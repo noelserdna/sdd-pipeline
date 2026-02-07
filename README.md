@@ -1,5 +1,7 @@
 # SDD Skills
 
+> **[Leer en español](README.es.md)**
+
 **Specification-Driven Development pipeline for Claude Code, based on SWEBOK v4.**
 
 From requirements to production code — a structured, auditable, traceable pipeline that transforms natural-language requirements into implemented software through formal specifications, automated auditing, and atomic task execution.
