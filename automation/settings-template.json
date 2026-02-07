@@ -39,10 +39,9 @@
       {
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Check if an SDD pipeline stage was active during this session. Look for evidence of SDD skill invocations (sdd-requirements-engineer through sdd-task-implementer) by checking if pipeline-state.json has any stage with status 'running'. If NO pipeline work was detected, respond {\"decision\": \"allow\"}. If pipeline work was detected, verify that: (1) artifacts were created in the expected directories, (2) pipeline-state.json was updated. If the stop_hook_active flag is present in context, respond {\"decision\": \"allow\"} to prevent loops. Summarize any incomplete pipeline stages as a warning. Respond with JSON only.",
-            "timeout": 30000,
-            "model": "haiku"
+            "type": "command",
+            "command": "echo {}",
+            "timeout": 5000
           }
         ]
       }

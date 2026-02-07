@@ -145,21 +145,21 @@ SDD includes automated guardrails that enforce pipeline integrity without manual
 ### Starting a new project
 
 ```
-/sdd-setup                          # Install automation into your project
-/sdd-requirements-engineer          # Elicit requirements interactively
-/sdd-specifications-engineer        # Transform requirements into formal specs
-/sdd-spec-auditor                   # Audit specs — produces baseline
-/sdd-spec-auditor --fix             # Fix audit findings
-/sdd-test-planner                   # Generate test strategy and matrices
-/sdd-plan-architect                 # Generate FASE files and implementation plans
-/sdd-task-generator                 # Decompose into atomic tasks
-/sdd-task-implementer --fase 0      # Implement FASE 0, task by task
+/sdd:setup                          # Install automation into your project
+/sdd:requirements-engineer          # Elicit requirements interactively
+/sdd:specifications-engineer        # Transform requirements into formal specs
+/sdd:spec-auditor                   # Audit specs — produces baseline
+/sdd:spec-auditor --fix             # Fix audit findings
+/sdd:test-planner                   # Generate test strategy and matrices
+/sdd:plan-architect                 # Generate FASE files and implementation plans
+/sdd:task-generator                 # Decompose into atomic tasks
+/sdd:task-implementer --fase 0      # Implement FASE 0, task by task
 ```
 
 ### Handling a requirements change mid-pipeline
 
 ```
-/sdd-req-change --cascade=auto      # Add/modify/deprecate a requirement
+/sdd:req-change --cascade=auto      # Add/modify/deprecate a requirement
                                     # Automatically propagates through:
                                     #   spec-auditor -> test-planner ->
                                     #   plan-architect -> task-generator ->
@@ -169,9 +169,9 @@ SDD includes automated guardrails that enforce pipeline integrity without manual
 ### Checking pipeline health
 
 ```
-/sdd-pipeline-status                # Which stages are done, stale, or running?
-/sdd-traceability-check             # Any orphaned references or broken links?
-/sdd-session-summary                # What did we decide this session?
+/sdd:pipeline-status                # Which stages are done, stale, or running?
+/sdd:traceability-check             # Any orphaned references or broken links?
+/sdd:session-summary                # What did we decide this session?
 ```
 
 ---

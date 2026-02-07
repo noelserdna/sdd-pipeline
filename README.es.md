@@ -143,21 +143,21 @@ SDD incluye guardrails automatizados que imponen la integridad del pipeline sin 
 ### Iniciando un proyecto nuevo
 
 ```
-/sdd-setup                          # Instalar automatizacion en tu proyecto
-/sdd-requirements-engineer          # Elicitar requisitos interactivamente
-/sdd-specifications-engineer        # Transformar requisitos en specs formales
-/sdd-spec-auditor                   # Auditar specs — produce baseline
-/sdd-spec-auditor --fix             # Corregir hallazgos de auditoria
-/sdd-test-planner                   # Generar estrategia de testing y matrices
-/sdd-plan-architect                 # Generar archivos FASE y planes de implementacion
-/sdd-task-generator                 # Descomponer en tareas atomicas
-/sdd-task-implementer --fase 0      # Implementar FASE 0, tarea por tarea
+/sdd:setup                          # Instalar automatizacion en tu proyecto
+/sdd:requirements-engineer          # Elicitar requisitos interactivamente
+/sdd:specifications-engineer        # Transformar requisitos en specs formales
+/sdd:spec-auditor                   # Auditar specs — produce baseline
+/sdd:spec-auditor --fix             # Corregir hallazgos de auditoria
+/sdd:test-planner                   # Generar estrategia de testing y matrices
+/sdd:plan-architect                 # Generar archivos FASE y planes de implementacion
+/sdd:task-generator                 # Descomponer en tareas atomicas
+/sdd:task-implementer --fase 0      # Implementar FASE 0, tarea por tarea
 ```
 
 ### Manejando un cambio de requisitos a mitad del pipeline
 
 ```
-/sdd-req-change --cascade=auto      # Agregar/modificar/deprecar un requisito
+/sdd:req-change --cascade=auto      # Agregar/modificar/deprecar un requisito
                                     # Propaga automaticamente a traves de:
                                     #   spec-auditor -> test-planner ->
                                     #   plan-architect -> task-generator ->
@@ -167,9 +167,9 @@ SDD incluye guardrails automatizados que imponen la integridad del pipeline sin 
 ### Verificando la salud del pipeline
 
 ```
-/sdd-pipeline-status                # Que etapas estan done, stale o running?
-/sdd-traceability-check             # Hay referencias huerfanas o links rotos?
-/sdd-session-summary                # Que decidimos en esta sesion?
+/sdd:pipeline-status                # Que etapas estan done, stale o running?
+/sdd:traceability-check             # Hay referencias huerfanas o links rotos?
+/sdd:session-summary                # Que decidimos en esta sesion?
 ```
 
 ---
