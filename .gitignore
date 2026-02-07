@@ -1,0 +1,12 @@
+# External resources (22MB+)
+recursos/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Accidental files
+nul
+
+# Analysis artifacts (research, can be regenerated)
+ANALYSIS-REQ-CHANGE-MAINTENANCE.md
+CROSS-ANALYSIS-AUDIT.md
