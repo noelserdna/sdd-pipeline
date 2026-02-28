@@ -378,6 +378,13 @@ npx vitest run tests/
 npx vitest run --coverage
 ```
 
+**Per-file coverage verification:**
+After running coverage, check the report for each source file listed in PLAN-FASE §7.4 Coverage Map:
+- If any mapped source file shows 0% → stop and create missing test
+- If any domain logic file (entity, service, state-machine) shows < 80% lines → add tests before proceeding
+- Files in the Exclusions table with valid justification can be skipped
+- Report coverage summary in the FASE completion output
+
 ### Handling Test Failures
 
 ```

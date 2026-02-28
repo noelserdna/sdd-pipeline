@@ -518,7 +518,16 @@ EOF
 
 3. **Ejecutar suite completa de tests**
 
-4. **Reportar completion**:
+4. **Verificar coverage per-file** (si el plan incluye Coverage Map §7.4):
+   ```bash
+   npx vitest run --coverage
+   ```
+   - Para cada source file en Coverage Map §7.4, verificar que tiene coverage > 0%
+   - Para cada source file con tipo `logic`/`entity`/`service`/`state-machine`, verificar coverage >= 80% lines
+   - Si un archivo tiene 0% y NO esta en Exclusions → **FAIL** — crear test task pendiente
+   - Si un archivo tiene <80% y es lógica de dominio → **WARN** — reportar en completion
+
+5. **Reportar completion**:
 
 ```
 FASE-0 Implementation Complete
@@ -526,6 +535,9 @@ FASE-0 Implementation Complete
 Total tasks: 12
 Completed: 12 (100%)
 Tests: 45 passing, 0 failing
+Coverage: 92% lines (threshold: 80%)
+  - Files below 80%: {list or "none"}
+  - Files at 0% (not excluded): {list or "none"}
 Criterios de Exito: 5/5 verified
 Checkpoint: git tag fase-0-verified
 ```

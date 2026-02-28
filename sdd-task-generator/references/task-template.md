@@ -112,6 +112,16 @@
 
 {Same task format as above}
 
+### Test Exclusions
+
+Files excluded from unit test coverage (from PLAN-FASE §7.4 Exclusions):
+
+| File | Reason | Verified By |
+|------|--------|-------------|
+| {file_path} | {reason} | {integration test / E2E test / N/A - infrastructure} |
+
+> Task generator MUST verify that every source file with testable logic either has a test task in this phase or appears in this exclusions table.
+
 ---
 
 ## Phase 7: Verification

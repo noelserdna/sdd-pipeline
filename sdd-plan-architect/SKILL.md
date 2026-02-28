@@ -577,6 +577,11 @@ For each FASE file found in Phase 0:
    - API implementation notes (endpoints, middleware, validation)
    - Data changes (new tables, migrations)
    - Test strategy (unit, integration, BDD mapping)
+   - **Test Coverage Map** (Source File → Test File):
+     - For each source file with testable logic, map to its corresponding test file
+     - Classify each source file: `logic` | `entity` | `service` | `state-machine` | `infrastructure`
+     - Infrastructure files (thin wrappers, enum constants, event publishers) → mark as excluded with justification
+     - Priority: HIGH (domain logic, state machines, services), MEDIUM (mappers, validators), LOW (config, constants)
    - Dependencies on shared components from other FASEs
    - Acceptance criteria (from UCs + INVs)
 

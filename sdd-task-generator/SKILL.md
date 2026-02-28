@@ -329,7 +329,7 @@ For each PLAN-FASE-{N}.md, extract:
 | Middleware | 1 task per middleware | "Add rate limiting middleware" |
 | Service | 1 task per service class | "Implement EncryptionService" |
 | Migration | 1 task per schema change | "Create users table migration" |
-| Test file | 1 task per test file | "Add unit tests for EncryptionService" |
+| Test file | **1 task per source file** that needs tests (from Coverage Map §7.4) | "Add unit tests for call-analyzer.step.ts" |
 | Config | 1 task per config concern | "Configure Cloudflare Workers environment" |
 | Integration | 1 task per integration | "Wire event bus to audit logger" |
 
@@ -501,6 +501,8 @@ Generate documents using templates from `references/`:
 | V-10 | Task count per FASE is reasonable (5-80 tasks) | WARN |
 | V-11 | Critical path identified in TASK-ORDER.md | ERROR |
 | V-12 | All file paths use project conventions from CLAUDE.md | WARN |
+| V-13 | Every source file in Coverage Map §7.4 has a corresponding test task | ERROR |
+| V-14 | Every file in Coverage Map Exclusions has a justified reason | WARN |
 
 ---
 

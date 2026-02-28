@@ -566,6 +566,21 @@ CREATE TABLE {table_name} (
 |----------|-----------|----------|
 | {spec ref} | {N scenarios} | {P1/P2/P3} |
 
+### 7.4 Test Coverage Map (Source → Test)
+
+| Source File | Type | Test File | Priority |
+|------------|------|-----------|----------|
+| {source_path} | {logic/entity/service/state-machine} | {test_path} | {HIGH/MEDIUM/LOW} |
+
+**Exclusions (no unit test needed):**
+
+| File | Reason |
+|------|--------|
+| {file_path} | {infrastructure wrapper / enum constant / tested via integration or E2E} |
+
+> Every source file with testable logic MUST appear in this table or in Exclusions.
+> This map drives task generation: each row becomes a test task.
+
 ## 8. Dependencies on Shared Components
 
 | Component | From FASE | Required For |

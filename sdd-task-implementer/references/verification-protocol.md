@@ -250,7 +250,26 @@ IF glossary term violation → WARNING
 IF complexity limit exceeded → WARNING
 IF naming inconsistency → OBSERVATION
 IF code duplication (< 5 lines) → OBSERVATION
+IF source file at 0% coverage (not in exclusions) → CRITICAL
+IF domain logic file below 80% coverage → WARNING
 ```
+
+### Dimension 4: Coverage
+
+Verify that every source file with testable logic has adequate test coverage.
+
+| Check | What | Severity |
+|-------|------|----------|
+| CHECK-COV-01 | Every source file in Coverage Map §7.4 has coverage > 0% | CRITICAL |
+| CHECK-COV-02 | Domain logic files (entity, service, state-machine) have >= 80% line coverage | WARNING |
+| CHECK-COV-03 | Files in Coverage Map Exclusions table are genuinely infrastructure (no business logic) | WARNING |
+| CHECK-COV-04 | Global coverage thresholds (lines/branches/functions/statements) are met | CRITICAL |
+
+**Procedure:**
+1. Run `npx vitest run --coverage` and parse the coverage report
+2. For each file in Coverage Map §7.4, check its line coverage percentage
+3. For files at 0%, verify they appear in the Exclusions table with valid reason
+4. Flag any domain logic file below 80% line coverage
 
 ---
 
