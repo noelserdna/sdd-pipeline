@@ -284,7 +284,40 @@ REQ-{id} → UC-{nnn} → WF-{nnn} → API-{module} → BDD-{feature} → INV-{a
 | plan/fases/FASE-{N}.md | {Fresh/Stale} | {Regenerate / No change} |
 | task/TASK-FASE-{N}.md | {Fresh/Stale} | {Regenerate after plan update / No change} |
 | src/ (FASE-{N} code) | {Fresh/Stale} | {New tasks needed / No change} |
+
+### Code & Commit Impact
+
+| Artifact | Commits | Last Commit | Files Affected |
+|----------|---------|-------------|----------------|
+| UC-002 | abc1234, def5678 | 2026-02-27 | src/auth/middleware.ts, src/auth/jwt.ts |
+| INV-SYS-001 | ghi9012 | 2026-02-26 | src/middleware/tenant.ts |
+
+Blast radius: {N} commits, {M} source files, {K} test files
 ```
+
+7. **Commit Impact Analysis** (if git available):
+
+   Check git availability first:
+   ```bash
+   git rev-parse --is-inside-work-tree 2>/dev/null
+   ```
+
+   If git is available, for each artifact in the Direct Impact list:
+   ```bash
+   git log --all --oneline --grep='Refs:.*{ARTIFACT-ID}'
+   ```
+
+   Build a commit impact map:
+   - **Artifact → commits**: Which commits reference this artifact via `Refs:` trailers
+   - **Commits → files**: Which source files were touched by those commits (`git diff-tree --no-commit-id --name-only -r {SHA}`)
+   - **Last commit date**: When was the most recent commit for this artifact
+
+   Estimate blast radius:
+   - Total unique commits referencing affected artifacts
+   - Total unique source files touched by those commits
+   - Total unique test files touched by those commits
+
+   **Graceful degradation**: If git is not available, skip this step and note "Git not available — commit impact analysis skipped" in the Impact Matrix.
 
 ---
 

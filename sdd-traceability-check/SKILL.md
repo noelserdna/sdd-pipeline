@@ -13,13 +13,13 @@ You are the **SDD Traceability Checker**. Your job is to verify the complete tra
 
 ## Traceability Chain
 
-The SDD pipeline maintains this traceability chain:
+The SDD pipeline maintains this extended traceability chain:
 
 ```
-REQ-NNN → UC-NNN → WF-NNN → API-NNN → BDD-NNN → INV-NNN → ADR-NNN
+REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST
 ```
 
-Each artifact type references others via standardized IDs. Every reference must resolve to an actual definition.
+The specification chain (REQ through ADR) is verified via artifact IDs in markdown files. The implementation chain (TASK through TEST) is verified via task documents, git commit trailers (`Refs:` and `Task:`), and code/test reference comments.
 
 ## Process
 
@@ -66,7 +66,36 @@ Build a condensed traceability matrix showing which REQs trace through to which 
 
 Flag any REQ that doesn't trace through at least to a UC as **UNTRACEABLE**.
 
-### Step 5: Generate Report
+### Step 5: Commit Chain Verification
+
+Verify the TASK → COMMIT link in the extended traceability chain.
+
+1. **Check git availability**:
+   ```bash
+   git rev-parse --is-inside-work-tree 2>/dev/null
+   ```
+   If this fails, skip this step and note "Git not available — commit verification skipped" in the report.
+
+2. **Extract commits with `Refs:` and `Task:` trailers**:
+   ```bash
+   git log --all --format='%H|%h|%s|%an|%aI|%b' --grep='Refs:' | head -500
+   git log --all --format='%H|%h|%s|%an|%aI|%b' --grep='Task:' | head -500
+   ```
+   Merge and deduplicate by full SHA.
+
+3. **Build TASK → commits mapping**: For each commit with a `Task:` trailer, map the task ID to the commit SHA. A task may have multiple commits (e.g., if amended or reworked).
+
+4. **Identify gaps**:
+   - **Tasks without commits**: TASKs defined in `task/TASK-FASE-*.md` that are marked `[x]` but have no matching commit in git log.
+   - **Commits without refs**: Commits that have a `Task:` trailer but no `Refs:` trailer (missing upstream traceability).
+   - **Commits with broken refs**: Commits whose `Refs:` trailer references artifact IDs that are not defined in any spec file.
+
+5. **Compute commit coverage**:
+   - Total completed tasks (marked `[x]`): count from task documents
+   - Tasks with at least one commit: count from TASK → commits mapping
+   - Commit coverage percentage: tasks with commits / total completed tasks
+
+### Step 6: Generate Report
 
 ```
 ## SDD Traceability Report
@@ -77,6 +106,7 @@ Flag any REQ that doesn't trace through at least to a UC as **UNTRACEABLE**.
 - Orphaned definitions: Z
 - Broken references: W
 - Coverage: N% of REQs fully traceable
+- Commit coverage: N% of completed tasks have commits
 
 ### Orphaned Definitions (defined but never referenced)
 | ID | Defined In | Type |
@@ -88,12 +118,33 @@ Flag any REQ that doesn't trace through at least to a UC as **UNTRACEABLE**.
 |----|--------------|------|
 | UC-099 | spec/workflows.md:15 | Use Case |
 
+### Commit Traceability
+- Tasks with commits: X/Y (Z%)
+- Commits with valid refs: X/Y
+- Commits with task trailers: X/Y
+
+#### Tasks Without Commits
+| Task | FASE | Status | Expected Commit |
+|------|------|--------|----------------|
+| TASK-F0-005 | FASE-0 | [x] Complete | feat(auth): add rate limiting |
+
+#### Commits Without Refs
+| SHA | Message | Task | Issue |
+|-----|---------|------|-------|
+| abc1234 | chore(bootstrap): init project | TASK-F0-001 | No Refs: trailer |
+
+#### Orphaned Commit References
+| SHA | Message | Broken Ref |
+|-----|---------|------------|
+| def5678 | feat(auth): add middleware | UC-099 (not defined) |
+
 ### Traceability Matrix
 [condensed matrix as above]
 
 ### Recommendations
 - Define UC-099 or remove references
 - Add cross-references for orphaned INV-005
+- Add Refs: trailer to commits missing upstream traceability
 ```
 
 ## Constraints
