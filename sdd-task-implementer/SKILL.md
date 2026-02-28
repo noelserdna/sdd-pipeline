@@ -439,15 +439,20 @@ Task Quality Report:
 └── Invariants: INV-SYS-001 ✓, INV-SYS-003 ✓
 ```
 
-### Phase 7: Atomic Commit
+### Phase 7: Atomic Commit & SHA Capture
 
-**Goal:** Crear el commit atomico con el mensaje exacto de la task.
+**Goal:** Crear el commit atomico con el mensaje exacto de la task y capturar su SHA para trazabilidad.
 
 1. **Stage solo los archivos de la task** — nunca `git add -A`
 2. **Usar el mensaje del campo Commit** de la task, verbatim
 3. **Agregar footer** con Refs y Task ID del task document
 4. **Verificar** que el commit contiene exactamente los archivos esperados
-5. **Marcar la task como completa** en `task/TASK-FASE-{N}.md`: `- [ ]` → `- [x]`
+5. **Capturar SHA del commit**:
+   ```bash
+   COMMIT_SHA=$(git rev-parse --short HEAD)
+   ```
+6. **Almacenar mapping** en memoria de sesión: `TASK-F{N}-{SEQ} → {SHA}`
+7. **Marcar la task como completa** en `task/TASK-FASE-{N}.md`: `- [ ]` → `- [x]`
 
 **Commit Format:**
 
@@ -479,6 +484,10 @@ Task: TASK-F0-003
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
+
+# Capture SHA for traceability
+COMMIT_SHA=$(git rev-parse --short HEAD)
+# Store: TASK-F0-003 → $COMMIT_SHA
 ```
 
 ### Phase 8: Progress Tracking & Task Loop
@@ -486,10 +495,10 @@ EOF
 **Goal:** Actualizar progreso y continuar con la siguiente task.
 
 1. **Actualizar checkbox** en `task/TASK-FASE-{N}.md`
-2. **Reportar progreso** al usuario:
+2. **Reportar progreso** al usuario (incluir SHA del commit):
 
 ```
-✓ TASK-F0-003 completed (3/12 tasks, 25%)
+✓ TASK-F0-003 completed (3/12 tasks, 25%) → commit abc1234
   Next: TASK-F0-004 [P] Create rate limiting middleware
   Parallel available: TASK-F0-004, TASK-F0-005 (both [P])
 ```
@@ -527,7 +536,7 @@ EOF
    - Si un archivo tiene 0% y NO esta en Exclusions → **FAIL** — crear test task pendiente
    - Si un archivo tiene <80% y es lógica de dominio → **WARN** — reportar en completion
 
-5. **Reportar completion**:
+5. **Reportar completion** (incluir commit log):
 
 ```
 FASE-0 Implementation Complete
@@ -540,6 +549,16 @@ Coverage: 92% lines (threshold: 80%)
   - Files at 0% (not excluded): {list or "none"}
 Criterios de Exito: 5/5 verified
 Checkpoint: git tag fase-0-verified
+
+Commit Log:
+| Task | SHA | Message | Refs |
+|------|-----|---------|------|
+| TASK-F0-001 | abc1234 | chore(bootstrap): configure wrangler.toml | FASE-0 |
+| TASK-F0-002 | def5678 | feat(bootstrap): initialize TypeScript project | FASE-0, ADR-001 |
+| TASK-F0-003 | ghi9012 | feat(auth): add JWT authentication middleware | FASE-0, UC-002, ADR-003, INV-SYS-001 |
+| ... | ... | ... | ... |
+
+Commits: 12 atomic (abc1234..xyz9012)
 ```
 
 ---
@@ -914,12 +933,12 @@ Al finalizar una sesion de implementacion:
 
 ### Progress
 
-| Task | Status | Tests | Commit |
-|------|--------|-------|--------|
-| TASK-F0-001 | ✓ Complete | 3/3 | abc1234 |
-| TASK-F0-002 | ✓ Complete | 5/5 | def5678 |
-| TASK-F0-003 | ⏸ Paused | 2/4 | — |
-| TASK-F0-004 | ○ Pending | — | — |
+| Task | Status | Tests | SHA | Commit Message |
+|------|--------|-------|-----|----------------|
+| TASK-F0-001 | ✓ Complete | 3/3 | abc1234 | chore(bootstrap): configure wrangler.toml |
+| TASK-F0-002 | ✓ Complete | 5/5 | def5678 | feat(bootstrap): init TypeScript project |
+| TASK-F0-003 | ⏸ Paused | 2/4 | — | — |
+| TASK-F0-004 | ○ Pending | — | — | — |
 
 ### Pauses
 - TASK-F0-003: [DECISION PENDIENTE] in ADR-025 line 45

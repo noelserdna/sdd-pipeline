@@ -23,7 +23,7 @@ CHECK-C02: Test files exist
   - Corresponding test files exist (if task type requires tests)
   - Test file is not empty or stub-only
 
-CHECK-C03: Commit exists
+CHECK-C03: Commit exists (see "CHECK-C03 Implementation Procedure" below)
   - Git log contains commit matching task's Commit message
   - Commit modifies only the files listed in the task
 
@@ -62,6 +62,55 @@ CHECK-C12: Checkpoint tags placed
 
 Missing files: src/middleware/rate-limiter.ts
 Missing tests: tests/middleware/rate-limiter.test.ts
+```
+
+### CHECK-C03 Implementation Procedure
+
+Detailed procedure for verifying that each task has a corresponding atomic commit.
+
+**Steps:**
+
+1. **Extract expected commit message** from the task's **Commit** field in `task/TASK-FASE-{N}.md`.
+
+2. **Search by Task trailer** (preferred — most reliable):
+   ```bash
+   git log --all --oneline --grep='Task: TASK-F{N}-{SEQ}'
+   ```
+
+3. **Fallback: search by subject match** if no Task trailer found:
+   ```bash
+   git log --all --oneline --grep='{commit subject from task}'
+   ```
+
+4. **Verify file scope** — the commit should only touch files listed in the task:
+   ```bash
+   git diff-tree --no-commit-id --name-only -r {SHA}
+   ```
+   Compare the output against the files listed in the task description.
+
+5. **Report result per task:**
+
+| Status | Condition |
+|--------|-----------|
+| PASS | Commit found with matching Task trailer AND file scope matches |
+| WARN | Commit found but file scope includes unexpected files |
+| FAIL | No commit found matching task |
+| SKIPPED | Git not available or not inside a git repository |
+
+6. **Graceful degradation**: If `git rev-parse --is-inside-work-tree` fails (not a git repo), mark ALL CHECK-C03 as SKIPPED and continue with other checks.
+
+**CHECK-C03 Report Format:**
+
+```markdown
+### CHECK-C03: Commit Verification
+
+| Task | Expected Message | Found SHA | Files Match | Status |
+|------|-----------------|-----------|-------------|--------|
+| TASK-F0-001 | chore(bootstrap): configure wrangler.toml | abc1234 | ✓ 2/2 | PASS |
+| TASK-F0-002 | feat(bootstrap): init TypeScript project | def5678 | ⚠ 4/3 (+1 extra) | WARN |
+| TASK-F0-003 | feat(auth): add JWT auth middleware | — | — | FAIL |
+
+Summary: 1 PASS, 1 WARN, 1 FAIL
 ```
 
 ---

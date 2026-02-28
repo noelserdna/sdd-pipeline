@@ -87,6 +87,37 @@ Task: TASK-F0-012
 
 ---
 
+## SHA Capture & Traceability
+
+After each atomic commit, `sdd-task-implementer` captures the commit SHA and maintains a mapping for the full traceability chain:
+
+```
+TASK-F{N}-{SEQ} → {SHA} (captured via `git rev-parse --short HEAD`)
+```
+
+### How SHA is Used
+
+| Consumer | Purpose |
+|----------|---------|
+| **task-implementer Phase 8** | Progress report includes SHA per completed task |
+| **task-implementer Phase 9** | Completion report includes full commit log table |
+| **CHECK-C03 verification** | Validates commit exists and file scope matches task |
+| **dashboard** | Populates `commitRefs[]` in `traceability-graph.json` for visual traceability |
+| **traceability-check** | Verifies TASK → COMMIT link in the extended traceability chain |
+| **req-change Phase 2** | Commit impact analysis identifies code blast radius per affected artifact |
+
+### Extended Traceability Chain
+
+With SHA capture, the full SDD traceability chain extends beyond specifications into implementation:
+
+```
+REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST
+```
+
+The `Refs:` and `Task:` trailers in commit messages provide the backward links from COMMIT to TASK and to upstream specification artifacts (UC, ADR, INV, etc.).
+
+---
+
 ## Revert Strategy Design
 
 ### Revert Safety Categories
