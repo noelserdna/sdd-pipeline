@@ -7,6 +7,12 @@ recursos/
 # Accidental files
 nul
 
+# Dashboard screenshots (generated, not source)
+dashboard-*.png
+
+# Playwright MCP cache
+.playwright-mcp/
+
 # Analysis artifacts (research, can be regenerated)
 ANALYSIS-REQ-CHANGE-MAINTENANCE.md
 CROSS-ANALYSIS-AUDIT.md
