@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 13 Claude Code skills (9 pipeline + 3 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings). There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 17 Claude Code skills (9 pipeline + 4 onboarding + 3 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings). There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -29,6 +29,12 @@ sdd-task-implementer  →  src/, tests/, git commits
 **Lateral skills** (invoke at any point):
 - `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`
 - `sdd-req-change` → Universal change entry point: manages ADD/MODIFY/DEPRECATE with maintenance classification (ISO 14764, Ch05) and optional pipeline cascade triggering (can re-trigger spec-auditor → test-planner → plan-architect → task-generator → task-implementer)
+
+**Onboarding skills** (for adopting SDD in existing projects):
+- `sdd-onboarding` → Diagnoses project state, classifies into 8 scenarios, generates adoption plan. Entry point for any project.
+- `sdd-reverse-engineer` → Analyzes existing code to generate complete SDD artifacts (requirements, specs, test plan, tasks, findings). For brownfield projects.
+- `sdd-reconcile` → Detects drift between SDD specs and code, classifies divergences, reconciles. Requires existing SDD artifacts + code.
+- `sdd-import` → Imports external docs (Jira, OpenAPI, Markdown, Notion, CSV, Excel) into SDD format. Pre-pipeline.
 
 **Utility skills** (invoke on demand):
 - `sdd-pipeline-status` → Pipeline status report with artifact verification and next-action recommendation
@@ -173,6 +179,7 @@ When editing a SKILL.md:
 
 ## Known Gaps
 
+- **Brownfield adoption:** Fully covered by 4 onboarding skills: `sdd-onboarding` (diagnosis), `sdd-reverse-engineer` (code→artifacts), `sdd-reconcile` (drift resolution), `sdd-import` (external docs). Covers greenfield, brownfield, drift, partial SDD, multi-team, fork, and tests-as-spec scenarios.
 - **SWEBOK Ch05 (Software Maintenance):** Partially covered by `sdd-req-change` v2.0.0 (ISO 14764 maintenance classification, feature retirement planning, impact analysis, regression risk, technical debt tracking, pipeline cascade). Production-specific operational maintenance (monitoring, incident response, runtime rollback) remains uncovered — these are operational concerns outside the SDD specification pipeline scope.
 - **SWEBOK Ch07 (Engineering Management):** No effort estimation, risk management, or project control metrics. The pipeline focuses on technical artifacts, not project management.
 - **SWEBOK Ch10 (Software Eng. Economics):** Cost-benefit analysis not covered.
