@@ -19,3 +19,8 @@ ideas/
 # Analysis artifacts (research, can be regenerated)
 ANALYSIS-REQ-CHANGE-MAINTENANCE.md
 CROSS-ANALYSIS-AUDIT.md
+
+# MCP Server build artifacts
+server/node_modules/
+server/dist/
+server/package-lock.json
