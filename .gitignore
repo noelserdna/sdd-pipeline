@@ -13,6 +13,9 @@ dashboard-*.png
 # Playwright MCP cache
 .playwright-mcp/
 
+# Ideas and brainstorming (local only)
+ideas/
+
 # Analysis artifacts (research, can be regenerated)
 ANALYSIS-REQ-CHANGE-MAINTENANCE.md
 CROSS-ANALYSIS-AUDIT.md
