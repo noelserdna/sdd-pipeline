@@ -11,9 +11,9 @@ From requirements to production code — a structured, auditable, traceable pipe
 
 ## What's in this repo
 
-- **19 skills** in `sdd-*/` directories (pipeline + onboarding + lateral + utilities)
+- **20 skills** in `sdd-*/` directories (pipeline + onboarding + lateral + utilities)
 - **MCP server** in `server/` (TypeScript, 5 tools for querying the traceability graph)
-- **Automation** in `automation/` (4 hooks, 3 agents, settings template)
+- **Automation** in `automation/` (5 hooks, 3 agents, settings template)
 - **References** in `references/` (SDD Constitution, shared knowledge)
 
 ## The Pipeline

@@ -9,9 +9,9 @@ De requisitos a codigo en produccion — un pipeline estructurado, auditable y t
 
 ## Que contiene este repo
 
-- **19 skills** en directorios `sdd-*/` (pipeline + onboarding + laterales + utilidades)
+- **20 skills** en directorios `sdd-*/` (pipeline + onboarding + laterales + utilidades)
 - **Servidor MCP** en `server/` (TypeScript, 5 herramientas para consultar el grafo de trazabilidad)
-- **Automatizacion** en `automation/` (4 hooks, 3 agentes, template de settings)
+- **Automatizacion** en `automation/` (5 hooks, 3 agentes, template de settings)
 - **Referencias** en `references/` (Constitucion SDD, conocimiento compartido)
 
 ## El Pipeline

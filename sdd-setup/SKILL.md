@@ -52,6 +52,14 @@ sdd-skills/automation/agents/sdd-cross-auditor.md         → .claude/agents/sdd
 sdd-skills/automation/agents/sdd-context-keeper.md        → .claude/agents/sdd-context-keeper.md
 ```
 
+### Step 4.5: Copy Augment Hook
+
+```
+sdd-skills/automation/hooks/sdd-context-augment.sh → .claude/hooks/sdd-context-augment.sh
+```
+
+Make it executable: `chmod +x .claude/hooks/sdd-context-augment.sh`
+
 ### Step 5: Configure Settings
 
 If `.claude/settings.json` does not exist:
@@ -62,6 +70,22 @@ If `.claude/settings.json` exists:
 - Preserve existing permissions and other settings
 - Add hooks that don't already exist (match by command path)
 - Warn user about any conflicts
+
+### Step 5.5: Build MCP Server
+
+Check if `server/dist/` exists in the sdd-skills repo:
+- If it exists: skip (already built)
+- If not: run `cd $SDD/server && npm install && npm run build`
+- Report build status (success/failure/skipped)
+- Requires Node.js 18+
+
+### Step 5.6: Optional — Code Intelligence
+
+Inform the user about the code intelligence feature:
+- `/sdd-code-index` indexes the project codebase for deep traceability
+- Works standalone but produces richer results with **GitNexus** installed
+- Run after `/sdd-dashboard` to enable code-aware blast radius analysis
+- This is optional and can be configured later
 
 ### Step 6: Initialize Pipeline State
 
@@ -92,10 +116,11 @@ If `pipeline-state.json` already exists:
 
 Run verification checks:
 
-1. All 3 hook scripts exist and are executable
+1. All 4 hook scripts exist and are executable (H1-H3 + H5 augment)
 2. All 3 agent definitions exist
-3. `settings.json` contains the 4 hook configurations (H1-H4)
+3. `settings.json` contains the 5 hook configurations (H1-H5)
 4. `pipeline-state.json` exists and is valid JSON
+5. MCP server built (`server/dist/index.js` exists)
 
 Report results:
 
@@ -108,17 +133,21 @@ Report results:
 | Hook: sdd-upstream-guard (H2) | Installed |
 | Hook: sdd-pipeline-state-updater (H3) | Installed |
 | Hook: stop-hook (H4) | Configured in settings |
+| Hook: sdd-context-augment (H5) | Installed |
 | Agent: sdd-constitution-enforcer (A1) | Installed |
 | Agent: sdd-cross-auditor (A2) | Installed |
 | Agent: sdd-context-keeper (A3) | Installed |
+| MCP Server: server/dist/ | Built / NOT BUILT |
 | Settings: .claude/settings.json | Configured |
 | Pipeline: pipeline-state.json | Initialized |
 | Dependency: jq | Available / MISSING (using node fallback) |
+| Dependency: node | Available / MISSING (MCP server requires Node.js 18+) |
 
 ### Next Steps
 1. Start a new Claude Code session to activate hooks
 2. Run `/sdd-pipeline-status` to verify pipeline state
 3. Begin with `/sdd-requirements-engineer` for a new project
+4. (Optional) Run `/sdd-code-index` after dashboard to enable code intelligence
 ```
 
 ## Constraints

@@ -21,6 +21,7 @@ From within Claude Code, in your target project:
 
 ### Prerequisites
 
+- **Node.js 18+** (required for MCP server and augment hook)
 - **jq** (recommended) or **Node.js** (fallback) for JSON processing in hooks
 - **Claude Code CLI** with hooks support
 - The **sdd-skills** repository (default: `~/programacion/sdd-skills/`)
@@ -65,7 +66,32 @@ Manually add the hooks from `settings-template.json` into your `.claude/settings
 - `PostToolUse`: Add `Write` (H3) hook
 - `Stop`: Add the prompt hook (H4)
 
-### Step 5: Initialize Pipeline State
+### Step 5: Build MCP Server
+
+The MCP server provides live traceability queries. It requires Node.js 18+.
+
+```bash
+cd $SDD/server
+npm install
+npm run build
+cd -
+```
+
+Verify the build succeeded:
+```bash
+ls $SDD/server/dist/index.js
+```
+
+### Step 5.5: Copy Augment Hook
+
+```bash
+cp $SDD/automation/hooks/sdd-context-augment.sh .claude/hooks/
+chmod +x .claude/hooks/sdd-context-augment.sh
+```
+
+Add the hook to `.claude/settings.json` (see `settings-template.json` for the H5 configuration).
+
+### Step 6: Initialize Pipeline State
 
 If `pipeline-state.json` doesn't exist in your project root:
 
@@ -87,7 +113,7 @@ cat > pipeline-state.json << 'EOF'
 EOF
 ```
 
-### Step 6: Verify
+### Step 7: Verify
 
 ```bash
 # Check hooks are executable
@@ -111,9 +137,35 @@ cat pipeline-state.json | jq '.stages | to_entries[] | {key, status: .value.stat
 | H2 | `.claude/hooks/sdd-upstream-guard.sh` | PreToolUse (Edit\|Write) | Blocks upstream artifact modification |
 | H3 | `.claude/hooks/sdd-pipeline-state-updater.sh` | PostToolUse (Write, async) | Auto-updates pipeline-state.json |
 | H4 | Inline in settings.json | Stop (prompt, haiku) | Verifies pipeline state on session end |
+| H5 | `.claude/hooks/sdd-context-augment.sh` | PreToolUse (Grep\|Glob\|Read\|Edit\|Write) | Injects SDD traceability context into file operations |
 | A1 | `.claude/agents/sdd-constitution-enforcer.md` | Agent (haiku) | Validates against SDD Constitution |
 | A2 | `.claude/agents/sdd-cross-auditor.md` | Agent (sonnet) | Cross-references skill definitions |
 | A3 | `.claude/agents/sdd-context-keeper.md` | Agent (haiku) | Maintains informal project context |
+| A4 | `.claude/agents/sdd-requirements-watcher.md` | Agent | Monitors requirement changes |
+| A5 | `.claude/agents/sdd-spec-compliance-checker.md` | Agent | Validates spec consistency |
+| A6 | `.claude/agents/sdd-test-coverage-monitor.md` | Agent | Tracks test coverage gaps |
+| A7 | `.claude/agents/sdd-traceability-validator.md` | Agent | Detects suspect links (DOORS-style) |
+| A8 | `.claude/agents/sdd-pipeline-health-monitor.md` | Agent | Monitors pipeline health and staleness |
+| MCP | `server/dist/index.js` | MCP Server (stdio) | Live traceability queries (5 tools, 7 resources, 2 prompts) |
+
+## Optional: Code Intelligence
+
+Code intelligence enables deep traceability between SDD artifacts and source code symbols. It requires the MCP server to be built (Step 5).
+
+### Setup
+
+1. Run `/sdd-dashboard` to generate `traceability-graph.json`
+2. Run `/sdd-code-index` to analyze the codebase and generate the symbol index
+3. The context augmentation hook (H5) will automatically enrich file reads with traceability data
+
+### GitNexus (Optional)
+
+Code intelligence works standalone but produces richer results with **GitNexus** installed:
+- Advanced call graph analysis
+- Cross-repository references
+- Higher confidence scores for inferred references
+
+Install GitNexus separately if needed. `/sdd-code-index` will detect it automatically.
 
 ## Troubleshooting
 
