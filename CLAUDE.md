@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 18 Claude Code skills (9 pipeline + 4 onboarding + 4 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings). There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 20 Claude Code skills (9 pipeline + 4 onboarding + 5 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -40,6 +40,7 @@ sdd-task-implementer  →  src/, tests/, git commits
 - `sdd-pipeline-status` → Pipeline status report with artifact verification and next-action recommendation
 - `sdd-traceability-check` → Verifies REQ→UC→WF→API→BDD→INV→ADR traceability chain, finds orphans/broken links
 - `sdd-dashboard` → Visual HTML traceability dashboard with interactive prompts, pipeline popovers, and JSONP live status feed
+- `sdd-code-index` → Indexes project code for deep traceability. Bridges GitNexus code intelligence with SDD artifacts (optional, enhances blast radius analysis and code coverage)
 - `sdd-session-summary` → Summarizes session decisions, categorizes formal vs informal context
 
 **Setup skill**:
@@ -67,6 +68,26 @@ automation/
 │   └── sdd-context-keeper.md            # A3: Maintains informal project context
 ├── settings-template.json               # P1: Settings template with H1-H4 hook configs
 └── INSTALL.md                           # Manual installation guide
+```
+
+MCP server (live traceability queries):
+```
+server/                                  # TypeScript MCP server
+├── package.json                         # Deps: @modelcontextprotocol/sdk
+├── tsconfig.json
+└── src/
+    ├── index.ts                         # Entry: stdio transport
+    ├── server.ts                        # createSDDServer() — registers tools/resources/prompts
+    ├── graph-loader.ts                  # Reads traceability-graph.json, file watcher
+    ├── tools/
+    │   ├── query.ts                     # sdd_query — search artifacts by text/ID/type
+    │   ├── impact.ts                    # sdd_impact — blast radius BFS by depth
+    │   ├── context.ts                   # sdd_context — 360° artifact view
+    │   ├── coverage.ts                  # sdd_coverage — gap analysis by domain/layer
+    │   └── trace.ts                     # sdd_trace — full traceability chain
+    ├── resources.ts                     # sdd:// URI handlers
+    ├── prompts.ts                       # Workflow prompts (analyze_impact, generate_status_report)
+    └── hints.ts                         # Next-step hints (GitNexus pattern)
 ```
 
 Scripts: `sdd-specifications-engineer/scripts/create-spec-structure.ps1` (PowerShell) and `sdd-setup/scripts/install-sdd-automation.sh` (bash).

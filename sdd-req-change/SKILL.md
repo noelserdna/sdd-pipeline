@@ -319,6 +319,34 @@ Blast radius: {N} commits, {M} source files, {K} test files
 
    **Graceful degradation**: If git is not available, skip this step and note "Git not available — commit impact analysis skipped" in the Impact Matrix.
 
+8. **Code Intelligence Impact Analysis** (if SDD MCP server available):
+
+   IF the SDD MCP server is available (tool `sdd_impact` exists):
+   ```
+   result = sdd_impact({ artifact_id: "{ARTIFACT-ID}", direction: "downstream", maxDepth: 3 })
+   ```
+
+   Classify by depth:
+   - **d=1 (WILL_BREAK)**: Direct implementors — these symbols/files implement the artifact
+   - **d=2 (LIKELY_AFFECTED)**: Callers of implementors — functions that call the affected code
+   - **d=3 (MAY_NEED_REVIEW)**: Transitive callers — indirect dependents needing testing
+
+   IF `codeIntelligence` data available in the graph (from `/sdd-code-index`):
+   - Enrich the Impact Matrix with symbol-level detail:
+
+   ```markdown
+   | Symbol | File | Depth | Callers | Risk |
+   |--------|------|-------|---------|------|
+   | validateUser() | src/auth/validator.ts | d=1 | 3 direct | HIGH |
+   | handleLogin() | src/routes/auth.ts | d=2 | 2 direct | MEDIUM |
+   | authMiddleware() | src/middleware/auth.ts | d=3 | 5 direct | LOW |
+   ```
+
+   ELSE:
+   - Fallback to git-based analysis from Step 7 (commit blast radius only)
+
+   **Graceful degradation**: If MCP server not available, rely entirely on Step 7's git-based analysis.
+
 ---
 
 ### Phase 3: Clarification & Decision

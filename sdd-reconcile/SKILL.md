@@ -95,6 +95,22 @@ version: "1.0.0"
    - Naming conventions → inferred mapping
    - Endpoint paths → API contract mapping
    - Entity names → domain model mapping
+5. **Code Intelligence Enrichment** (if SDD MCP server available):
+
+   IF `sdd_context` tool is available (SDD MCP server running):
+   - For each artifact in scope, query `sdd_context({ artifact_id })` to get:
+     - All symbols implementing this artifact (with callers/callees)
+     - Full traceability chain context
+     - Coverage status
+   - IF `codeIntelligence` data available (from `/sdd-code-index`):
+     - Use symbol table directly: names, types, precise line ranges
+     - Use call graph to understand dependencies between features
+     - Classify divergences more precisely:
+       - **BEHAVIORAL_CHANGE** vs **REFACTORING**: Use call graph equivalence — if callers/callees unchanged but internals differ, it's refactoring
+       - **NEW_FUNCTIONALITY**: Symbols with no `Refs:` annotations and no inferred refs
+     - Scale: analyze any codebase size via structured MCP data instead of manual file-by-file reading
+   ELSE:
+     - Fallback to manual file-by-file Grep/Read/Glob scanning (Steps 1-4)
 
 **Output:** Code feature index with spec mappings.
 

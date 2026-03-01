@@ -537,6 +537,81 @@ All v1 fields remain unchanged. v2 is a backward-compatible extension.
 
 All v2 fields remain unchanged. v3 is a backward-compatible extension. When no onboarding data exists, `adoption` defaults to `{ "present": false }` and `adoptionStats` is `null`.
 
+## Migration from v3
+
+| v3 Field | v4 Change |
+|----------|-----------|
+| `$schema: "traceability-graph-v3"` | Changed to `"traceability-graph-v4"` |
+| `codeIntelligence` | **New**: top-level code intelligence block from `/sdd-code-index` |
+| `codeRefs[].inferred` | **New**: boolean flag for transitively inferred refs |
+| `codeRefs[].confidence` | **New**: 0.0-1.0 confidence for inferred refs |
+| `statistics.codeStats.symbolsWithInferredRefs` | **New**: count of symbols with inferred refs |
+| Relationship type `inferred-implements` | **New**: transitively inferred code→artifact link |
+
+All v3 fields remain unchanged. v4 is a backward-compatible extension. When no code index has been run, `codeIntelligence` is absent (not null).
+
+### codeIntelligence (v4)
+
+Top-level block added by `/sdd-code-index`. Absent by default.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `indexed` | boolean | Whether code has been indexed |
+| `indexedAt` | string (ISO-8601) | When the index was last generated |
+| `engine` | string | Analysis engine: `"gitnexus"` or `"regex-lite"` |
+| `engineVersion` | string | Engine version |
+| `symbols` | array | Symbol table (see below) |
+| `callGraph` | array | Call relationships between symbols |
+| `processes` | array | Detected execution flows |
+| `stats` | object | Aggregate statistics |
+
+### codeIntelligence.symbols[]
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique symbol ID (e.g., `"sym-validate-user-a3f2"`) |
+| `name` | string | Symbol name |
+| `type` | string | `"Function"`, `"Class"`, `"Method"`, `"Const"`, `"Interface"` |
+| `filePath` | string | Relative file path |
+| `startLine` | number | Start line of definition |
+| `endLine` | number | End line of definition |
+| `isExported` | boolean | Whether the symbol is exported/public |
+| `artifactRefs` | array of strings | Direct Refs: annotation artifact IDs |
+| `inferredRefs` | array of strings | Transitively inferred artifact IDs |
+| `callers` | array of strings | Symbol names that call this symbol |
+| `callees` | array of strings | Symbol names called by this symbol |
+| `processes` | array of strings | Execution flow names this symbol participates in |
+| `community` | string | Community/cluster name from graph analysis |
+
+### codeIntelligence.callGraph[]
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `from` | string | Caller symbol name |
+| `to` | string | Callee symbol name |
+| `confidence` | number | Edge confidence 0.0-1.0 |
+| `type` | string | `"CALLS"`, `"IMPORTS"`, `"INHERITS"` |
+
+### codeIntelligence.processes[]
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Process/flow name |
+| `steps` | array of strings | Ordered symbol names in the flow |
+| `entryPoint` | string | First symbol in the flow |
+| `artifactRefs` | array of strings | SDD artifacts this flow implements |
+
+### codeIntelligence.stats
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `totalSymbols` | number | Total symbols indexed |
+| `symbolsWithRefs` | number | Symbols with direct Refs: annotations |
+| `symbolsWithInferredRefs` | number | Symbols with transitive inferred refs |
+| `uncoveredSymbols` | number | Symbols with no refs (direct or inferred) |
+| `totalProcesses` | number | Total execution flows detected |
+| `processesWithRefs` | number | Flows linked to SDD artifacts |
+
 ## Notes
 
 - The `file` and `sourceFile` fields use forward-slash paths relative to the project root.
