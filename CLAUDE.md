@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 17 Claude Code skills (9 pipeline + 4 onboarding + 3 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings). There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 18 Claude Code skills (9 pipeline + 4 onboarding + 4 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings). There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -39,6 +39,7 @@ sdd-task-implementer  →  src/, tests/, git commits
 **Utility skills** (invoke on demand):
 - `sdd-pipeline-status` → Pipeline status report with artifact verification and next-action recommendation
 - `sdd-traceability-check` → Verifies REQ→UC→WF→API→BDD→INV→ADR traceability chain, finds orphans/broken links
+- `sdd-dashboard` → Visual HTML traceability dashboard with interactive prompts, pipeline popovers, and JSONP live status feed
 - `sdd-session-summary` → Summarizes session decisions, categorizes formal vs informal context
 
 **Setup skill**:
