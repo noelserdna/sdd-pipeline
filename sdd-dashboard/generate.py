@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SDD Dashboard Generator
-Scans spec/, plan/, task/, test/ for artifact definitions and cross-references,
+Scans requirements/, spec/, plan/, task/, test/ for artifact definitions and cross-references,
 builds traceability-graph.json following the SDD graph schema,
 and generates index.html from the plugin HTML template.
 
@@ -26,7 +26,7 @@ from collections import OrderedDict
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-SCAN_DIRS = ["spec", "plan", "task", "test"]
+SCAN_DIRS = ["requirements", "spec", "plan", "task", "test"]
 SKIP_DIRS = {".git", ".claude", "node_modules", "__pycache__", "dashboard", "temp_files"}
 
 # ──────────────────────────────────────────────────────────
@@ -63,6 +63,8 @@ DEF_PATTERNS = [
     ("FASE", re.compile(r'^(#{1,6})\s+(FASE-\d{1,2})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # TASK: ### TASK-F0-001: title
     ("TASK", re.compile(r'^(#{1,6})\s+(TASK-F\d{1,2}-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
+    # TASK in checkbox list: - [ ] TASK-F1-009 description  or  - [x] TASK-F1-009 description
+    ("TASK", re.compile(r'^(\s*-\s*\[[ x]\])\s+(TASK-F\d{1,2}-\d{3,4})\s+(.*)', re.IGNORECASE)),
 ]
 
 # Filename-based definitions: extract from filenames like UC-001-extract-pdf.md, ADR-001-hybrid.md, WF-001-xxx.md
@@ -86,7 +88,7 @@ TABLE_DEF_PATTERNS = [
 
 # Universal reference pattern: matches any artifact ID in text
 REF_PATTERN = re.compile(
-    r'(?<![a-zA-Z])'  # no letter before
+    r'(?<![a-zA-Z\-])'  # no letter or hyphen before (prevents REQ-001 matching inside INV-GDPR-REQ-001)
     r'('
     r'REQ-[A-Z]*-?\d{3,4}[a-z]?'
     r'|UC-\d{3,4}'
@@ -209,6 +211,41 @@ def extract_category(id_str, id_type):
 def normalize_id(id_str):
     """Normalize an artifact ID for deduplication."""
     return id_str.strip()
+
+
+# Pattern for range references: "REQ-F-007 a REQ-F-019", "UC-001..UC-005", "INV-SEC-001..007"
+# Captures: PREFIX-CAT-START {separator} PREFIX-CAT-END  or  PREFIX-CAT-START..END
+_RANGE_PATTERN_FULL = re.compile(
+    r'((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z]+)?-)'  # prefix with optional category
+    r'(\d{3,4})'                                                     # start number
+    r'\s*(?:\.\.|\ba\b|\bhasta\b|\bal\b|–|—|-\s+)'                  # separator: .., a, hasta, al, en-dash, em-dash
+    r'\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z]+)?-)?'  # optional repeated prefix
+    r'(\d{3,4})',                                                     # end number
+    re.IGNORECASE
+)
+
+
+def expand_ranges(line):
+    """Expand range notation in a line to individual IDs.
+
+    Supports:
+    - Spanish:  REQ-F-007 a REQ-F-019, del REQ-F-001 al REQ-F-005
+    - Dot-dot:  UC-001..UC-005, INV-SEC-001..007
+    - Dash:     UC-001 – UC-005 (en-dash/em-dash)
+
+    Returns the line with ranges replaced by comma-separated individual IDs.
+    """
+    def _replace(m):
+        prefix = m.group(1)  # e.g. "REQ-F-" or "UC-"
+        start = int(m.group(2))
+        end = int(m.group(3))
+        if end < start or (end - start) > 200:  # sanity limit
+            return m.group(0)
+        width = len(m.group(2))  # preserve zero-padding
+        ids = [f"{prefix}{str(i).zfill(width)}" for i in range(start, end + 1)]
+        return ", ".join(ids)
+
+    return _RANGE_PATTERN_FULL.sub(_replace, line)
 
 
 def _rel_path(filepath, project_dir):
@@ -353,9 +390,10 @@ def scan_files(project_dir):
                             "stage": TYPE_TO_STAGE.get(ttype, "unknown"),
                         }
 
-            # 3. Extract all references on this line
+            # 3. Extract all references on this line (expand ranges first)
             ref_ids = set()
-            for rm in REF_PATTERN.finditer(line_stripped):
+            expanded_line = expand_ranges(line_stripped)
+            for rm in REF_PATTERN.finditer(expanded_line):
                 rid = normalize_id(rm.group(1))
                 # Skip noise IDs
                 if any(rid.startswith(p) for p in NOISE_PREFIXES):
@@ -566,9 +604,31 @@ def scan_code_refs(project_dir):
     }
 
 
+def _discover_test_dirs(project_dir):
+    """Discover test directories: tests/, test/, and */tests/ one level deep."""
+    candidates = [
+        os.path.join(project_dir, "tests"),
+        os.path.join(project_dir, "test"),
+    ]
+    # Auto-discover */tests/ and */test/ one level deep (e.g. frontend/tests/)
+    try:
+        for entry in os.listdir(project_dir):
+            if entry.startswith(".") or entry in SKIP_DIRS:
+                continue
+            subdir = os.path.join(project_dir, entry)
+            if os.path.isdir(subdir):
+                for tname in ("tests", "test"):
+                    tpath = os.path.join(subdir, tname)
+                    if os.path.isdir(tpath) and tpath not in candidates:
+                        candidates.append(tpath)
+    except OSError:
+        pass
+    return candidates
+
+
 def scan_test_refs(project_dir):
     """Scan tests/ for Refs: comments and test descriptions referencing SDD artifacts."""
-    test_dirs = [os.path.join(project_dir, "tests"), os.path.join(project_dir, "test")]
+    test_dirs = _discover_test_dirs(project_dir)
     test_refs = []
     total_test_files = 0
     total_tests = 0
@@ -653,6 +713,141 @@ def scan_test_refs(project_dir):
         "totalTests": total_tests,
         "testsWithRefs": tests_with_refs,
     }
+
+
+def scan_audits(project_dir):
+    """Scan audits/*.md for severity breakdown, 3C gate status, corrections, and progression."""
+    audits_dir = os.path.join(project_dir, "audits")
+    result = {
+        "auditFiles": [],
+        "latestGate": None,
+        "totalFindings": 0,
+        "bySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+        "corrected": 0,
+        "accepted": 0,
+        "deferred": 0,
+        "progression": [],
+    }
+
+    if not os.path.isdir(audits_dir):
+        return result
+
+    md_files = sorted(
+        [f for f in os.listdir(audits_dir) if f.lower().endswith(".md")]
+    )
+    if not md_files:
+        return result
+
+    result["auditFiles"] = [f"audits/{f}" for f in md_files]
+
+    # Patterns for table rows (pipe-delimited markdown tables)
+    re_total = re.compile(
+        r'\|\s*(?:Findings in audit|Total hallazgos|Total findings)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_critical = re.compile(
+        r'\|\s*(?:Criticos|Critical|Cr[ií]ticos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_high = re.compile(
+        r'\|\s*(?:Altos|High)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_medium = re.compile(
+        r'\|\s*(?:Medios|Medium)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_low = re.compile(
+        r'\|\s*(?:Bajos|Low)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_corrected = re.compile(
+        r'\|\s*(?:Corrections applied|Correcciones aplicadas|Corrected)\s*\|\s*(\d+)\s*/?\s*\d*\s*\|', re.IGNORECASE
+    )
+    re_accepted = re.compile(
+        r'\|\s*(?:Accepted|Aceptados)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_deferred = re.compile(
+        r'\|\s*(?:Deferred|Diferidos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
+    )
+    re_gate = re.compile(
+        r'\|\s*(?:3C Gate|3C)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE
+    )
+    # Progression table row: | vN.N | N | N | N | N | PASS/FAIL |
+    re_progression = re.compile(
+        r'\|\s*(v[\d.]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE
+    )
+
+    latest_gate = None
+    latest_total = 0
+    latest_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    latest_corrected = 0
+    latest_accepted = 0
+    latest_deferred = 0
+    progression = []
+
+    for fname in md_files:
+        fpath = os.path.join(audits_dir, fname)
+        try:
+            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception:
+            continue
+
+        # Extract progression table rows (most complete source)
+        prog_rows = re_progression.findall(content)
+        if prog_rows:
+            progression = []
+            for row in prog_rows:
+                progression.append({
+                    "version": row[0],
+                    "findings": int(row[1]),
+                    "fixed": int(row[2]),
+                    "accepted": int(row[3]),
+                    "deferred": int(row[4]),
+                    "gate": row[5].upper(),
+                })
+
+        # Extract summary data (latest file wins)
+        m = re_total.search(content)
+        if m:
+            latest_total = int(m.group(1))
+        m = re_critical.search(content)
+        if m:
+            latest_severity["critical"] = int(m.group(1))
+        m = re_high.search(content)
+        if m:
+            latest_severity["high"] = int(m.group(1))
+        m = re_medium.search(content)
+        if m:
+            latest_severity["medium"] = int(m.group(1))
+        m = re_low.search(content)
+        if m:
+            latest_severity["low"] = int(m.group(1))
+        m = re_corrected.search(content)
+        if m:
+            latest_corrected = int(m.group(1))
+        m = re_accepted.search(content)
+        if m:
+            latest_accepted = int(m.group(1))
+        m = re_deferred.search(content)
+        if m:
+            latest_deferred = int(m.group(1))
+        m = re_gate.search(content)
+        if m:
+            latest_gate = m.group(1).upper()
+
+    result["latestGate"] = latest_gate
+    result["totalFindings"] = latest_total
+    result["bySeverity"] = latest_severity
+    result["corrected"] = latest_corrected
+    result["accepted"] = latest_accepted
+    result["deferred"] = latest_deferred
+    result["progression"] = progression
+
+    sev_parts = []
+    for sev in ("critical", "high", "medium", "low"):
+        if latest_severity[sev]:
+            sev_parts.append(f"{latest_severity[sev]} {sev}")
+    sev_str = ", ".join(sev_parts) if sev_parts else "none"
+    print(f"  Audits: {len(md_files)} files, {latest_total} findings ({sev_str}), gate={latest_gate or 'N/A'}")
+
+    return result
 
 
 def classify_requirements(artifacts, incoming, outgoing):
@@ -845,6 +1040,12 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     else:
         stages_data = {}
 
+    # Count audit files for spec-auditor stage (findings aren't graph artifacts)
+    audits_dir = os.path.join(project_dir, "audits")
+    if os.path.isdir(audits_dir):
+        audit_files = [f for f in os.listdir(audits_dir) if f.lower().endswith(".md")]
+        stage_counts["spec-auditor"] = stage_counts.get("spec-auditor", 0) + len(audit_files)
+
     pipeline_stages = []
     for sname in stage_order:
         sd = stages_data.get(sname, {})
@@ -892,26 +1093,72 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     reqs = [a for a in artifacts.values() if a["type"] == "REQ"]
     total_reqs = len(reqs)
 
+    # Categories that don't need Use Cases (they trace to NFR specs or are project constraints)
+    _NO_UC_CATEGORIES = {"NF", "C"}
+
+    def _req_needs_uc(req):
+        """Return True if this REQ type is expected to have a Use Case."""
+        cat = req.get("category")
+        return cat not in _NO_UC_CATEGORIES
+
+    # Functional REQs = those expected to have UCs
+    functional_reqs = [r for r in reqs if _req_needs_uc(r)]
+    total_functional_reqs = len(functional_reqs)
+
+    def _neighbors(node_id):
+        """Return all directly connected artifact IDs (both directions)."""
+        return incoming.get(node_id, set()) | outgoing.get(node_id, set())
+
     def count_reqs_with(target_type):
         count = 0
         for req in reqs:
             rid = req["id"]
-            # Check incoming: other artifacts pointing to this REQ
-            for src in incoming.get(rid, set()):
-                if classify_id(src) == target_type:
+            for neighbor in _neighbors(rid):
+                if classify_id(neighbor) == target_type:
                     count += 1
                     break
-            else:
-                # Check outgoing: this REQ pointing to other artifacts
-                for tgt in outgoing.get(rid, set()):
-                    if classify_id(tgt) == target_type:
-                        count += 1
-                        break
         return count
 
-    reqs_with_uc = count_reqs_with("UC")
-    reqs_with_bdd = count_reqs_with("BDD")
-    reqs_with_task = count_reqs_with("TASK")
+    def count_reqs_with_transitive(target_type, req_subset=None, bridge_types=("UC", "WF")):
+        """Count REQs linked to target_type within 2 hops via bridge artifacts.
+
+        Checks: REQ↔TARGET (1-hop) then REQ↔bridge↔TARGET (2-hop).
+        bridge_types=None means any artifact type can serve as bridge.
+        req_subset: if provided, only count from this subset of REQs.
+        """
+        subset = req_subset if req_subset is not None else reqs
+        count = 0
+        for req in subset:
+            rid = req["id"]
+            found = False
+            neighbors = _neighbors(rid)
+            # 1-hop: direct REQ↔TARGET
+            for n in neighbors:
+                if classify_id(n) == target_type:
+                    found = True
+                    break
+            if not found:
+                # 2-hop: REQ↔bridge↔TARGET
+                for n in neighbors:
+                    n_type = classify_id(n)
+                    if n_type == "REQ":
+                        continue  # skip REQ→REQ→TARGET to avoid noise
+                    if bridge_types is not None and n_type not in bridge_types:
+                        continue
+                    for n2 in _neighbors(n):
+                        if classify_id(n2) == target_type:
+                            found = True
+                            break
+                    if found:
+                        break
+            if found:
+                count += 1
+        return count
+
+    # UC coverage: only count functional REQs (NF/C don't need UCs by design)
+    reqs_with_uc = count_reqs_with_transitive("UC", req_subset=functional_reqs, bridge_types=None)
+    reqs_with_bdd = count_reqs_with_transitive("BDD", bridge_types=None)
+    reqs_with_task = count_reqs_with_transitive("TASK")
 
     # Find orphans: artifacts defined but never referenced by any other artifact
     all_defined = set(artifacts.keys())
@@ -1061,8 +1308,8 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "traceabilityCoverage": {
             "reqsWithUCs": {
                 "count": reqs_with_uc,
-                "total": total_reqs,
-                "percentage": round(reqs_with_uc / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "total": total_functional_reqs,
+                "percentage": round(reqs_with_uc / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
             "reqsWithBDD": {
                 "count": reqs_with_bdd,
@@ -1109,6 +1356,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         adoption_stats = adoption_data.get("adoptionStats", None)
 
     stats["adoptionStats"] = adoption_stats
+    stats["auditData"] = scan_audits(project_dir)
 
     graph = {
         "$schema": "traceability-graph-v3",

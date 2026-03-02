@@ -694,7 +694,12 @@ tr.row-none td:last-child{color:var(--red)}
     metrics.forEach(function(m) {
       score += Math.min(m.val / m.target, 1) * m.weight;
     });
-    return Math.round(score);
+    score = Math.round(score);
+    var audit = (DATA.statistics || {}).auditData;
+    if (audit && audit.latestGate === "FAIL") {
+      score = Math.max(0, score - 10);
+    }
+    return score;
   }
 
   function healthGrade(score) {
@@ -728,6 +733,11 @@ tr.row-none td:last-child{color:var(--red)}
     if (orphans > 0) recs.push({ priority: "medium", text: orphans + " orphaned artifacts found", action: "Review and link or remove", prompt: "Ejecuta /sdd-traceability-check para ver los artefactos huerfanos y decidir si vincularlos o eliminarlos." });
     var broken = (st.brokenReferences || []).length;
     if (broken > 0) recs.push({ priority: "high", text: broken + " broken references", action: "Fix or remove invalid references", prompt: "Ejecuta /sdd-traceability-check para localizar las referencias rotas y corregirlas." });
+    var audit = st.auditData;
+    if (audit && audit.latestGate === "FAIL") {
+      var critHigh = ((audit.bySeverity || {}).critical || 0) + ((audit.bySeverity || {}).high || 0);
+      recs.push({ priority: "high", text: critHigh + " critical/high audit findings block pipeline", action: "Run /sdd:spec-auditor --fix", prompt: "La auditoria tiene hallazgos criticos/altos sin resolver. El 3C Gate esta en FAIL.\n\nEjecuta /sdd:spec-auditor --fix para corregir los hallazgos." });
+    }
     return recs;
   }
 
@@ -768,11 +778,26 @@ tr.row-none td:last-child{color:var(--red)}
     var statusCls = "st-" + (s.status || "unknown");
     var lastRun = s.lastRun ? new Date(s.lastRun).toLocaleString() : "Never";
     var prompt = getStagePrompt(s.name, s.status || "unknown");
+    var auditProgHtml = "";
+    if (s.name === "spec-auditor" && DATA.statistics && DATA.statistics.auditData && DATA.statistics.auditData.progression && DATA.statistics.auditData.progression.length > 0) {
+      var prog = DATA.statistics.auditData.progression;
+      var tbl = '<table style="width:100%;font-size:11px;margin:8px 0;border-collapse:collapse">';
+      tbl += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:2px 4px">Audit</th><th style="text-align:right;padding:2px 4px">Findings</th><th style="text-align:right;padding:2px 4px">Fixed</th><th style="text-align:right;padding:2px 4px">Accepted</th><th style="text-align:right;padding:2px 4px">Deferred</th><th style="text-align:center;padding:2px 4px">3C</th></tr>';
+      prog.forEach(function(row) {
+        var gateColor = row.gate === "PASS" ? "var(--green)" : "var(--red)";
+        tbl += '<tr><td style="padding:2px 4px">' + esc(row.version) + '</td><td style="text-align:right;padding:2px 4px">' + row.findings + '</td><td style="text-align:right;padding:2px 4px">' + row.fixed + '</td>'
+            + '<td style="text-align:right;padding:2px 4px">' + row.accepted + '</td><td style="text-align:right;padding:2px 4px">' + row.deferred + '</td>'
+            + '<td style="text-align:center;padding:2px 4px;color:' + gateColor + ';font-weight:600">' + esc(row.gate) + '</td></tr>';
+      });
+      tbl += '</table>';
+      auditProgHtml = tbl;
+    }
     pop.innerHTML = '<div class="stage-popover-header">'
       + '<strong>' + esc(STAGE_LABELS[s.name] || s.name.replace(/-/g," ")) + '</strong>'
       + '<span class="stage-popover-status ' + statusCls + '">' + esc(s.status || "unknown") + '</span>'
       + '</div>'
       + '<div class="stage-popover-info">' + (s.artifactCount || 0) + ' artifacts &middot; Last run: ' + esc(lastRun) + '</div>'
+      + auditProgHtml
       + '<div class="prompt-block" style="font-size:11px;max-height:120px;overflow-y:auto">' + esc(prompt) + '</div>'
       + '<div class="stage-popover-actions"></div>';
     div.appendChild(pop);
@@ -822,7 +847,7 @@ tr.row-none td:last-child{color:var(--red)}
   addStat("Artifacts", st.totalArtifacts || 0, typeSummary(st.byType), "", "Total number of traced artifacts across all types");
   addStat("Relationships", st.totalRelationships || 0, "", "", "Total number of links between artifacts");
   var covUC = (cov.reqsWithUCs && cov.reqsWithUCs.percentage != null) ? cov.reqsWithUCs.percentage : 0;
-  addStat("Requirements with Use Cases", covUC.toFixed(1) + "%", (cov.reqsWithUCs ? cov.reqsWithUCs.count + "/" + cov.reqsWithUCs.total : ""), covUC >= 80 ? "good" : "", "Percentage of requirements that have at least one Use Case linked");
+  addStat("Requirements with Use Cases", covUC.toFixed(1) + "%", (cov.reqsWithUCs ? cov.reqsWithUCs.count + "/" + cov.reqsWithUCs.total + " functional" : ""), covUC >= 80 ? "good" : "", "Percentage of functional requirements with at least one Use Case (excludes NFR/Constraint REQs)");
   var covCode = (cov.reqsWithCode && cov.reqsWithCode.percentage != null) ? cov.reqsWithCode.percentage : 0;
   addStat("Requirements with Code", covCode.toFixed(1) + "%", (cov.reqsWithCode ? cov.reqsWithCode.count + "/" + cov.reqsWithCode.total : ""), covCode >= 60 ? "good" : "", "Percentage of requirements referenced by source code (Refs: comments)");
   var covTest = (cov.reqsWithTests && cov.reqsWithTests.percentage != null) ? cov.reqsWithTests.percentage : 0;
@@ -837,6 +862,24 @@ tr.row-none td:last-child{color:var(--red)}
   addStat("Orphans", orphanCount, "Unreferenced", orphanCount > 0 ? "warn" : "good", "Artifacts not referenced by any other artifact");
   var brokenCount = (st.brokenReferences || []).length;
   addStat("Broken References", brokenCount, "Undefined targets", brokenCount > 0 ? "warn" : "good", "References pointing to artifacts that do not exist");
+
+  var auditD = st.auditData;
+  if (auditD && auditD.auditFiles && auditD.auditFiles.length > 0) {
+    var gateCls = auditD.latestGate === "PASS" ? "good" : (auditD.latestGate === "FAIL" ? "warn" : "");
+    var gateLbl = auditD.latestGate || "N/A";
+    var sevSub = "";
+    if (auditD.bySeverity) {
+      var sv = auditD.bySeverity;
+      var parts = [];
+      if (sv.critical) parts.push(sv.critical + " crit");
+      if (sv.high) parts.push(sv.high + " high");
+      if (sv.medium) parts.push(sv.medium + " med");
+      if (sv.low) parts.push(sv.low + " low");
+      sevSub = parts.join(", ");
+    }
+    addStat("Audit Gate", gateLbl, auditD.totalFindings + " findings" + (sevSub ? ": " + sevSub : ""), gateCls,
+            "3C Gate status from spec-auditor. PASS = all critical/high findings resolved");
+  }
 
   var statIndex = 0;
   function addStat(label, value, sub, cls, tooltip){
