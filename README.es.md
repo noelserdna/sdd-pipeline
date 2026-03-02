@@ -88,13 +88,37 @@ El directorio `server/` contiene un servidor MCP en TypeScript que expone el gra
 | `sdd_coverage` | Analisis de gaps por dominio de negocio o capa tecnica |
 | `sdd_trace` | Recorrido completo de cadena con deteccion de roturas |
 
-**Build:**
+Ademas incluye 7 resources `sdd://` y 2 prompts de workflow (`analyze_impact`, `generate_status_report`).
+
+### Build
 
 ```bash
 cd server && npm install && npm run build
 ```
 
-El servidor lee `dashboard/traceability-graph.json` (generado por `/sdd:dashboard`).
+### Instalacion
+
+El servidor MCP se configura via `~/.claude/.mcp.json` (global) o `<proyecto>/.mcp.json` (por proyecto):
+
+```json
+{
+  "mcpServers": {
+    "sdd": {
+      "command": "node",
+      "args": ["/ruta/a/sdd-skills/server/dist/index.js"]
+    }
+  }
+}
+```
+
+**Global vs por proyecto:** El servidor usa `process.cwd()` para localizar el grafo de trazabilidad, y Claude Code lanza los servidores MCP desde el directorio del proyecto actual. Esto significa que una instalacion global resuelve automaticamente al proyecto correcto — no necesitas configurar rutas.
+
+**Como encuentra el grafo:** Al iniciar, el servidor busca `dashboard/traceability-graph.json` desde el `cwd` subiendo hasta 6 directorios padre. Si no encuentra ningun grafo, degrada gracefully (devuelve resultados vacios, sin crash). Esto significa:
+
+- En proyectos **con** artefactos SDD: funcionalidad completa tras ejecutar `/sdd:dashboard`
+- En proyectos **sin** artefactos SDD: el servidor carga pero todas las consultas devuelven resultados vacios
+
+**Prerrequisitos:** Node.js 18+. Tras reiniciar Claude Code, se te pedira aprobar el servidor MCP "sdd" en el primer uso.
 
 ## Automatizacion
 

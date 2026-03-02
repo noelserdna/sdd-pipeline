@@ -20,7 +20,6 @@ ideas/
 ANALYSIS-REQ-CHANGE-MAINTENANCE.md
 CROSS-ANALYSIS-AUDIT.md
 
-# MCP Server build artifacts
+# MCP Server dependencies (dist/ is committed for plugin distribution)
 server/node_modules/
-server/dist/
 server/package-lock.json
