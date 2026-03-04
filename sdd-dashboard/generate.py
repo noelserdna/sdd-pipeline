@@ -941,13 +941,94 @@ def classify_requirements(artifacts, incoming, outgoing):
 
     classification_stats = {"byDomain": {}, "byLayer": {}, "byCategory": {}}
 
+    # Title-based domain inference rules: (keywords, domain_name)
+    # Used as fallback when REQ prefix is generic (F, C, NF) or unknown
+    _domain_keyword_rules = [
+        # Customer & User Management
+        (["cliente", "client", "usuario", "user", "alta", "baja", "registro", "registr", "perfil", "profile",
+          "cuenta", "account", "contacto", "suscript", "subscri"], "Customer Management"),
+        # Service & Product Management
+        (["servicio", "service", "pack", "producto", "product", "tarifa", "plan", "oferta", "offer",
+          "catalogo", "catalog", "tipo de servicio", "contratacion", "contrat"], "Service Management"),
+        # Billing & Payments
+        (["factur", "invoice", "billing", "pago", "payment", "cobro", "cargo", "charge", "precio", "price",
+          "descuento", "discount", "impuesto", "tax", "penalizacion", "penal"], "Billing & Payments"),
+        # Provisioning & Activation
+        (["activacion", "activat", "provision", "suspend", "suspens", "reactivac", "reactivat",
+          "desactivac", "deactivat", "permanencia", "portabilidad"], "Provisioning & Lifecycle"),
+        # Incidents & Support
+        (["incidencia", "incident", "ticket", "soporte", "support", "sla", "escalad", "resolucion",
+          "resolut", "averia", "reclam", "claim", "queja", "complaint"], "Incidents & Support"),
+        # Security & Auth
+        (["seguridad", "security", "autenticac", "authenticat", "autorizac", "authorizat", "password",
+          "contrasena", "token", "sesion", "session", "rol", "role", "permiso", "permission",
+          "cifrado", "encrypt", "audit"], "Security & Auth"),
+        # Integration & APIs
+        (["integracion", "integrat", "api", "webhook", "notificacion", "notificat", "email", "sms",
+          "mensaje", "message", "evento", "event", "sincroniz", "sync"], "Integration & APIs"),
+        # Infrastructure & DevOps
+        (["infraestructura", "infrastructure", "deploy", "despliegue", "monitor", "log", "backup",
+          "migracion", "migrat", "config", "entorno", "environment", "ci/cd", "pipeline"], "Infrastructure & DevOps"),
+        # Reporting & Analytics
+        (["reporte", "report", "estadistic", "statistic", "dashboard", "tablero", "metricas",
+          "metrics", "analitic", "analytic", "kpi", "export"], "Analytics & Reporting"),
+        # Frontend & UI
+        (["interfaz", "interface", "ui", "ux", "pantalla", "screen", "formulario", "form",
+          "vista", "view", "navegacion", "navigation", "responsive", "accesibil"], "Frontend & UI"),
+        # Data & Storage
+        (["base de datos", "database", "almacen", "storage", "cache", "indice", "index",
+          "archivo", "file", "import", "export"], "Data & Storage"),
+    ]
+
+    # Title-based layer inference rules: (keywords, layer_name)
+    _layer_keyword_rules = [
+        (["ui", "ux", "interfaz", "interface", "pantalla", "screen", "formulario", "form",
+          "vista", "view", "frontend", "navegacion", "navigation", "responsive", "css",
+          "componente visual", "widget", "boton", "button", "modal", "menu", "sidebar"], "Frontend"),
+        (["infraestructura", "infrastructure", "deploy", "despliegue", "ci/cd", "pipeline",
+          "docker", "kubernetes", "terraform", "cloud", "servidor", "server", "nginx",
+          "ssl", "dns", "dominio", "domain", "hosting", "monitor", "log"], "Infrastructure"),
+        (["integracion", "integrat", "webhook", "api extern", "third.party", "tercero",
+          "pasarela", "gateway", "sync", "sincroniz", "import", "export", "migra"], "Integration/Deployment"),
+    ]
+
+    def _infer_domain_from_title(title):
+        """Infer business domain from REQ title using keyword matching."""
+        t = title.lower()
+        for keywords, domain_name in _domain_keyword_rules:
+            if any(kw in t for kw in keywords):
+                return domain_name
+        return "Other"
+
+    def _infer_layer_from_title(title):
+        """Infer technical layer from REQ title using keyword matching. Defaults to Backend."""
+        t = title.lower()
+        for keywords, layer_name in _layer_keyword_rules:
+            if any(kw in t for kw in keywords):
+                return layer_name
+        # Default to Backend for functional requirements — most common layer
+        return "Backend"
+
+    # Generic REQ prefixes that don't carry domain information (IEEE 830 style)
+    generic_cats = {"F", "NF", "C", "R", "D", "G", "S", "P"}
+
+    from collections import Counter
+
     for art in artifacts.values():
         if art["type"] != "REQ":
             art["classification"] = None
             continue
 
         cat = art.get("category")
-        domain = domain_map.get(cat, "Other") if cat else "Other"
+        title = art.get("title", "")
+
+        # Business domain: try prefix map first, fallback to title inference
+        if cat and cat not in generic_cats:
+            domain = domain_map.get(cat, None)
+            if domain is None:
+                domain = _infer_domain_from_title(title)
+        else:
+            domain = _infer_domain_from_title(title)
 
         # Technical layer: follow REQ -> UC -> TASK -> FASE
         fases = set()
@@ -974,16 +1055,17 @@ def classify_requirements(artifacts, incoming, outgoing):
                     layers.append("Frontend")
                 else:
                     layers.append("Integration/Deployment")
-            from collections import Counter
             layer = Counter(layers).most_common(1)[0][0]
         else:
-            layer = "Unknown"
+            # Fallback: infer from title keywords instead of showing "Unknown"
+            layer = _infer_layer_from_title(title)
 
         # Functional category from section or category prefix
-        nfr_cats = {"PERF", "SEC", "SCAL", "AVAIL", "TECH", "CACHE", "OBS", "RATE", "VAL", "I18N", "ACC"}
+        nfr_cats = {"PERF", "SEC", "SCAL", "AVAIL", "TECH", "CACHE", "OBS", "RATE", "VAL", "I18N", "ACC", "NF"}
         security_cats = {"SEC", "AUT", "GDP", "GDPR", "DPR"}
         data_cats = {"RET", "DPR", "AUT", "MNT"}
         integration_cats = {"NTF", "INC", "DEP", "MON", "REC", "DER"}
+        constraint_cats = {"C"}
         if cat in nfr_cats:
             func_cat = "Non-Functional"
         elif cat in security_cats:
@@ -992,6 +1074,8 @@ def classify_requirements(artifacts, incoming, outgoing):
             func_cat = "Data"
         elif cat in integration_cats:
             func_cat = "Integration"
+        elif cat in constraint_cats:
+            func_cat = "Constraint"
         else:
             func_cat = "Functional"
 
