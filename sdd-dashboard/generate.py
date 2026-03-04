@@ -1071,6 +1071,55 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     if impl_count > 0:
         stage_counts["task-implementer"] = impl_count
 
+    # Fallback: when a stage is done/stale but count is 0, use summary.metrics from pipeline-state.json
+    # This avoids showing misleading "0" for completed stages whose artifacts aren't captured by graph scanning
+    # Each entry: (metric_keys_to_sum, label_override_when_fallback_used)
+    SUMMARY_METRIC_FALLBACKS = {
+        "test-planner": (["bdd_scenarios", "test_matrices", "perf_scenarios"], "scenarios"),
+        "task-implementer": (["tasks_completed", "commits", "tests_passed"], "tasks/commits"),
+        "spec-auditor": (["total_findings"], "findings"),
+        "plan-architect": (["total_fases", "components"], "phases"),
+        "task-generator": (["total_tasks"], "tasks"),
+        "security-auditor": (["total_findings"], "findings"),
+        "tech-designer": (["dimensions_analyzed"], "dimensions"),
+        "ux-designer": (["dimensions_analyzed"], "dimensions"),
+    }
+    summary_label_overrides = {}
+    for sname, (metric_keys, label_override) in SUMMARY_METRIC_FALLBACKS.items():
+        if stage_counts.get(sname, 0) == 0:
+            sd = stages_data.get(sname, {})
+            if sd.get("status") in ("done", "stale"):
+                summary = sd.get("summary")
+                if summary and isinstance(summary.get("metrics"), dict):
+                    metrics = summary["metrics"]
+                    fallback = sum(metrics.get(k, 0) for k in metric_keys)
+                    if fallback > 0:
+                        stage_counts[sname] = fallback
+                        summary_label_overrides[sname] = label_override
+
+    # Fallback: count files recursively for test-planner if still 0
+    if stage_counts.get("test-planner", 0) == 0:
+        test_dir = os.path.join(project_dir, "test")
+        if os.path.isdir(test_dir):
+            count = 0
+            for root, dirs, filenames in os.walk(test_dir):
+                count += sum(1 for f in filenames if f.lower().endswith(".md"))
+            if count > 0:
+                stage_counts["test-planner"] = count
+
+    # Fallback: count src/tests files with broader extensions for task-implementer if still 0
+    if stage_counts.get("task-implementer", 0) == 0:
+        broad_exts = {".ts", ".js", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".rb", ".cs", ".cpp", ".c", ".swift"}
+        impl_fallback = 0
+        for search_dir in ["src", "app", "lib", "tests", "test"]:
+            d = os.path.join(project_dir, search_dir)
+            if os.path.isdir(d):
+                for root, dirs, filenames in os.walk(d):
+                    dirs[:] = [dd for dd in dirs if dd not in SKIP_DIRS]
+                    impl_fallback += sum(1 for f in filenames if os.path.splitext(f)[1].lower() in broad_exts)
+        if impl_fallback > 0:
+            stage_counts["task-implementer"] = impl_fallback
+
     pipeline_stages = []
     for sname in stage_order:
         sd = stages_data.get(sname, {})
@@ -1079,7 +1128,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             "status": sd.get("status", "unknown"),
             "lastRun": sd.get("lastRun"),
             "artifactCount": stage_counts.get(sname, 0),
-            "stageLabel": STAGE_COUNT_UNITS.get(sname, "artifacts"),
+            "stageLabel": summary_label_overrides.get(sname, STAGE_COUNT_UNITS.get(sname, "artifacts")),
         }
         if sd.get("summary"):
             stage_entry["summary"] = sd["summary"]
@@ -1097,7 +1146,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                 "status": ld.get("status", "unknown"),
                 "lastRun": ld.get("lastRun"),
                 "artifactCount": stage_counts.get(lname, 0),
-                "stageLabel": STAGE_COUNT_UNITS.get(lname, "artifacts"),
+                "stageLabel": summary_label_overrides.get(lname, STAGE_COUNT_UNITS.get(lname, "artifacts")),
             }
             if ld.get("summary"):
                 lateral_entry["summary"] = ld["summary"]
