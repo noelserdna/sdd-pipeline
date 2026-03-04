@@ -61,8 +61,8 @@ DEF_PATTERNS = [
     ("RN", re.compile(r'^(#{1,6})\s+(RN-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # FASE: # FASE-0: title
     ("FASE", re.compile(r'^(#{1,6})\s+(FASE-\d{1,2})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
-    # TASK: ### TASK-F0-001: title
-    ("TASK", re.compile(r'^(#{1,6})\s+(TASK-F\d{1,2}-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
+    # TASK: ### TASK-F0-001: title  or  ### [x] TASK-F0-001: title  or  ### ✅ TASK-F0-001: title
+    ("TASK", re.compile(r'^(#{1,6})\s+(?:\[[ x]\]\s*)?(?:✅\s*)?(TASK-F\d{1,2}-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # TASK in checkbox list: - [ ] TASK-F1-009 description  or  - [x] TASK-F1-009 description
     ("TASK", re.compile(r'^(\s*-\s*\[[ x]\])\s+(TASK-F\d{1,2}-\d{3,4})\s+(.*)', re.IGNORECASE)),
 ]
@@ -426,6 +426,13 @@ def scan_files(project_dir):
                     for j, tgt in enumerate(ref_list):
                         if i != j:
                             references.append((src, tgt, frel, line_num))
+                # Also connect the file context ID (e.g., API heading) to each ref ID on this line
+                # This fixes orphaned APIs when a Refs: line under an API heading has 2+ IDs
+                if file_context_ids:
+                    ctx_id = file_context_ids[-1]
+                    for rid in ref_list:
+                        if rid != ctx_id:
+                            references.append((ctx_id, rid, frel, line_num))
             elif len(ref_ids) == 1 and file_context_ids:
                 rid = list(ref_ids)[0]
                 ctx_id = file_context_ids[-1]
