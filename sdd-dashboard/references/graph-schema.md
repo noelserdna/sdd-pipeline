@@ -157,12 +157,15 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
     },
     "totalRelationships": 1200,
     "traceabilityCoverage": {
-      "reqsWithUCs": { "count": 280, "total": 330, "percentage": 84.8 },
-      "reqsWithBDD": { "count": 200, "total": 330, "percentage": 60.6 },
-      "reqsWithTasks": { "count": 250, "total": 330, "percentage": 75.8 },
-      "reqsWithCode": { "count": 180, "total": 330, "percentage": 54.5 },
-      "reqsWithTests": { "count": 160, "total": 330, "percentage": 48.5 },
-      "reqsWithCommits": { "count": 170, "total": 330, "percentage": 51.5 }
+      "totalReqs": 330,
+      "totalFunctionalReqs": 290,
+      "reqBreakdown": { "Functional": 290, "Non-Functional": 30, "Constraint": 10 },
+      "reqsWithUCs": { "count": 280, "total": 290, "percentage": 96.6 },
+      "reqsWithBDD": { "count": 200, "total": 330, "percentage": 60.6, "functionalCount": 190, "functionalTotal": 290, "functionalPercentage": 65.5 },
+      "reqsWithTasks": { "count": 250, "total": 330, "percentage": 75.8, "functionalCount": 250, "functionalTotal": 290, "functionalPercentage": 86.2 },
+      "reqsWithCode": { "count": 180, "total": 330, "percentage": 54.5, "functionalCount": 180, "functionalTotal": 290, "functionalPercentage": 62.1 },
+      "reqsWithTests": { "count": 160, "total": 330, "percentage": 48.5, "functionalCount": 155, "functionalTotal": 290, "functionalPercentage": 53.4 },
+      "reqsWithCommits": { "count": 170, "total": 330, "percentage": 51.5, "functionalCount": 170, "functionalTotal": 290, "functionalPercentage": 58.6 }
     },
     "orphans": ["INV-SYS-042", "NFR-015"],
     "brokenReferences": [
@@ -443,14 +446,19 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `reqsWithUCs` | coverage | REQs that have at least one UC |
-| `reqsWithBDD` | coverage | REQs that have at least one BDD |
-| `reqsWithTasks` | coverage | REQs traceable to at least one TASK |
-| `reqsWithCode` | coverage | REQs that have at least one codeRef (directly or via chain) |
-| `reqsWithTests` | coverage | REQs that have at least one testRef (directly or via chain) |
-| `reqsWithCommits` | coverage | REQs that have at least one commitRef (directly or via chain) |
+| `totalReqs` | number | Total number of REQ artifacts |
+| `totalFunctionalReqs` | number | Total functional REQs (excludes NFR/Constraint) |
+| `reqBreakdown` | object | Count per functional category (`Functional`, `Non-Functional`, `Constraint`, etc.) |
+| `reqsWithUCs` | coverage | Functional REQs that have at least one UC |
+| `reqsWithBDD` | coverage+ | REQs that have at least one BDD |
+| `reqsWithTasks` | coverage+ | REQs traceable to at least one TASK |
+| `reqsWithCode` | coverage+ | REQs that have at least one codeRef (directly or via chain) |
+| `reqsWithTests` | coverage+ | REQs that have at least one testRef (directly or via chain) |
+| `reqsWithCommits` | coverage+ | REQs that have at least one commitRef (directly or via chain) |
 
-Each coverage object: `{ "count": N, "total": M, "percentage": P }`
+Base coverage object: `{ "count": N, "total": M, "percentage": P }`
+
+Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, "functionalTotal": M, "functionalPercentage": P }` — metrics computed over functional REQs only. NFR/constraint REQs are excluded since they don't produce UCs, tasks, or code by design. The HTML dashboard uses `functionalPercentage` as the primary display and falls back to `percentage` for backwards compatibility.
 
 ### codeStats
 

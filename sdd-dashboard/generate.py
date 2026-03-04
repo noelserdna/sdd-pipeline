@@ -1348,6 +1348,12 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     reqs_with_bdd = count_reqs_with_transitive("BDD", bridge_types=None)
     reqs_with_task = count_reqs_with_transitive("TASK")
 
+    # Functional-only variants for implementation metrics
+    # (NF/C REQs don't generate UCs, tasks, or code — so they shouldn't penalize coverage)
+    functional_req_ids = {r["id"] for r in functional_reqs}
+    reqs_with_bdd_functional = count_reqs_with_transitive("BDD", req_subset=functional_reqs, bridge_types=None)
+    reqs_with_task_functional = count_reqs_with_transitive("TASK", req_subset=functional_reqs)
+
     # Find orphans: artifacts defined but never referenced by any other artifact
     all_defined = set(artifacts.keys())
     all_referenced = set()
@@ -1423,6 +1429,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                     break
 
     reqs_with_commits = len(reqs_with_commits_set)
+    reqs_with_commits_functional = len(reqs_with_commits_set & functional_req_ids)
 
     # ── Code refs processing ─────────────────────────────────
     artifact_code_refs = {}
@@ -1448,6 +1455,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                     reqs_with_code_set.add(rid)
                     break
     reqs_with_code = len(reqs_with_code_set)
+    reqs_with_code_functional = len(reqs_with_code_set & functional_req_ids)
 
     # ── Test refs processing ──────────────────────────────────
     artifact_test_refs = {}
@@ -1473,6 +1481,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                     reqs_with_tests_set.add(rid)
                     break
     reqs_with_tests = len(reqs_with_tests_set)
+    reqs_with_tests_functional = len(reqs_with_tests_set & functional_req_ids)
 
     # ── Classification ────────────────────────────────────────
     classification_stats = classify_requirements(artifacts, incoming, outgoing)
@@ -1494,6 +1503,9 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "byType": OrderedDict(sorted(by_type.items())),
         "totalRelationships": len(deduped_rels),
         "traceabilityCoverage": {
+            "totalReqs": total_reqs,
+            "totalFunctionalReqs": total_functional_reqs,
+            "reqBreakdown": classification_stats.get("byCategory", {}),
             "reqsWithUCs": {
                 "count": reqs_with_uc,
                 "total": total_functional_reqs,
@@ -1503,26 +1515,41 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                 "count": reqs_with_bdd,
                 "total": total_reqs,
                 "percentage": round(reqs_with_bdd / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalCount": reqs_with_bdd_functional,
+                "functionalTotal": total_functional_reqs,
+                "functionalPercentage": round(reqs_with_bdd_functional / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
             "reqsWithTasks": {
                 "count": reqs_with_task,
                 "total": total_reqs,
                 "percentage": round(reqs_with_task / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalCount": reqs_with_task_functional,
+                "functionalTotal": total_functional_reqs,
+                "functionalPercentage": round(reqs_with_task_functional / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
             "reqsWithCode": {
                 "count": reqs_with_code,
                 "total": total_reqs,
                 "percentage": round(reqs_with_code / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalCount": reqs_with_code_functional,
+                "functionalTotal": total_functional_reqs,
+                "functionalPercentage": round(reqs_with_code_functional / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
             "reqsWithTests": {
                 "count": reqs_with_tests,
                 "total": total_reqs,
                 "percentage": round(reqs_with_tests / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalCount": reqs_with_tests_functional,
+                "functionalTotal": total_functional_reqs,
+                "functionalPercentage": round(reqs_with_tests_functional / total_functional_reqs * 100, 1) if total_reqs > 0 else 0,
             },
             "reqsWithCommits": {
                 "count": reqs_with_commits,
                 "total": total_reqs,
                 "percentage": round(reqs_with_commits / total_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalCount": reqs_with_commits_functional,
+                "functionalTotal": total_functional_reqs,
+                "functionalPercentage": round(reqs_with_commits_functional / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
         },
         "orphans": orphans[:50],  # cap at 50 to avoid bloat

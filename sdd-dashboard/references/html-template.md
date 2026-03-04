@@ -642,8 +642,8 @@ tr.row-none td:last-child{color:var(--red)}
     }
 
     var ucGap = stCov.reqsWithUCs ? ((stCov.reqsWithUCs.total || 0) - (stCov.reqsWithUCs.count || 0)) : 0;
-    var bddGap = stCov.reqsWithBDD ? ((stCov.reqsWithBDD.total || 0) - (stCov.reqsWithBDD.count || 0)) : 0;
-    var taskGap = stCov.reqsWithTasks ? ((stCov.reqsWithTasks.total || 0) - (stCov.reqsWithTasks.count || 0)) : 0;
+    var bddGap = stCov.reqsWithBDD ? ((stCov.reqsWithBDD.functionalTotal || stCov.reqsWithBDD.total || 0) - (stCov.reqsWithBDD.functionalCount || stCov.reqsWithBDD.count || 0)) : 0;
+    var taskGap = stCov.reqsWithTasks ? ((stCov.reqsWithTasks.functionalTotal || stCov.reqsWithTasks.total || 0) - (stCov.reqsWithTasks.functionalCount || stCov.reqsWithTasks.count || 0)) : 0;
 
     switch (stageName) {
       case "requirements-engineer":
@@ -722,12 +722,15 @@ tr.row-none td:last-child{color:var(--red)}
   var TARGETS = { ucs: 90, bdd: 70, tasks: 80, code: 60, tests: 50 };
   function computeHealthScore(cov) {
     if (!cov) return 0;
+    // Use functional percentages where available (implementation metrics)
+    // This avoids penalizing for NFR/constraint REQs that don't produce code/tasks
+    function _fp(m) { return (m || {}).functionalPercentage || (m || {}).percentage || 0; }
     var metrics = [
       { val: (cov.reqsWithUCs || {}).percentage || 0, target: TARGETS.ucs, weight: 25 },
-      { val: (cov.reqsWithBDD || {}).percentage || 0, target: TARGETS.bdd, weight: 20 },
-      { val: (cov.reqsWithTasks || {}).percentage || 0, target: TARGETS.tasks, weight: 20 },
-      { val: (cov.reqsWithCode || {}).percentage || 0, target: TARGETS.code, weight: 20 },
-      { val: (cov.reqsWithTests || {}).percentage || 0, target: TARGETS.tests, weight: 15 }
+      { val: _fp(cov.reqsWithBDD), target: TARGETS.bdd, weight: 20 },
+      { val: _fp(cov.reqsWithTasks), target: TARGETS.tasks, weight: 20 },
+      { val: _fp(cov.reqsWithCode), target: TARGETS.code, weight: 20 },
+      { val: _fp(cov.reqsWithTests), target: TARGETS.tests, weight: 15 }
     ];
     var score = 0;
     metrics.forEach(function(m) {
@@ -759,14 +762,16 @@ tr.row-none td:last-child{color:var(--red)}
       recs.push({ priority: "high", text: gap + " requirements lack use cases", action: "Run /sdd-specifications-engineer", prompt: getStagePrompt("specifications-engineer", "pending") });
     }
     var cod = c.reqsWithCode || {};
-    if ((cod.percentage || 0) < TARGETS.code) {
-      var gap2 = (cod.total || 0) - (cod.count || 0);
-      recs.push({ priority: "high", text: gap2 + " requirements have no code references", action: "Add Refs: comments to source files", prompt: "Agrega comentarios Refs: en tu codigo fuente para vincular funciones a requisitos SDD.\n\nEjemplo:\n/**\n * Refs: UC-001, INV-EXT-005\n */\nfunction validateInput() { ... }" });
+    var codPct = cod.functionalPercentage || cod.percentage || 0;
+    if (codPct < TARGETS.code) {
+      var gap2 = (cod.functionalTotal || cod.total || 0) - (cod.functionalCount || cod.count || 0);
+      recs.push({ priority: "high", text: gap2 + " functional requirements have no code references", action: "Add Refs: comments to source files", prompt: "Agrega comentarios Refs: en tu codigo fuente para vincular funciones a requisitos SDD.\n\nEjemplo:\n/**\n * Refs: UC-001, INV-EXT-005\n */\nfunction validateInput() { ... }" });
     }
     var tst = c.reqsWithTests || {};
-    if ((tst.percentage || 0) < TARGETS.tests) {
-      var gap3 = (tst.total || 0) - (tst.count || 0);
-      recs.push({ priority: "medium", text: gap3 + " requirements have no test coverage", action: "Add Refs: to test descriptions", prompt: "Agrega comentarios Refs: en tus archivos de test para vincular tests a requisitos.\n\nEjemplo:\n// Refs: UC-001, INV-EXT-005\ndescribe('Validation', () => { ... })" });
+    var tstPct = tst.functionalPercentage || tst.percentage || 0;
+    if (tstPct < TARGETS.tests) {
+      var gap3 = (tst.functionalTotal || tst.total || 0) - (tst.functionalCount || tst.count || 0);
+      recs.push({ priority: "medium", text: gap3 + " functional requirements have no test coverage", action: "Add Refs: to test descriptions", prompt: "Agrega comentarios Refs: en tus archivos de test para vincular tests a requisitos.\n\nEjemplo:\n// Refs: UC-001, INV-EXT-005\ndescribe('Validation', () => { ... })" });
     }
     var orphans = (st.orphans || []).length;
     if (orphans > 0) recs.push({ priority: "medium", text: orphans + " orphaned artifacts found", action: "Review and link or remove", prompt: "Ejecuta /sdd-traceability-check para ver los artefactos huerfanos y decidir si vincularlos o eliminarlos." });
@@ -918,17 +923,36 @@ tr.row-none td:last-child{color:var(--red)}
 
   addStat("Artifacts", st.totalArtifacts || 0, typeSummary(st.byType), "", "Total number of traced artifacts across all types");
   addStat("Relationships", st.totalRelationships || 0, "", "", "Total number of links between artifacts");
+  // Helper: build subtitle showing functional count and note about excluded REQs
+  function covSubtitle(m, label) {
+    if (!m) return "";
+    var fc = m.functionalCount, ft = m.functionalTotal;
+    if (fc != null && ft != null) {
+      var excluded = (m.total || 0) - ft;
+      var sub = fc + "/" + ft + " functional";
+      if (excluded > 0) sub += " (" + excluded + " NFR/constraint excluded)";
+      return sub;
+    }
+    return m.count + "/" + m.total + (label ? " " + label : "");
+  }
+  // Helper: pick functional percentage as primary, falling back to overall
+  function covPct(m) {
+    if (!m) return 0;
+    if (m.functionalPercentage != null) return m.functionalPercentage;
+    return m.percentage || 0;
+  }
+
   var covUC = (cov.reqsWithUCs && cov.reqsWithUCs.percentage != null) ? cov.reqsWithUCs.percentage : 0;
   addStat("Requirements with Use Cases", covUC.toFixed(1) + "%", (cov.reqsWithUCs ? cov.reqsWithUCs.count + "/" + cov.reqsWithUCs.total + " functional" : ""), covUC >= 80 ? "good" : "", "Percentage of functional requirements with at least one Use Case (excludes NFR/Constraint REQs)");
-  var covCode = (cov.reqsWithCode && cov.reqsWithCode.percentage != null) ? cov.reqsWithCode.percentage : 0;
-  addStat("Requirements with Code", covCode.toFixed(1) + "%", (cov.reqsWithCode ? cov.reqsWithCode.count + "/" + cov.reqsWithCode.total : ""), covCode >= 60 ? "good" : "", "Percentage of requirements referenced by source code (Refs: comments)");
-  var covTest = (cov.reqsWithTests && cov.reqsWithTests.percentage != null) ? cov.reqsWithTests.percentage : 0;
-  addStat("Requirements with Tests", covTest.toFixed(1) + "%", (cov.reqsWithTests ? cov.reqsWithTests.count + "/" + cov.reqsWithTests.total : ""), covTest >= 60 ? "good" : "", "Percentage of requirements referenced by test files");
+  var covCode = covPct(cov.reqsWithCode);
+  addStat("Requirements with Code", covCode.toFixed(1) + "%", covSubtitle(cov.reqsWithCode), covCode >= 60 ? "good" : "", "Percentage of functional requirements referenced by source code (Refs: comments). NFR/constraint REQs excluded — they don't produce code directly.");
+  var covTest = covPct(cov.reqsWithTests);
+  addStat("Requirements with Tests", covTest.toFixed(1) + "%", covSubtitle(cov.reqsWithTests), covTest >= 60 ? "good" : "", "Percentage of functional requirements referenced by test files. NFR/constraint REQs excluded.");
   var cs = st.commitStats || {};
   if (cs.totalCommits > 0) {
     addStat("Commits", cs.totalCommits, cs.commitsWithRefs + " with refs, " + cs.commitsWithTasks + " with tasks", "", "Git commits with Refs: or Task: trailers linking to SDD artifacts");
-    var covCommit = (cov.reqsWithCommits && cov.reqsWithCommits.percentage != null) ? cov.reqsWithCommits.percentage : 0;
-    addStat("Requirements with Commits", covCommit.toFixed(1) + "%", (cov.reqsWithCommits ? cov.reqsWithCommits.count + "/" + cov.reqsWithCommits.total : ""), covCommit >= 50 ? "good" : "", "Percentage of requirements linked to at least one git commit via Refs/Task trailers");
+    var covCommit = covPct(cov.reqsWithCommits);
+    addStat("Requirements with Commits", covCommit.toFixed(1) + "%", covSubtitle(cov.reqsWithCommits), covCommit >= 50 ? "good" : "", "Percentage of functional requirements linked to at least one git commit. NFR/constraint REQs excluded.");
   }
   var orphanCount = (st.orphans || []).length;
   addStat("Orphans", orphanCount, "Unreferenced", orphanCount > 0 ? "warn" : "good", "Artifacts not referenced by any other artifact");
@@ -1872,19 +1896,32 @@ tr.row-none td:last-child{color:var(--red)}
 
     // Card 1: Coverage Progress
     html += '<div class="summary-card"><h3>Traceability Coverage</h3>';
+    // Note explaining functional-only scope
+    var nfTotal = (cov.totalReqs || 0) - (cov.totalFunctionalReqs || 0);
+    if (nfTotal > 0) {
+      html += '<div style="font-size:0.78rem;color:var(--text2);margin-bottom:0.5rem;">Showing functional requirements only (' + (cov.totalFunctionalReqs || 0) + ' of ' + (cov.totalReqs || 0) + '). ' + nfTotal + ' NFR/constraint REQs excluded from implementation metrics.</div>';
+    }
     var metrics = [
-      { label: "Requirements \u2192 Use Cases", val: cov.reqsWithUCs, target: TARGETS.ucs },
-      { label: "Requirements \u2192 Code", val: cov.reqsWithCode, target: TARGETS.code },
-      { label: "Requirements \u2192 Tests", val: cov.reqsWithTests, target: TARGETS.tests },
-      { label: "Requirements \u2192 Acceptance Tests", val: cov.reqsWithBDD, target: TARGETS.bdd },
-      { label: "Requirements \u2192 Tasks", val: cov.reqsWithTasks, target: TARGETS.tasks },
-      { label: "Requirements \u2192 Commits", val: cov.reqsWithCommits, target: 50 }
+      { label: "Requirements \u2192 Use Cases", val: cov.reqsWithUCs, target: TARGETS.ucs, useFunctional: false },
+      { label: "Functional REQs \u2192 Code", val: cov.reqsWithCode, target: TARGETS.code, useFunctional: true },
+      { label: "Functional REQs \u2192 Tests", val: cov.reqsWithTests, target: TARGETS.tests, useFunctional: true },
+      { label: "Functional REQs \u2192 Acceptance Tests", val: cov.reqsWithBDD, target: TARGETS.bdd, useFunctional: true },
+      { label: "Functional REQs \u2192 Tasks", val: cov.reqsWithTasks, target: TARGETS.tasks, useFunctional: true },
+      { label: "Functional REQs \u2192 Commits", val: cov.reqsWithCommits, target: 50, useFunctional: true }
     ];
     metrics.forEach(function(m) {
-      var pct = m.val ? m.val.percentage : 0;
+      var pct = m.useFunctional ? covPct(m.val) : (m.val ? m.val.percentage : 0);
       var color = pct >= m.target ? "var(--green)" : pct >= m.target*0.6 ? "var(--yellow)" : "var(--red)";
+      var countInfo = "";
+      if (m.val) {
+        if (m.useFunctional && m.val.functionalCount != null) {
+          countInfo = m.val.functionalCount + "/" + m.val.functionalTotal;
+        } else {
+          countInfo = m.val.count + "/" + m.val.total;
+        }
+      }
       html += '<div class="summary-progress">';
-      html += '<div class="summary-progress-header"><span>' + esc(m.label) + '</span><span>' + pct.toFixed(1) + '%</span></div>';
+      html += '<div class="summary-progress-header"><span>' + esc(m.label) + '</span><span>' + pct.toFixed(1) + '% <small style="color:var(--text2);font-weight:normal">(' + countInfo + ')</small></span></div>';
       html += '<div class="summary-progress-bar"><div class="summary-progress-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
       html += '</div>';
     });
