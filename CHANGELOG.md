@@ -5,6 +5,24 @@ All notable changes to the SDD skills repository will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-03-04
+
+### Added
+- **sdd-tech-designer** (v1.0.0): New lateral skill — 12-dimension technical architecture exploration (delivery channels, architecture style, tech stack, data strategy, auth, API, infrastructure, CI/CD, observability, cost, DX, i18n). Outputs `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md`. ATAM-lite quality attribute analysis.
+- **sdd-ux-designer** (v1.0.0): New lateral skill — 12-dimension UI/UX design system (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Outputs `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/INTERACTION-MODEL.md`, `ux/DESIGN-TOKENS.json`. WCAG 2.1 AA compliance.
+
+### Fixed
+- **sdd-dashboard**: Tolerate `[x]` in TASK headings and fix multi-ref context bug
+- **sdd-dashboard**: Use summary metrics fallback when artifact count is 0
+- **sdd-dashboard**: Infer domain/layer from title for generic REQ prefixes
+- **sdd-dashboard**: Use functional-only denominators for implementation coverage metrics
+
+### Changed
+- **sdd-plan-architect** (v1.2.0): Phase 2.0 System Vision Gate, Phase 2.9 Coverage Gate, 13 clarify categories (+CL-UI, CL-DX, CL-ENV), consumes `design/` and `ux/` directories
+- **cascade-patterns.md**: Includes tech-designer and ux-designer as lateral stages
+- **graph-schema.md**: Includes tech-designer and ux-designer in lateralStages
+- CLAUDE.md updated to 22 skills with lateral skill documentation
+
 ## [2.0.0] - 2026-03-01
 
 ### Added
