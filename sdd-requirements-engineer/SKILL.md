@@ -171,6 +171,22 @@ sdd-spec-auditor → audits/AUDIT-BASELINE.md
 
 For detailed SWEBOK knowledge on categories, analysis, economics, tracing, management: read [references/swebok-requirements-knowledge.md](references/swebok-requirements-knowledge.md).
 
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["requirements-engineer"].status` = `"done"`
+3. Set `stages["requirements-engineer"].lastRun` = current ISO-8601
+4. Set `stages["requirements-engineer"].summary`:
+   - `artifacts`: list of files created/modified with labels (e.g., `{"file": "requirements/REQUIREMENTS.md", "label": "Requirements Document"}`)
+   - `metrics`: `{ "total_requirements": N, "functional": N, "nonfunctional": N, "constraints": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "85 requirements across 6 domains", "12 security requirements identified")
+   - `nextStep`: `"Run /sdd-specifications-engineer"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)
+
 ## Output Language
 
 Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English.

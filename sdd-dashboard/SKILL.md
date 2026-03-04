@@ -71,8 +71,9 @@ The script auto-detects the project name from `package.json` → `pipeline-state
 
 Read `pipeline-state.json` from the project root.
 
-- If it exists: extract `currentStage` and each stage's `status` and `lastRun`.
-- If it does not exist: set all stages to `status: "unknown"` and `lastRun: null`.
+- If it exists: extract `currentStage`, each stage's `status`, `lastRun`, and `summary` (if present).
+- Also extract lateral stages (`security-auditor`, `req-change`) if they exist in `stages`.
+- If it does not exist: set all stages to `status: "unknown"`, `lastRun: null`, `summary: null`.
 
 Also determine the project name:
 1. From `pipeline-state.json` project field, if present
@@ -362,7 +363,7 @@ For each REQ artifact, compute a classification object using the taxonomy from `
 
 Assemble the JSON structure following the schema in `references/graph-schema.md` (v3):
 
-1. **pipeline**: Merge stage statuses from Step 1 with artifact counts from Step 3.
+1. **pipeline**: Merge stage statuses from Step 1 with artifact counts from Step 3. Include `stageLabel` (unit label per stage, e.g., "requirements", "findings"), `summary` forwarding, and `lateralStages` array for security-auditor/req-change if present. Count test/ files for test-planner and code+test files for task-implementer (same pattern as audits/ for spec-auditor).
 2. **artifacts**: All extracted artifacts from Step 3, enriched with:
    - `classification` from Step 7
    - `codeRefs` from Step 5
@@ -437,6 +438,7 @@ Report a summary to the user:
 | Orphaned Artifacts | {N} |
 | Broken References | {N} |
 | Pipeline Stage | {currentStage} |
+| Summaries Available | {N}/9 |
 
 Files written:
 - `dashboard/traceability-graph.json`

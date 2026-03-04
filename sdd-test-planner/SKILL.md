@@ -384,6 +384,22 @@ sdd-task-implementer → src/, tests/
 **Output:** `test/TEST-PLAN.md`, `test/TEST-MATRIX-UC-*.md`, `test/PERF-SCENARIOS.md`
 **Next step:** Run `sdd-plan-architect` which reads test strategy for FASE planning
 
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["test-planner"].status` = `"done"`
+3. Set `stages["test-planner"].lastRun` = current ISO-8601
+4. Set `stages["test-planner"].summary`:
+   - `artifacts`: list of files created in `test/` with labels (e.g., `{"file": "test/TEST-PLAN.md", "label": "Test Strategy"}`)
+   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "perf_scenarios": N, "invariants_mapped": N, "test_gaps": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing")
+   - `nextStep`: `"Run /sdd-plan-architect"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)
+
 ## Output Language
 
 Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English.

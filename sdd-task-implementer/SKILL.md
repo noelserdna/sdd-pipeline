@@ -951,3 +951,21 @@ Al finalizar una sesion de implementacion:
 ### Checkpoints
 - `fase-0-setup` after TASK-F0-002
 ```
+
+---
+
+## Persist Summary
+
+After completing a FASE or a batch of tasks, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["task-implementer"].status` = `"done"` (or `"running"` if more FASEs remain)
+3. Set `stages["task-implementer"].lastRun` = current ISO-8601
+4. Set `stages["task-implementer"].summary`:
+   - `artifacts`: list of key files created/modified in `src/` and `tests/` with labels (e.g., `{"file": "src/extraction/pdf-parser.ts", "label": "PDF Parser"}`)
+   - `metrics`: `{ "tasks_completed": N, "tasks_remaining": N, "commits": N, "tests_passed": N, "tests_failed": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "FASE-0 complete: 8/8 tasks", "All 24 tests passing")
+   - `nextStep`: `"Run /sdd-task-implementer --fase=N"` (next FASE) or `"Pipeline complete"` (if last FASE)
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

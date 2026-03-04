@@ -7,7 +7,7 @@
 
 ## Overview
 
-The Clarify Taxonomy defines **10 implementation-gap categories** that bridge the distance between "what the system does" (specs) and "how to build it" (plan). Unlike audit categories that detect spec defects, clarify categories detect **decisions not yet made** for implementation.
+The Clarify Taxonomy defines **13 implementation-gap categories** that bridge the distance between "what the system does" (specs) and "how to build it" (plan). Unlike audit categories that detect spec defects, clarify categories detect **decisions not yet made** for implementation.
 
 ### Classification
 
@@ -22,10 +22,76 @@ For each category, specs are classified as:
 ### Rules
 
 1. **Context-aware**: Read ADRs and existing decisions BEFORE generating questions
-2. **Max 10 candidates**: Generate at most 10 candidate questions across all categories
-3. **Max 5 asked**: Present at most 5 questions to the user (prioritize by impact)
+2. **Prioritize**: Generate candidate questions across all 13 categories, prioritized by impact
+3. **No hard limit**: Present questions until critical dimensions are covered (user can terminate early)
 4. **One at a time**: Present ONE question with recommended answer + alternatives
 5. **Early termination**: Accept "done", "proceed", "skip" to end clarify phase
+
+---
+
+## CL-UI: Delivery Channels & UI
+
+### What It Detects
+
+Missing or implicit delivery channel decisions: web app, mobile app, CLI, API-only, desktop, embedded. Critical gap when specs describe user interactions, forms, or screens without specifying the presentation layer, OR when specs describe only backend behavior without confirming that no UI is needed.
+
+### Detection Rules
+
+```
+SCAN FOR:
+- ADR with "frontend" or "ui" or "mobile" or "desktop" or "cli" → Resolved
+- Specs mentioning "screen", "form", "dashboard", "page", "view", "button" → check for channel decision
+- Specs mentioning only API contracts with NO UI references → check if API-only is intentional
+- NFR with "accessibility" or "responsive" → Partial (implies web/mobile but not decided)
+- [DECISION PENDIENTE] related to UI or delivery → Missing
+- NO mention of ANY delivery channel in entire spec → Missing (critical gap)
+
+SKIP IF:
+- ADR exists selecting delivery channel(s) (web, mobile, CLI, API-only)
+- CLAUDE.md has "Frontend" section with framework decision
+- System context diagram explicitly shows user-facing channels
+```
+
+### Context-Aware Checks
+
+1. Read all ADRs with `frontend|ui|web|mobile|cli|desktop|spa|ssr` in content
+2. Read 01-SYSTEM-CONTEXT.md for actors and their interaction channels
+3. Read use-cases/ for user-facing interaction patterns (forms, views, dashboards)
+4. Read nfr/ for accessibility, responsiveness, or UI performance targets
+5. Read CLAUDE.md for frontend framework or UI decisions
+
+### Question Templates
+
+```markdown
+**CL-UI-001: Primary Delivery Channel**
+Las specs definen {N} use cases con interacción de usuario pero no especifican
+el canal de entrega (web, mobile, CLI, API-only).
+
+| Opción | Descripción |
+|--------|-------------|
+| Web SPA (Recomendado) | Single-Page Application con framework moderno |
+| Web SSR | Server-Side Rendered para SEO y first-load |
+| Mobile (React Native / Flutter) | App nativa cross-platform |
+| CLI | Command-line interface para developers/ops |
+| API-only | Sin UI propia — consumido por clientes externos |
+| Multiple channels | Combinación (especificar cuáles) |
+
+**Contexto:** [actores identificados], [patterns de interacción en UCs], [NFRs de accesibilidad]
+```
+
+```markdown
+**CL-UI-002: Frontend Framework**
+Se decidió canal web pero no hay selección de framework frontend.
+
+| Opción | Descripción |
+|--------|-------------|
+| React + Next.js (Recomendado) | Full-featured, SSR/SSG, amplio ecosystem |
+| Vue + Nuxt | Menor curva de aprendizaje, buen DX |
+| Svelte + SvelteKit | Mínimo bundle, excelente performance |
+| HTMX + server templates | Minimal JS, server-centric |
+
+**Contexto:** [canal seleccionado], [complejidad de UI], [team expertise]
+```
 
 ---
 
@@ -435,6 +501,66 @@ stack de logging.
 
 ---
 
+## CL-DX: Developer Experience
+
+### What It Detects
+
+Missing decisions about repository structure, development environment, CI/CD tooling, and developer workflow that affect team productivity and code quality.
+
+### Detection Rules
+
+```
+SCAN FOR:
+- CLAUDE.md with "Development Setup" or "Contributing" section → Resolved
+- ADR with "monorepo" or "tooling" or "linting" or "dev-environment" → Resolved
+- .github/ or CI config exists → Partial
+- No CLAUDE.md development section AND no CI config → Missing
+- Multiple modules/packages without repo structure decision → Missing
+
+SKIP IF:
+- CLAUDE.md has development setup with build/test/deploy commands
+- Contributing guide exists with tooling decisions
+- Single-developer project with no collaboration needs
+```
+
+### Context-Aware Checks
+
+1. Read CLAUDE.md for "Development Setup", "Contributing", "Tooling" sections
+2. Read ADRs with `monorepo|tooling|lint|format|dev-environment|workspace`
+3. Check for existing config files (.eslintrc, prettier, turbo.json, nx.json)
+4. Check for Dockerfile or devcontainer.json
+5. Read FASE-0 for bootstrap/setup decisions
+
+### Question Templates
+
+```markdown
+**CL-DX-001: Repository Structure**
+El proyecto tiene múltiples módulos/paquetes pero no hay decisión de estructura.
+
+| Opción | Descripción |
+|--------|-------------|
+| Monorepo + Turborepo (Recomendado) | Código compartido, builds incrementales |
+| Monorepo simple | Un repo sin herramienta de monorepo |
+| Multi-repo | Un repositorio por servicio/módulo |
+
+**Contexto:** [módulos identificados], [team size], [deploy strategy]
+```
+
+```markdown
+**CL-DX-002: Local Development Environment**
+No hay setup de desarrollo local documentado.
+
+| Opción | Descripción |
+|--------|-------------|
+| Docker Compose (Recomendado) | Reproducible, aislado, multi-servicio |
+| Devcontainer (VS Code) | Consistente, cloud-ready |
+| Native setup | Más rápido, requiere documentación de prereqs |
+
+**Contexto:** [tech stack], [external dependencies], [team size]
+```
+
+---
+
 ## CL-TEST: Test Implementation
 
 ### What It Detects
@@ -477,6 +603,69 @@ El spec define BDD scenarios y property tests pero no selecciona framework.
 | Node test runner | Zero-dep, built-in, limited features |
 
 **Contexto:** [test types defined], [runtime], [BDD scenario count]
+```
+
+---
+
+## CL-ENV: Deployment Environment
+
+### What It Detects
+
+Missing decisions about where and how the system will be deployed: cloud provider, region, compliance, infrastructure budget, on-prem vs cloud vs hybrid.
+
+### Detection Rules
+
+```
+SCAN FOR:
+- ADR with "cloud" or "aws" or "azure" or "gcp" or "deploy" or "hosting" → Resolved
+- CLAUDE.md with platform or hosting decisions → Resolved
+- NFR mentioning region, compliance, or data residency → check for deploy decision
+- No deployment target mentioned anywhere in specs → Missing
+- "Cloud" mentioned without specific provider → Partial
+
+SKIP IF:
+- ADR exists selecting cloud provider + region + compliance strategy
+- Deployment platform documented in CLAUDE.md or architecture artifacts
+- System is a library/package (no deployment)
+```
+
+### Context-Aware Checks
+
+1. Read ADRs with `cloud|aws|azure|gcp|deploy|hosting|region|compliance|on-prem`
+2. Read CLAUDE.md for infrastructure/platform sections
+3. Read nfr/SECURITY.md for data residency or compliance requirements
+4. Read nfr/ for uptime/availability targets (imply hosting decisions)
+5. Check for existing IaC files (terraform, pulumi, CDK)
+
+### Question Templates
+
+```markdown
+**CL-ENV-001: Deployment Platform**
+No hay decisión sobre plataforma de despliegue.
+
+| Opción | Descripción |
+|--------|-------------|
+| AWS (Recomendado para enterprise) | Amplio servicio, madurez, compliance |
+| GCP | Data/ML strengths, competitive pricing |
+| Azure | Microsoft ecosystem, enterprise AD integration |
+| Cloudflare | Edge-first, Workers, competitive pricing |
+| Vercel/Railway | PaaS simple, ideal para startups |
+| On-premises | Control total, compliance estricta |
+
+**Contexto:** [compliance requirements], [budget], [team expertise], [existing infra]
+```
+
+```markdown
+**CL-ENV-002: Infrastructure Budget**
+Plataforma seleccionada pero sin estimación de costos de infraestructura.
+
+| Opción | Descripción |
+|--------|-------------|
+| Estimar desde NFR targets (Recomendado) | Derivar de targets × pricing |
+| Presupuesto fijo mensual | Definir tope y ajustar arquitectura |
+| Pay-as-you-go sin límite | Sin restricción, optimizar después |
+
+**Contexto:** [platform pricing], [scale targets], [expected traffic]
 ```
 
 ---
@@ -535,12 +724,15 @@ When multiple categories have **Missing** status, prioritize by implementation i
 |----------|----------|-----------|
 | 1 | CL-TECH | Blocks everything else |
 | 2 | CL-DATA | Shapes all persistence |
+| 2.5 | CL-UI | Determines entire frontend architecture |
 | 3 | CL-ARCH | Defines system structure |
 | 4 | CL-SEC | Security must be built-in |
 | 5 | CL-INTEG | External dependencies |
 | 6 | CL-PERF | Performance strategies |
 | 7 | CL-TEST | Test infrastructure |
+| 7.5 | CL-DX | Developer productivity |
 | 8 | CL-CICD | Build & deploy |
+| 8.5 | CL-ENV | Deployment environment |
 | 9 | CL-OBS | Operational readiness |
 | 10 | CL-COST | Cost awareness |
 

@@ -734,3 +734,21 @@ Do NOT report findings that belong to `sdd-spec-auditor`:
 5. **SIEMPRE cruzar documentos** - Mínimo 2 docs por hallazgo
 6. **SIEMPRE generar scorecard** - Incluso si hay 0 hallazgos, reportar las 10 dimensiones
 7. **NUNCA duplicar con spec-auditor** - Solo hallazgos con impacto de seguridad demostrable
+
+---
+
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["security-auditor"].status` = `"done"` (lateral stage — add key if absent)
+3. Set `stages["security-auditor"].lastRun` = current ISO-8601
+4. Set `stages["security-auditor"].summary`:
+   - `artifacts`: list of files created with labels (e.g., `{"file": "audits/SECURITY-AUDIT-BASELINE.md", "label": "Security Audit Baseline"}`)
+   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "owasp_coverage": N }` (owasp_coverage: percentage of OWASP ASVS dimensions assessed)
+   - `highlights`: top 3-5 notable observations (e.g., "1 critical: Missing CSRF on payment endpoint", "OWASP coverage: 78%")
+   - `nextStep`: `"Address critical findings before implementation"` or `"No critical findings — proceed with pipeline"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

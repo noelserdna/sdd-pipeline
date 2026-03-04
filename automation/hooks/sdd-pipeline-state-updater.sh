@@ -3,6 +3,9 @@
 # Hook type: PostToolUse (Write) | async: true | Timeout: 10s
 # Detects writes to pipeline artifact directories and updates pipeline-state.json.
 # Only marks stages as "running" (not "done" — that's the skill's responsibility).
+# NOTE: The "summary" field in each stage is EXCLUSIVELY managed by skills on completion.
+# This hook must NOT modify or remove the "summary" field. The jq/node updates below
+# only touch status/lastRun/staleReason/currentStage/lastUpdated, preserving summary intact.
 
 set -euo pipefail
 

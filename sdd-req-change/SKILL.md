@@ -1698,3 +1698,21 @@ Skills executed:     {N}/{N}
 Status:              {COMPLETE | PARTIAL}
 Cascade Report:      changes/CASCADE-REPORT-{id}.md
 ```
+
+---
+
+## Persist Summary
+
+After generating the change report and optionally executing cascade, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["req-change"].status` = `"done"` (lateral stage — add key if absent)
+3. Set `stages["req-change"].lastRun` = current ISO-8601
+4. Set `stages["req-change"].summary`:
+   - `artifacts`: list of files created/modified with labels (e.g., `{"file": "changes/CHANGE-REPORT-CHG-2026-03-04-001.md", "label": "Change Report"}`)
+   - `metrics`: `{ "change_requests": N, "applied": N, "skipped": N, "documents_modified": N, "invalidated_stages": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "3 requirements modified", "Cascade invalidated 4 stages")
+   - `nextStep`: `"Run cascade commands"` (if manual mode) or `"Cascade complete"` (if auto mode)
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

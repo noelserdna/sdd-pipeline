@@ -1,7 +1,7 @@
 ---
 name: sdd-spec-auditor
 description: This skill should be used when auditing, reviewing, or validating technical specifications for defects. Performs systematic cross-document analysis to detect ambiguities, implicit rules, dangerous silences, semantic ambiguities, contradictions, incomplete specifications, weak/missing invariants, evolution risks, and implicit decisions without ADRs. Generates audit reports with location, problem description, and resolution questions. Does NOT propose implementations, write code, or assume unspecified behavior. For users maintaining specification repositories requiring quality assurance and defect detection.
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # SDD Spec Auditor Skill
@@ -706,6 +706,68 @@ Documents: {comma-separated list}
 2. Produce Correction Summary with: resolved count, skipped count, pending count, new artifacts created, breaking changes
 3. Suggest tagging: `git tag AUDIT-vX.X-resolved`
 
+#### Fix Phase 4: Upstream Impact Analysis
+
+> **Principio:** Las correcciones en especificaciones pueden revelar que los requisitos de origen están incompletos o desalineados. Esta fase cierra el ciclo de retroalimentación hacia arriba sin violar Art. 4 (el spec-auditor detecta pero no modifica requisitos — delega a req-change).
+
+After all corrections are applied and the baseline is updated, analyze whether the corrections impact upstream requirements.
+
+##### Step 4.1: Collect Correction Impacts
+
+For each corrected finding, determine its upstream impact:
+
+| Impact Type | Criteria | Example |
+|-------------|----------|---------|
+| `NONE` | Cosmetic fix, terminology alignment, format correction, filling a TBD with info already implied by REQ | Fixing a glossary term in a UC |
+| `MODIFY` | Correction changes the semantics of a behavior already covered by a REQ | REQ says "system detects X automatically" but correction clarifies it's manual |
+| `ADD` | Correction introduces new functionality (UC, invariant, API, state transition) with no tracing REQ | New UC for login added without any REQ for authentication |
+
+##### Step 4.2: Cross-Reference Against Requirements
+
+For each correction with impact `MODIFY` or `ADD`:
+
+1. **Identify the REQ(s)** that the corrected spec document traces to (via Refs field, UC→REQ mapping, or INV→REQ chain)
+2. **For `MODIFY`:** Compare the REQ's statement and acceptance criteria against the corrected spec. Flag if:
+   - The REQ statement contradicts the corrected behavior
+   - The REQ acceptance criteria are incomplete (missing cases added by the correction)
+   - The REQ's scope is narrower than what the correction defines
+3. **For `ADD`:** Verify there is truly no REQ that covers this functionality. Search:
+   - Direct REQ references in the spec document
+   - Implicit coverage via parent REQs or domain-level REQs
+   - If none found → flag as "new REQ needed"
+
+##### Step 4.3: Generate Impact Summary
+
+Present to the user:
+
+```markdown
+## Upstream Impact Analysis
+
+| # | Finding ID | Correction Summary | Impact | REQ Affected | CR Type | Description |
+|---|-----------|-------------------|--------|-------------|---------|-------------|
+| 1 | {ID} | {brief} | MODIFY | REQ-F-012 | Statement update | {what changed} |
+| 2 | {ID} | {brief} | ADD | (new) | New requirement | {what's missing} |
+| 3 | {ID} | {brief} | NONE | - | - | Cosmetic only |
+
+**Totals:** {N} MODIFY, {N} ADD, {N} NONE
+```
+
+##### Step 4.4: User Decision
+
+If ALL impacts are `NONE`:
+- Report "No upstream impact detected — requirements are aligned" and finish.
+
+If there are any `MODIFY` or `ADD` impacts, ask the user:
+
+- **Option 1: Invoke req-change now** (Recommended) — Execute `/sdd-req-change` with pre-populated CRs from the impact analysis. Pass as context:
+  - Pre-populated CR table with: CR-ID, Type (ADD/MODIFY), REQ-ID (or "new"), description, source finding ID
+  - Note that spec documents are already corrected — only requirements need updating
+  - Audit ID for traceability
+- **Option 2: Generate impact report only** — Write the impact analysis to `audits/UPSTREAM-IMPACT-AUDIT-vX.X.md` for manual review later
+- **Option 3: Skip** — Acknowledge the impacts but defer alignment to a later session
+
+> **Note:** If Option 1 is selected, the req-change skill handles all requirement modifications, maintaining separation of responsibilities. The spec-auditor only detects and classifies — it never writes to `requirements/`.
+
 ### Fix Constraints
 
 1. NEVER generate code — only specification text, invariants, ADRs
@@ -714,6 +776,7 @@ Documents: {comma-separated list}
 4. ALWAYS show before/after for every spec change
 5. ALWAYS make atomic commits per correction
 6. NEVER skip a finding — every one MUST appear in corrections plan
+7. NEVER modify requirements directly — upstream impacts are detected and delegated to req-change
 
 ---
 
@@ -728,7 +791,7 @@ sdd-specifications-engineer (create) → sdd-spec-auditor (audit) → sdd-spec-a
 | Mode | Input | Output |
 |------|-------|--------|
 | Mode Audit | Specifications + Baseline | Audit report with findings |
-| Mode Fix | Audit report + Answers | Corrected specs + Corrections plan + Baseline update |
+| Mode Fix | Audit report + Answers | Corrected specs + Corrections plan + Baseline update + Upstream impact analysis |
 | Mode Focused | Change Report + Specifications subset | Focused audit report on changed documents |
 
 ### Invocation
@@ -757,6 +820,9 @@ sdd-requirements-engineer → requirements/REQUIREMENTS.md
 sdd-specifications-engineer → spec/
 sdd-spec-auditor (audit) → audits/AUDIT-BASELINE.md
 sdd-spec-auditor (fix) → spec/ (corrections) + audits/CORRECTIONS-PLAN-*.md
+  └─ Phase 4: upstream impact? ──YES──→ sdd-req-change → requirements/ (updated)
+                                 NO
+                                 ↓
 sdd-plan-architect → plan/
 sdd-task-generator → task/
 sdd-task-implementer → src/, tests/
@@ -852,3 +918,21 @@ Every finding MUST include:
 3. **SIEMPRE indicar ubicación exacta** - Documento y línea/sección
 4. **SIEMPRE cruzar documentos** - Un hallazgo puede involucrar múltiples docs
 5. **SIEMPRE formular pregunta** - El hallazgo debe terminar con pregunta de resolución
+
+---
+
+## Persist Summary
+
+After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["spec-auditor"].status` = `"done"`
+3. Set `stages["spec-auditor"].lastRun` = current ISO-8601
+4. Set `stages["spec-auditor"].summary`:
+   - `artifacts`: list of files created/modified with labels (e.g., `{"file": "audits/AUDIT-BASELINE.md", "label": "Audit Baseline"}`)
+   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "gate_result": 1|0 }` (gate_result: 1=PASS, 0=FAIL)
+   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: FAIL — 2 critical unresolved")
+   - `nextStep`: `"Run /sdd-test-planner"` (if gate PASS) or `"Re-run /sdd-spec-auditor --mode=fix"` (if gate FAIL)
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

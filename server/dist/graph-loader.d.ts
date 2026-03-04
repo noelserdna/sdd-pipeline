@@ -1,12 +1,25 @@
+export interface StageSummary {
+    artifacts: {
+        file: string;
+        label: string;
+    }[];
+    metrics: Record<string, number>;
+    highlights: string[];
+    nextStep: string;
+    generatedAt: string;
+}
 export interface PipelineStage {
     name: string;
     status: "done" | "stale" | "running" | "error" | "pending";
     lastRun: string | null;
     artifactCount: number;
+    stageLabel?: string;
+    summary?: StageSummary | null;
 }
 export interface Pipeline {
     currentStage: string;
     stages: PipelineStage[];
+    lateralStages?: PipelineStage[];
 }
 export interface Classification {
     businessDomain: string;

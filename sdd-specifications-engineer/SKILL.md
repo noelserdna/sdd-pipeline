@@ -386,6 +386,22 @@ sdd-task-implementer → src/, tests/
 **Output:** Complete `spec/` directory with all subdirectories populated
 **Next step:** Run `sdd-spec-auditor` to validate the generated specifications
 
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["specifications-engineer"].status` = `"done"`
+3. Set `stages["specifications-engineer"].lastRun` = current ISO-8601
+4. Set `stages["specifications-engineer"].summary`:
+   - `artifacts`: list of files created in `spec/` with labels (e.g., `{"file": "spec/use-cases/UC-001.md", "label": "Extract PDF"}`)
+   - `metrics`: `{ "use_cases": N, "workflows": N, "api_contracts": N, "bdd_scenarios": N, "invariants": N, "adrs": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "41 use cases across 8 domains", "55 invariants defined")
+   - `nextStep`: `"Run /sdd-spec-auditor"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)
+
 ## Output Language
 
 Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English.

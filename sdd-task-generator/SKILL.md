@@ -845,3 +845,21 @@ git branch -D feat/fase-0
 | "Circular dependency detected" | Task ordering error | Review dependency annotations |
 | "Task touches >5 files" | Task too broad | Split into smaller tasks |
 | "Orphan task (no FASE)" | Task lost traceability | Assign to correct FASE or remove |
+
+---
+
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["task-generator"].status` = `"done"`
+3. Set `stages["task-generator"].lastRun` = current ISO-8601
+4. Set `stages["task-generator"].summary`:
+   - `artifacts`: list of files created in `task/` with labels (e.g., `{"file": "task/TASK-FASE-1.md", "label": "FASE 1 Tasks"}`)
+   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "42 tasks across 7 FASEs", "65% parallelizable", "8 coupled-revert tasks")
+   - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

@@ -409,6 +409,41 @@ tr.row-none td:last-child{color:var(--red)}
 .stage-popover-filter{font-size:11px;padding:4px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer}
 .stage-popover-filter:hover{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 
+/* Stage popover summary */
+.stage-popover-summary{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+.stage-popover-summary.stale{opacity:.5}
+.stage-popover-summary .stale-badge{font-size:10px;color:var(--yellow);font-weight:600;margin-left:6px}
+.sps-artifacts{font-size:11px;margin:4px 0}
+.sps-artifacts table{width:100%;border-collapse:collapse}
+.sps-artifacts td{padding:2px 4px;font-size:11px}
+.sps-artifacts td:first-child{color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sps-metrics{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.sps-metric{font-size:10px;padding:2px 6px;background:var(--surface3);border-radius:3px;color:var(--text2);white-space:nowrap}
+.sps-metric b{color:var(--text1)}
+.sps-highlights{font-size:11px;color:var(--text2);margin:4px 0;padding-left:14px}
+.sps-highlights li{margin:2px 0}
+.sps-next{font-size:11px;color:var(--green);font-style:italic;margin-top:6px}
+
+/* Pipeline Summary view */
+.pipeline-summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:16px}
+.ps-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative}
+.ps-card.stale{opacity:.6}
+.ps-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.ps-card-name{font-weight:600;font-size:14px}
+.ps-card-status{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px}
+.ps-card-artifacts{margin:8px 0}
+.ps-card-artifacts table{width:100%;border-collapse:collapse;font-size:12px}
+.ps-card-artifacts td{padding:3px 6px;border-bottom:1px solid var(--border)}
+.ps-card-artifacts td:first-child{color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ps-card-metrics{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.ps-card-metric{font-size:11px;padding:3px 8px;background:var(--surface3);border-radius:4px}
+.ps-card-metric b{color:var(--accent)}
+.ps-card-highlights{font-size:12px;color:var(--text2);padding-left:16px;margin:8px 0}
+.ps-card-highlights li{margin:3px 0}
+.ps-card-next{font-size:12px;color:var(--green);font-style:italic;margin-top:10px}
+.ps-card-placeholder{font-size:12px;color:var(--text2);font-style:italic;padding:20px 0;text-align:center}
+.ps-section-label{font-size:13px;font-weight:600;color:var(--text2);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
 /* Live dot */
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:livePulse 2s ease-in-out infinite}
 .live-dot.stale{background:var(--yellow);animation:none}
@@ -464,6 +499,7 @@ tr.row-none td:last-child{color:var(--red)}
   <button class="view-tab" data-view="classification">Classification</button>
   <button class="view-tab" data-view="coverage">Code Coverage</button>
   <button class="view-tab" data-view="adoption">Adoption</button>
+  <button class="view-tab" data-view="pipelinesummary">Pipeline Summary</button>
 </div>
 
 <!-- Filters -->
@@ -523,6 +559,9 @@ tr.row-none td:last-child{color:var(--red)}
 
 <!-- ADOPTION VIEW -->
 <div class="view" id="view-adoption"></div>
+
+<!-- PIPELINE SUMMARY VIEW -->
+<div class="view" id="view-pipelinesummary"></div>
 
 <!-- Empty state -->
 <div class="empty" id="empty" style="display:none">
@@ -768,8 +807,10 @@ tr.row-none td:last-child{color:var(--red)}
     div.setAttribute("role", "button");
     div.setAttribute("tabindex", "0");
     div.dataset.stage = s.name;
+    var countDisplay = (s.status === 'pending' || s.status === 'unknown') && !s.artifactCount
+      ? '\u2014' : String(s.artifactCount || 0);
     div.innerHTML = '<div class="stage-name">' + esc(s.name.replace(/-/g," ")) + '</div>'
-      + '<div class="stage-count">' + (s.artifactCount || 0) + '</div>'
+      + '<div class="stage-count">' + countDisplay + '</div>'
       + '<div class="stage-status">' + esc(s.status || "unknown") + '</div>';
 
     // Build popover
@@ -792,12 +833,43 @@ tr.row-none td:last-child{color:var(--red)}
       tbl += '</table>';
       auditProgHtml = tbl;
     }
+    var summaryHtml = "";
+    if (s.summary) {
+      var isStale = s.status === "stale";
+      summaryHtml = '<div class="stage-popover-summary' + (isStale ? ' stale' : '') + '">';
+      if (isStale) summaryHtml += '<span class="stale-badge">stale summary</span>';
+      if (s.summary.metrics) {
+        summaryHtml += '<div class="sps-metrics">';
+        Object.keys(s.summary.metrics).forEach(function(k) {
+          summaryHtml += '<span class="sps-metric"><b>' + s.summary.metrics[k] + '</b> ' + esc(k.replace(/_/g,' ')) + '</span>';
+        });
+        summaryHtml += '</div>';
+      }
+      if (s.summary.artifacts && s.summary.artifacts.length > 0) {
+        summaryHtml += '<div class="sps-artifacts"><table>';
+        s.summary.artifacts.slice(0, 5).forEach(function(a) {
+          summaryHtml += '<tr><td>' + esc(a.file) + '</td><td>' + esc(a.label) + '</td></tr>';
+        });
+        if (s.summary.artifacts.length > 5) summaryHtml += '<tr><td colspan="2" style="color:var(--text2)">+' + (s.summary.artifacts.length - 5) + ' more</td></tr>';
+        summaryHtml += '</table></div>';
+      }
+      if (s.summary.highlights && s.summary.highlights.length > 0) {
+        summaryHtml += '<ul class="sps-highlights">';
+        s.summary.highlights.forEach(function(h) { summaryHtml += '<li>' + esc(h) + '</li>'; });
+        summaryHtml += '</ul>';
+      }
+      if (s.summary.nextStep) {
+        summaryHtml += '<div class="sps-next">&rarr; ' + esc(s.summary.nextStep) + '</div>';
+      }
+      summaryHtml += '</div>';
+    }
     pop.innerHTML = '<div class="stage-popover-header">'
       + '<strong>' + esc(STAGE_LABELS[s.name] || s.name.replace(/-/g," ")) + '</strong>'
       + '<span class="stage-popover-status ' + statusCls + '">' + esc(s.status || "unknown") + '</span>'
       + '</div>'
-      + '<div class="stage-popover-info">' + (s.artifactCount || 0) + ' artifacts &middot; Last run: ' + esc(lastRun) + '</div>'
+      + '<div class="stage-popover-info">' + (s.artifactCount || 0) + ' ' + esc(s.stageLabel || 'artifacts') + ' &middot; Last run: ' + esc(lastRun) + '</div>'
       + auditProgHtml
+      + summaryHtml
       + '<div class="prompt-block" style="font-size:11px;max-height:120px;overflow-y:auto">' + esc(prompt) + '</div>'
       + '<div class="stage-popover-actions"></div>';
     div.appendChild(pop);
@@ -1869,7 +1941,7 @@ tr.row-none td:last-child{color:var(--red)}
       html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px">';
       html += '<span style="width:8px;height:8px;border-radius:50%;background:' + stColor + ';flex-shrink:0" aria-label="Status: ' + esc(s.status || 'unknown') + '"></span>';
       html += '<span style="flex:1">' + esc(s.name.replace(/-/g, " ")) + '</span>';
-      html += '<span style="font-size:11px;color:var(--text2)">' + (s.artifactCount || 0) + ' artifacts</span>';
+      html += '<span style="font-size:11px;color:var(--text2)">' + (s.artifactCount || 0) + ' ' + esc(s.stageLabel || 'artifacts') + '</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -2098,6 +2170,100 @@ tr.row-none td:last-child{color:var(--red)}
   addAdoptionStats();
 
   // ==========================================
+  // PIPELINE SUMMARY VIEW
+  // ==========================================
+  function renderPipelineSummaryView() {
+    var el = $("view-pipelinesummary");
+    var pipeline = DATA.pipeline || {};
+    var stages = pipeline.stages || [];
+    var lateralStages = pipeline.lateralStages || [];
+    var allStages = stages.concat(lateralStages);
+
+    var hasSummary = allStages.some(function(s) { return s.summary; });
+    if (!hasSummary) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2)">'
+        + '<h3>No Pipeline Summaries Yet</h3>'
+        + '<p>Summaries appear here as each pipeline skill completes. Run any pipeline skill to populate this view.</p>'
+        + '</div>';
+      return;
+    }
+
+    var html = '';
+
+    function renderCard(s) {
+      var isStale = s.status === "stale";
+      var card = '<div class="ps-card' + (isStale ? ' stale' : '') + '">';
+      var statusCls = "st-" + (s.status || "unknown");
+      card += '<div class="ps-card-header">';
+      card += '<span class="ps-card-name">' + esc(STAGE_LABELS[s.name] || s.name.replace(/-/g, " ")) + '</span>';
+      card += '<span class="ps-card-status ' + statusCls + '">' + esc(s.status || "unknown") + '</span>';
+      card += '</div>';
+
+      if (!s.summary) {
+        card += '<div class="ps-card-placeholder">Not yet completed</div>';
+        card += '</div>';
+        return card;
+      }
+
+      var sm = s.summary;
+      if (isStale) {
+        card += '<div style="font-size:10px;color:var(--yellow);margin-bottom:8px">&#9888; Stale — summary from previous run</div>';
+      }
+
+      // Metrics chips
+      if (sm.metrics) {
+        card += '<div class="ps-card-metrics">';
+        Object.keys(sm.metrics).forEach(function(k) {
+          card += '<span class="ps-card-metric"><b>' + sm.metrics[k] + '</b> ' + esc(k.replace(/_/g, ' ')) + '</span>';
+        });
+        card += '</div>';
+      }
+
+      // Artifacts table
+      if (sm.artifacts && sm.artifacts.length > 0) {
+        card += '<div class="ps-card-artifacts"><table>';
+        sm.artifacts.slice(0, 8).forEach(function(a) {
+          card += '<tr><td>' + esc(a.file) + '</td><td>' + esc(a.label) + '</td></tr>';
+        });
+        if (sm.artifacts.length > 8) card += '<tr><td colspan="2" style="color:var(--text2)">+' + (sm.artifacts.length - 8) + ' more</td></tr>';
+        card += '</table></div>';
+      }
+
+      // Highlights
+      if (sm.highlights && sm.highlights.length > 0) {
+        card += '<ul class="ps-card-highlights">';
+        sm.highlights.forEach(function(h) { card += '<li>' + esc(h) + '</li>'; });
+        card += '</ul>';
+      }
+
+      // Next step
+      if (sm.nextStep) {
+        card += '<div class="ps-card-next">&rarr; ' + esc(sm.nextStep) + '</div>';
+      }
+
+      card += '</div>';
+      return card;
+    }
+
+    // Linear pipeline stages
+    html += '<div class="ps-section-label">Pipeline Stages</div>';
+    html += '<div class="pipeline-summary-grid">';
+    stages.forEach(function(s) { html += renderCard(s); });
+    html += '</div>';
+
+    // Lateral stages
+    if (lateralStages.length > 0) {
+      html += '<div class="ps-section-label">Lateral Skills</div>';
+      html += '<div class="pipeline-summary-grid">';
+      lateralStages.forEach(function(s) { html += renderCard(s); });
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+  }
+  renderPipelineSummaryView();
+
+  // ==========================================
   // JSONP LIVE STATUS SYSTEM
   // ==========================================
   var LIVE_STATUS = null;
@@ -2202,6 +2368,7 @@ tr.row-none td:last-child{color:var(--red)}
   doFilter();
   renderCodeCoverage();
   renderAdoptionView();
+  renderPipelineSummaryView();
   initLiveStatus();
 })();
 </script>
