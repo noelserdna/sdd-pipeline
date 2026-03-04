@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 20 Claude Code skills (9 pipeline + 4 onboarding + 5 utility + 1 setup) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 22 Claude Code skills (9 pipeline + 4 onboarding + 6 utility + 1 setup + 2 lateral) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -27,6 +27,8 @@ sdd-task-implementer  →  src/, tests/, git commits
 ```
 
 **Lateral skills** (invoke at any point):
+- `sdd-tech-designer` → `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md` — Technical architecture exploration across 12 dimensions (delivery channels, architecture style, tech stack, data strategy, auth, API, infrastructure, CI/CD, observability, cost, DX, i18n). Optional: consumed by plan-architect if exists.
+- `sdd-ux-designer` → `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/INTERACTION-MODEL.md`, `ux/DESIGN-TOKENS.json` — UI/UX design system across 12 dimensions (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Optional: consumed by plan-architect if exists.
 - `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`
 - `sdd-req-change` → Universal change entry point: manages ADD/MODIFY/DEPRECATE with maintenance classification (ISO 14764, Ch05) and optional pipeline cascade triggering (can re-trigger spec-auditor → test-planner → plan-architect → task-generator → task-implementer)
 
@@ -129,6 +131,10 @@ Each target project using SDD skills tracks pipeline progress in a `pipeline-sta
 }
 ```
 
+Each completed stage also stores a `summary` object with: `artifacts` (files created), `metrics` (skill-specific numbers), `highlights` (notable observations), `nextStep` (recommended action), and `generatedAt` (timestamp). Skills persist this on completion; it's preserved when stage goes stale and overwritten on re-run. See `sdd-req-change/references/cascade-patterns.md` Section 9 for the full schema and per-skill metric keys.
+
+Lateral skills (`security-auditor`, `req-change`) store their state as additional keys in `stages`.
+
 **Stage I/O mapping** (used for hash computation):
 
 | Stage                    | Input artifacts              | Output artifacts          |
@@ -137,7 +143,7 @@ Each target project using SDD skills tracks pipeline progress in a `pipeline-sta
 | specifications-engineer  | `requirements/`              | `spec/`                   |
 | spec-auditor             | `spec/`                      | `audits/`, corrected `spec/` |
 | test-planner             | `spec/`, `audits/`           | `test/`                   |
-| plan-architect           | `spec/`, `audits/`, `test/`  | `plan/`                   |
+| plan-architect           | `spec/`, `audits/`, `test/`, `design/` (optional), `ux/` (optional)  | `plan/`                   |
 | task-generator           | `plan/`                      | `task/`                   |
 | task-implementer         | `task/`, `spec/`, `plan/`    | `src/`, `tests/`          |
 
@@ -145,6 +151,8 @@ Each target project using SDD skills tracks pipeline progress in a `pipeline-sta
 - A stage is **stale** when its `inputHash` no longer matches the current hash of its input directory.
 - When stage N becomes stale, all stages N+1..7 are also marked stale (`status: "stale"`).
 - Lateral skills (`sdd-security-auditor`, `sdd-req-change`) do not participate in the linear chain but may invalidate specific stages.
+- Lateral skills (`sdd-tech-designer`) output to `design/` which is consumed optionally by `plan-architect` Phase 0.
+- Lateral skills (`sdd-ux-designer`) output to `ux/` which is consumed optionally by `plan-architect` Phase 0.
 - `sdd-req-change` is the primary pipeline cascade trigger: it reads/writes `pipeline-state.json` (Phases 0, 8, 9) and can invoke downstream skills via `--cascade={auto|manual|dry-run|plan-only}`. See `sdd-req-change/references/cascade-patterns.md` for full invalidation rules.
 
 **Re-run guidance** -- when a file changes in:

@@ -123,6 +123,20 @@ TYPE_TO_STAGE = {
     "TASK": "task-generator",
 }
 
+STAGE_COUNT_UNITS = {
+    "requirements-engineer": "requirements",
+    "specifications-engineer": "artifacts",
+    "spec-auditor": "findings",
+    "test-planner": "documents",
+    "plan-architect": "phases",
+    "task-generator": "tasks",
+    "task-implementer": "files",
+    "security-auditor": "findings",
+    "req-change": "changes",
+    "tech-designer": "dimensions",
+    "ux-designer": "artifacts",
+}
+
 
 # ──────────────────────────────────────────────────────────
 # Helpers
@@ -1046,16 +1060,50 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         audit_files = [f for f in os.listdir(audits_dir) if f.lower().endswith(".md")]
         stage_counts["spec-auditor"] = stage_counts.get("spec-auditor", 0) + len(audit_files)
 
+    # Count test plan documents for test-planner stage
+    test_dir = os.path.join(project_dir, "test")
+    if os.path.isdir(test_dir):
+        test_files = [f for f in os.listdir(test_dir) if f.lower().endswith(".md")]
+        stage_counts["test-planner"] = stage_counts.get("test-planner", 0) + len(test_files)
+
+    # Count code + test files for task-implementer stage
+    impl_count = code_stats.get("totalFiles", 0) + test_stats.get("totalTestFiles", 0)
+    if impl_count > 0:
+        stage_counts["task-implementer"] = impl_count
+
     pipeline_stages = []
     for sname in stage_order:
         sd = stages_data.get(sname, {})
-        pipeline_stages.append({
+        stage_entry = {
             "name": sname,
             "status": sd.get("status", "unknown"),
             "lastRun": sd.get("lastRun"),
             "artifactCount": stage_counts.get(sname, 0),
-        })
+            "stageLabel": STAGE_COUNT_UNITS.get(sname, "artifacts"),
+        }
+        if sd.get("summary"):
+            stage_entry["summary"] = sd["summary"]
+        pipeline_stages.append(stage_entry)
     pipeline_data["stages"] = pipeline_stages
+
+    # Lateral stages (security-auditor, req-change)
+    lateral_names = ["security-auditor", "req-change", "tech-designer", "ux-designer"]
+    lateral_stages = []
+    for lname in lateral_names:
+        ld = stages_data.get(lname)
+        if ld:
+            lateral_entry = {
+                "name": lname,
+                "status": ld.get("status", "unknown"),
+                "lastRun": ld.get("lastRun"),
+                "artifactCount": stage_counts.get(lname, 0),
+                "stageLabel": STAGE_COUNT_UNITS.get(lname, "artifacts"),
+            }
+            if ld.get("summary"):
+                lateral_entry["summary"] = ld["summary"]
+            lateral_stages.append(lateral_entry)
+    if lateral_stages:
+        pipeline_data["lateralStages"] = lateral_stages
 
     # Deduplicate relationships
     seen_rels = set()

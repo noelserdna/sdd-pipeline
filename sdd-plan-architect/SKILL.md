@@ -1,7 +1,7 @@
 ---
 name: sdd-plan-architect
 description: This skill should be used when generating implementation plans from technical specifications. Bridges the gap between "what the system does" (specs) and "how to build it" (plan) through FASE generation, interactive clarification of implementation gaps, technical research, architecture design, and per-FASE plan generation. Reads existing ADRs and decisions context-aware to avoid redundant questions. Generates plan/ artifacts including FASE files (plan/fases/), PLAN.md, ARCHITECTURE.md, CLARIFY-LOG.md, RESEARCH.md, and per-FASE implementation plans. Does NOT modify specs — only writes to plan/. For users with mature specification repositories that need actionable implementation blueprints. Also use when generating, regenerating, or auditing FASE (implementation phase) files from technical specifications.
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # SDD Plan Architect Skill
@@ -48,6 +48,8 @@ Use this skill when:
 | **`sdd-plan-architect`** | **Phases + Planning** | **THIS SKILL**: generates FASE files + plan/ artifacts |
 | `sdd-task-generator` | Tasks | **Downstream**: generates task/ from plan + FASE |
 | `sdd-task-implementer` | Implementation | **Downstream**: implements code from tasks |
+| `sdd-tech-designer` | Technical Design | **Optional input**: reads `design/TECHNICAL-DESIGN.md` if exists |
+| `sdd-ux-designer` | UX Design | **Optional input**: reads `ux/UI-DESIGN-SYSTEM.md` if exists |
 | `sdd-requirements-engineer` | Requirements | **Lateral/Opcional**: retrofit para derivar REQs cuando se empezó por specs |
 | `sdd-req-change` | Changes | **Lateral/Opcional**: gestionar cambios de requisitos post-facto |
 
@@ -64,6 +66,8 @@ Requisitos → sdd-specifications-engineer → sdd-spec-auditor (fix) →
                                                sdd-task-implementer
 
 Herramientas laterales (opcionales):
+  sdd-tech-designer     ← diseño técnico profundo (design/ consumido si existe)
+  sdd-ux-designer       ← diseño UI/UX profundo (ux/ consumido si existe)
   sdd-requirements-engineer        ← retrofit: derivar REQs cuando se empezó por specs
   sdd-req-change        ← gestionar cambios de requisitos post-facto
   sdd-security-auditor  ← auditoría de seguridad complementaria
@@ -235,12 +239,29 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
    ```
    Extract: FASE number, title, dependencies, specs referenced
 
-5. **Load baseline** (if plan/ has artifacts):
+5. **Load technical design** (if exists):
+   - Read `design/TECHNICAL-DESIGN.md` — Extract technology decisions, architecture style, quality attributes
+   - Read `design/QUALITY-ATTRIBUTES.md` — Extract quality trade-offs
+   - Read `design/ADR-DRAFT-*.md` — Extract draft architecture decisions
+   - These inputs from `sdd-tech-designer` pre-resolve many clarify categories
+
+5b. **Load UX design** (if exists):
+   - Read `ux/UI-DESIGN-SYSTEM.md` — Extract brand identity, design tokens, component library, responsive strategy
+   - Read `ux/WIREFRAMES.md` — Extract screen layouts and component inventory
+   - Read `ux/ACCESSIBILITY-SPEC.md` — Extract WCAG compliance targets and ARIA patterns
+   - Read `ux/INTERACTION-MODEL.md` — Extract transitions, loading states, error handling patterns
+   - These inputs from `sdd-ux-designer` pre-resolve CL-UI category and inform frontend implementation planning
+
+6. **Load security findings** (if exists):
+   - Read `audits/SECURITY-AUDIT-BASELINE.md` — Extract security findings and recommendations
+   - Incorporate into CL-SEC and CL-NFR categories during Phase 2
+
+7. **Load baseline** (if plan/ has artifacts):
    - Read existing PLAN.md, ARCHITECTURE.md, CLARIFY-LOG.md, RESEARCH.md
    - Read existing PLAN-FASE-*.md files
    - Mark as baseline for incremental update
 
-6. **Build manifest:**
+8. **Build manifest:**
    ```
    {
      file_path: {
@@ -347,6 +368,61 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 ---
 
+### Phase 2.0: System Vision Gate (Mandatory)
+
+**Purpose:** Ensure a holistic understanding of the system before diving into category-specific questions.
+
+> This phase is **mandatory** and does NOT count toward question limits. It runs before category-specific clarification.
+
+**Steps:**
+
+1. **Analyze complete specs** — Read all spec documents to build a holistic system picture.
+
+2. **Generate System Vision Statement** (3-5 lines):
+   - What type of system is this? (web app, API, data pipeline, etc.)
+   - Who are the primary users?
+   - What is the expected scale?
+   - What is the key constraint?
+
+3. **Verify 5 minimum dimensions:**
+
+   | Dimension | Check | Source |
+   |-----------|-------|--------|
+   | **Delivery Channels** | How do users interact? (web, mobile, CLI, API-only) | Use-cases actors, UI references |
+   | **Data Strategy** | How is data stored and managed? | Domain entities, persistence specs |
+   | **Auth Model** | How are users authenticated and authorized? | Security specs, user roles |
+   | **Integration Points** | What external systems are involved? | Contracts, workflows |
+   | **Quality Attributes** | What are the top 3 quality priorities? | NFRs, invariants |
+
+4. **For each dimension, classify:**
+   - **Covered**: Decision exists in specs, ADRs, `design/TECHNICAL-DESIGN.md`, or CLAUDE.md
+   - **Implicit**: Can be inferred from specs but not explicitly stated
+   - **Missing**: No information found — **generate mandatory question**
+
+5. **Output — Vision Gate Table:**
+
+   ```markdown
+   ## System Vision Gate
+
+   > {System Vision Statement — 3-5 lines}
+
+   | Dimension | Status | Evidence |
+   |-----------|--------|----------|
+   | Delivery Channels | ✅ Covered | ADR-005: Web SPA with React |
+   | Data Strategy | ⚠️ Implicit | Domain entities exist, no DB selection |
+   | Auth Model | ✅ Covered | nfr/SECURITY.md defines JWT + RBAC |
+   | Integration Points | ✅ Covered | 3 external APIs in contracts/ |
+   | Quality Attributes | ❌ Missing | No NFR prioritization found |
+   ```
+
+6. **If any dimension is Missing → generate mandatory question** (presented before category questions).
+
+7. **If `design/TECHNICAL-DESIGN.md` exists**, many dimensions will be Covered — the Vision Gate validates this and proceeds quickly.
+
+**Output:** Vision Gate table (embedded in CLARIFY-LOG.md header)
+
+---
+
 ### Phase 2: Clarify for Implementation (Interactive)
 
 **Purpose:** Identify and resolve implementation gaps through interactive Q&A.
@@ -355,7 +431,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 **Steps:**
 
-1. **Scan against 10 categories** (see Clarify Taxonomy below)
+1. **Scan against 13 categories** (see Clarify Taxonomy below)
 
 2. **For each category, classify:**
    - **Resolved**: Decision exists in ADR, spec, CLARIFICATIONS.md, or CLAUDE.md
@@ -391,15 +467,43 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 6. **Early termination signals:**
    - User says "done", "proceed", "skip" → End Phase 2
    - All questions answered → End Phase 2
-   - Max 5 questions asked → End Phase 2
+   - No maximum question limit — questions continue until critical dimensions are covered
+   - User can cut short at any time; Phase 2.9 Coverage Gate validates minimum coverage
 
 **Output:** `plan/CLARIFY-LOG.md`
 
-**Skip behavior:** If `--skip-clarify` flag or existing CLARIFY-LOG.md with > 5 entries, show summary and proceed.
+**Skip behavior:** If `--skip-clarify` flag or existing CLARIFY-LOG.md with sufficient entries, show summary and proceed.
 
 ---
 
-### Clarify Taxonomy (10 Categories)
+### Phase 2.9: Coverage Gate
+
+**Purpose:** Validate that the 5 critical dimensions from the Vision Gate are resolved before proceeding to architecture design.
+
+**Steps:**
+
+1. **Re-check Vision Gate dimensions:**
+   - Delivery Channels: Resolved?
+   - Data Strategy: Resolved?
+   - Auth Model: Resolved?
+   - Integration Points: Resolved?
+   - Quality Attributes: Resolved?
+
+2. **For each unresolved dimension:**
+   - Generate a focused question targeting the specific gap
+   - Present to user with strong recommendation
+   - If user says "skip" → mark as "Deferred" with warning
+
+3. **Gate result:**
+   - **PASS**: All 5 dimensions resolved → proceed to Phase 3/4
+   - **PASS with warnings**: 1-2 dimensions deferred → proceed with explicit warning in CLARIFY-LOG.md
+   - **BLOCK**: 3+ dimensions unresolved → recommend running `sdd-tech-designer` first, or answer remaining questions
+
+**Output:** Coverage Gate result embedded in CLARIFY-LOG.md
+
+---
+
+### Clarify Taxonomy (13 Categories)
 
 > Full details in `references/clarify-taxonomy.md`
 
@@ -407,12 +511,15 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 |----|----------|---------|----------|
 | CL-TECH | Technology Stack | Missing language/framework/runtime choices | 1 |
 | CL-DATA | Physical Data Model | Logical-to-physical mapping gaps | 2 |
+| CL-UI | Delivery Channels & UI | Missing presentation layer decisions | 2.5 |
 | CL-ARCH | Architecture Topology | Undefined deployment/scaling strategy | 3 |
 | CL-SEC | Security Implementation | Security specs without library/pattern | 4 |
 | CL-INTEG | Integration Patterns | Undefined external system protocols | 5 |
 | CL-PERF | Performance Strategy | NFR targets without implementation strategy | 6 |
 | CL-TEST | Test Implementation | Missing test framework/environment | 7 |
+| CL-DX | Developer Experience | Missing repo structure/tooling/dev env decisions | 7.5 |
 | CL-CICD | Build & Deploy Pipeline | Missing CI/CD definition | 8 |
+| CL-ENV | Deployment Environment | Missing cloud/hosting/region decisions | 8.5 |
 | CL-OBS | Observability & Ops | Missing monitoring/logging strategy | 9 |
 | CL-COST | Cost & Resources | Missing infrastructure cost estimation | 10 |
 
@@ -866,7 +973,7 @@ If spec version > plan version (from Document History):
 ### Minimum Viable Run
 
 ```
-Phase 0 (Inventory) → Phase 1 (Gates) → Phase 1B (FASEs, if needed) → Phase 2 (Clarify) → Phase 5 (Generate) → Phase 6 (Validate)
+Phase 0 (Inventory) → Phase 1 (Gates) → Phase 1B (FASEs, if needed) → Phase 2.0 (Vision Gate) → Phase 2 (Clarify) → Phase 2.9 (Coverage Gate) → Phase 5 (Generate) → Phase 6 (Validate)
 ```
 
 Phases 1B, 3, and 4 are conditional:
@@ -877,22 +984,24 @@ Phases 1B, 3, and 4 are conditional:
 ### Full Run
 
 ```
-Phase 0 → Phase 1 → Phase 1B → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6
+Phase 0 → Phase 1 → Phase 1B → Phase 2.0 → Phase 2 → Phase 2.9 → Phase 3 → Phase 4 → Phase 5 → Phase 6
 ```
 
 ### Time Estimates
 
 | Phase | Estimated Duration |
 |-------|-------------------|
-| Phase 0: Inventory | 1-2 min (reading specs) |
+| Phase 0: Inventory | 1-2 min (reading specs + design/ if exists) |
 | Phase 1: Gates | < 30s (existence checks) |
-| Phase 2: Clarify | 2-10 min (interactive, depends on gaps) |
+| Phase 2.0: Vision Gate | 1-2 min (holistic system analysis) |
+| Phase 2: Clarify | 2-15 min (interactive, no hard limit) |
+| Phase 2.9: Coverage Gate | < 30s (dimension validation) |
 | Phase 3: Research | 3-5 min (parallel agents, web search) |
 | Phase 4: Architecture | 3-5 min (generating views) |
 | Phase 5: Plan Generation | 5-10 min (writing all artifacts) |
 | Phase 6: Validation | 1-2 min (cross-checks) |
 
-**Total (full run):** 15-35 min depending on spec size and gap count
+**Total (full run):** 16-40 min depending on spec size and gap count
 
 ---
 
@@ -900,10 +1009,28 @@ Phase 0 → Phase 1 → Phase 1B → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 | Reference | Location | Content |
 |-----------|----------|---------|
-| Clarify Taxonomy | `references/clarify-taxonomy.md` | 10 categories with detection rules, templates |
+| Clarify Taxonomy | `references/clarify-taxonomy.md` | 13 categories with detection rules, templates |
 | Plan Templates | `references/plan-templates.md` | Output templates for all artifacts |
 | Architecture Patterns | `references/architecture-patterns.md` | C4 guide, deployment patterns, common views |
 | FASE Template | `references/fase-template.md` | Canonical FASE file structure |
 | Phase Assignment Rules | `references/phase-assignment-rules.md` | Algorithm for assigning specs to phases |
 | FASE README Template | `references/readme-template.md` | Template for fases/ README with coverage matrices |
 | Coverage Report Template | `references/coverage-report-template.md` | Template for FASE audit reports |
+
+---
+
+## Persist Summary
+
+After generating all output artifacts, update `pipeline-state.json`:
+
+1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
+2. Set `stages["plan-architect"].status` = `"done"`
+3. Set `stages["plan-architect"].lastRun` = current ISO-8601
+4. Set `stages["plan-architect"].summary`:
+   - `artifacts`: list of files created in `plan/` with labels (e.g., `{"file": "plan/fases/FASE-1.md", "label": "FASE 1: Core Setup"}`)
+   - `metrics`: `{ "total_fases": N, "components": N, "adrs_created": N }`
+   - `highlights`: top 3-5 notable observations (e.g., "7 FASEs planned", "3 new ADRs for architecture decisions")
+   - `nextStep`: `"Run /sdd-task-generator"`
+   - `generatedAt`: current ISO-8601
+5. Write updated `pipeline-state.json`
+6. Display summary table to user (console output)

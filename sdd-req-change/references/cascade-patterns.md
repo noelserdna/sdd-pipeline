@@ -29,6 +29,16 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 }
 ```
 
+### Stage Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"` |
+| `outputHash` | string | No | `sha256:{hash}` of output directory/files |
+| `lastRun` | string | No | ISO 8601 timestamp |
+| `staleReason` | string | No | `CHG-{id}` or null |
+| `summary` | object | No | Stage completion summary (see Section 9) |
+
 ### Stage Names (pipeline order)
 
 1. `requirements-engineer`
@@ -38,6 +48,13 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 5. `plan-architect`
 6. `task-generator`
 7. `task-implementer`
+
+### Lateral Stages (optional keys in `stages`)
+
+- `security-auditor` — populated by `/sdd-security-auditor`
+- `req-change` — populated by `/sdd-req-change`
+- `tech-designer` — populated by `/sdd-tech-designer`
+- `ux-designer` — populated by `/sdd-ux-designer`
 
 ---
 
@@ -53,6 +70,8 @@ When an artifact changes, all downstream stages that depend on it become **stale
 | `spec/contracts/` | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | API contract changes affect audit, planning, and implementation |
 | `spec/nfr/` only | `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | NFR changes may affect architecture decisions and test strategy |
 | `spec/adr/` only | `plan-architect` → `task-generator` → `task-implementer` | Architecture decision changes affect planning and implementation |
+| `spec/` (any) | `tech-designer` (lateral) | Spec changes may invalidate technical design in `design/` |
+| `spec/` (any) | `ux-designer` (lateral) | Spec changes may invalidate UX design in `ux/` |
 | `spec/tests/` only | `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | Test specification changes affect test planning and downstream |
 | `plan/` | `task-generator` → `task-implementer` | Plan changes affect task breakdown and implementation |
 | `task/` | `task-implementer` | Task changes only affect implementation |
@@ -258,3 +277,58 @@ If git is not available, use file modification timestamps as a proxy:
 - This is less reliable than content hashing but sufficient for detecting changes.
 
 > **Important:** Hash comparison is used to **skip** stages whose inputs have not changed. If the hash matches the stored value, the stage is still `done`. If it differs, the stage must be marked `stale`.
+
+---
+
+## 9. Stage Summaries
+
+Each skill persists a structured summary in `pipeline-state.json` upon completion. This enables the dashboard to display rich stage information without re-scanning artifacts.
+
+### Summary Sub-Schema
+
+```json
+"summary": {
+  "artifacts": [
+    { "file": "test/TEST-PLAN.md", "label": "Test Strategy" }
+  ],
+  "metrics": {
+    "bdd_scenarios": 101,
+    "invariants_mapped": 46
+  },
+  "highlights": ["0% coverage -> Plan for 100%"],
+  "nextStep": "Run /sdd-plan-architect",
+  "generatedAt": "2026-03-04T15:30:00Z"
+}
+```
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `artifacts` | array of `{file, label}` | Max 15 items | Files created/modified by the stage |
+| `metrics` | object (key→number) | Flat, skill-specific keys | Quantitative metrics (see table below) |
+| `highlights` | array of strings | Max 5 items | Notable observations or decisions |
+| `nextStep` | string | — | Recommended next action |
+| `generatedAt` | string (ISO-8601) | — | When this summary was generated |
+
+### Per-Skill Metric Keys
+
+| Skill | Metric Keys |
+|-------|-------------|
+| `requirements-engineer` | `total_requirements`, `functional`, `nonfunctional`, `constraints` |
+| `specifications-engineer` | `use_cases`, `workflows`, `api_contracts`, `bdd_scenarios`, `invariants`, `adrs` |
+| `spec-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `gate_result` |
+| `test-planner` | `bdd_scenarios`, `test_matrices`, `perf_scenarios`, `invariants_mapped`, `test_gaps` |
+| `plan-architect` | `total_fases`, `components`, `adrs_created` |
+| `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert` |
+| `task-implementer` | `tasks_completed`, `tasks_remaining`, `commits`, `tests_passed`, `tests_failed` |
+| `security-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `owasp_coverage` |
+| `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |
+| `tech-designer` | `dimensions_analyzed`, `quality_attributes`, `adr_drafts`, `trade_offs_evaluated` |
+| `ux-designer` | `dimensions_analyzed`, `wireframes`, `components_specified`, `wcag_level`, `design_tokens`, `frontend_security_items` |
+
+### Summary Lifecycle Rules
+
+1. **Optional**: `summary` is `null` or absent when the stage has never completed.
+2. **Preserved on stale**: When a stage transitions to `stale`, its `summary` is retained (rendered dimmed in the dashboard).
+3. **Overwritten on re-run**: When a stage completes again, `summary` is fully replaced with the new data.
+4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, and `ux-designer` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
+5. **Hook-safe**: The H3 state-updater hook does NOT modify `summary` — it is exclusively managed by skills.

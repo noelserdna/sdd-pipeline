@@ -35,7 +35,17 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
         "name": "test-planner",
         "status": "done",
         "lastRun": "2026-02-26T11:00:00.000Z",
-        "artifactCount": 20
+        "artifactCount": 20,
+        "summary": {
+          "artifacts": [
+            { "file": "test/TEST-PLAN.md", "label": "Test Strategy" },
+            { "file": "test/TEST-MATRIX-extraction.md", "label": "Extraction Matrix" }
+          ],
+          "metrics": { "bdd_scenarios": 101, "test_matrices": 5, "perf_scenarios": 12, "invariants_mapped": 46, "test_gaps": 3 },
+          "highlights": ["101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing identified"],
+          "nextStep": "Run /sdd-plan-architect",
+          "generatedAt": "2026-02-26T11:00:00.000Z"
+        }
       },
       {
         "name": "plan-architect",
@@ -54,6 +64,21 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
         "status": "pending",
         "lastRun": null,
         "artifactCount": 0
+      }
+    ],
+    "lateralStages": [
+      {
+        "name": "security-auditor",
+        "status": "done",
+        "lastRun": "2026-02-27T12:00:00.000Z",
+        "artifactCount": 1,
+        "summary": {
+          "artifacts": [{ "file": "audits/SECURITY-AUDIT-BASELINE.md", "label": "Security Audit Baseline" }],
+          "metrics": { "total_findings": 12, "critical": 1, "high": 3, "medium": 5, "low": 3, "owasp_coverage": 78 },
+          "highlights": ["1 critical: Missing CSRF protection on payment endpoint"],
+          "nextStep": "Address critical findings before implementation",
+          "generatedAt": "2026-02-27T12:00:00.000Z"
+        }
       }
     ]
   },
@@ -287,6 +312,24 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
 | `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"`, `"pending"` |
 | `lastRun` | string or null | Yes | ISO-8601 timestamp of last completion, null if never run |
 | `artifactCount` | number | Yes | Count of artifacts produced by this stage |
+| `stageLabel` | string | No | Unit label for `artifactCount` (e.g., `"requirements"`, `"findings"`). Defaults to `"artifacts"`. |
+| `summary` | object or null | No | Stage completion summary (see `pipeline.stages[].summary` below) |
+
+### pipeline.lateralStages[]
+
+Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `tech-designer`, `ux-designer`). Same schema as `pipeline.stages[]`. Only present when these stages have been run at least once.
+
+### pipeline.stages[].summary
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `artifacts` | array | Yes | Files created/modified: `[{ "file": "path", "label": "description" }]`. Max 15. |
+| `metrics` | object | Yes | Flat key→number map. Keys are skill-specific (see `cascade-patterns.md` Section 9). |
+| `highlights` | array of strings | Yes | Notable observations. Max 5 items. |
+| `nextStep` | string | Yes | Recommended next action. |
+| `generatedAt` | string (ISO-8601) | Yes | When this summary was generated. |
+
+**Lifecycle**: `null`/absent when stage never completed. Preserved (rendered dimmed) when stage is `stale`. Overwritten on re-run.
 
 ### artifacts[]
 
@@ -549,6 +592,16 @@ All v2 fields remain unchanged. v3 is a backward-compatible extension. When no o
 | Relationship type `inferred-implements` | **New**: transitively inferred code→artifact link |
 
 All v3 fields remain unchanged. v4 is a backward-compatible extension. When no code index has been run, `codeIntelligence` is absent (not null).
+
+## Migration from v4
+
+| v4 Field | v5 Change |
+|----------|-----------|
+| `pipeline.stages[].summary` | **New**: stage completion summary object |
+| `pipeline.stages[].stageLabel` | **New**: unit label for artifactCount |
+| `pipeline.lateralStages` | **New**: array for lateral skills (security-auditor, req-change) |
+
+All v4 fields remain unchanged. v5 is a backward-compatible extension. When no summaries exist, `summary` is `null` or absent and `lateralStages` is an empty array or absent.
 
 ### codeIntelligence (v4)
 
