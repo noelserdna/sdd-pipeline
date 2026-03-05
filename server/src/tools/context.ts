@@ -129,6 +129,11 @@ export function executeContext(
     }
   }
 
+  // Separate code refs by origin for clarity
+  const allCodeRefs = artifact.codeRefs ?? [];
+  const directCodeRefs = allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct");
+  const inferredCodeRefs = allCodeRefs.filter((cr) => cr.origin && cr.origin !== "direct");
+
   const output = {
     artifact: {
       id: artifact.id,
@@ -144,7 +149,13 @@ export function executeContext(
     coverageStatus,
     upstream,
     downstream,
-    codeRefs: artifact.codeRefs ?? [],
+    codeRefs: directCodeRefs,
+    inferredCodeRefs: inferredCodeRefs.map((cr) => ({
+      ...cr,
+      inferencePath: cr.inferredFrom
+        ? `via commit:${cr.inferredFrom.commitSha}${cr.inferredFrom.taskId ? ` → ${cr.inferredFrom.taskId}` : ""}`
+        : undefined,
+    })),
     testRefs: artifact.testRefs ?? [],
     commitRefs: artifact.commitRefs ?? [],
     gaps,

@@ -495,6 +495,29 @@ a:hover{text-decoration:underline}
   <p>Code intelligence works standalone but produces richer results when <strong>GitNexus</strong> is available. GitNexus provides advanced call graph analysis, cross-repository references, and higher confidence scores.</p>
 </div>
 
+<h3>Inference Engine</h3>
+
+<p>The dashboard automatically infers code coverage from git commit trailers (<code>Refs:</code> and <code>Task:</code>), complementing manual <code>// Refs:</code> annotations in source code. Each code reference has an <strong>origin</strong> indicating how it was discovered:</p>
+
+<table class="metric-table">
+  <thead>
+    <tr><th>State</th><th>Origin</th><th>Visual</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Linked</strong></td><td><code>direct</code></td><td style="color:var(--green)">&#9632; Green square</td><td><code>// Refs:</code> annotation in source code (highest confidence)</td></tr>
+    <tr><td><strong>Inferred</strong></td><td><code>commit-inferred</code></td><td style="color:var(--yellow)">&#9638; Yellow half-square</td><td>Commit has both <code>Refs:</code> and <code>Task:</code> trailers</td></tr>
+    <tr><td><strong>Suggested</strong></td><td><code>task-inferred</code></td><td style="color:var(--gray)">? Gray question</td><td>Only <code>Task:</code> trailer — transitively inferred via BFS</td></tr>
+    <tr><td><strong>Uncovered</strong></td><td>(none)</td><td style="color:var(--red)">&#9675; Red circle</td><td>No reference of any kind</td></tr>
+  </tbody>
+</table>
+
+<p>Inferred references can be <strong>promoted</strong> to direct references by adding <code>// Refs: ID</code> comments in the source code. The traceability check skill (<code>/sdd-traceability-check</code>) recommends promotions for stable inferred refs.</p>
+
+<div class="info-card">
+  <h4>Manual Overrides</h4>
+  <p>Create <code>.sdd/overrides.json</code> to pin or suppress inferred references when the automatic inference is incorrect. Use <code>"pin"</code> to force a file-artifact link, or <code>"suppress"</code> to ignore inferred refs for utility files.</p>
+</div>
+
 
 <h2 id="utility-skills">Utility Skills</h2>
 

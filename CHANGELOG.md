@@ -5,6 +5,32 @@ All notable changes to the SDD skills repository will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-05
+
+### Added
+- **Commit-based traceability inference**: Enriches code coverage automatically from git commit trailers (`Refs:`, `Task:`) — no manual `// Refs:` comments needed
+  - 4 origin states: `linked` (direct), `inferred` (commit), `suggested` (task-only), `uncovered` — with shape+color+text for colorblind accessibility
+  - Single `git log --all --name-only` call with null-byte delimiters (~0.5s vs 160s for per-commit approach)
+  - BFS N-hop propagation (max depth 3) replaces 1-hop for REQ coverage chains
+  - Manual overrides via `.sdd/overrides.json` (pin/suppress operations)
+- **Graph schema v6**: Backward-compatible extension with `origin`, `inferredFrom`, `files[]`, inference stats on `codeStats`
+- **Code-index Phase 4.5**: Commit-Symbol Bridge — maps git diff hunks to symbol ranges for symbol-level inference
+- **Traceability-check Step 5b**: Inferred Reference Verification — validates commit SHAs, file freshness, task linkage; classifies as valid/stale/broken
+
+### Fixed
+- **sdd-dashboard**: Pipe delimiter in `scan_commits()` broke when commit subject contained `|` — now uses `%x00` null bytes
+- **sdd-dashboard**: `Refs:` regex captured prose from commit body — now uses `%(trailers:key=Refs,valueonly)`
+- **sdd-dashboard**: Ref ID validation accepted any string — now validates against `ARTIFACT_ID_RE` pattern
+- **sdd-dashboard**: ZeroDivisionError when `total_functional_reqs` is 0
+- **sdd-dashboard**: `open(file, "w")` truncated immediately on crash — now uses tempfile + `os.replace()` for crash-safe writes
+
+### Changed
+- **sdd-dashboard generate.py**: Rewritten `scan_commits()`, new `infer_code_refs_from_commits()`, `propagate_refs_to_reqs()` (BFS), `apply_overrides()`, `_refine_with_code_intelligence()`
+- **sdd-dashboard html-template**: 4-state origin indicators (Linked/Inferred/Suggested/Uncovered) with shape+color+text, inference paths, legend
+- **MCP server**: Updated TypeScript types (`origin`, `inferredFrom` on CodeRef, `files` on CommitRef), coverage tool shows inference breakdown, trace tool includes origin, context tool separates direct vs inferred refs
+- **sdd-dashboard SKILL.md**: Documents inference engine and 5 origin types
+- **graph-schema.md**: Schema v6 with migration notes from v5
+
 ## [2.2.0] - 2026-03-04
 
 ### Added

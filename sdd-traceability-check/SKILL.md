@@ -76,12 +76,11 @@ Verify the TASK → COMMIT link in the extended traceability chain.
    ```
    If this fails, skip this step and note "Git not available — commit verification skipped" in the report.
 
-2. **Extract commits with `Refs:` and `Task:` trailers**:
+2. **Extract commits with `Refs:` and `Task:` trailers** (single call with null-byte delimiters):
    ```bash
-   git log --all --format='%H|%h|%s|%an|%aI|%b' --grep='Refs:' | head -500
-   git log --all --format='%H|%h|%s|%an|%aI|%b' --grep='Task:' | head -500
+   git log --all --name-only --format='%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly)---COMMIT-END---' | head -5000
    ```
-   Merge and deduplicate by full SHA.
+   Parse by splitting on `---COMMIT-END---`, then split header on `\x00`. Files follow on separate lines after the header.
 
 3. **Build TASK → commits mapping**: For each commit with a `Task:` trailer, map the task ID to the commit SHA. A task may have multiple commits (e.g., if amended or reworked).
 
@@ -94,6 +93,39 @@ Verify the TASK → COMMIT link in the extended traceability chain.
    - Total completed tasks (marked `[x]`): count from task documents
    - Tasks with at least one commit: count from TASK → commits mapping
    - Commit coverage percentage: tasks with commits / total completed tasks
+
+### Step 5b: Inferred Reference Verification
+
+Verify the quality and freshness of commit-inferred code references from `dashboard/traceability-graph.json`.
+
+IF `dashboard/traceability-graph.json` exists AND contains `codeRefs` with `origin: "commit-inferred"` or `origin: "task-inferred"`:
+
+1. **Verify commit existence**: For each inferred codeRef with `inferredFrom.commitSha`:
+   ```bash
+   git cat-file -t <fullSha>
+   ```
+   If the SHA doesn't exist in the repo, mark as `broken`.
+
+2. **Verify file freshness**: For each inferred codeRef:
+   - Check that `file` exists on disk
+   - Compare the file's last modification date against the commit date
+   - If file was modified AFTER the commit: mark as `stale` (the commit's file list may be outdated)
+   - If file was NOT modified: mark as `valid`
+
+3. **Verify task linkage**: For each inferred codeRef with `origin: "task-inferred"`:
+   - Check that `inferredFrom.taskId` exists as a defined TASK artifact
+   - Check that the TASK has relationships to the `refIds` in the codeRef
+   - If the TASK doesn't trace to the claimed refs: mark as `broken`
+
+4. **Compute inference quality**:
+   - Inferred refs: valid / stale / broken counts
+   - Inference sources: commit-inferred vs task-inferred breakdown
+   - Promotion candidates: valid inferred refs that should be promoted to direct `// Refs:` comments
+   - Report format: `{ file, symbol, origin, status, inferredFrom, promotionRecommendation }`
+
+5. **Promotion recommendations**: For files with `valid` inferred refs that have been stable for >5 commits:
+   - Suggest adding `// Refs: <ids>` comment directly in the source file
+   - This promotes the ref from `inferred` to `direct` status
 
 ### Step 5.5: Code & Test Chain Verification
 

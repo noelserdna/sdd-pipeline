@@ -11,7 +11,7 @@ From requirements to production code — a structured, auditable, traceable pipe
 
 ## What's in this repo
 
-- **20 skills** in `sdd-*/` directories (pipeline + onboarding + lateral + utilities)
+- **22 skills** in `sdd-*/` directories (pipeline + onboarding + lateral + utilities)
 - **MCP server** in `server/` (TypeScript, 5 tools for querying the traceability graph)
 - **Automation** in `automation/` (5 hooks, 3 agents, settings template)
 - **References** in `references/` (SDD Constitution, shared knowledge)
@@ -28,7 +28,7 @@ sdd-task-generator  →  task/TASK-FASE-*.md
 sdd-task-implementer  →  src/, tests/, git commits
 ```
 
-**Lateral skills** (anytime): `sdd-security-auditor`, `sdd-req-change`
+**Lateral skills** (anytime): `sdd-security-auditor`, `sdd-req-change`, `sdd-tech-designer`, `sdd-ux-designer`
 
 **Onboarding** (existing projects): `sdd-onboarding`, `sdd-reverse-engineer`, `sdd-reconcile`, `sdd-import`
 
@@ -44,7 +44,7 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 
 ## Skills Reference
 
-### Pipeline (9)
+### Pipeline (7)
 
 | # | Skill | Input | Output |
 |---|-------|-------|--------|
@@ -55,8 +55,6 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 | 5 | plan-architect | `spec/`, `audits/`, `test/` | `plan/` |
 | 6 | task-generator | `plan/` | `task/` |
 | 7 | task-implementer | `task/`, `spec/`, `plan/` | `src/`, `tests/`, commits |
-| 8 | security-auditor | `spec/` | `audits/SECURITY-AUDIT-BASELINE.md` |
-| 9 | req-change | Change request | Updated `spec/`, `requirements/`, cascade |
 
 ### Onboarding (4)
 
@@ -66,6 +64,15 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 | reverse-engineer | Code → SDD artifacts (requirements, specs, tasks, findings) |
 | reconcile | Detect spec-code drift, classify divergences, reconcile |
 | import | External docs → SDD format (Jira, OpenAPI, Markdown, Notion, CSV, Excel) |
+
+### Lateral (4)
+
+| Skill | Purpose |
+|-------|---------|
+| security-auditor | Security analysis based on OWASP ASVS v4, CWE |
+| req-change | Requirements change management with pipeline cascade |
+| tech-designer | 12-dimension technical architecture exploration (ATAM-lite) |
+| ux-designer | 12-dimension UI/UX design system (WCAG 2.1 AA) |
 
 ### Utilities (6)
 
@@ -162,6 +169,8 @@ sdd-skills/
 ├── sdd-dashboard/
 ├── sdd-code-index/
 ├── sdd-session-summary/
+├── sdd-tech-designer/
+├── sdd-ux-designer/
 ├── sdd-setup/
 ├── server/                      # MCP server (TypeScript)
 ├── automation/

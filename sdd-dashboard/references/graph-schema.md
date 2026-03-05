@@ -296,7 +296,7 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `$schema` | string | Yes | Always `"traceability-graph-v3"` |
+| `$schema` | string | Yes | `"traceability-graph-v6"` (consumes v3-v5 without error) |
 | `generatedAt` | string (ISO-8601) | Yes | When the graph was generated |
 | `projectName` | string | Yes | Name of the project (from `package.json`, directory name, or `pipeline-state.json`) |
 
@@ -370,8 +370,16 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `symbol` | string | Yes | Nearest symbol name (function, class, const, etc.) or `"filename:line"` fallback |
 | `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the Ref comment (e.g., `["UC-001", "INV-EXT-005"]`) |
+| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping) |
+| `inferredFrom` | object or null | No | Inference provenance when origin is not `"direct"`: `{ "commitSha": "abc1234", "taskId": "TASK-F1-003", "trailerRefs": ["UC-001"] }`. Default: `null` |
 
-**Propagation**: A codeRef is attached to a REQ if any of its `refIds` match a UC/INV/BDD/WF/API that traces back to that REQ. Direct REQ references in code are also captured.
+**Origin states and visual mapping**:
+- **linked** (`origin: "direct"`): `// Refs:` comment in code — green solid badge
+- **inferred** (`origin: "commit-inferred"`): Commit has Refs: + Task: trailers — yellow dashed badge
+- **suggested** (`origin: "task-inferred"`): Only Task: trailer, transitively resolved — gray dotted badge
+- **uncovered**: No reference of any kind — red faint badge
+
+**Propagation**: A codeRef is attached to a REQ if any of its `refIds` match a UC/INV/BDD/WF/API that traces back to that REQ via BFS (max 3 hops). Direct REQ references in code are also captured.
 
 ### artifacts[].testRefs[]
 
@@ -396,8 +404,9 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `date` | string (ISO-8601) | Yes | Commit author date |
 | `taskId` | string or null | Yes | Task ID from `Task:` trailer (e.g., `"TASK-F0-003"`), null if no Task trailer |
 | `refIds` | array of strings | Yes | Artifact IDs from `Refs:` trailer (e.g., `["UC-002", "ADR-003"]`) |
+| `files` | array of strings | No | Files changed in this commit (from `git log --name-only`). Default: `[]` |
 
-**Propagation**: A commitRef is attached to a REQ if any of its `refIds` match a UC/INV/BDD/WF/API that traces back to that REQ (same logic as codeRefs/testRefs). Commits with `Task:` trailers also propagate via the TASK → FASE → spec chain.
+**Propagation**: A commitRef is attached to a REQ if any of its `refIds` match a UC/INV/BDD/WF/API that traces back to that REQ via BFS (max 3 hops, same as codeRefs/testRefs). Commits with `Task:` trailers also propagate via the TASK → FASE → spec chain.
 
 ### relationships[]
 
@@ -467,6 +476,9 @@ Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, 
 | `totalFiles` | number | Total source files scanned in `src/` |
 | `totalSymbols` | number | Total exported symbols found across all files |
 | `symbolsWithRefs` | number | Symbols that have at least one SDD artifact reference |
+| `directRefs` | number | Total code refs from `// Refs:` comments (origin: direct) |
+| `inferredRefs` | number | Total code refs inferred from commits (origin: commit-inferred or task-inferred) |
+| `manualOverrides` | number | Total overrides applied from `.sdd/overrides.json` |
 
 ### testStats
 
@@ -610,6 +622,20 @@ All v3 fields remain unchanged. v4 is a backward-compatible extension. When no c
 | `pipeline.lateralStages` | **New**: array for lateral skills (security-auditor, req-change) |
 
 All v4 fields remain unchanged. v5 is a backward-compatible extension. When no summaries exist, `summary` is `null` or absent and `lateralStages` is an empty array or absent.
+
+## Migration from v5
+
+| v5 Field | v6 Change |
+|----------|-----------|
+| `$schema: "traceability-graph-v5"` | Changed to `"traceability-graph-v6"` |
+| `codeRefs[].origin` | **New**: origin field for direct/inferred/override/code-index tracking |
+| `codeRefs[].inferredFrom` | **New**: inference provenance object with commitSha, taskId, trailerRefs |
+| `commitRefs[].files` | **New**: files changed in the commit (from git log --name-only) |
+| `codeStats.directRefs` | **New**: count of direct code refs |
+| `codeStats.inferredRefs` | **New**: count of inferred code refs |
+| `codeStats.manualOverrides` | **New**: count of manual overrides applied |
+
+All v5 fields remain unchanged. v6 is a backward-compatible extension. The `origin` field defaults to `"direct"` when absent (backward-compatible with v3-v5 data).
 
 ### codeIntelligence (v4)
 

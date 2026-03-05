@@ -108,6 +108,27 @@ npx gitnexus analyze
 - Group symbols by their GitNexus community assignments
 - Map communities to SDD business domains (from classification)
 
+### Phase 4.5: Commit-Symbol Bridge
+
+For each commit with Refs:/Task: trailers, analyze which symbols were affected:
+
+4.5.1. Get changed lines from each commit:
+```bash
+git diff-tree -p <sha> -- src/
+```
+
+4.5.2. For each changed file, extract the diff hunks (added/modified line ranges).
+
+4.5.3. Match changed line ranges against symbol ranges (startLine..endLine) from the symbol table built in Phase 2/3.
+
+4.5.4. For overlapping symbols:
+- Add `commitRefs[]` to the symbol entry: `{ sha, taskId, refIds }`
+- If the symbol has no `artifactRefs`, add the commit's `refIds` to `inferredRefs`
+
+4.5.5. Bridge output: commit → file → changed lines → overlapping symbols → artifact refs
+
+This enables `generate.py` to refine file-level inferred codeRefs into symbol-level refs when codeIntelligence is present.
+
 ### Phase 5: Graph Enrichment
 
 5.1. Build `codeIntelligence` block for `traceability-graph.json`:

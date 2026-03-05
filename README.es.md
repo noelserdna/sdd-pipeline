@@ -9,7 +9,7 @@ De requisitos a codigo en produccion — un pipeline estructurado, auditable y t
 
 ## Que contiene este repo
 
-- **20 skills** en directorios `sdd-*/` (pipeline + onboarding + laterales + utilidades)
+- **22 skills** en directorios `sdd-*/` (pipeline + onboarding + laterales + utilidades)
 - **Servidor MCP** en `server/` (TypeScript, 5 herramientas para consultar el grafo de trazabilidad)
 - **Automatizacion** en `automation/` (5 hooks, 3 agentes, template de settings)
 - **Referencias** en `references/` (Constitucion SDD, conocimiento compartido)
@@ -26,7 +26,7 @@ sdd-task-generator  →  task/TASK-FASE-*.md
 sdd-task-implementer  →  src/, tests/, git commits
 ```
 
-**Skills laterales** (en cualquier momento): `sdd-security-auditor`, `sdd-req-change`
+**Skills laterales** (en cualquier momento): `sdd-security-auditor`, `sdd-req-change`, `sdd-tech-designer`, `sdd-ux-designer`
 
 **Onboarding** (proyectos existentes): `sdd-onboarding`, `sdd-reverse-engineer`, `sdd-reconcile`, `sdd-import`
 
@@ -42,7 +42,7 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 
 ## Referencia de Skills
 
-### Pipeline (9)
+### Pipeline (7)
 
 | # | Skill | Entrada | Salida |
 |---|-------|---------|--------|
@@ -53,8 +53,6 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 | 5 | plan-architect | `spec/`, `audits/`, `test/` | `plan/` |
 | 6 | task-generator | `plan/` | `task/` |
 | 7 | task-implementer | `task/`, `spec/`, `plan/` | `src/`, `tests/`, commits |
-| 8 | security-auditor | `spec/` | `audits/SECURITY-AUDIT-BASELINE.md` |
-| 9 | req-change | Solicitud de cambio | `spec/`, `requirements/` actualizados, cascade |
 
 ### Onboarding (4)
 
@@ -64,6 +62,15 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 | reverse-engineer | Codigo → artefactos SDD (requisitos, specs, tareas, hallazgos) |
 | reconcile | Detectar drift specs-codigo, clasificar divergencias, reconciliar |
 | import | Docs externos → formato SDD (Jira, OpenAPI, Markdown, Notion, CSV, Excel) |
+
+### Laterales (4)
+
+| Skill | Proposito |
+|-------|-----------|
+| security-auditor | Analisis de seguridad basado en OWASP ASVS v4, CWE |
+| req-change | Gestion de cambios de requisitos con cascade de pipeline |
+| tech-designer | Exploracion de arquitectura tecnica en 12 dimensiones (ATAM-lite) |
+| ux-designer | Sistema de diseno UI/UX en 12 dimensiones (WCAG 2.1 AA) |
 
 ### Utilidades (6)
 
@@ -160,6 +167,8 @@ sdd-skills/
 ├── sdd-dashboard/
 ├── sdd-code-index/
 ├── sdd-session-summary/
+├── sdd-tech-designer/
+├── sdd-ux-designer/
 ├── sdd-setup/
 ├── server/                      # Servidor MCP (TypeScript)
 ├── automation/

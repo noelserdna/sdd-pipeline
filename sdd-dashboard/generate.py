@@ -17,6 +17,7 @@ import json
 import sys
 import argparse
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from collections import OrderedDict
 
@@ -25,6 +26,42 @@ from collections import OrderedDict
 # ──────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _safe_write_json(output_path, data):
+    """Write JSON atomically: write to temp file, then os.replace (Step 0.5)."""
+    out_dir = os.path.dirname(output_path)
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, output_path)
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _safe_write_text(output_path, text):
+    """Write text atomically: write to temp file, then os.replace (Step 0.5)."""
+    out_dir = os.path.dirname(output_path)
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_path, output_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
 
 SCAN_DIRS = ["requirements", "spec", "plan", "task", "test"]
 SKIP_DIRS = {".git", ".claude", "node_modules", "__pycache__", "dashboard", "temp_files"}
@@ -442,8 +479,50 @@ def scan_files(project_dir):
     return artifacts, references, all_ref_ids
 
 
+# Valid SDD artifact ID pattern for ref validation (Step 0.3)
+ARTIFACT_ID_RE = re.compile(r'^(REQ|UC|WF|API|BDD|INV|ADR|RN|NFR|FASE|TASK)-[\w.-]+$')
+
+# Files to skip during commit-based inference (utility/config files)
+SKIP_FILE_PATTERNS = [
+    re.compile(r'package\.json$'),
+    re.compile(r'package-lock\.json$'),
+    re.compile(r'tsconfig\.json$'),
+    re.compile(r'\.config\.'),
+    re.compile(r'\.lock$'),
+    re.compile(r'\.env'),
+    re.compile(r'README', re.IGNORECASE),
+    re.compile(r'CHANGELOG', re.IGNORECASE),
+    re.compile(r'^\.'),
+    re.compile(r'node_modules/'),
+    re.compile(r'__pycache__/'),
+]
+
+
+def _is_source_file(filepath):
+    """Return True if file is likely a source/test file (not config/utility)."""
+    for pat in SKIP_FILE_PATTERNS:
+        if pat.search(filepath):
+            return False
+    # Must be under a source-like directory
+    src_prefixes = ("src/", "lib/", "app/", "tests/", "test/", "pkg/", "cmd/", "internal/")
+    return any(filepath.startswith(p) or ("/" + p) in filepath for p in src_prefixes)
+
+
+def _parse_validated_refs(raw_refs_str):
+    """Parse comma-separated ref IDs and validate against artifact ID pattern."""
+    if not raw_refs_str or not raw_refs_str.strip():
+        return []
+    raw = [r.strip() for r in raw_refs_str.split(",") if r.strip()]
+    return [r for r in raw if ARTIFACT_ID_RE.match(r)]
+
+
 def scan_commits(project_dir):
-    """Scan git log for commits with Refs: and Task: trailers. Returns list of commit dicts."""
+    """Scan git log for commits with Refs: and Task: trailers.
+
+    Uses a single git log call with null-byte delimiters and --name-only
+    to get both metadata and changed files efficiently.
+    Returns list of commit dicts.
+    """
     # Check git availability
     try:
         result = subprocess.run(
@@ -457,78 +536,244 @@ def scan_commits(project_dir):
         print("  Git not available — skipping commit scan.")
         return []
 
-    commits_by_sha = {}  # full SHA -> commit dict
+    # Single git log call: null-byte delimiters (Step 0.1), trailer extraction (Step 0.2),
+    # --name-only for file lists (Step 1.1)
+    COMMIT_DELIM = "---COMMIT-END---"
+    try:
+        result = subprocess.run(
+            [
+                "git", "log", "--all", "--name-only",
+                f"--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly){COMMIT_DELIM}"
+            ],
+            capture_output=True, text=True, cwd=project_dir, timeout=60
+        )
+        if result.returncode != 0:
+            print(f"  Warning: git log failed (rc={result.returncode})")
+            return []
+    except Exception as e:
+        print(f"  Warning: git log scan failed: {e}")
+        return []
 
-    for trailer in ["Refs:", "Task:"]:
-        try:
-            result = subprocess.run(
-                ["git", "log", "--all", "--format=%H|%h|%s|%an|%aI|%b", f"--grep={trailer}"],
-                capture_output=True, text=True, cwd=project_dir, timeout=30
-            )
-            if result.returncode != 0:
-                continue
-
-            # Parse output — each commit can span multiple lines (body has newlines)
-            # Split by full SHA pattern at start of line
-            raw = result.stdout
-            entries = re.split(r'(?=^[0-9a-f]{40}\|)', raw, flags=re.MULTILINE)
-            for entry in entries:
-                entry = entry.strip()
-                if not entry:
-                    continue
-                # Parse first line: fullSha|shortSha|subject|author|date
-                parts = entry.split("|", 5)
-                if len(parts) < 5:
-                    continue
-                full_sha = parts[0]
-                short_sha = parts[1]
-                subject = parts[2]
-                author = parts[3]
-                date = parts[4]
-                body = parts[5] if len(parts) > 5 else ""
-
-                if full_sha in commits_by_sha:
-                    existing = commits_by_sha[full_sha]
-                    if not existing.get("body") and body:
-                        existing["body"] = body
-                    continue
-
-                commits_by_sha[full_sha] = {
-                    "sha": short_sha,
-                    "fullSha": full_sha,
-                    "message": subject,
-                    "author": author,
-                    "date": date,
-                    "body": body,
-                    "taskId": None,
-                    "refIds": [],
-                }
-        except Exception as e:
-            print(f"  Warning: git log scan failed for {trailer}: {e}")
+    commits = []
+    for chunk in result.stdout.split(COMMIT_DELIM):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        lines = chunk.split("\n")
+        if not lines or not lines[0]:
             continue
 
-    # Parse trailers from body
-    task_re = re.compile(r'^Task:\s*(TASK-F\d{1,2}-\d{3,4})\s*$', re.MULTILINE)
-    refs_re = re.compile(r'^Refs:\s*(.+)$', re.MULTILINE)
+        header = lines[0].split("\x00", 6)
+        if len(header) < 5:
+            continue
 
-    for commit in commits_by_sha.values():
-        body = commit.get("body", "")
-        # Extract Task: trailer
-        tm = task_re.search(body)
-        if tm:
-            commit["taskId"] = tm.group(1)
-        # Extract Refs: trailer
-        rm = refs_re.search(body)
-        if rm:
-            refs_str = rm.group(1)
-            ref_ids = [r.strip() for r in refs_str.split(",") if r.strip()]
-            commit["refIds"] = ref_ids
-        # Remove body from output (not needed in JSON)
-        del commit["body"]
+        full_sha = header[0]
+        short_sha = header[1]
+        subject = header[2]
+        author = header[3]
+        date = header[4]
+        trailer_refs = header[5].strip() if len(header) > 5 else ""
+        trailer_task = header[6].strip() if len(header) > 6 else ""
 
-    commits = list(commits_by_sha.values())
+        # Parse and validate ref IDs (Step 0.3)
+        ref_ids = _parse_validated_refs(trailer_refs)
+
+        # Parse Task: trailer — validate format
+        task_id = None
+        if trailer_task:
+            task_match = re.match(r'^(TASK-F\d{1,2}-\d{3,4})\s*$', trailer_task)
+            if task_match:
+                task_id = task_match.group(1)
+
+        # Skip commits without any trailer data
+        if not ref_ids and not task_id:
+            continue
+
+        # Extract changed files from remaining lines
+        files = [f.strip() for f in lines[1:] if f.strip()]
+
+        commits.append({
+            "sha": short_sha,
+            "fullSha": full_sha,
+            "message": subject,
+            "author": author,
+            "date": date,
+            "taskId": task_id,
+            "refIds": ref_ids,
+            "files": files,
+        })
+
     print(f"  Found {len(commits)} commits with Refs:/Task: trailers")
     return commits
+
+
+def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing):
+    """Infer code references from commits with Refs:/Task: trailers (Step 1.2).
+
+    For each commit that has changed files AND trailer refs:
+    - Files from Refs: trailer → origin "commit-inferred"
+    - Files from Task: trailer (transitive via graph) → origin "task-inferred"
+
+    Returns list of inferred codeRef dicts.
+    """
+    SIGNIFICANT_TYPES = {"UC", "INV", "API", "BDD", "REQ", "ADR", "WF"}
+    inferred_refs = []
+
+    for commit in commits:
+        if not commit.get("files"):
+            continue
+
+        ref_ids = list(commit.get("refIds", []))
+        task_id = commit.get("taskId")
+
+        # If we have a taskId, BFS from the TASK node to find related artifacts
+        task_inferred_ids = []
+        if task_id and task_id in artifacts:
+            visited = {task_id}
+            queue = [(task_id, 0)]
+            while queue:
+                current, depth = queue.pop(0)
+                if depth > 2:
+                    continue
+                neighbors = list(outgoing.get(current, set())) + list(incoming.get(current, set()))
+                for n in neighbors:
+                    if n not in visited:
+                        visited.add(n)
+                        n_type = classify_id(n)
+                        if n_type in SIGNIFICANT_TYPES:
+                            task_inferred_ids.append(n)
+                        if depth < 2:
+                            queue.append((n, depth + 1))
+
+        # Determine origin based on what we have
+        if ref_ids:
+            origin = "commit-inferred"
+        elif task_inferred_ids:
+            origin = "task-inferred"
+        else:
+            continue
+
+        # Combine all ref IDs (direct trailers + task-inferred)
+        all_ref_ids = list(set(ref_ids + task_inferred_ids))
+        if not all_ref_ids:
+            continue
+
+        # Create inferred code refs for source files in this commit
+        for filepath in commit["files"]:
+            fpath_fwd = filepath.replace("\\", "/")
+            if not _is_source_file(fpath_fwd):
+                continue
+
+            inferred_refs.append({
+                "file": fpath_fwd,
+                "line": 0,
+                "symbol": os.path.basename(fpath_fwd),
+                "symbolType": "file",
+                "refIds": all_ref_ids,
+                "origin": origin,
+                "inferredFrom": {
+                    "commitSha": commit["sha"],
+                    "taskId": task_id,
+                    "trailerRefs": commit.get("refIds", []),
+                },
+            })
+
+    print(f"  Inferred {len(inferred_refs)} code refs from commits")
+    return inferred_refs
+
+
+def propagate_refs_to_reqs(reqs, ref_map, incoming, outgoing, max_depth=3):
+    """BFS N-hop propagation: find REQs reachable from artifacts with refs (Step 1.3).
+
+    Args:
+        reqs: set of REQ IDs to check
+        ref_map: dict {artifactId: [...refs]} — artifacts that have code/test/commit refs
+        incoming/outgoing: adjacency dicts from the relationship graph
+        max_depth: maximum BFS depth
+    Returns:
+        set of REQ IDs that have refs reachable within max_depth hops
+    """
+    result = set()
+    for req_id in reqs:
+        # Quick check: direct ref on the REQ itself
+        if ref_map.get(req_id):
+            result.add(req_id)
+            continue
+        # BFS from REQ through non-REQ neighbors
+        visited = {req_id}
+        queue = [(req_id, 0)]
+        found = False
+        while queue and not found:
+            current, depth = queue.pop(0)
+            if depth > 0 and current in ref_map:
+                result.add(req_id)
+                found = True
+                break
+            if depth >= max_depth:
+                continue
+            neighbors = list(outgoing.get(current, set())) + list(incoming.get(current, set()))
+            for neighbor in neighbors:
+                if neighbor not in visited and not neighbor.startswith("REQ-"):
+                    visited.add(neighbor)
+                    queue.append((neighbor, depth + 1))
+    return result
+
+
+def apply_overrides(code_refs, overrides_path):
+    """Apply manual overrides from .sdd/overrides.json (Step 1.5).
+
+    Supports:
+    - "pin": force-add refs for specific files
+    - "suppress": remove inferred refs for specific files
+    """
+    if not os.path.exists(overrides_path):
+        return code_refs, 0
+
+    try:
+        with open(overrides_path, "r", encoding="utf-8") as f:
+            overrides = json.load(f)
+    except Exception as e:
+        print(f"  Warning: could not read overrides file: {e}")
+        return code_refs, 0
+
+    count = 0
+
+    # Apply pins (add/force refs)
+    for pin in overrides.get("pin", []):
+        pin_file = pin.get("file", "").replace("\\", "/")
+        pin_refs = pin.get("refs", [])
+        if pin_file and pin_refs:
+            code_refs.append({
+                "file": pin_file,
+                "line": 0,
+                "symbol": os.path.basename(pin_file),
+                "symbolType": "file",
+                "refIds": pin_refs,
+                "origin": "manual-override",
+                "inferredFrom": None,
+            })
+            count += 1
+
+    # Apply suppressions (remove inferred refs for specific files)
+    for sup in overrides.get("suppress", []):
+        sup_file = sup.get("file", "").replace("\\", "/")
+        sup_refs = sup.get("refs", ["*"])
+        if sup_file:
+            if "*" in sup_refs:
+                # Suppress all inferred refs for this file
+                code_refs = [r for r in code_refs
+                             if not (r["file"] == sup_file and r.get("origin", "direct") != "direct")]
+            else:
+                # Suppress specific ref IDs
+                for cr in code_refs:
+                    if cr["file"] == sup_file and cr.get("origin", "direct") != "direct":
+                        cr["refIds"] = [rid for rid in cr["refIds"] if rid not in sup_refs]
+                code_refs = [r for r in code_refs if r.get("refIds")]
+            count += 1
+
+    if count > 0:
+        print(f"  Applied {count} manual overrides from .sdd/overrides.json")
+    return code_refs, count
 
 
 def scan_code_refs(project_dir):
@@ -1376,7 +1621,6 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
 
     # ── Commit processing ──────────────────────────────────
     artifact_commit_refs = {}  # artifact id -> list of commitRef objects
-    reqs_with_commits_set = set()
 
     for commit in commits:
         commit_ref = {
@@ -1387,6 +1631,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             "date": commit["date"],
             "taskId": commit.get("taskId"),
             "refIds": commit.get("refIds", []),
+            "files": commit.get("files", []),
         }
         # Attach to each referenced artifact
         for ref_id in commit.get("refIds", []):
@@ -1412,76 +1657,61 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     for art in artifacts.values():
         art["commitRefs"] = artifact_commit_refs.get(art["id"], [])
 
-    # Propagate commits to REQs
-    for req in reqs:
-        rid = req["id"]
-        if artifact_commit_refs.get(rid):
-            reqs_with_commits_set.add(rid)
-            continue
-        for src in incoming.get(rid, set()):
-            if artifact_commit_refs.get(src):
-                reqs_with_commits_set.add(rid)
-                break
-        else:
-            for tgt in outgoing.get(rid, set()):
-                if artifact_commit_refs.get(tgt):
-                    reqs_with_commits_set.add(rid)
-                    break
-
-    reqs_with_commits = len(reqs_with_commits_set)
-    reqs_with_commits_functional = len(reqs_with_commits_set & functional_req_ids)
-
-    # ── Code refs processing ─────────────────────────────────
-    artifact_code_refs = {}
-    reqs_with_code_set = set()
+    # ── Code refs processing (Step 1.4: merge direct + inferred) ──
+    # 1. Tag direct code refs with origin
     for cr in code_refs:
+        cr["origin"] = "direct"
+        cr["inferredFrom"] = None
+
+    # 2. Infer code refs from commits (Step 1.2)
+    inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing)
+
+    # 3. Deduplicate: if file+refId already has direct ref, skip inferred
+    direct_keys = set()
+    for cr in code_refs:
+        for rid in cr.get("refIds", []):
+            direct_keys.add((cr["file"], rid))
+
+    deduped_inferred = []
+    for cr in inferred_code_refs:
+        new_ref_ids = [rid for rid in cr["refIds"] if (cr["file"], rid) not in direct_keys]
+        if new_ref_ids:
+            cr["refIds"] = new_ref_ids
+            deduped_inferred.append(cr)
+
+    # 4. Apply overrides (Step 1.5)
+    overrides_path = os.path.join(project_dir, ".sdd", "overrides.json")
+    all_code_refs = code_refs + deduped_inferred
+    all_code_refs, override_count = apply_overrides(all_code_refs, overrides_path)
+
+    # 5. Build artifact_code_refs map from merged refs
+    artifact_code_refs = {}
+    for cr in all_code_refs:
         for ref_id in cr.get("refIds", []):
             artifact_code_refs.setdefault(ref_id, []).append(cr)
     for art in artifacts.values():
         art["codeRefs"] = artifact_code_refs.get(art["id"], [])
-    # Propagate to REQs
-    for req in reqs:
-        rid = req["id"]
-        if artifact_code_refs.get(rid):
-            reqs_with_code_set.add(rid)
-            continue
-        for src in incoming.get(rid, set()):
-            if artifact_code_refs.get(src):
-                reqs_with_code_set.add(rid)
-                break
-        else:
-            for tgt in outgoing.get(rid, set()):
-                if artifact_code_refs.get(tgt):
-                    reqs_with_code_set.add(rid)
-                    break
-    reqs_with_code = len(reqs_with_code_set)
-    reqs_with_code_functional = len(reqs_with_code_set & functional_req_ids)
 
     # ── Test refs processing ──────────────────────────────────
     artifact_test_refs = {}
-    reqs_with_tests_set = set()
     for tr in test_refs:
         for ref_id in tr.get("refIds", []):
             artifact_test_refs.setdefault(ref_id, []).append(tr)
     for art in artifacts.values():
         art["testRefs"] = artifact_test_refs.get(art["id"], [])
-    # Propagate to REQs
-    for req in reqs:
-        rid = req["id"]
-        if artifact_test_refs.get(rid):
-            reqs_with_tests_set.add(rid)
-            continue
-        for src in incoming.get(rid, set()):
-            if artifact_test_refs.get(src):
-                reqs_with_tests_set.add(rid)
-                break
-        else:
-            for tgt in outgoing.get(rid, set()):
-                if artifact_test_refs.get(tgt):
-                    reqs_with_tests_set.add(rid)
-                    break
+
+    # ── BFS N-hop propagation to REQs (Step 1.3) ──────────────
+    req_ids = {r["id"] for r in reqs}
+    reqs_with_code_set = propagate_refs_to_reqs(req_ids, artifact_code_refs, incoming, outgoing)
+    reqs_with_tests_set = propagate_refs_to_reqs(req_ids, artifact_test_refs, incoming, outgoing)
+    reqs_with_commits_set = propagate_refs_to_reqs(req_ids, artifact_commit_refs, incoming, outgoing)
+
+    reqs_with_code = len(reqs_with_code_set)
+    reqs_with_code_functional = len(reqs_with_code_set & functional_req_ids)
     reqs_with_tests = len(reqs_with_tests_set)
     reqs_with_tests_functional = len(reqs_with_tests_set & functional_req_ids)
+    reqs_with_commits = len(reqs_with_commits_set)
+    reqs_with_commits_functional = len(reqs_with_commits_set & functional_req_ids)
 
     # ── Classification ────────────────────────────────────────
     classification_stats = classify_requirements(artifacts, incoming, outgoing)
@@ -1497,6 +1727,13 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "commitsWithTasks": commits_with_tasks,
         "uniqueTasksCovered": unique_tasks,
     }
+
+    # Enhanced code stats with inference breakdown (Step 1.6)
+    direct_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") == "direct")
+    inferred_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") in ("commit-inferred", "task-inferred"))
+    code_stats["directRefs"] = direct_refs_count
+    code_stats["inferredRefs"] = inferred_refs_count
+    code_stats["manualOverrides"] = override_count
 
     stats = {
         "totalArtifacts": len(artifacts),
@@ -1541,7 +1778,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                 "percentage": round(reqs_with_tests / total_reqs * 100, 1) if total_reqs > 0 else 0,
                 "functionalCount": reqs_with_tests_functional,
                 "functionalTotal": total_functional_reqs,
-                "functionalPercentage": round(reqs_with_tests_functional / total_functional_reqs * 100, 1) if total_reqs > 0 else 0,
+                "functionalPercentage": round(reqs_with_tests_functional / total_functional_reqs * 100, 1) if total_functional_reqs > 0 else 0,
             },
             "reqsWithCommits": {
                 "count": reqs_with_commits,
@@ -1574,7 +1811,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     stats["auditData"] = scan_audits(project_dir)
 
     graph = {
-        "$schema": "traceability-graph-v3",
+        "$schema": "traceability-graph-v6",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "projectName": project_name,
         "pipeline": pipeline_data,
@@ -1584,7 +1821,67 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "adoption": adoption,
     }
 
+    # Preserve codeIntelligence from previous graph if it exists (Step 2.1)
+    graph_file = os.path.join(output_dir, "traceability-graph.json")
+    if os.path.exists(graph_file):
+        try:
+            with open(graph_file, "r", encoding="utf-8") as f:
+                prev_graph = json.load(f)
+            if "codeIntelligence" in prev_graph:
+                graph["codeIntelligence"] = prev_graph["codeIntelligence"]
+        except Exception:
+            pass
+
+    # Refine with code intelligence if available (Step 2.3)
+    if "codeIntelligence" in graph:
+        _refine_with_code_intelligence(graph)
+
     return graph
+
+
+def _refine_with_code_intelligence(graph):
+    """Refine file-level inferred codeRefs with symbol-level data from codeIntelligence (Step 2.3).
+
+    For each codeRef with origin "commit-inferred" and symbolType "file",
+    if codeIntelligence has symbols for that file, replace with symbol-level refs.
+    """
+    ci = graph.get("codeIntelligence")
+    if not ci or not ci.get("indexed"):
+        return
+
+    # Build file→symbols index
+    file_symbols = {}
+    for sym in ci.get("symbols", []):
+        fp = sym.get("filePath", "")
+        file_symbols.setdefault(fp, []).append(sym)
+
+    for art in graph.get("artifacts", []):
+        refined = []
+        for cr in art.get("codeRefs", []):
+            if (cr.get("origin") in ("commit-inferred", "task-inferred")
+                    and cr.get("symbolType") == "file"
+                    and cr["file"] in file_symbols):
+                # Replace with symbol-level refs
+                for sym in file_symbols[cr["file"]]:
+                    sym_ref_ids = list(set(sym.get("artifactRefs", []) + sym.get("inferredRefs", [])))
+                    # Only include if there's overlap with the inferred refIds
+                    overlap = set(sym_ref_ids) & set(cr["refIds"])
+                    if overlap:
+                        refined.append({
+                            "file": cr["file"],
+                            "line": sym.get("startLine", 0),
+                            "symbol": sym["name"],
+                            "symbolType": sym.get("type", "unknown").lower(),
+                            "refIds": list(overlap),
+                            "origin": "code-index",
+                            "inferredFrom": cr.get("inferredFrom"),
+                        })
+                # If no symbol matched, keep original file-level ref
+                if not any(r for r in refined if r["file"] == cr["file"]):
+                    refined.append(cr)
+            else:
+                refined.append(cr)
+        art["codeRefs"] = refined
 
 
 def generate_html(graph, template_file, html_file):
@@ -1612,8 +1909,7 @@ def generate_html(graph, template_file, html_file):
     html = html.replace("{{DATA_JSON}}", data_json)
     html = html.replace("{{PROJECT_NAME}}", graph.get("projectName", "SDD Project"))
 
-    with open(html_file, "w", encoding="utf-8") as f:
-        f.write(html)
+    _safe_write_text(html_file, html)
 
     return True
 
@@ -1676,10 +1972,8 @@ def main():
     graph = build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
                         commits, code_refs, code_stats, test_refs, test_stats)
 
-    # Write JSON
-    os.makedirs(output_dir, exist_ok=True)
-    with open(graph_file, "w", encoding="utf-8") as f:
-        json.dump(graph, f, indent=2, ensure_ascii=False)
+    # Write JSON (crash-safe — Step 0.5)
+    _safe_write_json(graph_file, graph)
     print(f"\nWrote {graph_file}")
 
     # Print statistics
@@ -1727,8 +2021,7 @@ def main():
                 guide_md = f.read()
             gm = re.search(r'```html\s*\n(.*?)\n```', guide_md, re.DOTALL)
             if gm:
-                with open(guide_file, "w", encoding="utf-8") as f:
-                    f.write(gm.group(1))
+                _safe_write_text(guide_file, gm.group(1))
                 print(f"Wrote {guide_file}")
         except Exception as e:
             print(f"  Warning: guide generation failed: {e}")
@@ -1746,8 +2039,7 @@ window.__SDD_LIVE_UPDATE({{
   "message": "Dashboard generated. Waiting for pipeline activity.",
   "history": []
 }});"""
-    with open(live_status_file, "w", encoding="utf-8") as f:
-        f.write(live_status_js)
+    _safe_write_text(live_status_file, live_status_js)
     print(f"Wrote {live_status_file}")
 
     print(f"\n{'='*60}")

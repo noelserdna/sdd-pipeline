@@ -140,14 +140,16 @@ export function executeTrace(
 
     if (level === "CODE") {
       // Gather all code refs from all artifacts in the chain
-      const codeItems: Array<{ id: string; title: string; file: string }> = [];
+      const codeItems: Array<{ id: string; title: string; file: string; relationship?: string }> = [];
       for (const a of allConnected) {
         const art = index.byId.get(a.id);
         for (const cr of art?.codeRefs ?? []) {
+          const origin = cr.origin ?? "direct";
           codeItems.push({
             id: `${cr.symbol}@${cr.file}:${cr.line}`,
             title: `${cr.symbol} (${cr.symbolType})`,
             file: cr.file,
+            relationship: origin !== "direct" ? `origin:${origin}` : undefined,
           });
         }
       }

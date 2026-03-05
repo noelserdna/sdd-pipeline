@@ -1,6 +1,6 @@
 # HTML Dashboard Template v5
 
-Self-contained HTML template for the SDD Comprehension Dashboard. The skill replaces `{{DATA_JSON}}` with the serialized `traceability-graph.json` content (v3 schema).
+Self-contained HTML template for the SDD Comprehension Dashboard. The skill replaces `{{DATA_JSON}}` with the serialized `traceability-graph.json` content (v6 schema, backward-compatible with v3-v5).
 
 ## Template
 
@@ -233,6 +233,28 @@ tr.row-none td:last-child{color:var(--red)}
 .cov-symbol-type{font-size:10px;color:var(--text3);background:var(--surface2);padding:1px 6px;border-radius:3px}
 .cov-symbol-refs{font-size:11px;color:var(--accent)}
 .cov-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+/* Origin state badges (linked/inferred/suggested/uncovered) */
+.origin-badge{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.origin-badge.linked{background:rgba(52,211,153,.15);color:var(--green);border-left:3px solid var(--green)}
+.origin-badge.inferred{background:rgba(245,197,66,.12);color:var(--yellow);border-left:3px dashed var(--yellow)}
+.origin-badge.suggested{background:rgba(136,144,160,.1);color:var(--gray);border-left:3px dotted var(--gray)}
+.origin-badge.uncovered{background:rgba(248,113,113,.08);color:var(--red)}
+.origin-badge .origin-icon{font-size:11px}
+.cov-inference-path{font-size:10px;color:var(--text3);font-family:var(--mono);margin-left:8px}
+/* Origin stat cards */
+.origin-stats{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.origin-stat{padding:8px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;gap:8px;min-width:130px}
+.origin-stat .stat-count{font-size:20px;font-weight:700}
+.origin-stat .stat-label{font-size:11px;color:var(--text2)}
+.origin-stat.linked .stat-count{color:var(--green)}
+.origin-stat.inferred .stat-count{color:var(--yellow)}
+.origin-stat.suggested .stat-count{color:var(--gray)}
+.origin-stat.uncovered .stat-count{color:var(--red)}
+/* Legend */
+.cov-legend{margin-top:16px;padding:12px 16px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border)}
+.cov-legend-title{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.cov-legend-items{display:flex;gap:16px;flex-wrap:wrap}
+.cov-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
 
 /* === DETAIL PANEL (5 tabs) === */
 .detail-overlay{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.5);z-index:200;display:none;opacity:0;transition:opacity .2s}
@@ -1390,6 +1412,27 @@ tr.row-none td:last-child{color:var(--red)}
   // ==========================================
   // CODE COVERAGE VIEW
   // ==========================================
+  function getOriginState(cr){
+    var o = cr.origin || "direct";
+    if(o === "direct") return "linked";
+    if(o === "commit-inferred" || o === "code-index") return "inferred";
+    if(o === "task-inferred") return "suggested";
+    if(o === "manual-override") return "linked";
+    return "linked";
+  }
+  function originIcon(state){
+    if(state === "linked") return "\u25A0"; // ■
+    if(state === "inferred") return "\u25E7"; // ◧
+    if(state === "suggested") return "?";
+    return "\u25CB"; // ○
+  }
+  function originLabel(state){
+    if(state === "linked") return "Linked";
+    if(state === "inferred") return "Inferred";
+    if(state === "suggested") return "Suggested";
+    return "Uncovered";
+  }
+
   function renderCodeCoverage(){
     var sumEl = $("covSummary");
     var listEl = $("covList");
@@ -1399,9 +1442,35 @@ tr.row-none td:last-child{color:var(--red)}
     var cs = st.codeStats || {};
     var ts = st.testStats || {};
 
-    // Summary cards
+    // Count refs by origin state
+    var linkedCount = 0, inferredCount = 0, suggestedCount = 0;
+    var fileMap = {};
+    (DATA.artifacts || []).forEach(function(a){
+      (a.codeRefs || []).forEach(function(cr){
+        if(!fileMap[cr.file]) fileMap[cr.file] = {refs: []};
+        fileMap[cr.file].refs.push(cr);
+        var state = getOriginState(cr);
+        if(state === "linked") linkedCount++;
+        else if(state === "inferred") inferredCount++;
+        else if(state === "suggested") suggestedCount++;
+      });
+    });
+    var totalSyms = cs.totalSymbols || 0;
+    var coveredSyms = cs.symbolsWithRefs || 0;
+    var uncoveredCount = Math.max(0, totalSyms - coveredSyms);
+
+    // Origin stat cards (shape + color + text for accessibility)
+    var statsHtml = '<div class="origin-stats">'
+      + '<div class="origin-stat linked"><span class="stat-count">' + linkedCount + '</span><span class="stat-label">\u25A0 Linked</span></div>'
+      + '<div class="origin-stat inferred"><span class="stat-count">' + inferredCount + '</span><span class="stat-label">\u25E7 Inferred</span></div>'
+      + '<div class="origin-stat suggested"><span class="stat-count">' + suggestedCount + '</span><span class="stat-label">? Suggested</span></div>'
+      + '<div class="origin-stat uncovered"><span class="stat-count">' + uncoveredCount + '</span><span class="stat-label">\u25CB Uncovered</span></div>'
+      + '</div>';
+    sumEl.innerHTML = statsHtml;
+
+    // Traditional summary cards
     addCovStat(sumEl, "Source Files", cs.totalFiles || 0, "Scanned in src/");
-    addCovStat(sumEl, "Symbols with Refs", cs.symbolsWithRefs || 0, "of " + (cs.totalSymbols || 0) + " total");
+    addCovStat(sumEl, "Symbols with Refs", coveredSyms, "of " + totalSyms + " total");
     addCovStat(sumEl, "Test Files", ts.totalTestFiles || 0, "Scanned in tests/");
     addCovStat(sumEl, "Tests with Refs", ts.testsWithRefs || 0, "of " + (ts.totalTests || 0) + " total");
     var cms = st.commitStats || {};
@@ -1410,35 +1479,28 @@ tr.row-none td:last-child{color:var(--red)}
       addCovStat(sumEl, "Tasks Covered", cms.uniqueTasksCovered || 0, "by commits");
     }
 
-    // Build file → codeRefs map
-    var fileMap = {};
-    (DATA.artifacts || []).forEach(function(a){
-      (a.codeRefs || []).forEach(function(cr){
-        if(!fileMap[cr.file]) fileMap[cr.file] = {refs: [], totalSymbols: 0};
-        fileMap[cr.file].refs.push(cr);
-      });
-    });
-
     var files = Object.keys(fileMap).sort();
     if(files.length === 0){
-      listEl.innerHTML = '<div class="empty-section">No code references found. Add <code>Refs: UC-001</code> comments to your source code.</div>';
+      listEl.innerHTML = '<div class="empty-section">No code references found. Add <code>Refs: UC-001</code> comments to your source code, or use <code>Refs:</code> and <code>Task:</code> commit trailers for automatic inference.</div>';
       return;
     }
 
     files.forEach(function(filepath){
       var info = fileMap[filepath];
       var refCount = info.refs.length;
-      var pct = refCount > 0 ? 100 : 0;
+      var directCount = info.refs.filter(function(r){return getOriginState(r)==="linked"}).length;
+      var infCount = info.refs.filter(function(r){return getOriginState(r)==="inferred"||getOriginState(r)==="suggested"}).length;
 
       var div = ce("div");
       div.className = "cov-file";
 
       var header = ce("div");
       header.className = "cov-file-header";
-      var pctClass = pct >= 80 ? "high" : pct >= 40 ? "mid" : pct > 0 ? "low" : "zero";
-      header.innerHTML = '<span class="cov-file-path">' + esc(filepath) + '</span>'
-        + '<span class="cov-file-pct ' + pctClass + '">' + refCount + ' ref' + (refCount !== 1 ? 's' : '') + '</span>'
-        + '<div class="cov-bar"><div class="cov-bar-fill" style="width:' + Math.min(pct, 100) + '%;background:var(--' + (pctClass === "high" ? "green" : pctClass === "mid" ? "yellow" : pctClass === "low" ? "red" : "gray") + ')"></div></div>';
+      // File-level badge showing dominant origin
+      var fileBadge = directCount > 0 ? "linked" : infCount > 0 ? "inferred" : "uncovered";
+      header.innerHTML = '<span class="origin-badge ' + fileBadge + '"><span class="origin-icon">' + originIcon(fileBadge) + '</span></span>'
+        + '<span class="cov-file-path">' + esc(filepath) + '</span>'
+        + '<span class="cov-file-pct ' + (directCount > 0 ? "high" : infCount > 0 ? "mid" : "zero") + '">' + refCount + ' ref' + (refCount !== 1 ? 's' : '') + '</span>';
       header.addEventListener("click", function(){
         div.classList.toggle("open");
       });
@@ -1447,17 +1509,37 @@ tr.row-none td:last-child{color:var(--red)}
       var symbols = ce("div");
       symbols.className = "cov-file-symbols";
       info.refs.forEach(function(cr){
+        var state = getOriginState(cr);
         var sym = ce("div");
         sym.className = "cov-symbol";
-        sym.innerHTML = '<span class="cov-symbol-name">' + esc(cr.symbol || "unknown") + '</span>'
+        var inferPath = "";
+        if(cr.inferredFrom && cr.inferredFrom.commitSha){
+          inferPath = '<span class="cov-inference-path">via commit:' + esc(cr.inferredFrom.commitSha)
+            + (cr.inferredFrom.taskId ? ' \u2192 ' + esc(cr.inferredFrom.taskId) : '') + '</span>';
+        }
+        sym.innerHTML = '<span class="origin-badge ' + state + '"><span class="origin-icon">' + originIcon(state) + '</span> ' + originLabel(state) + '</span>'
+          + '<span class="cov-symbol-name">' + esc(cr.symbol || "unknown") + '</span>'
           + '<span class="cov-symbol-type">' + esc(cr.symbolType || "unknown") + '</span>'
-          + '<span class="cov-symbol-refs">' + esc((cr.refIds || []).join(", ")) + '</span>';
+          + '<span class="cov-symbol-refs">' + esc((cr.refIds || []).join(", ")) + '</span>'
+          + inferPath;
         symbols.appendChild(sym);
       });
       div.appendChild(symbols);
 
       listEl.appendChild(div);
     });
+
+    // Legend
+    var legend = ce("div");
+    legend.className = "cov-legend";
+    legend.innerHTML = '<div class="cov-legend-title">Reference Origins</div>'
+      + '<div class="cov-legend-items">'
+      + '<div class="cov-legend-item"><span class="origin-badge linked"><span class="origin-icon">\u25A0</span> Linked</span> Direct // Refs: comment in code</div>'
+      + '<div class="cov-legend-item"><span class="origin-badge inferred"><span class="origin-icon">\u25E7</span> Inferred</span> From commit Refs: + Task: trailers</div>'
+      + '<div class="cov-legend-item"><span class="origin-badge suggested"><span class="origin-icon">?</span> Suggested</span> Transitively from Task: trailer only</div>'
+      + '<div class="cov-legend-item"><span class="origin-badge uncovered"><span class="origin-icon">\u25CB</span> Uncovered</span> No reference of any kind</div>'
+      + '</div>';
+    listEl.appendChild(legend);
   }
 
   function addCovStat(el, label, value, sub){
@@ -1757,23 +1839,49 @@ tr.row-none td:last-child{color:var(--red)}
     });
   }
 
-  // Code tab
+  // Code tab — separates direct and inferred references
   function renderCodeTab(art){
     var el = $("dtab-code");
     el.innerHTML = "";
     var refs = art.codeRefs || [];
     if(refs.length === 0){
-      el.innerHTML = '<div class="empty-section">No code references found.<br>Add <code>Refs: ' + esc(art.id) + '</code> comments to your source code.</div>';
+      el.innerHTML = '<div class="empty-section">No code references found.<br>Add <code>Refs: ' + esc(art.id) + '</code> comments to your source code, or use <code>Refs:</code> and <code>Task:</code> commit trailers for automatic inference.</div>';
       return;
     }
-    refs.forEach(function(cr){
-      var div = ce("div");
-      div.className = "code-ref";
-      div.innerHTML = '<div class="code-ref-file">' + esc(cr.file) + ':' + (cr.line || '') + '</div>'
-        + '<div class="code-ref-symbol">' + esc(cr.symbol || "unknown") + '<span class="code-ref-type">' + esc(cr.symbolType || "unknown") + '</span></div>'
-        + '<div class="code-ref-ids">Refs: ' + esc((cr.refIds || []).join(", ")) + '</div>';
-      el.appendChild(div);
-    });
+    var directRefs = refs.filter(function(r){return (r.origin||"direct")==="direct"||r.origin==="manual-override"});
+    var inferredRefs = refs.filter(function(r){return r.origin&&r.origin!=="direct"&&r.origin!=="manual-override"});
+
+    if(directRefs.length > 0){
+      var h1 = ce("div");
+      h1.style.cssText = "font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px";
+      h1.textContent = "Direct References (" + directRefs.length + ")";
+      el.appendChild(h1);
+      directRefs.forEach(function(cr){ el.appendChild(renderCodeRefItem(cr)) });
+    }
+    if(inferredRefs.length > 0){
+      var h2 = ce("div");
+      h2.style.cssText = "font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px";
+      h2.textContent = "Inferred from Commits (" + inferredRefs.length + ")";
+      el.appendChild(h2);
+      inferredRefs.forEach(function(cr){ el.appendChild(renderCodeRefItem(cr)) });
+    }
+  }
+  function renderCodeRefItem(cr){
+    var state = getOriginState(cr);
+    var div = ce("div");
+    div.className = "code-ref";
+    var inferHtml = "";
+    if(cr.inferredFrom && cr.inferredFrom.commitSha){
+      inferHtml = '<div class="cov-inference-path">via commit:' + esc(cr.inferredFrom.commitSha)
+        + (cr.inferredFrom.taskId ? ' \u2192 ' + esc(cr.inferredFrom.taskId) : '') + '</div>';
+    }
+    div.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+      + '<span class="origin-badge ' + state + '"><span class="origin-icon">' + originIcon(state) + '</span> ' + originLabel(state) + '</span>'
+      + '<span class="code-ref-file">' + esc(cr.file) + ':' + (cr.line || '') + '</span></div>'
+      + '<div class="code-ref-symbol">' + esc(cr.symbol || "unknown") + '<span class="code-ref-type">' + esc(cr.symbolType || "unknown") + '</span></div>'
+      + '<div class="code-ref-ids">Refs: ' + esc((cr.refIds || []).join(", ")) + '</div>'
+      + inferHtml;
+    return div;
   }
 
   // Tests tab

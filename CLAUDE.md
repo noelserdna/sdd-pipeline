@@ -105,8 +105,10 @@ Reference implementations and external tools used as inspiration/comparison for 
 ## Key Conventions
 
 - **EARS syntax** for requirements: `WHEN <trigger> THE <system> SHALL <behavior>`
-- **Traceability chain**: REQ → UC → WF → API → BDD → INV → ADR → RN
+- **Traceability chain**: REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST
 - **1 task = 1 commit** using Conventional Commits with `Refs:` and `Task:` trailers
+- **Inference engine**: Commits with `Refs:`/`Task:` trailers enrich code coverage automatically; 4 origin states: `linked` (direct `// Refs:`), `inferred` (commit), `suggested` (task-only), `uncovered`
+- **Graph schema v6**: `codeRefs[].origin`, `codeRefs[].inferredFrom`, `commitRefs[].files`, BFS N-hop propagation (max depth 3), `.sdd/overrides.json` for manual pin/suppress
 - **Clarification-first**: Skills never assume — they ask the user via structured option tables
 - **Baseline auditing**: First audit creates baseline; subsequent audits only report new/regression findings
 - **Revert strategies**: Each task documents rollback approach (SAFE, COUPLED, MIGRATION, CONFIG)

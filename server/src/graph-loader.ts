@@ -40,6 +40,8 @@ export interface CodeRef {
   symbol: string;
   symbolType: string;
   refIds: string[];
+  origin?: "direct" | "commit-inferred" | "task-inferred" | "manual-override" | "code-index";
+  inferredFrom?: { commitSha: string; taskId?: string; trailerRefs?: string[] } | null;
 }
 
 export interface TestRef {
@@ -58,6 +60,7 @@ export interface CommitRef {
   date: string;
   taskId: string | null;
   refIds: string[];
+  files?: string[];
 }
 
 export interface Artifact {

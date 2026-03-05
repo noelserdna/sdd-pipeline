@@ -54,6 +54,18 @@ Options:
 
 The script auto-detects the project name from `package.json` → `pipeline-state.json` → directory name.
 
+### Inference Engine
+
+`generate.py` includes a **commit-based traceability inference engine** that enriches code coverage without requiring manual `// Refs:` comments:
+
+1. **Direct refs** (`origin: "direct"`): Traditional `// Refs:` comments in source code — highest confidence.
+2. **Commit-inferred** (`origin: "commit-inferred"`): When a commit has `Refs:` trailers, all source files in that commit are linked to those artifacts.
+3. **Task-inferred** (`origin: "task-inferred"`): When a commit has only a `Task:` trailer, BFS finds related artifacts transitively.
+4. **Manual overrides** (`origin: "manual-override"`): `.sdd/overrides.json` allows pinning or suppressing refs.
+5. **Code-index** (`origin: "code-index"`): When `codeIntelligence` exists, file-level inferences are refined to symbol-level.
+
+The dashboard displays 4 visual states: **Linked** (green ■), **Inferred** (yellow ◧), **Suggested** (gray ?), **Uncovered** (red ○), using shape + color + text for colorblind accessibility.
+
 ## Output Artifacts
 
 | File | Purpose |
