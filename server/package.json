@@ -1,6 +1,6 @@
 {
   "name": "@sdd/mcp-server",
-  "version": "1.0.0",
+  "version": "2.3.0",
   "description": "MCP server for SDD traceability graph — exposes pipeline state, artifact queries, impact analysis, and coverage gaps as tools/resources/prompts",
   "type": "module",
   "main": "dist/index.js",
