@@ -1,23 +1,25 @@
 {
   "hooks": {
-    "PreToolUse": [
+    "SessionStart": [
       {
-        "matcher": "SessionStart",
+        "matcher": "startup|resume|compact",
         "hooks": [
           {
             "type": "command",
             "command": "bash .claude/hooks/sdd-session-start.sh",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
-      },
+      }
+    ],
+    "PreToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
             "command": "bash .claude/hooks/sdd-upstream-guard.sh",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }
@@ -29,19 +31,8 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/sdd-pipeline-state-updater.sh",
-            "timeout": 10000,
+            "timeout": 10,
             "async": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo {}",
-            "timeout": 5000
           }
         ]
       }

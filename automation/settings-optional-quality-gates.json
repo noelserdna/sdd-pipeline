@@ -1,0 +1,27 @@
+{
+  "_comment": "SDD Quality Gate Hooks — opt-in via sdd-setup. Uses LLM to verify traceability and pipeline consistency. Adds latency: ~30s on Stop, ~60s on TaskCompleted.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review this SDD pipeline session. Context: $ARGUMENTS\n\nCheck:\n1. Are there stages left in 'running' status that were reported as completed but pipeline-state.json was not updated?\n2. Were any pipeline artifacts left in an inconsistent state?\n\nIMPORTANT: If the session context shows normal completion or the user explicitly ended the session, respond {\"ok\": true}. Only respond {\"ok\": false, \"reason\": \"...\"} if there is a clear, specific inconsistency that Claude should fix before stopping.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "A task is being marked as completed. Task details: $ARGUMENTS\n\nVerify traceability for this task:\n1. Run: git log -5 --format='%h %s%n%(trailers:key=Refs,key=Task,separator=%x2C)' to check recent commits\n2. Verify that commits related to this task have Refs: or Task: trailers\n3. If source code was modified, verify the files exist\n\nRespond {\"ok\": true} if traceability is adequate. Respond {\"ok\": false, \"reason\": \"Missing Refs: trailers in recent commits. Add trailers before completing.\"} only if there are clear traceability gaps.",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

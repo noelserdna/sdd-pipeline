@@ -74,7 +74,11 @@ version: "1.0.0"
 **Objetivo:** Determine if the project has existing SDD artifacts and their completeness.
 
 1. Scan for `pipeline-state.json` — if found, read current stage status
-2. Scan for SDD directories: `requirements/`, `spec/`, `audits/`, `test/`, `plan/`, `task/`, `onboarding/`, `reconciliation/`, `findings/`
+2. Check automation version: look for `hooksVersion` field in `pipeline-state.json`
+   - If missing: v1 hooks — flag for upgrade in action plan (recommend running `/sdd-setup` to migrate)
+   - If `hooksVersion >= 2`: current version, no action needed
+   - Also check `.claude/settings.json` for v1 signals (PreToolUse matcher "SessionStart", missing hookSpecificOutput)
+3. Scan for SDD directories: `requirements/`, `spec/`, `audits/`, `test/`, `plan/`, `task/`, `onboarding/`, `reconciliation/`, `findings/`
 3. For each found directory:
    - Count files and total lines
    - Check for key files (e.g., `REQUIREMENTS.md`, `ARCHITECTURE.md`)

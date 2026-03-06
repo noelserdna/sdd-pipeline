@@ -131,7 +131,7 @@ is_prohibited() {
 if is_prohibited "$RUNNING_STAGE" "$REL_PATH"; then
   REASON="SDD Art. 4 Violation: Stage '$RUNNING_STAGE' cannot modify upstream artifact '$REL_PATH'. Upstream artifacts are immutable during downstream execution. Complete the current stage first, or use sdd-req-change for controlled modifications."
   ESCAPED_REASON=$(echo "$REASON" | jq -Rs . 2>/dev/null || node -e "console.log(JSON.stringify('$REASON'))")
-  echo "{\"permissionDecision\":\"deny\",\"reason\":$ESCAPED_REASON}"
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":$ESCAPED_REASON}}"
   exit 0
 fi
 

@@ -472,6 +472,13 @@ tr.row-none td:last-child{color:var(--red)}
 .live-dot.off{display:none}
 @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.3}}
 
+/* Connection status indicator */
+.conn-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 10px;border-radius:12px;position:fixed;bottom:12px;right:12px;z-index:100;background:var(--card);border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.conn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.conn-status.live .conn-dot{background:var(--green);animation:livePulse 2s ease-in-out infinite}
+.conn-status.polling .conn-dot{background:var(--yellow)}
+.conn-status.offline .conn-dot{background:var(--text2)}
+
 /* Responsive */
 @media(max-width:768px){
   .pipeline{flex-wrap:wrap}
@@ -490,6 +497,12 @@ tr.row-none td:last-child{color:var(--red)}
 </style>
 </head>
 <body>
+
+<!-- Connection status indicator (SSE/JSONP) -->
+<div class="conn-status offline" id="connStatus">
+  <span class="conn-dot"></span>
+  <span class="conn-label">Offline</span>
+</div>
 
 <div class="header">
   <h1><span>SDD</span> Dashboard <span class="header-version">v5</span></h1>
@@ -2409,12 +2422,13 @@ tr.row-none td:last-child{color:var(--red)}
   renderPipelineSummaryView();
 
   // ==========================================
-  // JSONP LIVE STATUS SYSTEM
+  // LIVE STATUS SYSTEM (SSE + JSONP fallback)
   // ==========================================
   var LIVE_STATUS = null;
   var liveFailCount = 0;
   var liveInterval = null;
   var liveLastTimestamp = null;
+  var sseSource = null;
 
   function updateActivityFeed(history) {
     var feed = $("activityFeed");
@@ -2441,6 +2455,30 @@ tr.row-none td:last-child{color:var(--red)}
     feed.scrollTop = feed.scrollHeight;
   }
 
+  // Append a single activity entry without replacing the whole feed
+  function appendActivityEntry(entry) {
+    var feed = $("activityFeed");
+    if (!feed) return;
+    // Remove "empty" placeholder if present
+    var empty = feed.querySelector(".activity-empty");
+    if (empty) empty.remove();
+
+    var div = ce("div");
+    div.className = "activity-entry";
+    var iconCls = entry.type === "error" ? "error" : entry.type === "done" ? "done" : entry.type === "running" ? "running" : "info";
+    var iconChar = entry.type === "error" ? "\u2717" : entry.type === "done" ? "\u2713" : entry.type === "running" ? "\u25B6" : "\u2022";
+    div.innerHTML = '<span class="activity-icon ' + iconCls + '">' + iconChar + '</span>'
+      + '<div class="activity-body">'
+      + '<span class="activity-stage">' + esc(entry.stage || "") + '</span> '
+      + '<span class="activity-msg">' + esc(entry.message || "") + '</span>'
+      + '<div class="activity-time">' + timeAgo(entry.timestamp) + '</div>'
+      + '</div>';
+    feed.appendChild(div);
+    // Keep last 30 entries
+    while (feed.children.length > 30) feed.removeChild(feed.firstChild);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
   function updateLiveDots(active, stale) {
     var dots = document.querySelectorAll(".live-dot");
     dots.forEach(function(dot) {
@@ -2453,9 +2491,66 @@ tr.row-none td:last-child{color:var(--red)}
     });
   }
 
+  function setConnStatus(mode) {
+    var el = $("connStatus");
+    if (!el) return;
+    el.className = "conn-status " + mode;
+    var label = el.querySelector(".conn-label");
+    if (label) label.textContent = mode === "live" ? "Live (SSE)" : mode === "polling" ? "Polling (JSONP)" : "Offline";
+  }
+
+  // Map SSE event types to activity entry format
+  function sseEventToEntry(type, data) {
+    var typeMap = { "session-start": "running", "session-stop": "done", "session-end": "done",
+      "artifact-changed": "info", "agent-start": "running", "agent-stop": "done", "task-completed": "done" };
+    return {
+      timestamp: data.timestamp || new Date().toISOString(),
+      stage: data.stage || "",
+      message: (data.detail && data.detail.message) || type,
+      type: typeMap[type] || "info"
+    };
+  }
+
+  // --- SSE mode (HTTP protocol) ---
+  function initSSE() {
+    var baseUrl = location.protocol + "//" + location.host;
+    sseSource = new EventSource(baseUrl + "/events");
+
+    sseSource.onopen = function() {
+      setConnStatus("live");
+      updateLiveDots(true, false);
+    };
+
+    sseSource.onerror = function() {
+      if (sseSource.readyState === EventSource.CLOSED) {
+        setConnStatus("offline");
+        updateLiveDots(false, false);
+      }
+    };
+
+    // Listen to dashboard event types
+    var eventTypes = ["session-start", "session-stop", "session-end",
+      "artifact-changed", "agent-start", "agent-stop", "task-completed"];
+    eventTypes.forEach(function(evtType) {
+      sseSource.addEventListener(evtType, function(e) {
+        try {
+          var data = JSON.parse(e.data);
+          var entry = sseEventToEntry(evtType, data);
+          appendActivityEntry(entry);
+          updateLiveDots(true, false);
+        } catch(err) { /* ignore parse errors */ }
+      });
+    });
+
+    // Heartbeat keeps connection alive
+    sseSource.addEventListener("heartbeat", function() {
+      updateLiveDots(true, false);
+    });
+  }
+
+  // --- JSONP mode (file:// protocol fallback) ---
   window.__SDD_LIVE_UPDATE = function(data) {
     if (!data) return;
-    // Ignore older updates (race condition guard)
     if (liveLastTimestamp && data.lastHeartbeat && new Date(data.lastHeartbeat) < new Date(liveLastTimestamp)) return;
     liveLastTimestamp = data.lastHeartbeat || null;
 
@@ -2463,7 +2558,6 @@ tr.row-none td:last-child{color:var(--red)}
     liveFailCount = 0;
     updateActivityFeed(data.history || []);
 
-    // Check staleness
     var stale = false;
     if (data.lastHeartbeat && data.status === "running") {
       var hbAge = (Date.now() - new Date(data.lastHeartbeat).getTime()) / 1000;
@@ -2475,10 +2569,10 @@ tr.row-none td:last-child{color:var(--red)}
       }
     }
     updateLiveDots(true, stale);
+    setConnStatus("polling");
   };
 
   function pollLiveStatus() {
-    // Remove previous script tag if any
     var prev = document.getElementById("sdd-live-script");
     if (prev) prev.remove();
 
@@ -2489,13 +2583,11 @@ tr.row-none td:last-child{color:var(--red)}
       liveFailCount++;
       if (liveFailCount >= 3) {
         updateLiveDots(false, false);
+        setConnStatus("offline");
       }
       script.remove();
     };
-    script.onload = function() {
-      // __SDD_LIVE_UPDATE should have been called by the script
-      script.remove();
-    };
+    script.onload = function() { script.remove(); };
     try {
       document.head.appendChild(script);
     } catch(e) {
@@ -2504,8 +2596,14 @@ tr.row-none td:last-child{color:var(--red)}
   }
 
   function initLiveStatus() {
-    pollLiveStatus();
-    liveInterval = setInterval(pollLiveStatus, 5000);
+    // SSE for HTTP-served dashboards, JSONP fallback for file:// protocol
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      initSSE();
+    } else {
+      setConnStatus("polling");
+      pollLiveStatus();
+      liveInterval = setInterval(pollLiveStatus, 5000);
+    }
   }
 
   // --- Initial render ---
@@ -2548,13 +2646,17 @@ tr.row-none td:last-child{color:var(--red)}
 - **Popover Actions**: "Copy Prompt" button and "Filter by Stage" button within each popover
 - **Click-Away Dismiss**: Clicking outside the popover or on another stage closes it
 
-### Activity Feed & JSONP Live Status
-- **Activity Feed Panel**: Scrollable feed in Summary view showing real-time pipeline activity entries with timestamps, stage names, and status icons
-- **JSONP Polling**: Loads `./live-status.js` every 5 seconds via `<script>` tag injection (works with `file://` protocol)
-- **`window.__SDD_LIVE_UPDATE(data)`**: Callback function that receives live status data and updates the activity feed
-- **Live Dot Indicator**: Pulsing green dot when live status is active; yellow when stale; hidden when no live-status.js found
+### Activity Feed & Live Status (SSE + JSONP)
+- **Dual transport**: SSE (`EventSource`) when served over HTTP; JSONP fallback when opened via `file://` protocol
+- **SSE mode**: Connects to `/events` endpoint on dashboard server; receives `artifact-changed`, `session-start`, `agent-start/stop`, `task-completed` events in real-time; heartbeat every 15s
+- **JSONP mode**: Loads `./live-status.js` every 5 seconds via `<script>` tag injection (works with `file://` protocol)
+- **`appendActivityEntry(entry)`**: Incrementally appends a single entry to the feed (SSE mode); keeps last 30 entries
+- **`updateActivityFeed(history)`**: Replaces entire feed (JSONP mode, batch update)
+- **Connection Status Indicator**: Fixed bottom-right pill showing connection state — green "Live (SSE)", yellow "Polling (JSONP)", gray "Offline"
+- **`window.__SDD_LIVE_UPDATE(data)`**: JSONP callback function (backward compatible)
+- **Live Dot Indicator**: Pulsing green dot when live status is active; yellow when stale; hidden when offline
 - **Stale Detection**: If heartbeat >60s and status=running, shows "Possibly stalled" warning
-- **Graceful Degradation**: Silent no-op on file not found; live dot hidden after 3 failures; race condition guard via timestamp comparison
+- **Graceful Degradation**: SSE auto-reconnects on disconnect; JSONP silent no-op on file not found; live dot hidden after 3 failures
 
 ### New CSS Components
 - `.toast`: Fixed bottom-right notification with slide-up animation and auto-dismiss
@@ -2564,6 +2666,7 @@ tr.row-none td:last-child{color:var(--red)}
 - `.activity-panel` / `.activity-feed` / `.activity-entry`: Activity feed layout
 - `.stage-popover`: Popover attached to pipeline stages with arrow indicator
 - `.live-dot`: Pulsing indicator for live status with stale state
+- `.conn-status` / `.conn-dot` / `.conn-label`: Connection status pill indicator (live/polling/offline)
 
 ### New Reference Document
 - `references/live-status-template.md`: JSONP schema, field reference, idle seed template, skill integration instructions

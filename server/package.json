@@ -1,13 +1,18 @@
 {
   "name": "@sdd/mcp-server",
-  "version": "2.3.0",
-  "description": "MCP server for SDD traceability graph — exposes pipeline state, artifact queries, impact analysis, and coverage gaps as tools/resources/prompts",
+  "version": "2.4.0",
+  "description": "MCP server for SDD traceability graph — exposes pipeline state, artifact queries, impact analysis, and coverage gaps as tools/resources/prompts. Includes dashboard HTTP+SSE server for real-time updates.",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "sdd-server": "dist/index.js",
+    "sdd-dashboard-server": "dist/dashboard-entry.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "start:dashboard": "node dist/dashboard-entry.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"

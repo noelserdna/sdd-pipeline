@@ -68,17 +68,25 @@ automation/
 │   ├── sdd-constitution-enforcer.md     # A1: Validates against 11 SDD Constitution articles
 │   ├── sdd-cross-auditor.md             # A2: Cross-references skill definitions for mismatches
 │   └── sdd-context-keeper.md            # A3: Maintains informal project context
-├── settings-template.json               # P1: Settings template with H1-H4 hook configs
+├── scripts/
+│   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
+├── settings-template.json               # P1: Settings template with H1-H3 core hook configs
+├── settings-optional-dashboard.json     # P2: Opt-in HTTP hooks for dashboard server (H6)
+├── settings-optional-quality-gates.json # P3: Opt-in prompt/agent quality gate hooks (H7-H8)
 └── INSTALL.md                           # Manual installation guide
 ```
 
-MCP server (live traceability queries):
+MCP server (live traceability queries) + Dashboard server (HTTP+SSE):
 ```
-server/                                  # TypeScript MCP server
+server/                                  # TypeScript MCP server + Dashboard server
 ├── package.json                         # Deps: @modelcontextprotocol/sdk
 ├── tsconfig.json
 └── src/
-    ├── index.ts                         # Entry: stdio transport
+    ├── index.ts                         # Entry: stdio transport (MCP)
+    ├── dashboard-entry.ts               # Entry: HTTP dashboard server
+    ├── dashboard-server.ts              # HTTP+SSE server for real-time dashboard updates
+    ├── sse.ts                           # SSE client manager (addClient, broadcast)
+    ├── path-mapper.ts                   # File path → pipeline stage mapper
     ├── server.ts                        # createSDDServer() — registers tools/resources/prompts
     ├── graph-loader.ts                  # Reads traceability-graph.json, file watcher
     ├── tools/
@@ -176,19 +184,37 @@ Skills should read `pipeline-state.json` on start and update it on completion. I
 
 SDD automation is installed into target projects via `/sdd-setup` or the install script. It consists of:
 
-**Hooks** (enforced automatically by Claude Code):
-- **H1 — Session Start** (`sdd-session-start.sh`): Reads `pipeline-state.json` and injects pipeline status into session context.
-- **H2 — Upstream Guard** (`sdd-upstream-guard.sh`): Blocks downstream skills from modifying upstream artifacts (Art. 4 enforcement). PreToolUse on Edit|Write.
-- **H3 — State Updater** (`sdd-pipeline-state-updater.sh`): Auto-updates `pipeline-state.json` when pipeline artifact directories are written to. PostToolUse on Write, async.
+**Hooks v2** (enforced automatically by Claude Code):
+- **H1 — Session Start** (`sdd-session-start.sh`): Reads `pipeline-state.json` and injects pipeline status. Event: `SessionStart` (matcher: `startup|resume|compact`).
+- **H2 — Upstream Guard** (`sdd-upstream-guard.sh`): Blocks downstream skills from modifying upstream artifacts (Art. 4). Event: `PreToolUse` (matcher: `Edit|Write`). Uses `hookSpecificOutput` wrapper.
+- **H3 — State Updater** (`sdd-pipeline-state-updater.sh`): Auto-updates `pipeline-state.json` on writes. Event: `PostToolUse` (matcher: `Write`, async).
 - **H4 — Stop Hook** (inline prompt in settings): Verifies pipeline state consistency on session end. Uses haiku model.
+- **H5 — Context Augment** (`sdd-context-augment.sh`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`).
+
+**Optional hooks** (opt-in via `/sdd-setup` Step 5.7):
+- **H6 — Dashboard HTTP hooks** (`settings-optional-dashboard.json`): POST events to dashboard server (`http://localhost:3001/hooks/*`). Events: SessionStart, PostToolUse, SubagentStart/Stop, TaskCompleted, Stop, SessionEnd.
+- **H7 — Stop Quality Gate** (prompt hook): Pipeline consistency check at session end.
+- **H8 — Task Traceability Gate** (agent hook): Verifies commit trailers on TaskCompleted.
+
+**Skill-level hooks** (defined in SKILL.md frontmatter):
+- `sdd-task-implementer` Stop hook: Prompt verifying Refs:/Task: trailers on last commit.
+- `sdd-spec-auditor` Stop hook: Prompt verifying P0/P1 findings are addressed.
 
 **Agents** (delegated by Claude or user):
 - **A1 — Constitution Enforcer**: Validates operations against the 11 SDD Constitution articles. Model: haiku.
 - **A2 — Cross-Auditor**: Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
 - **A3 — Context Keeper**: Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
 
+**Dashboard Server** (`server/src/dashboard-server.ts`):
+- HTTP+SSE server for real-time dashboard updates, zero external deps (node:http only)
+- Receives hook events via POST `/hooks/*`, broadcasts to connected browsers via SSE `/events`
+- Serves dashboard HTML at `/`, API status at `/api/status`, graph at `/api/graph`
+- Configurable port via `SDD_DASHBOARD_PORT` env var (default: 3001)
+- Entry: `node server/dist/dashboard-entry.js`
+
 **Pipeline State Schema** (authoritative source: `sdd-req-change/references/cascade-patterns.md`):
 - Uses `lastRun` (not `completedAt`), no `inputHash`, adds `staleReason`, `error` status, `lastChange` block.
+- Includes `sddVersion` and `hooksVersion` fields for upgrade detection.
 - Hooks and skills use this schema; the simplified schema in "Pipeline State Management" above is for conceptual understanding only.
 
 ## Modifying Skills

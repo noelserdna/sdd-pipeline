@@ -54,6 +54,8 @@ export function executeCoverage(args, graph, index) {
             return art?.type === "BDD";
         });
         const hasCode = (req.codeRefs?.length ?? 0) > 0;
+        const hasDirectCode = req.codeRefs?.some((cr) => (cr.origin ?? "direct") === "direct") ?? false;
+        const hasInferredCode = req.codeRefs?.some((cr) => cr.origin === "commit-inferred" || cr.origin === "task-inferred") ?? false;
         const hasTests = (req.testRefs?.length ?? 0) > 0;
         const missing = [];
         if (!hasUC)
@@ -102,10 +104,20 @@ export function executeCoverage(args, graph, index) {
                 : 0,
         };
     }
+    // Code inference breakdown
+    const allCodeRefs = reqs.flatMap((r) => r.codeRefs ?? []);
+    const codeInferenceBreakdown = {
+        directRefs: allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct").length,
+        commitInferred: allCodeRefs.filter((cr) => cr.origin === "commit-inferred").length,
+        taskInferred: allCodeRefs.filter((cr) => cr.origin === "task-inferred").length,
+        manualOverrides: allCodeRefs.filter((cr) => cr.origin === "manual-override").length,
+        codeIndex: allCodeRefs.filter((cr) => cr.origin === "code-index").length,
+    };
     const output = {
         filters: { domain: domain ?? null, layer: layer ?? null },
         totalReqs: reqs.length,
         overallCoverage: graph.statistics.traceabilityCoverage,
+        codeInferenceBreakdown,
         byDomain: Object.entries(byDomain).map(([name, stats]) => ({
             domain: name,
             ...stats,

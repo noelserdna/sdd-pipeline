@@ -1,7 +1,7 @@
 ---
 name: sdd-setup
-description: "Installs SDD automation (hooks, agents, settings) into the current target project. Use when setting up a new project for SDD pipeline or updating automation."
-version: "1.0.0"
+description: "Initializes the SDD pipeline in the current project by creating pipeline-state.json and verifying plugin installation. Use when: (1) Setting up a new project for SDD pipeline, (2) Starting SDD on an existing codebase, (3) Verifying that SDD automation (hooks, agents, MCP server) is properly installed, (4) Upgrading from hooks v1 to v2. Triggers: 'setup SDD', 'init pipeline', 'install SDD', 'start SDD project', 'iniciar SDD', 'configurar pipeline', 'initialize SDD', 'upgrade SDD'."
+version: "2.0.0"
 ---
 
 # SDD Setup
@@ -14,6 +14,27 @@ You are the **SDD Setup** installer. Your job is to install SDD automation infra
 - The sdd-skills repo must be accessible (default: `~/programacion/sdd-skills/`)
 
 ## Installation Process
+
+### Step 0: Upgrade Detection
+
+Before any installation, check for existing v1 hooks that need migration:
+
+1. Check `pipeline-state.json` for `hooksVersion` field
+   - If `hooksVersion >= 2`: already upgraded, skip migration
+   - If missing: potential v1 installation, continue checks
+2. Detect v1 signals in `.claude/settings.json`:
+   - `PreToolUse` hook with matcher `SessionStart` (should be `SessionStart` event)
+   - `permissionDecision` without `hookSpecificOutput` wrapper
+   - H4 stop hook with `echo {}` placeholder
+   - Timeout values in milliseconds (>100) instead of seconds
+3. If v1 detected:
+   - Inform user: "Detected hooks v1 configuration — upgrading to v2"
+   - Run `automation/scripts/migrate-hooks-v2.sh` (or apply fixes inline)
+   - Add `sddVersion` and `hooksVersion` to `pipeline-state.json`
+4. If plugin is also installed (check for `hooks.json` in plugin root):
+   - Remove duplicate hooks from `.claude/settings.json` that are already in plugin `hooks.json` (H1-H3, H5)
+   - Keep only project-specific optional hooks (H4, H6, H7)
+5. Report migration result
 
 ### Step 1: Detect Environment
 
@@ -87,6 +108,21 @@ Inform the user about the code intelligence feature:
 - Run after `/sdd-dashboard` to enable code-aware blast radius analysis
 - This is optional and can be configured later
 
+### Step 5.7: Optional — Dashboard Server & HTTP Hooks
+
+If user wants real-time dashboard updates:
+1. Merge `automation/settings-optional-dashboard.json` into `.claude/settings.json`
+   - Adds HTTP hooks (H6) that POST events to `http://localhost:3001/hooks/*`
+   - Events: SessionStart, PostToolUse (artifact-changed), SubagentStart/Stop, TaskCompleted, Stop, SessionEnd
+2. Optionally merge `automation/settings-optional-quality-gates.json`
+   - H7: Stop prompt hook (pipeline consistency check)
+   - H8: TaskCompleted agent hook (traceability verification)
+3. Start the dashboard server: `node $SDD/server/dist/dashboard-entry.js`
+   - Or set `SDD_DASHBOARD_PORT` env var for custom port
+   - Dashboard available at `http://localhost:3001/`
+   - SSE stream at `http://localhost:3001/events`
+4. Inform user: these hooks require the dashboard server to be running — they silently fail if the server is not available
+
 ### Step 6: Initialize Pipeline State
 
 If `pipeline-state.json` does not exist:
@@ -134,12 +170,16 @@ Report results:
 | Hook: sdd-pipeline-state-updater (H3) | Installed |
 | Hook: stop-hook (H4) | Configured in settings |
 | Hook: sdd-context-augment (H5) | Installed |
+| Hook: dashboard HTTP hooks (H6) | Opt-in / Configured / Skipped |
+| Hook: quality gates (H7-H8) | Opt-in / Configured / Skipped |
 | Agent: sdd-constitution-enforcer (A1) | Installed |
 | Agent: sdd-cross-auditor (A2) | Installed |
 | Agent: sdd-context-keeper (A3) | Installed |
 | MCP Server: server/dist/ | Built / NOT BUILT |
+| Dashboard Server | Available (port 3001) / NOT CONFIGURED |
 | Settings: .claude/settings.json | Configured |
-| Pipeline: pipeline-state.json | Initialized |
+| Pipeline: pipeline-state.json | Initialized (hooksVersion: 2) |
+| Hooks version | v2 / Upgraded from v1 |
 | Dependency: jq | Available / MISSING (using node fallback) |
 | Dependency: node | Available / MISSING (MCP server requires Node.js 18+) |
 
@@ -148,6 +188,7 @@ Report results:
 2. Run `/sdd-pipeline-status` to verify pipeline state
 3. Begin with `/sdd-requirements-engineer` for a new project
 4. (Optional) Run `/sdd-code-index` after dashboard to enable code intelligence
+5. (Optional) Start dashboard server: `node server/dist/dashboard-entry.js`
 ```
 
 ## Constraints

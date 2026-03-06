@@ -65,6 +65,8 @@ fi
 if [ ! -f "$PIPELINE_STATE" ]; then
   cat > "$PIPELINE_STATE" <<'INIT_EOF'
 {
+  "sddVersion": "2.4.0",
+  "hooksVersion": 2,
   "currentStage": "requirements-engineer",
   "lastUpdated": "",
   "stages": {
