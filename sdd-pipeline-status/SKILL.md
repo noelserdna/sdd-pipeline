@@ -1,6 +1,6 @@
 ---
 name: sdd-pipeline-status
-description: "Shows SDD pipeline status, artifact verification, staleness detection, and next recommended action. Use when asking about pipeline state, progress, or what to do next."
+description: "Shows SDD pipeline status, artifact verification, staleness detection, and next recommended action. Use when: (1) Checking pipeline progress or current stage, (2) Detecting stale artifacts after upstream changes, (3) Deciding which skill to run next, (4) Verifying artifact integrity before continuing pipeline. Triggers: 'pipeline status', 'what stage', 'next step', 'check staleness', 'pipeline progress', 'que sigue', 'estado del pipeline', 'verificar artefactos'."
 version: "1.0.0"
 context: fork
 agent: Explore

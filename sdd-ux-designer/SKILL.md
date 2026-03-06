@@ -1,6 +1,6 @@
 ---
 name: sdd-ux-designer
-description: "UI/UX design system and visual specification. Analyzes specifications to define brand identity, design tokens, component library, wireframes, accessibility standards, and frontend security across 12 UX dimensions. Use before plan-architect for comprehensive UI/UX design, or independently for design system creation. Invoke with /sdd-ux-designer."
+description: "UI/UX design system and visual specification across 12 dimensions (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Generates wireframes, design tokens, WCAG 2.1 AA accessibility specs, and interaction models. Use when: (1) Creating a design system before implementation, (2) Defining UI components with Atomic Design, (3) Specifying accessibility and responsive requirements, (4) Generating wireframes and interaction flows from specs. Outputs to ux/. Triggers: 'UX design', 'design system', 'wireframes', 'accessibility', 'design tokens', 'diseno UX', 'sistema de diseno', 'componentes UI'."
 version: "1.0.0"
 ---
 

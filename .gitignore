@@ -20,6 +20,10 @@ ideas/
 ANALYSIS-REQ-CHANGE-MAINTENANCE.md
 CROSS-ANALYSIS-AUDIT.md
 
+# Python cache
+__pycache__/
+*.pyc
+
 # MCP Server dependencies (dist/ is committed for plugin distribution)
 server/node_modules/
 server/package-lock.json

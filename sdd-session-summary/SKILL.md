@@ -1,6 +1,6 @@
 ---
 name: sdd-session-summary
-description: "Summarizes SDD session decisions, lists formal vs informal context, and updates project memory. Use at end of session or when asked to summarize progress."
+description: "Summarizes SDD session decisions, lists formal vs informal context, and updates project memory. Use when: (1) Ending a work session and need to preserve decisions, (2) Reviewing what was accomplished in the current session, (3) Separating formal artifacts from informal context (deferred decisions, preferences), (4) Updating project memory for cross-session continuity. Triggers: 'session summary', 'summarize session', 'what did we do', 'save progress', 'resumen de sesion', 'guardar progreso', 'end session'."
 version: "1.0.0"
 ---
 
