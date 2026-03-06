@@ -1,0 +1,401 @@
+{
+  "$schema": "sdd-evidence-db-export-v1",
+  "exportedAt": "2026-03-04T15:30:00.000Z",
+  "exportVersion": "1.0.0",
+  "dbSchemaVersion": 1,
+
+  "project": {
+    "id": "proj-abc-123",
+    "name": "my-project",
+    "rootPath": "/home/user/my-project",
+    "repositoryUrl": "https://github.com/user/my-project.git",
+    "createdAt": "2026-01-15T10:00:00.000Z"
+  },
+
+  "pipeline": {
+    "stages": [
+      {
+        "name": "requirements-engineer",
+        "stageType": "pipeline",
+        "status": "done",
+        "lastRun": "2026-02-25T10:00:00.000Z",
+        "artifactCount": 330,
+        "stageLabel": "requirements",
+        "sortOrder": 0,
+        "summary": {
+          "artifacts": [
+            { "file": "requirements/REQUIREMENTS.md", "label": "Requirements Document" }
+          ],
+          "metrics": { "total_reqs": 330, "must_have": 180, "should_have": 100, "could_have": 50 },
+          "highlights": ["330 requirements across 6 domains", "80% are Must Have"],
+          "nextStep": "Run specifications-engineer",
+          "generatedAt": "2026-02-25T10:00:00.000Z"
+        }
+      }
+    ],
+    "lateralStages": [
+      {
+        "name": "security-auditor",
+        "stageType": "lateral",
+        "status": "done",
+        "lastRun": "2026-02-27T12:00:00.000Z",
+        "artifactCount": 1,
+        "summary": null
+      }
+    ]
+  },
+
+  "artifacts": [
+    {
+      "id": "REQ-EXT-001",
+      "type": "REQ",
+      "category": "EXT",
+      "title": "Extract text from PDF files",
+      "filePath": "requirements/REQUIREMENTS.md",
+      "line": 42,
+      "priority": "Must Have",
+      "status": "active",
+      "stage": "requirements-engineer",
+      "contentHash": "sha256:abc123...",
+      "earsSyntax": "WHEN the user uploads a PDF file THE system SHALL extract text content",
+      "classification": {
+        "businessDomain": "Extraction & Processing",
+        "technicalLayer": "Backend",
+        "functionalCategory": "Functional"
+      }
+    }
+  ],
+
+  "codeIntelligence": {
+    "files": [
+      {
+        "id": "file-001",
+        "path": "src/extraction/validators/pdf-validator.ts",
+        "language": "typescript",
+        "sizeBytes": 2048,
+        "lineCount": 85,
+        "lastModified": "2026-02-27T15:30:00.000Z",
+        "contentHash": "sha256:def456..."
+      }
+    ],
+    "symbols": [
+      {
+        "id": "sym-validate-size-a3f2",
+        "fileId": "file-001",
+        "name": "validateSize",
+        "qualifiedName": "pdf-validator.validateSize",
+        "kind": "function",
+        "signature": "(file: File): boolean",
+        "startLine": 8,
+        "endLine": 22,
+        "isExported": true,
+        "community": "extraction"
+      }
+    ],
+    "callGraph": [
+      {
+        "callerId": "sym-upload-handler-b1c2",
+        "calleeId": "sym-validate-size-a3f2",
+        "edgeType": "CALLS",
+        "confidence": 1.0,
+        "callSiteLine": 45
+      }
+    ],
+    "importGraph": [
+      {
+        "importerId": "file-002",
+        "importedId": "file-001",
+        "importPath": "../validators/pdf-validator",
+        "line": 3
+      }
+    ],
+    "symbolReferences": [
+      {
+        "symbolId": "sym-validate-size-a3f2",
+        "fileId": "file-002",
+        "line": 45,
+        "refType": "usage"
+      }
+    ],
+    "executionFlows": [
+      {
+        "id": "flow-pdf-upload",
+        "name": "PDF Upload Flow",
+        "entryPointId": "sym-upload-handler-b1c2",
+        "steps": ["sym-upload-handler-b1c2", "sym-validate-size-a3f2", "sym-extract-text-c3d4"]
+      }
+    ]
+  },
+
+  "commits": [
+    {
+      "sha": "abc1234567890abcdef1234567890abcdef123456",
+      "shortSha": "abc1234",
+      "subject": "feat(extraction): add PDF upload endpoint",
+      "authorName": "developer",
+      "authorEmail": "dev@example.com",
+      "authorDate": "2026-02-27T15:30:00.000Z",
+      "branch": "main",
+      "filesAdded": 2,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 120,
+      "linesDeleted": 5,
+      "taskId": "TASK-F1-003",
+      "artifactRefs": ["UC-001", "INV-EXT-005"],
+      "ccType": "feat",
+      "ccScope": "extraction",
+      "ccBreaking": false,
+      "filesChanged": [
+        {
+          "filePath": "src/extraction/validators/pdf-validator.ts",
+          "changeType": "A",
+          "linesAdded": 85,
+          "linesDeleted": 0
+        }
+      ]
+    }
+  ],
+
+  "testEvidence": {
+    "runs": [
+      {
+        "id": "run-001",
+        "runner": "vitest",
+        "trigger": "ci",
+        "branch": "main",
+        "commitSha": "abc1234567890abcdef1234567890abcdef123456",
+        "startedAt": "2026-02-27T16:00:00.000Z",
+        "finishedAt": "2026-02-27T16:02:30.000Z",
+        "status": "passed",
+        "totalTests": 285,
+        "passed": 280,
+        "failed": 0,
+        "skipped": 5,
+        "durationMs": 150000
+      }
+    ],
+    "cases": [
+      {
+        "id": "tc-001",
+        "filePath": "tests/unit/extraction/pdf-validator.test.ts",
+        "line": 12,
+        "testName": "accepts size at exact 50MB limit",
+        "suiteName": "validateSize",
+        "framework": "vitest"
+      }
+    ],
+    "executions": [
+      {
+        "id": "exec-001",
+        "testRunId": "run-001",
+        "testCaseId": "tc-001",
+        "result": "pass",
+        "durationMs": 12
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-001",
+        "testExecutionId": "exec-001",
+        "evidenceType": "screenshot",
+        "filePath": "tests/evidence/pdf-upload-success.png",
+        "sizeBytes": 45000,
+        "createdAt": "2026-02-27T16:01:00.000Z"
+      }
+    ],
+    "coverage": {
+      "id": "cov-001",
+      "testRunId": "run-001",
+      "tool": "c8",
+      "linesPct": 87.3,
+      "branchesPct": 72.1,
+      "functionsPct": 91.5,
+      "statementsPct": 88.0
+    }
+  },
+
+  "cicd": {
+    "runs": [
+      {
+        "id": "ci-run-001",
+        "provider": "github-actions",
+        "pipelineName": "CI",
+        "runNumber": 42,
+        "triggerType": "push",
+        "triggerRef": "main",
+        "commitSha": "abc1234567890abcdef1234567890abcdef123456",
+        "status": "success",
+        "conclusion": "success",
+        "url": "https://github.com/user/my-project/actions/runs/42",
+        "startedAt": "2026-02-27T15:35:00.000Z",
+        "finishedAt": "2026-02-27T16:05:00.000Z",
+        "durationMs": 1800000
+      }
+    ],
+    "jobs": [
+      {
+        "id": "job-001",
+        "runId": "ci-run-001",
+        "name": "test",
+        "status": "completed",
+        "conclusion": "success",
+        "durationMs": 150000
+      }
+    ]
+  },
+
+  "aiAudit": {
+    "sessions": [
+      {
+        "id": "sess-001",
+        "skillName": "requirements-engineer",
+        "mode": "default",
+        "model": "claude-opus-4-6",
+        "startedAt": "2026-02-25T09:00:00.000Z",
+        "finishedAt": "2026-02-25T10:00:00.000Z",
+        "status": "completed",
+        "totalTurns": 24,
+        "totalTokens": 85000,
+        "inputTokens": 35000,
+        "outputTokens": 50000
+      }
+    ],
+    "decisions": [
+      {
+        "id": "dec-001",
+        "sessionId": "sess-001",
+        "description": "How to categorize authentication requirements",
+        "optionsPresented": ["Separate SEC domain", "Merge into SYS domain", "Create AUTH sub-domain"],
+        "choiceMade": "Separate SEC domain",
+        "rationale": "Authentication is a cross-cutting concern with enough requirements to warrant its own domain",
+        "impact": "medium",
+        "category": "requirement",
+        "artifactsAffected": ["REQ-SEC-001", "REQ-SEC-002", "REQ-SEC-003"]
+      }
+    ]
+  },
+
+  "traceabilityLinks": [
+    {
+      "id": "link-001",
+      "sourceId": "UC-001",
+      "sourceType": "artifact",
+      "targetId": "REQ-EXT-001",
+      "targetType": "artifact",
+      "linkType": "implements",
+      "origin": "manual",
+      "confidence": 1.0,
+      "suspect": false,
+      "suspectReason": null,
+      "sourceFile": "spec/use-cases/UC-001.md",
+      "sourceLine": 15,
+      "createdAt": "2026-02-25T14:00:00.000Z",
+      "lastValidated": "2026-02-27T12:00:00.000Z"
+    },
+    {
+      "id": "link-002",
+      "sourceId": "sym-validate-size-a3f2",
+      "sourceType": "symbol",
+      "targetId": "INV-EXT-005",
+      "targetType": "artifact",
+      "linkType": "implemented-by-code",
+      "origin": "inferred:code-comment",
+      "confidence": 1.0,
+      "suspect": false,
+      "suspectReason": null,
+      "sourceFile": "src/extraction/validators/pdf-validator.ts",
+      "sourceLine": 8,
+      "createdAt": "2026-02-27T15:30:00.000Z",
+      "lastValidated": "2026-02-27T15:30:00.000Z"
+    },
+    {
+      "id": "link-003",
+      "sourceId": "abc1234567890abcdef1234567890abcdef123456",
+      "sourceType": "commit",
+      "targetId": "UC-001",
+      "targetType": "artifact",
+      "linkType": "implemented-by-commit",
+      "origin": "inferred:commit-chain",
+      "confidence": 1.0,
+      "suspect": false,
+      "suspectReason": null,
+      "sourceFile": null,
+      "sourceLine": null,
+      "createdAt": "2026-02-27T15:30:00.000Z",
+      "lastValidated": null
+    }
+  ],
+
+  "overrides": [
+    {
+      "id": "ovr-001",
+      "operation": "reject",
+      "linkId": "link-042",
+      "reason": "False positive from naming convention match",
+      "createdBy": "developer@team.com",
+      "createdAt": "2026-02-28T09:00:00.000Z",
+      "applied": true,
+      "appliedAt": "2026-02-28T09:00:05.000Z"
+    }
+  ],
+
+  "statistics": {
+    "artifacts": {
+      "total": 800,
+      "byType": { "REQ": 330, "UC": 41, "WF": 15, "API": 20, "BDD": 42, "INV": 55, "ADR": 12, "NFR": 30, "RN": 25, "FASE": 8, "TASK": 242 },
+      "byStatus": { "active": 790, "deprecated": 8, "superseded": 2 }
+    },
+    "traceability": {
+      "totalLinks": 2400,
+      "byLinkType": { "implements": 280, "verifies": 200, "implemented-by-code": 120, "tested-by": 95, "implemented-by-commit": 170, "decomposes": 242 },
+      "suspectCount": 3,
+      "orphanCount": 2,
+      "avgConfidence": 0.94
+    },
+    "code": {
+      "totalFiles": 85,
+      "totalSymbols": 340,
+      "symbolsWithDirectRefs": 120,
+      "symbolsWithInferredRefs": 45,
+      "uncoveredSymbols": 175,
+      "totalFlows": 8
+    },
+    "tests": {
+      "totalCases": 285,
+      "latestRunStatus": "passed",
+      "latestPassRate": 98.2,
+      "flakyTests": 2,
+      "coverage": {
+        "linesPct": 87.3,
+        "branchesPct": 72.1
+      }
+    },
+    "commits": {
+      "total": 48,
+      "withArtifactRefs": 42,
+      "withTaskTrailers": 45,
+      "uniqueTasksCovered": 40
+    },
+    "ci": {
+      "totalRuns": 42,
+      "successRate": 90.5,
+      "avgDurationMs": 180000,
+      "lastRunAt": "2026-02-27T16:05:00.000Z"
+    },
+    "ai": {
+      "totalSessions": 12,
+      "totalDecisions": 45,
+      "totalTokens": 1200000,
+      "sessionsBySkill": { "requirements-engineer": 2, "specifications-engineer": 3, "spec-auditor": 2 }
+    },
+    "overrides": {
+      "total": 5,
+      "byOperation": { "add": 2, "reject": 2, "confirm": 1 },
+      "applied": 4,
+      "pending": 1
+    }
+  },
+
+  "_comment": "This is the JSON export format for the SDD Evidence Database. It replaces traceability-graph.json with a richer, database-backed structure. The schema version is tracked in dbSchemaVersion. All entity IDs are stable UUIDs that can be used for cross-referencing. The traceabilityLinks array is the unified link store -- every relationship flows through it."
+}
