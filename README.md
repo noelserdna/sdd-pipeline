@@ -129,6 +129,45 @@ The MCP server is configured via `~/.claude/.mcp.json` (global) or `<project>/.m
 
 **Prerequisites:** Node.js 18+. After restarting Claude Code, you'll be prompted to approve the "sdd" MCP server on first use.
 
+## Code Intelligence (Optional)
+
+The `sdd-code-index` skill maps code symbols (functions, classes, modules) to SDD artifacts for deep traceability. It works in two modes:
+
+- **Lite mode** (default): Regex-based analysis — no extra dependencies needed
+- **Full mode**: Uses [GitNexus](https://github.com/nicobailon/gitnexus) for AST-level call graph analysis, cross-file references, and execution flow mapping
+
+### Installing GitNexus
+
+```bash
+npm install -g gitnexus
+```
+
+Or use it without installing:
+
+```bash
+npx gitnexus analyze
+```
+
+**Requirements:** Node.js 18+
+
+### Usage
+
+```bash
+# Full mode (with GitNexus)
+/sdd-code-index
+
+# Lite mode (regex only, no GitNexus needed)
+/sdd-code-index --lite
+
+# Check index status
+/sdd-code-index --status
+
+# Refresh only changed files
+/sdd-code-index --refresh
+```
+
+When GitNexus is available, `sdd-code-index` produces richer results: symbol-level call graphs, transitive inference (max 2 hops), execution flow mapping, and community-based domain detection. Without it, the skill still works but only provides file-level symbol detection and direct `// Refs:` annotations.
+
 ## Automation
 
 In `automation/`:
