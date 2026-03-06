@@ -67,23 +67,26 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 
 ### Lateral (4)
 
-| Skill | Purpose |
-|-------|---------|
-| security-auditor | Security analysis based on OWASP ASVS v4, CWE |
-| req-change | Requirements change management with pipeline cascade |
-| tech-designer | 12-dimension technical architecture exploration (ATAM-lite) |
-| ux-designer | 12-dimension UI/UX design system (WCAG 2.1 AA) |
+| Skill | Purpose | Output |
+|-------|---------|--------|
+| security-auditor | OWASP ASVS v4 / CWE security posture audit of specs | `audits/SECURITY-AUDIT-BASELINE.md` |
+| req-change | Manage ADD/MODIFY/DEPRECATE changes with optional pipeline cascade (ISO 14764) | Updated `requirements/`, `spec/`, cascade |
+| tech-designer | Technical architecture design: stack, auth, API, infra, CI/CD, data, observability, cost, i18n (ATAM-lite quality analysis) | `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md` |
+| ux-designer | UI/UX design system: components, tokens, wireframes, responsive, accessibility, forms, navigation, theming | `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/DESIGN-TOKENS.json` |
 
-### Utilities (6)
+`tech-designer` and `ux-designer` output is consumed by `plan-architect` if present — the pipeline adapts automatically.
+
+### Utilities (7)
 
 | Skill | Purpose |
 |-------|---------|
 | pipeline-status | Pipeline state report with next-action recommendation |
-| traceability-check | Verify full artifact chain, find orphans |
-| dashboard | Interactive HTML traceability dashboard (5 views + guide) |
-| code-index | Index code for deep traceability (GitNexus bridge) |
-| session-summary | Summarize session decisions |
-| setup | Initialize `pipeline-state.json` |
+| traceability-check | Verify full traceability chain (REQ→...→TEST), find orphans and broken links |
+| dashboard | Generate interactive HTML traceability dashboard (5 views + guide + live status) |
+| code-index | Index code symbols for deep traceability — optional [GitNexus](https://github.com/nicobailon/gitnexus) bridge for call graphs |
+| sync-notion | Bidirectional sync of SDD artifacts with Notion databases |
+| session-summary | Summarize session decisions and update project memory |
+| setup | Initialize `pipeline-state.json` in a new project |
 
 ## MCP Server
 

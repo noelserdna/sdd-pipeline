@@ -65,23 +65,26 @@ REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE �
 
 ### Laterales (4)
 
+| Skill | Proposito | Output |
+|-------|-----------|--------|
+| security-auditor | Auditoria de seguridad OWASP ASVS v4 / CWE sobre las specs | `audits/SECURITY-AUDIT-BASELINE.md` |
+| req-change | Gestionar cambios ADD/MODIFY/DEPRECATE con cascade opcional (ISO 14764) | `requirements/`, `spec/` actualizados, cascade |
+| tech-designer | Diseno de arquitectura tecnica: stack, auth, API, infra, CI/CD, datos, observabilidad, costos, i18n (analisis ATAM-lite) | `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md` |
+| ux-designer | Sistema de diseno UI/UX: componentes, tokens, wireframes, responsive, accesibilidad, formularios, navegacion, theming | `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/DESIGN-TOKENS.json` |
+
+`tech-designer` y `ux-designer` son consumidos por `plan-architect` si existen — el pipeline se adapta automaticamente.
+
+### Utilidades (7)
+
 | Skill | Proposito |
 |-------|-----------|
-| security-auditor | Analisis de seguridad basado en OWASP ASVS v4, CWE |
-| req-change | Gestion de cambios de requisitos con cascade de pipeline |
-| tech-designer | Exploracion de arquitectura tecnica en 12 dimensiones (ATAM-lite) |
-| ux-designer | Sistema de diseno UI/UX en 12 dimensiones (WCAG 2.1 AA) |
-
-### Utilidades (6)
-
-| Skill | Proposito |
-|-------|-----------|
-| pipeline-status | Reporte de estado con recomendacion de siguiente accion |
-| traceability-check | Verificar cadena completa, encontrar huerfanos |
-| dashboard | Dashboard HTML interactivo de trazabilidad (5 vistas + guia) |
-| code-index | Indexar codigo para trazabilidad profunda (puente GitNexus) |
-| session-summary | Resumir decisiones de sesion |
-| setup | Inicializar `pipeline-state.json` |
+| pipeline-status | Reporte de estado del pipeline con recomendacion de siguiente accion |
+| traceability-check | Verificar cadena completa de trazabilidad (REQ→...→TEST), encontrar huerfanos y links rotos |
+| dashboard | Generar dashboard HTML interactivo de trazabilidad (5 vistas + guia + status en vivo) |
+| code-index | Indexar simbolos de codigo para trazabilidad profunda — puente opcional [GitNexus](https://github.com/nicobailon/gitnexus) para call graphs |
+| sync-notion | Sincronizacion bidireccional de artefactos SDD con bases de datos Notion |
+| session-summary | Resumir decisiones de sesion y actualizar memoria del proyecto |
+| setup | Inicializar `pipeline-state.json` en un proyecto nuevo |
 
 ## Servidor MCP
 
