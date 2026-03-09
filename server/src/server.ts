@@ -7,6 +7,7 @@ import { executeImpact } from "./tools/impact.js";
 import { executeContext } from "./tools/context.js";
 import { executeCoverage } from "./tools/coverage.js";
 import { executeTrace } from "./tools/trace.js";
+import { executeGaps } from "./tools/gaps.js";
 import { readResource } from "./resources.js";
 import { getPrompt } from "./prompts.js";
 
@@ -105,6 +106,19 @@ export function createSDDServer(): McpServer {
     async (args) => {
       const { graph, index } = getGraphOrEmpty();
       const result = executeTrace(args, graph, index);
+      return { content: [{ type: "text" as const, text: result }] };
+    }
+  );
+
+  server.tool(
+    "sdd_gaps",
+    "Read gap analysis from .sdd/gap-analysis.json. Filters by category and returns summary or detailed findings.",
+    {
+      category: z.enum(["missing", "orphan", "mismatch", "all"]).optional().describe('Filter by gap category (default: "all")'),
+      format: z.enum(["summary", "detail"]).optional().describe('Output format: "summary" (stats + top issues) or "detail" (all findings). Default: "summary"'),
+    },
+    async (args) => {
+      const result = executeGaps(args);
       return { content: [{ type: "text" as const, text: result }] };
     }
   );

@@ -327,6 +327,7 @@ Phase 2 (Foundation):
 
 Para cada task, antes de escribir codigo:
 
+0. **Write breadcrumb**: Create `.sdd/current-task.json` with `{ "taskId": "{TASK-ID}", "fase": {N}, "refs": [{refs from task}], "startedAt": "{ISO-8601}" }` — this enables the trace-map hook (H9) to auto-capture file→task mappings during implementation.
 1. **Leer specs referenciadas**: Abrir cada UC, ADR, contrato mencionado en **Refs**
 2. **Extraer contratos de entrada/salida**: Request/response schemas, event schemas
 3. **Identificar invariantes aplicables**: Que INV-* deben cumplirse en este codigo
@@ -460,6 +461,7 @@ Task Quality Report:
    COMMIT_SHA=$(git rev-parse --short HEAD)
    ```
 7. **Almacenar mapping** en memoria de sesión: `TASK-F{N}-{SEQ} → {SHA}`
+8. **Clear breadcrumb**: Remove `.sdd/current-task.json` (`rm -f .sdd/current-task.json`) — prevents stale task context from leaking into the next task's trace mappings.
 
 **Commit Format:**
 

@@ -33,7 +33,7 @@ Before any installation, check for existing v1 hooks that need migration:
    - Add `sddVersion` and `hooksVersion` to `pipeline-state.json`
 4. If plugin is also installed (check for `hooks.json` in plugin root):
    - Remove duplicate hooks from `.claude/settings.json` that are already in plugin `hooks.json` (H1-H3, H5)
-   - Keep only project-specific optional hooks (H4, H6, H7)
+   - Keep only project-specific optional hooks (H4, H7)
 5. Report migration result
 
 ### Step 1: Detect Environment
@@ -62,6 +62,20 @@ sdd-skills/automation/hooks/sdd-pipeline-state-updater.sh → .claude/hooks/sdd-
 ```
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
+
+### Step 3.5: Install Git Commit-Msg Hook
+
+If the target project has a `.git/` directory, install the traceability commit-msg hook:
+
+```
+sdd-skills/automation/hooks/sdd-commit-msg-hook.sh → .git/hooks/commit-msg
+```
+
+- If `.git/hooks/commit-msg` already exists, back it up as `.commit-msg.backup` and warn the user
+- Make it executable: `chmod +x .git/hooks/commit-msg`
+- If no `.git/` directory exists, skip with a warning
+
+This hook enforces that implementation commits (`feat`, `fix`, `perf`, `test`) include `Refs:` and/or `Task:` traceability trailers. Commits with types `docs`, `chore`, `ci`, `style`, `build` are exempt. Bypass with `[skip-sdd]` in the message body or `SDD_SKIP_VERIFY=1` env var.
 
 ### Step 4: Copy Agent Definitions
 
@@ -108,20 +122,12 @@ Inform the user about the code intelligence feature:
 - Run after `/sdd-dashboard` to enable code-aware blast radius analysis
 - This is optional and can be configured later
 
-### Step 5.7: Optional — Dashboard Server & HTTP Hooks
+### Step 5.7: Optional — Quality Gate Hooks
 
-If user wants real-time dashboard updates:
-1. Merge `automation/settings-optional-dashboard.json` into `.claude/settings.json`
-   - Adds HTTP hooks (H6) that POST events to `http://localhost:3001/hooks/*`
-   - Events: SessionStart, PostToolUse (artifact-changed), SubagentStart/Stop, TaskCompleted, Stop, SessionEnd
-2. Optionally merge `automation/settings-optional-quality-gates.json`
+If user wants quality gate enforcement:
+1. Merge `automation/settings-optional-quality-gates.json` into `.claude/settings.json`
    - H7: Stop prompt hook (pipeline consistency check)
    - H8: TaskCompleted agent hook (traceability verification)
-3. Start the dashboard server: `node $SDD/server/dist/dashboard-entry.js`
-   - Or set `SDD_DASHBOARD_PORT` env var for custom port
-   - Dashboard available at `http://localhost:3001/`
-   - SSE stream at `http://localhost:3001/events`
-4. Inform user: these hooks require the dashboard server to be running — they silently fail if the server is not available
 
 ### Step 6: Initialize Pipeline State
 
@@ -170,13 +176,12 @@ Report results:
 | Hook: sdd-pipeline-state-updater (H3) | Installed |
 | Hook: stop-hook (H4) | Configured in settings |
 | Hook: sdd-context-augment (H5) | Installed |
-| Hook: dashboard HTTP hooks (H6) | Opt-in / Configured / Skipped |
+| Git hook: commit-msg (traceability) | Installed / Skipped (no .git) |
 | Hook: quality gates (H7-H8) | Opt-in / Configured / Skipped |
 | Agent: sdd-constitution-enforcer (A1) | Installed |
 | Agent: sdd-cross-auditor (A2) | Installed |
 | Agent: sdd-context-keeper (A3) | Installed |
 | MCP Server: server/dist/ | Built / NOT BUILT |
-| Dashboard Server | Available (port 3001) / NOT CONFIGURED |
 | Settings: .claude/settings.json | Configured |
 | Pipeline: pipeline-state.json | Initialized (hooksVersion: 2) |
 | Hooks version | v2 / Upgraded from v1 |
@@ -187,8 +192,7 @@ Report results:
 1. Start a new Claude Code session to activate hooks
 2. Run `/sdd-pipeline-status` to verify pipeline state
 3. Begin with `/sdd-requirements-engineer` for a new project
-4. (Optional) Run `/sdd-code-index` after dashboard to enable code intelligence
-5. (Optional) Start dashboard server: `node server/dist/dashboard-entry.js`
+4. (Optional) Run `/sdd-code-index` to enable code intelligence
 ```
 
 ## Constraints

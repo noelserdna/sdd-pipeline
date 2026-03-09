@@ -607,17 +607,81 @@ def scan_commits(project_dir):
     return commits
 
 
-def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing):
+def _build_rename_map(project_dir, source_files):
+    """Build a mapping from old file paths to their current names using git log --follow.
+
+    For each source file, checks if it was renamed at some point. Returns a dict
+    mapping old_path -> current_path for files that have been renamed.
+    """
+    rename_map = {}  # old_path -> current_path
+    if not source_files:
+        return rename_map
+
+    for current_file in source_files:
+        try:
+            result = subprocess.run(
+                [
+                    "git", "log", "--follow", "--diff-filter=R",
+                    "--name-status", "--format=",
+                    "--", current_file,
+                ],
+                capture_output=True, text=True, cwd=project_dir, timeout=10
+            )
+            if result.returncode != 0:
+                continue
+            # Parse rename entries: lines like "R100\told_path\tnew_path"
+            for line in result.stdout.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 3 and parts[0].startswith("R"):
+                    old_path = parts[1].replace("\\", "/")
+                    new_path = parts[2].replace("\\", "/")
+                    rename_map[old_path] = new_path
+        except Exception:
+            continue
+
+    return rename_map
+
+
+def _compute_confidence(commit_rank):
+    """Compute confidence score based on commit recency rank (0-indexed).
+
+    Most recent commit (rank 0): 0.9
+    Second most recent (rank 1): 0.8
+    Third (rank 2): 0.7
+    Older (rank 3+): 0.6 (floor)
+    """
+    if commit_rank == 0:
+        return 0.9
+    elif commit_rank == 1:
+        return 0.8
+    elif commit_rank == 2:
+        return 0.7
+    else:
+        return 0.6
+
+
+def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project_dir=None):
     """Infer code references from commits with Refs:/Task: trailers (Step 1.2).
 
     For each commit that has changed files AND trailer refs:
     - Files from Refs: trailer → origin "commit-inferred"
     - Files from Task: trailer (transitive via graph) → origin "task-inferred"
+    - Files tracked across renames via git log --follow → origin "blame-inferred"
+
+    Confidence scoring (per-file, per-artifactId):
+    - Most recent commit touching the file: 0.9
+    - Second most recent: 0.8, Third: 0.7, Older: 0.6 (floor)
 
     Returns list of inferred codeRef dicts.
     """
     SIGNIFICANT_TYPES = {"UC", "INV", "API", "BDD", "REQ", "ADR", "WF"}
-    inferred_refs = []
+
+    # Phase 1: Collect per-file, per-artifactId entries with commit metadata
+    # Key: (file, artifactId) -> list of (commit, origin, task_id) sorted by date later
+    file_artifact_commits = {}  # (file, artifactId) -> [(commit, origin, task_id), ...]
 
     for commit in commits:
         if not commit.get("files"):
@@ -658,23 +722,158 @@ def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing):
         if not all_ref_ids:
             continue
 
-        # Create inferred code refs for source files in this commit
+        # Accumulate per-file, per-artifactId entries
         for filepath in commit["files"]:
             fpath_fwd = filepath.replace("\\", "/")
             if not _is_source_file(fpath_fwd):
                 continue
 
+            for artifact_id in all_ref_ids:
+                key = (fpath_fwd, artifact_id)
+                file_artifact_commits.setdefault(key, []).append(
+                    (commit, origin, task_id)
+                )
+
+    # Phase 2: Rename tracking — propagate refs from old paths to current paths
+    if project_dir:
+        # Collect all unique source files from commits
+        all_commit_files = set()
+        for commit in commits:
+            for filepath in commit.get("files", []):
+                fpath_fwd = filepath.replace("\\", "/")
+                if _is_source_file(fpath_fwd):
+                    all_commit_files.add(fpath_fwd)
+
+        # Also find currently existing source files to track renames into them
+        current_source_files = set()
+        for search_dir in ["src", "lib", "app", "tests", "test", "pkg", "cmd", "internal"]:
+            d = os.path.join(project_dir, search_dir)
+            if os.path.isdir(d):
+                for root, dirs, filenames in os.walk(d):
+                    dirs[:] = [dd for dd in dirs if dd not in SKIP_DIRS]
+                    for fname in filenames:
+                        frel = _rel_path(os.path.join(root, fname), project_dir)
+                        current_source_files.add(frel)
+
+        rename_map = _build_rename_map(project_dir, current_source_files)
+
+        if rename_map:
+            # For each old_path -> new_path rename, propagate refs
+            blame_additions = {}
+            for old_path, new_path in rename_map.items():
+                # Find all artifact associations for the old path
+                keys_to_propagate = [
+                    (f, aid) for (f, aid) in file_artifact_commits
+                    if f == old_path
+                ]
+                for (_, artifact_id) in keys_to_propagate:
+                    new_key = (new_path, artifact_id)
+                    if new_key not in file_artifact_commits:
+                        # Propagate with blame-inferred origin
+                        old_entries = file_artifact_commits[(old_path, artifact_id)]
+                        blame_entries = []
+                        for (commit, _origin, task_id) in old_entries:
+                            blame_entries.append((commit, "blame-inferred", task_id))
+                        blame_additions[new_key] = blame_entries
+
+            # Merge blame additions into the main map
+            for key, entries in blame_additions.items():
+                file_artifact_commits.setdefault(key, []).extend(entries)
+
+            if blame_additions:
+                print(f"  Rename tracking: propagated refs across {len(rename_map)} renames, {len(blame_additions)} new file-artifact pairs")
+
+    # Phase 3: Sort commits per (file, artifactId) by date descending and assign confidence
+    inferred_refs = []
+
+    # Group by file to emit one codeRef per file with all its artifact refs
+    file_refs = {}  # file -> {artifactId: (confidence, origin, best_commit, task_id)}
+
+    for (fpath, artifact_id), entries in file_artifact_commits.items():
+        # Sort entries by commit date descending (most recent first)
+        sorted_entries = sorted(
+            entries,
+            key=lambda e: e[0].get("date", ""),
+            reverse=True,
+        )
+
+        # Best entry is the most recent
+        best_commit, best_origin, best_task_id = sorted_entries[0]
+        rank = 0  # most recent for this (file, artifactId) pair
+        confidence = _compute_confidence(rank)
+
+        # For multi-commit: use the rank among all commits touching this file+artifact
+        # The rank is 0 for the most recent commit for THIS specific artifact
+        # But we want the rank relative to all commits for this file across all artifacts
+        file_refs.setdefault(fpath, {})[artifact_id] = (
+            confidence, best_origin, best_commit, best_task_id
+        )
+
+    # Now compute per-file commit ranking for confidence
+    # Collect all commits per file (across all artifacts) for ranking
+    file_commit_dates = {}  # file -> sorted list of unique (date, sha)
+    for (fpath, artifact_id), entries in file_artifact_commits.items():
+        for (commit, _origin, _task_id) in entries:
+            file_commit_dates.setdefault(fpath, set()).add(
+                (commit.get("date", ""), commit["sha"])
+            )
+
+    for fpath in file_commit_dates:
+        file_commit_dates[fpath] = sorted(
+            file_commit_dates[fpath],
+            key=lambda x: x[0],
+            reverse=True,
+        )
+
+    # Rebuild with proper cross-artifact ranking
+    for fpath, artifact_map in file_refs.items():
+        # Build a date-ranked index for this file
+        date_rank = {}
+        for rank, (date, sha) in enumerate(file_commit_dates.get(fpath, [])):
+            date_rank[sha] = rank
+
+        for artifact_id, (_, best_origin, best_commit, best_task_id) in artifact_map.items():
+            commit_rank = date_rank.get(best_commit["sha"], 3)
+            confidence = _compute_confidence(commit_rank)
+
+            # Update the stored confidence
+            artifact_map[artifact_id] = (
+                confidence, best_origin, best_commit, best_task_id
+            )
+
+    # Phase 4: Emit one inferred codeRef per file, aggregating all artifact refs
+    for fpath, artifact_map in file_refs.items():
+        # Group by (origin, commit_sha) to produce coherent codeRef entries
+        origin_groups = {}  # (origin, sha) -> {refIds, confidence_min, commit, task_id}
+        for artifact_id, (confidence, origin, commit, task_id) in artifact_map.items():
+            group_key = (origin, commit["sha"])
+            if group_key not in origin_groups:
+                origin_groups[group_key] = {
+                    "refIds": [],
+                    "confidence": confidence,
+                    "commit": commit,
+                    "task_id": task_id,
+                    "origin": origin,
+                }
+            origin_groups[group_key]["refIds"].append(artifact_id)
+            # Use the lowest confidence in the group (conservative)
+            origin_groups[group_key]["confidence"] = min(
+                origin_groups[group_key]["confidence"], confidence
+            )
+
+        for group_key, group in origin_groups.items():
             inferred_refs.append({
-                "file": fpath_fwd,
+                "file": fpath,
                 "line": 0,
-                "symbol": os.path.basename(fpath_fwd),
+                "symbol": os.path.basename(fpath),
                 "symbolType": "file",
-                "refIds": all_ref_ids,
-                "origin": origin,
+                "refIds": sorted(set(group["refIds"])),
+                "origin": group["origin"],
+                "confidence": group["confidence"],
                 "inferredFrom": {
-                    "commitSha": commit["sha"],
-                    "taskId": task_id,
-                    "trailerRefs": commit.get("refIds", []),
+                    "commitSha": group["commit"]["sha"],
+                    "taskId": group["task_id"],
+                    "trailerRefs": group["commit"].get("refIds", []),
                 },
             })
 
@@ -751,6 +950,7 @@ def apply_overrides(code_refs, overrides_path):
                 "refIds": pin_refs,
                 "origin": "manual-override",
                 "inferredFrom": None,
+                "confidence": 1.0,
             })
             count += 1
 
@@ -860,6 +1060,7 @@ def scan_code_refs(project_dir):
                         "symbol": symbol,
                         "symbolType": symbol_type,
                         "refIds": ref_ids,
+                        "confidence": 1.0,
                     })
 
     print(f"  Code: {total_files} files, {total_symbols} symbols, {symbols_with_refs} with refs, {len(code_refs)} ref comments")
@@ -1662,9 +1863,10 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     for cr in code_refs:
         cr["origin"] = "direct"
         cr["inferredFrom"] = None
+        cr.setdefault("confidence", 1.0)
 
     # 2. Infer code refs from commits (Step 1.2)
-    inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing)
+    inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project_dir=project_dir)
 
     # 3. Deduplicate: if file+refId already has direct ref, skip inferred
     direct_keys = set()
@@ -1730,7 +1932,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
 
     # Enhanced code stats with inference breakdown (Step 1.6)
     direct_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") == "direct")
-    inferred_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") in ("commit-inferred", "task-inferred"))
+    inferred_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") in ("commit-inferred", "task-inferred", "blame-inferred"))
     code_stats["directRefs"] = direct_refs_count
     code_stats["inferredRefs"] = inferred_refs_count
     code_stats["manualOverrides"] = override_count
@@ -1842,8 +2044,9 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
 def _refine_with_code_intelligence(graph):
     """Refine file-level inferred codeRefs with symbol-level data from codeIntelligence (Step 2.3).
 
-    For each codeRef with origin "commit-inferred" and symbolType "file",
-    if codeIntelligence has symbols for that file, replace with symbol-level refs.
+    For each codeRef with origin "commit-inferred", "task-inferred", or "blame-inferred"
+    and symbolType "file", if codeIntelligence has symbols for that file, replace with
+    symbol-level refs.
     """
     ci = graph.get("codeIntelligence")
     if not ci or not ci.get("indexed"):
@@ -1858,7 +2061,7 @@ def _refine_with_code_intelligence(graph):
     for art in graph.get("artifacts", []):
         refined = []
         for cr in art.get("codeRefs", []):
-            if (cr.get("origin") in ("commit-inferred", "task-inferred")
+            if (cr.get("origin") in ("commit-inferred", "task-inferred", "blame-inferred")
                     and cr.get("symbolType") == "file"
                     and cr["file"] in file_symbols):
                 # Replace with symbol-level refs
@@ -1914,6 +2117,138 @@ def generate_html(graph, template_file, html_file):
     return True
 
 
+# ──────────────────────────────────────────────────────────
+# Optional Data Loaders (.sdd/ enrichment files)
+# ──────────────────────────────────────────────────────────
+
+def load_gap_analysis(project_dir):
+    """Load .sdd/gap-analysis.json if it exists. Returns parsed dict or None."""
+    gap_path = os.path.join(project_dir, ".sdd", "gap-analysis.json")
+    if not os.path.isfile(gap_path):
+        return None
+    try:
+        with open(gap_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def load_test_results(project_dir):
+    """Load .sdd/test-results-mapped.json if it exists. Returns parsed dict or None."""
+    results_path = os.path.join(project_dir, ".sdd", "test-results-mapped.json")
+    if not os.path.isfile(results_path):
+        return None
+    try:
+        with open(results_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def load_trace_map(project_dir):
+    """Load .sdd/trace-map.json if it exists. Returns parsed dict or None."""
+    trace_path = os.path.join(project_dir, ".sdd", "trace-map.json")
+    if not os.path.isfile(trace_path):
+        return None
+    try:
+        with open(trace_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _enrich_graph_with_loaders(graph, project_dir):
+    """Enrich graph with optional .sdd/ data files (gap analysis, test results, trace map).
+
+    This is a post-processing step: if the files exist, they add data to the graph;
+    if they don't exist, the graph remains unchanged.
+    """
+    # 1. Gap analysis → graph.statistics.gapAnalysis
+    gap_analysis = load_gap_analysis(project_dir)
+    if gap_analysis is not None:
+        graph.setdefault("statistics", {})["gapAnalysis"] = gap_analysis
+        print("  Enriched: gap-analysis.json loaded into statistics.gapAnalysis")
+
+    # 2. Test results → enrich artifact testRefs with lastRunStatus
+    test_results = load_test_results(project_dir)
+    if test_results is not None:
+        # Build a lookup: artifactId -> worst status from test results
+        artifact_test_status = {}  # artifactId -> "pass" | "fail" | "skip"
+        for tr in test_results.get("results", []):
+            status = tr.get("status", "unknown")
+            for ref_id in tr.get("artifactRefs", []):
+                current = artifact_test_status.get(ref_id)
+                # Worst status wins: fail > skip > pass
+                if current is None:
+                    artifact_test_status[ref_id] = status
+                elif status == "fail":
+                    artifact_test_status[ref_id] = "fail"
+                elif status == "skip" and current != "fail":
+                    artifact_test_status[ref_id] = "skip"
+
+        # Apply to artifacts in the graph
+        enriched_count = 0
+        for art in graph.get("artifacts", []):
+            art_id = art.get("id", "")
+            if art_id in artifact_test_status:
+                # Add or update lastRunStatus on each testRef, or on the artifact itself
+                art["lastRunStatus"] = artifact_test_status[art_id]
+                enriched_count += 1
+                # Also enrich individual testRefs if they exist
+                for tref in art.get("testRefs", []):
+                    for tr in test_results.get("results", []):
+                        if art_id in tr.get("artifactRefs", []):
+                            tref_name = tref.get("testName", "")
+                            if tref_name and tref_name == tr.get("testName", ""):
+                                tref["lastRunStatus"] = tr["status"]
+                                tref["lastRunDuration"] = tr.get("duration", 0)
+
+        if enriched_count > 0:
+            print(f"  Enriched: test-results-mapped.json applied to {enriched_count} artifacts")
+
+        # Also store summary-level data in statistics
+        summary = test_results.get("summary")
+        bdd_coverage = test_results.get("bddCoverage")
+        if summary:
+            graph.setdefault("statistics", {})["testRunSummary"] = summary
+        if bdd_coverage:
+            graph.setdefault("statistics", {})["bddCoverage"] = bdd_coverage
+
+    # 3. Trace map → add hook-captured codeRefs to artifacts
+    trace_map = load_trace_map(project_dir)
+    if trace_map is not None:
+        # trace-map.json expected structure: { "mappings": [ { "artifactId": "...", "codeRefs": [...] } ] }
+        mappings = trace_map.get("mappings", [])
+        if not mappings and isinstance(trace_map, dict):
+            # Alternative: flat dict { "UC-001": { "codeRefs": [...] }, ... }
+            mappings = [{"artifactId": k, "codeRefs": v.get("codeRefs", [])}
+                        for k, v in trace_map.items()
+                        if isinstance(v, dict) and "codeRefs" in v]
+
+        # Build artifact lookup by ID
+        art_by_id = {}
+        for art in graph.get("artifacts", []):
+            art_by_id[art.get("id", "")] = art
+
+        trace_count = 0
+        for mapping in mappings:
+            art_id = mapping.get("artifactId", "")
+            new_refs = mapping.get("codeRefs", [])
+            if art_id in art_by_id and new_refs:
+                existing = art_by_id[art_id].setdefault("codeRefs", [])
+                # Deduplicate by (file, line) to avoid overwriting existing refs
+                existing_keys = {(cr.get("file"), cr.get("line")) for cr in existing}
+                for cr in new_refs:
+                    key = (cr.get("file"), cr.get("line"))
+                    if key not in existing_keys:
+                        cr.setdefault("origin", "hook-captured")
+                        existing.append(cr)
+                        trace_count += 1
+
+        if trace_count > 0:
+            print(f"  Enriched: trace-map.json added {trace_count} code refs to artifacts")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="SDD Dashboard Generator — scans pipeline artifacts and generates traceability dashboard"
@@ -1935,11 +2270,8 @@ def main():
 
     # Resolve template locations
     template_file = resolve_template(project_dir)
-    guide_template_file = os.path.join(os.path.dirname(template_file), "guide-template.md")
     graph_file = os.path.join(output_dir, "traceability-graph.json")
     html_file = os.path.join(output_dir, "index.html")
-    guide_file = os.path.join(output_dir, "guide.html")
-    live_status_file = os.path.join(output_dir, "live-status.js")
 
     print("=" * 60)
     print("SDD Dashboard Generator")
@@ -1971,6 +2303,10 @@ def main():
     # Build graph
     graph = build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
                         commits, code_refs, code_stats, test_refs, test_stats)
+
+    # Enrich with optional .sdd/ data files (gap analysis, test results, trace map)
+    print("\nLoading optional enrichment data...")
+    _enrich_graph_with_loaders(graph, project_dir)
 
     # Write JSON (crash-safe — Step 0.5)
     _safe_write_json(graph_file, graph)
@@ -2014,33 +2350,6 @@ def main():
     else:
         print("HTML generation failed.")
 
-    # Generate guide.html
-    if os.path.exists(guide_template_file):
-        try:
-            with open(guide_template_file, "r", encoding="utf-8") as f:
-                guide_md = f.read()
-            gm = re.search(r'```html\s*\n(.*?)\n```', guide_md, re.DOTALL)
-            if gm:
-                _safe_write_text(guide_file, gm.group(1))
-                print(f"Wrote {guide_file}")
-        except Exception as e:
-            print(f"  Warning: guide generation failed: {e}")
-
-    # Generate live-status.js seed file
-    now_iso = datetime.now(timezone.utc).isoformat()
-    live_status_js = f"""// SDD Live Status — generated by /sdd:dashboard
-// Skills update this file during execution to show real-time progress
-window.__SDD_LIVE_UPDATE({{
-  "sessionId": null,
-  "currentStage": null,
-  "status": "idle",
-  "lastHeartbeat": "{now_iso}",
-  "progress": null,
-  "message": "Dashboard generated. Waiting for pipeline activity.",
-  "history": []
-}});"""
-    _safe_write_text(live_status_file, live_status_js)
-    print(f"Wrote {live_status_file}")
 
     print(f"\n{'='*60}")
     print("Done!")

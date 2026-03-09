@@ -16,6 +16,8 @@ export function getNextStepHint(toolName: string, args?: any): string {
       return "\n\n---\n**Next:** For each gap, use `sdd_trace` to understand why coverage is missing.";
     case "sdd_trace":
       return "\n\n---\n**Next:** Broken links? Run `/sdd:traceability-check` for full chain verification.";
+    case "sdd_gaps":
+      return "\n\n---\n**Next:** Use `sdd_gaps({ format: \"detail\" })` for full findings, or `sdd_trace` on specific artifacts to investigate gaps.";
     default:
       return "";
   }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 22 Claude Code skills (9 pipeline + 4 onboarding + 6 utility + 1 setup + 2 lateral) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 23 Claude Code skills (9 pipeline + 4 onboarding + 7 utility + 1 setup + 2 lateral) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -44,6 +44,8 @@ sdd-task-implementer  →  src/, tests/, git commits
 - `sdd-dashboard` → Visual HTML traceability dashboard with interactive prompts, pipeline popovers, and JSONP live status feed
 - `sdd-code-index` → Indexes project code for deep traceability. Bridges GitNexus code intelligence with SDD artifacts (optional, enhances blast radius analysis and code coverage)
 - `sdd-session-summary` → Summarizes session decisions, categorizes formal vs informal context
+- `sdd-gap-detector` → Detects implementation gaps between specs and code: missing endpoints, orphan routes, schema mismatches, uncovered BDD scenarios. Writes `.sdd/gap-analysis.json`
+- `sdd-verify-coverage` → LLM-as-judge heuristic layer (P3): verifies requirement coverage via structured binary prompts against source code, produces confidence-scored results in `.sdd/verification-results.json`
 
 **Setup skill**:
 - `sdd-setup` → Installs automation (hooks, agents, settings) into target projects
@@ -71,22 +73,17 @@ automation/
 ├── scripts/
 │   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
 ├── settings-template.json               # P1: Settings template with H1-H3 core hook configs
-├── settings-optional-dashboard.json     # P2: Opt-in HTTP hooks for dashboard server (H6)
-├── settings-optional-quality-gates.json # P3: Opt-in prompt/agent quality gate hooks (H7-H8)
+├── settings-optional-quality-gates.json # P2: Opt-in prompt/agent quality gate hooks (H7-H8)
 └── INSTALL.md                           # Manual installation guide
 ```
 
-MCP server (live traceability queries) + Dashboard server (HTTP+SSE):
+MCP server (live traceability queries):
 ```
-server/                                  # TypeScript MCP server + Dashboard server
+server/                                  # TypeScript MCP server
 ├── package.json                         # Deps: @modelcontextprotocol/sdk
 ├── tsconfig.json
 └── src/
     ├── index.ts                         # Entry: stdio transport (MCP)
-    ├── dashboard-entry.ts               # Entry: HTTP dashboard server
-    ├── dashboard-server.ts              # HTTP+SSE server for real-time dashboard updates
-    ├── sse.ts                           # SSE client manager (addClient, broadcast)
-    ├── path-mapper.ts                   # File path → pipeline stage mapper
     ├── server.ts                        # createSDDServer() — registers tools/resources/prompts
     ├── graph-loader.ts                  # Reads traceability-graph.json, file watcher
     ├── tools/
@@ -191,8 +188,10 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - **H4 — Stop Hook** (inline prompt in settings): Verifies pipeline state consistency on session end. Uses haiku model.
 - **H5 — Context Augment** (`sdd-context-augment.sh`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`).
 
+**Git hooks** (installed by `sdd-setup` into target `.git/hooks/`):
+- **commit-msg**: Enforces traceability trailers (`Refs:` and/or `Task:`) on commit messages, ensuring every commit links back to SDD artifacts.
+
 **Optional hooks** (opt-in via `/sdd-setup` Step 5.7):
-- **H6 — Dashboard HTTP hooks** (`settings-optional-dashboard.json`): POST events to dashboard server (`http://localhost:3001/hooks/*`). Events: SessionStart, PostToolUse, SubagentStart/Stop, TaskCompleted, Stop, SessionEnd.
 - **H7 — Stop Quality Gate** (prompt hook): Pipeline consistency check at session end.
 - **H8 — Task Traceability Gate** (agent hook): Verifies commit trailers on TaskCompleted.
 
@@ -204,13 +203,6 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - **A1 — Constitution Enforcer**: Validates operations against the 11 SDD Constitution articles. Model: haiku.
 - **A2 — Cross-Auditor**: Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
 - **A3 — Context Keeper**: Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
-
-**Dashboard Server** (`server/src/dashboard-server.ts`):
-- HTTP+SSE server for real-time dashboard updates, zero external deps (node:http only)
-- Receives hook events via POST `/hooks/*`, broadcasts to connected browsers via SSE `/events`
-- Serves dashboard HTML at `/`, API status at `/api/status`, graph at `/api/graph`
-- Configurable port via `SDD_DASHBOARD_PORT` env var (default: 3001)
-- Entry: `node server/dist/dashboard-entry.js`
 
 **Pipeline State Schema** (authoritative source: `sdd-req-change/references/cascade-patterns.md`):
 - Uses `lastRun` (not `completedAt`), no `inputHash`, adds `staleReason`, `error` status, `lastChange` block.

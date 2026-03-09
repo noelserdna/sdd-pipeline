@@ -35,6 +35,17 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/sdd-trace-map-updater.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
       }
     ]
   }

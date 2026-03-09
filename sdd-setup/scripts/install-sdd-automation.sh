@@ -63,7 +63,7 @@ info "  .claude/agents/ created"
 # Step 3: Copy hook scripts
 echo ""
 info "Step 3: Installing hook scripts..."
-for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh; do
+for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh sdd-trace-map-updater.sh; do
   SRC="$SDD_SKILLS/automation/hooks/$hook"
   DST=".claude/hooks/$hook"
   if [ -f "$SRC" ]; then
@@ -74,6 +74,28 @@ for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-update
     error "  $hook not found in source repo!"
   fi
 done
+
+# Step 3.5: Install git commit-msg hook (traceability enforcement)
+echo ""
+info "Step 3.5: Installing git commit-msg hook..."
+COMMIT_MSG_HOOK_SRC="$SDD_SKILLS/automation/hooks/sdd-commit-msg-hook.sh"
+if [ -d ".git" ]; then
+  COMMIT_MSG_HOOK_DST=".git/hooks/commit-msg"
+  if [ -f "$COMMIT_MSG_HOOK_SRC" ]; then
+    if [ -f "$COMMIT_MSG_HOOK_DST" ]; then
+      BACKUP_PATH="${COMMIT_MSG_HOOK_DST}.backup.$(date +%Y%m%d%H%M%S)"
+      cp "$COMMIT_MSG_HOOK_DST" "$BACKUP_PATH"
+      warn "  Existing commit-msg hook backed up to: $BACKUP_PATH"
+    fi
+    cp "$COMMIT_MSG_HOOK_SRC" "$COMMIT_MSG_HOOK_DST"
+    chmod +x "$COMMIT_MSG_HOOK_DST"
+    info "  commit-msg hook installed (.git/hooks/commit-msg)"
+  else
+    error "  sdd-commit-msg-hook.sh not found in source repo!"
+  fi
+else
+  warn "  No .git directory found — skipping commit-msg hook (not a git repo)"
+fi
 
 # Step 4: Copy agent definitions
 echo ""
@@ -176,7 +198,7 @@ echo ""
 info "Step 7: Verifying installation..."
 ERRORS=0
 
-for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh; do
+for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh sdd-trace-map-updater.sh; do
   if [ -x ".claude/hooks/$hook" ]; then
     info "  Hook $hook: OK"
   else
@@ -184,6 +206,12 @@ for hook in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-update
     ERRORS=$((ERRORS + 1))
   fi
 done
+
+if [ -d ".git" ] && [ -x ".git/hooks/commit-msg" ]; then
+  info "  Git hook commit-msg: OK"
+else
+  warn "  Git hook commit-msg: SKIPPED (no .git or not installed)"
+fi
 
 for agent in sdd-constitution-enforcer.md sdd-cross-auditor.md sdd-context-keeper.md; do
   if [ -f ".claude/agents/$agent" ]; then

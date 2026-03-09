@@ -6,7 +6,7 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
 
 ```json
 {
-  "$schema": "traceability-graph-v3",
+  "$schema": "traceability-graph-v7",
   "generatedAt": "2026-02-27T15:30:00.000Z",
   "projectName": "my-project",
 
@@ -104,7 +104,9 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
           "line": 8,
           "symbol": "validateSize",
           "symbolType": "function",
-          "refIds": ["UC-001", "INV-EXT-005"]
+          "refIds": ["UC-001", "INV-EXT-005"],
+          "origin": "direct",
+          "confidence": 1.0
         }
       ],
       "testRefs": [
@@ -113,7 +115,9 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
           "line": 12,
           "testName": "accepts size at exact 50MB limit",
           "framework": "vitest",
-          "refIds": ["UC-001", "INV-EXT-005"]
+          "refIds": ["UC-001", "INV-EXT-005"],
+          "lastRunStatus": "pass",
+          "lastRunDate": "2026-02-27T16:00:00.000Z"
         }
       ],
       "commitRefs": [
@@ -221,7 +225,25 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
       "criticalFindingsCount": 3,
       "highFindingsCount": 8,
       "alignmentPercentage": 78.5
-    }
+    },
+    "gapAnalysis": {
+      "totalSpecEndpoints": 20,
+      "implemented": 16,
+      "missing": 3,
+      "orphanRoutes": 2,
+      "mismatches": 1,
+      "endpointCoveragePercent": 80.0
+    },
+    "testResults": {
+      "total": 285,
+      "passed": 260,
+      "failed": 12,
+      "skipped": 13,
+      "bddMapped": 95,
+      "bddPassing": 88,
+      "bddFailing": 7
+    },
+    "codeOrphans": ["src/legacy/old-parser.ts", "src/utils/deprecated-helper.ts"]
   },
 
   "adoption": {
@@ -296,7 +318,7 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `$schema` | string | Yes | `"traceability-graph-v6"` (consumes v3-v5 without error) |
+| `$schema` | string | Yes | `"traceability-graph-v7"` (consumes v3-v6 without error) |
 | `generatedAt` | string (ISO-8601) | Yes | When the graph was generated |
 | `projectName` | string | Yes | Name of the project (from `package.json`, directory name, or `pipeline-state.json`) |
 
@@ -370,14 +392,25 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `symbol` | string | Yes | Nearest symbol name (function, class, const, etc.) or `"filename:line"` fallback |
 | `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the Ref comment (e.g., `["UC-001", "INV-EXT-005"]`) |
-| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping) |
+| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (from git blame analysis of code authorship), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (verified by LLM analysis of code semantics), `"gap-detected"` (detected as missing coverage by gap analysis) |
+| `confidence` | number | No | Confidence score 0.0-1.0 for this reference. `1.0` for `origin: "direct"` (`// Refs:` comments), `0.95` for `"hook-captured"`, varies for `"llm-verified"`, `0.6-0.9` for `"blame-inferred"` and `"commit-inferred"` (based on commit recency), `0.5` for `"task-inferred"`. Default: `1.0` |
 | `inferredFrom` | object or null | No | Inference provenance when origin is not `"direct"`: `{ "commitSha": "abc1234", "taskId": "TASK-F1-003", "trailerRefs": ["UC-001"] }`. Default: `null` |
 
 **Origin states and visual mapping**:
 - **linked** (`origin: "direct"`): `// Refs:` comment in code — green solid badge
+- **hook-captured** (`origin: "hook-captured"`): Captured in real-time by SDD hooks — green solid badge (near-direct)
+- **llm-verified** (`origin: "llm-verified"`): Verified by LLM analysis — blue solid badge (confidence varies)
+- **blame-inferred** (`origin: "blame-inferred"`): Inferred from git blame authorship — yellow dashed badge
 - **inferred** (`origin: "commit-inferred"`): Commit has Refs: + Task: trailers — yellow dashed badge
 - **suggested** (`origin: "task-inferred"`): Only Task: trailer, transitively resolved — gray dotted badge
+- **gap-detected** (`origin: "gap-detected"`): Detected as missing by gap analysis — red outlined badge
 - **uncovered**: No reference of any kind — red faint badge
+
+**Origin confidence hierarchy** (used for prioritization when multiple origins exist for the same symbol):
+```
+direct (1.0) > hook-captured (0.95) > llm-verified (varies) > blame-inferred (0.6-0.9) > commit-inferred (0.6-0.9) > task-inferred (0.5)
+```
+When a symbol has multiple codeRefs with different origins, the highest-confidence origin determines the displayed badge. The `confidence` field enables consumers to filter low-confidence refs or set thresholds for traceability reporting.
 
 **Propagation**: A codeRef is attached to a REQ if any of its `refIds` match a UC/INV/BDD/WF/API that traces back to that REQ via BFS (max 3 hops). Direct REQ references in code are also captured.
 
@@ -390,6 +423,8 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `testName` | string | Yes | Test description (e.g., `"validates size per INV-EXT-005"`) |
 | `framework` | string | Yes | Test framework: `"vitest"`, `"jest"`, `"pytest"`, `"jasmine"`, `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the test (e.g., `["UC-001", "INV-EXT-005"]`) |
+| `lastRunStatus` | string or null | No | Last test execution result: `"pass"`, `"fail"`, `"skip"`, `"never-run"`, or `null` (unknown). Default: `null` |
+| `lastRunDate` | string or null | No | ISO-8601 timestamp of last test execution. Default: `null` |
 
 **Propagation**: Same as codeRefs — testRefs propagate to REQs via the traceability chain.
 
@@ -450,6 +485,9 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `commitStats` | object | Commit scanning statistics |
 | `classificationStats` | object | Classification breakdown statistics |
 | `adoptionStats` | object or null | Adoption/onboarding statistics (null if no onboarding data) |
+| `gapAnalysis` | object or null | Spec-to-code gap analysis statistics (null if not computed). See below |
+| `testResults` | object or null | Aggregated test execution results (null if no test run data). See below |
+| `codeOrphans` | array of strings | Source files with zero traceability (no codeRefs, testRefs, or commitRefs). Default: `[]` |
 
 ### traceabilityCoverage
 
@@ -514,6 +552,33 @@ Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, 
 | `criticalFindingsCount` | number | Count of critical findings from reverse engineering |
 | `highFindingsCount` | number | Count of high findings from reverse engineering |
 | `alignmentPercentage` | number | Spec-code alignment percentage from reconciliation |
+
+### gapAnalysis
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `totalSpecEndpoints` | number | Total API endpoints defined in spec/ |
+| `implemented` | number | Endpoints with matching code implementations |
+| `missing` | number | Endpoints defined in spec but not found in code |
+| `orphanRoutes` | number | Code routes/handlers with no corresponding spec endpoint |
+| `mismatches` | number | Endpoints where code signature differs from spec (param types, response shape, etc.) |
+| `endpointCoveragePercent` | number | `implemented / totalSpecEndpoints * 100` |
+
+### testResults
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | number | Total test cases across all test files |
+| `passed` | number | Tests with `lastRunStatus: "pass"` |
+| `failed` | number | Tests with `lastRunStatus: "fail"` |
+| `skipped` | number | Tests with `lastRunStatus: "skip"` |
+| `bddMapped` | number | Tests that reference at least one BDD artifact |
+| `bddPassing` | number | BDD-mapped tests that are passing |
+| `bddFailing` | number | BDD-mapped tests that are failing |
+
+### codeOrphans
+
+Array of relative file paths (forward slashes) for source files that have zero traceability -- no `codeRefs` point to them, no `testRefs` reference them, and no `commitRefs` include them. Useful for identifying code that has drifted from the specification.
 
 ### adoption
 
@@ -636,6 +701,21 @@ All v4 fields remain unchanged. v5 is a backward-compatible extension. When no s
 | `codeStats.manualOverrides` | **New**: count of manual overrides applied |
 
 All v5 fields remain unchanged. v6 is a backward-compatible extension. The `origin` field defaults to `"direct"` when absent (backward-compatible with v3-v5 data).
+
+## Migration from v6
+
+| v6 Field | v7 Change |
+|----------|-----------|
+| `$schema: "traceability-graph-v6"` | Changed to `"traceability-graph-v7"` |
+| `codeRefs[].confidence` | **New**: confidence score 0.0-1.0 for data reliability |
+| `codeRefs[].origin` | **Extended**: added `"blame-inferred"`, `"hook-captured"`, `"llm-verified"`, `"gap-detected"` alongside existing values |
+| `testRefs[].lastRunStatus` | **New**: last test execution result (`"pass"`, `"fail"`, `"skip"`, `"never-run"`, null) |
+| `testRefs[].lastRunDate` | **New**: ISO-8601 timestamp of last test execution |
+| `statistics.gapAnalysis` | **New**: spec-to-code gap analysis (endpoints implemented/missing/orphan/mismatch) |
+| `statistics.testResults` | **New**: aggregated test execution results with BDD breakdown |
+| `statistics.codeOrphans` | **New**: list of source files with zero traceability |
+
+All v6 fields remain unchanged. v7 is a **backward-compatible** extension -- all new fields are optional or nullable. Consumers built for v6 will continue to work without modification. The HTML dashboard checks for field existence before using any v7 field (`if (ref.confidence !== undefined)`, `if (statistics.gapAnalysis)`, etc.).
 
 ### codeIntelligence (v4)
 

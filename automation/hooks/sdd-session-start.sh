@@ -2,6 +2,7 @@
 # H1: SDD Pipeline Status Injection at Session Start
 # Hook type: PreToolUse (SessionStart) | Timeout: 10s
 # Reads pipeline-state.json and injects pipeline context into the session.
+# Also reads dashboard/traceability-graph.json (if present) for coverage stats.
 
 set -euo pipefail
 
@@ -61,6 +62,41 @@ parse_with_node() {
 CONTEXT=$(parse_with_jq) || CONTEXT=$(parse_with_node) || CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
 
 [ -z "$CONTEXT" ] && CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
+
+# Try to append traceability coverage stats from graph
+GRAPH_FILE="$PROJECT_DIR/dashboard/traceability-graph.json"
+
+if [ -f "$GRAPH_FILE" ]; then
+  coverage_with_jq() {
+    jq -r '
+      .statistics.traceabilityCoverage as $tc |
+      .statistics.orphans as $orph |
+      "| Code: " +
+        (($tc.reqsWithCode.functionalPercentage // $tc.reqsWithCode.percentage // 0) | floor | tostring) + "%" +
+      ", Tests: " +
+        (($tc.reqsWithTests.functionalPercentage // $tc.reqsWithTests.percentage // 0) | floor | tostring) + "%" +
+      ", Orphans: " +
+        (($orph | length) | tostring)
+    ' "$GRAPH_FILE" 2>/dev/null
+  }
+
+  coverage_with_node() {
+    node -e "
+      const fs = require('fs');
+      try {
+        const g = JSON.parse(fs.readFileSync('$GRAPH_FILE', 'utf8'));
+        const tc = (g.statistics || {}).traceabilityCoverage || {};
+        const orph = (g.statistics || {}).orphans || [];
+        const code = Math.floor((tc.reqsWithCode || {}).functionalPercentage || (tc.reqsWithCode || {}).percentage || 0);
+        const tests = Math.floor((tc.reqsWithTests || {}).functionalPercentage || (tc.reqsWithTests || {}).percentage || 0);
+        console.log('| Code: ' + code + '%, Tests: ' + tests + '%, Orphans: ' + orph.length);
+      } catch(e) {}
+    " 2>/dev/null
+  }
+
+  COVERAGE=$(coverage_with_jq) || COVERAGE=$(coverage_with_node) || COVERAGE=""
+  [ -n "$COVERAGE" ] && CONTEXT="$CONTEXT $COVERAGE"
+fi
 
 # Escape for JSON output
 ESCAPED=$(echo "$CONTEXT" | jq -Rs . 2>/dev/null || node -e "console.log(JSON.stringify(require('fs').readFileSync('/dev/stdin','utf8').trim()))")
