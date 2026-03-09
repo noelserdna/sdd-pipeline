@@ -197,6 +197,8 @@ Req.   Caso   Flujo  Contrato Escen.  Regla  Decisión  Tarea    Commit    Archi
 │  Opcional:                                       │
 │  ○ GitHub CLI (gh)   (para PRs automáticos)     │
 │  ○ Notion API key    (para sync con Notion)     │
+│  ○ GitNexus          (code intelligence)        │
+│    npm i -g gitnexus                             │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -221,7 +223,7 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 **Paso 2: Instalar el plugin**
 
 ```
-/plugin install sdd@noelserdna/claude-plugin-sdd
+/plugin install sdd@noelserdna-claude-plugin-sdd
 ```
 
 > **Alternativa interactiva:** Puedes escribir `/plugin` sin argumentos para abrir
@@ -235,11 +237,11 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 │  1. Descarga el plugin desde GitHub                                              │
 │     noelserdna/claude-plugin-sdd                                                 │
 │                                                                                  │
-│  2. Registra los 20 skills como comandos /sdd:*                                  │
+│  2. Registra los 22 skills como comandos /sdd:*                                  │
 │     /sdd:requirements-engineer                                                   │
 │     /sdd:specifications-engineer                                                 │
 │     /sdd:spec-auditor                                                            │
-│     ... (20 skills en total)                                                     │
+│     ... (22 skills en total)                                                     │
 │                                                                                  │
 │  3. Instala hooks de automatización (H1-H5)                                      │
 │     Session start, upstream guard, state updater, etc.                            │
@@ -258,9 +260,9 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 **Gestión del plugin después de instalado:**
 
 ```
-/plugin disable sdd@noelserdna/claude-plugin-sdd     # Desactivar temporalmente
-/plugin enable sdd@noelserdna/claude-plugin-sdd      # Reactivar
-/plugin uninstall sdd@noelserdna/claude-plugin-sdd   # Desinstalar
+/plugin disable sdd@noelserdna-claude-plugin-sdd     # Desactivar temporalmente
+/plugin enable sdd@noelserdna-claude-plugin-sdd      # Reactivar
+/plugin uninstall sdd@noelserdna-claude-plugin-sdd   # Desinstalar
 ```
 
 > **Repositorio del plugin:** https://github.com/noelserdna/claude-plugin-sdd
@@ -285,32 +287,32 @@ Dentro de Claude Code:
 │                                                                                  │
 │  ¿Qué hace /sdd:setup?                                                          │
 │                                                                                  │
-│  A diferencia de /install-plugin (que es global), /sdd:setup es POR PROYECTO:    │
+│  A diferencia de /plugin install (que es global), /sdd:setup es POR PROYECTO:    │
 │                                                                                  │
 │  1. Crea pipeline-state.json                                                     │
-│     Estado del pipeline (qué pasos se han completado)                            │
+│     Estado del pipeline, con sddVersion y hooksVersion                           │
 │                                                                                  │
-│  2. Verifica la instalación                                                      │
-│     Hooks, agentes, servidor MCP, Node.js                                        │
+│  2. Detecta upgrades (v1 → v2)                                                  │
+│     Si tienes hooks antiguos, los migra automáticamente                          │
 │                                                                                  │
-│  3. Genera reporte de verificación                                               │
+│  3. Verifica dependencias (jq, node)                                             │
+│     y compila el servidor MCP si es necesario                                    │
+│                                                                                  │
+│  4. Genera reporte de verificación                                               │
 │     Confirma que todo está listo para usar                                        │
 │                                                                                  │
 │  Resultado:                                                                      │
 │                                                                                  │
 │  tu-proyecto/                                                                    │
-│  ├── pipeline-state.json     ← Estado del pipeline SDD                           │
-│  ├── .claude/                                                                    │
-│  │   ├── hooks/              ← Hooks automáticos (H1-H5)                         │
-│  │   ├── agents/             ← Agentes de validación (A1-A8)                     │
-│  │   └── settings.json       ← Configuración                                    │
-│  ├── src/                    ← Tu código (se creará en Paso 7)                   │
-│  └── ...                                                                         │
+│  └── pipeline-state.json     ← Estado del pipeline SDD                           │
+│                                                                                  │
+│  Los hooks (H1-H5), agentes (A1-A8) y servidor MCP vienen incluidos             │
+│  en el plugin — NO se copian al proyecto. Solo pipeline-state.json es local.     │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Resumen:** `/install-plugin` = instalar una vez, global.
+> **Resumen:** `/plugin install` = instalar una vez, global.
 > `/sdd:setup` = inicializar cada proyecto nuevo.
 
 ---
@@ -369,6 +371,8 @@ Dentro de Claude Code:
 ║  └─────────────────────┘                                                         ║
 ║                                                                                  ║
 ║  ┌─ Herramientas laterales ──────────────────────────────────────────────┐       ║
+║  │  /sdd:tech-designer       Diseño técnico (12 dimensiones)             │       ║
+║  │  /sdd:ux-designer         Diseño UX (12 dimensiones, WCAG)            │       ║
 ║  │  /sdd:security-auditor    Auditoría de seguridad (OWASP)              │       ║
 ║  │  /sdd:req-change          Gestión de cambios con cascada              │       ║
 ║  └───────────────────────────────────────────────────────────────────────┘       ║
@@ -1226,6 +1230,83 @@ Después de implementar cada FASE, el skill verifica:
 
 ## 11. Herramientas laterales
 
+Las herramientas laterales se pueden ejecutar en **cualquier momento** del pipeline.
+No tienen un orden fijo — úsalas cuando las necesites.
+
+### Diseño técnico (recomendado antes de plan-architect)
+
+```
+/sdd:tech-designer
+```
+
+Explora 12 dimensiones de arquitectura técnica y genera decisiones documentadas:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Tech Designer — 12 Dimensiones                                      │
+│                                                                      │
+│  1. Canales de entrega     (web, mobile, API, CLI)                  │
+│  2. Estilo de arquitectura (monolito, microservicios, serverless)   │
+│  3. Stack tecnológico      (lenguaje, framework, runtime)           │
+│  4. Estrategia de datos    (SQL, NoSQL, caché, migrations)          │
+│  5. Autenticación/Autoriz. (JWT, OAuth, RBAC, ABAC)                │
+│  6. API design             (REST, GraphQL, gRPC, WebSocket)         │
+│  7. Infraestructura        (cloud, containers, CDN)                 │
+│  8. CI/CD                  (pipeline, deploy, rollback)             │
+│  9. Observabilidad         (logs, metrics, tracing, alerting)       │
+│ 10. Costos                 (estimación, optimización)               │
+│ 11. Developer Experience   (DX, tooling, onboarding)                │
+│ 12. i18n/l10n              (idiomas, formatos, timezones)           │
+│                                                                      │
+│  Salida:                                                             │
+│  design/                                                             │
+│  ├── TECHNICAL-DESIGN.md        ← Decisiones por dimensión          │
+│  ├── QUALITY-ATTRIBUTES.md      ← ATAM-lite (trade-offs)            │
+│  └── ADR-DRAFT-*.md             ← Borradores de ADRs                │
+│                                                                      │
+│  Tip: Si ejecutas esto ANTES de /sdd:plan-architect,                │
+│  el arquitecto consumirá automáticamente tus decisiones.            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Diseño UX (recomendado antes de plan-architect)
+
+```
+/sdd:ux-designer
+```
+
+Define el sistema de diseño visual y de interacción en 12 dimensiones:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  UX Designer — 12 Dimensiones                                        │
+│                                                                      │
+│  1. Identidad de marca     (colores, tipografía, voz)               │
+│  2. Design tokens          (variables reutilizables)                │
+│  3. Componentes            (Atomic Design: atoms→organisms)         │
+│  4. Responsive             (breakpoints, mobile-first)              │
+│  5. Accesibilidad          (WCAG 2.1 AA, ARIA, contraste)          │
+│  6. Interacción            (animaciones, feedback, estados)         │
+│  7. Formularios            (validación, errores, UX)                │
+│  8. Navegación             (IA, rutas, breadcrumbs)                 │
+│  9. Seguridad frontend     (CSP, XSS, CSRF visual)                 │
+│ 10. Performance            (Core Web Vitals, lazy loading)          │
+│ 11. Mobile                 (touch, gestos, PWA)                     │
+│ 12. Temas                  (dark mode, theming)                     │
+│                                                                      │
+│  Salida:                                                             │
+│  ux/                                                                 │
+│  ├── UI-DESIGN-SYSTEM.md        ← Sistema de diseño completo        │
+│  ├── WIREFRAMES.md              ← Wireframes ASCII + descripción    │
+│  ├── ACCESSIBILITY-SPEC.md      ← Especificación WCAG               │
+│  ├── INTERACTION-MODEL.md       ← Modelo de interacción             │
+│  └── DESIGN-TOKENS.json         ← Tokens exportables                │
+│                                                                      │
+│  Tip: Si ejecutas esto ANTES de /sdd:plan-architect,                │
+│  el arquitecto integrará tu diseño en las fases.                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Auditoría de seguridad
 
 Ejecutar en cualquier momento para evaluar la postura de seguridad:
@@ -1377,6 +1458,60 @@ Genera un archivo HTML interactivo que puedes abrir en el navegador:
 │  3. Cobertura             (gaps analysis)                        │
 │  4. Pipeline              (estado de cada paso)                  │
 │  5. Adopción              (progreso de adopción SDD)             │
+│                                                                  │
+│  Dos formas de usarlo:                                           │
+│  • Abrir index.html directamente (funciona sin servidor)         │
+│  • Usar el dashboard server para actualizaciones en vivo (SSE)  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Opcional — Dashboard server con actualizaciones en vivo:**
+
+Si quieres que el dashboard se actualice en tiempo real mientras trabajas
+(sin tener que regenerarlo), puedes levantar el servidor:
+
+```bash
+# Busca la ruta del plugin
+# En Mac/Linux:
+node ~/.claude/plugins/cache/noelserdna-plugins/sdd/*/server/dist/dashboard-entry.js
+
+# El server arranca en http://localhost:3001
+# SSE stream en http://localhost:3001/events
+```
+
+El dashboard detecta automáticamente si está servido por HTTP (usa SSE en vivo)
+o abierto como archivo local (usa JSONP polling).
+
+### Code intelligence
+
+```
+/sdd:code-index
+```
+
+Indexa tu código fuente y lo conecta con los artefactos SDD. Si tienes
+**GitNexus** instalado (`npm i -g gitnexus`), genera un análisis profundo
+con call graph, clusters y flujos de ejecución:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Code Intelligence                                               │
+│                                                                  │
+│  Sin GitNexus (modo básico):                                     │
+│  • Escanea símbolos (funciones, clases, tipos)                  │
+│  • Mapea commits con Refs:/Task: trailers a artefactos          │
+│  • Enriquece traceability-graph.json con codeRefs               │
+│                                                                  │
+│  Con GitNexus (modo completo):                                   │
+│  • Todo lo anterior +                                            │
+│  • Call graph (quién llama a quién)                              │
+│  • Clusters de código relacionado                                │
+│  • Flujos de ejecución (execution flows)                        │
+│  • Commit-symbol bridge (a nivel de función, no de archivo)     │
+│                                                                  │
+│  Ejecútalo después de implementar para ver:                     │
+│  • Qué código implementa cada requisito                         │
+│  • Blast radius: si cambias X, qué se afecta                   │
+│  • Cobertura por origen: linked / inferred / uncovered          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1598,11 +1733,45 @@ mi-task-app/
     └── PERF-SCENARIOS.md       ← 4 escenarios de rendimiento
 ```
 
+### Paso 4b (opcional): Diseño técnico y UX
+
+Antes de la arquitectura, puedes explorar decisiones técnicas y de diseño visual.
+Esto es **opcional pero recomendado** — el plan-architect los consumirá automáticamente:
+
+```
+/sdd:tech-designer
+```
+
+```
+mi-task-app/
+└── design/
+    ├── TECHNICAL-DESIGN.md     ← Stack: Next.js + PostgreSQL + JWT
+    ├── QUALITY-ATTRIBUTES.md   ← Trade-offs documentados
+    └── ADR-DRAFT-001.md        ← Borrador: ¿por qué Next.js?
+```
+
+```
+/sdd:ux-designer
+```
+
+```
+mi-task-app/
+└── ux/
+    ├── UI-DESIGN-SYSTEM.md     ← Componentes, colores, tipografía
+    ├── WIREFRAMES.md           ← Wireframes ASCII de cada pantalla
+    ├── ACCESSIBILITY-SPEC.md   ← WCAG 2.1 AA
+    ├── INTERACTION-MODEL.md    ← Estados, animaciones, feedback
+    └── DESIGN-TOKENS.json      ← Tokens exportables a CSS/Tailwind
+```
+
 ### Paso 5: Arquitectura
 
 ```
 /sdd:plan-architect
 ```
+
+Si ejecutaste tech-designer y/o ux-designer, el arquitecto los consume automáticamente
+en su Phase 0 y los integra en las fases:
 
 ```
 mi-task-app/
@@ -1670,6 +1839,7 @@ mi-task-app/
 ```
 /sdd:traceability-check    ← Todo conectado ✅
 /sdd:dashboard             ← Dashboard HTML generado
+/sdd:code-index            ← (opcional) Indexar código para blast radius
 /sdd:pipeline-status       ← Todos los pasos: done ✅
 ```
 
@@ -1693,6 +1863,13 @@ mi-task-app/
 │   ├── TEST-PLAN.md
 │   ├── TEST-MATRIX-*.md
 │   └── PERF-SCENARIOS.md
+├── design/                       ← (opcional) Tech Designer
+│   ├── TECHNICAL-DESIGN.md
+│   └── QUALITY-ATTRIBUTES.md
+├── ux/                           ← (opcional) UX Designer
+│   ├── UI-DESIGN-SYSTEM.md
+│   ├── WIREFRAMES.md
+│   └── DESIGN-TOKENS.json
 ├── plan/
 │   ├── PLAN.md
 │   ├── ARCHITECTURE.md
@@ -1705,6 +1882,8 @@ mi-task-app/
 │   ├── index.html
 │   ├── guide.html
 │   └── traceability-graph.json
+├── code-intelligence/            ← (opcional) Code Index
+│   └── CODE-INDEX-REPORT.md
 ├── src/                          ← Código implementado
 ├── tests/                        ← Tests automatizados
 ├── package.json
@@ -1768,6 +1947,42 @@ Claude te consultará antes de tomar decisiones ambiguas.
 Si encuentras un error después de implementar, usa `/sdd:req-change`
 para corregirlo formalmente con trazabilidad.
 
+### ¿Cómo actualizo el plugin a una nueva versión?
+
+Desde Claude Code:
+
+```
+/plugin update sdd@noelserdna-claude-plugin-sdd
+```
+
+Después, en cada proyecto:
+
+```
+/sdd:setup
+```
+
+El setup detecta automáticamente si tu proyecto tiene una versión anterior
+y migra lo necesario (actualiza `sddVersion` y `hooksVersion` en `pipeline-state.json`).
+
+### ¿Para qué sirven tech-designer y ux-designer?
+
+Son skills **laterales opcionales** que puedes ejecutar en cualquier momento,
+pero son más útiles **antes de plan-architect**:
+
+- **tech-designer**: Explora decisiones de stack, infraestructura, API design, CI/CD, etc. Si ya sabes exactamente qué tecnología usar, puedes saltarlo. Si quieres explorar opciones con trade-offs documentados, úsalo.
+- **ux-designer**: Define sistema de diseño, wireframes, accesibilidad, tokens. Si tu proyecto no tiene UI (es solo una API), no lo necesitas.
+
+Ambos generan artefactos que plan-architect consume automáticamente si existen.
+
+### ¿Qué es el code intelligence?
+
+`/sdd:code-index` analiza tu código fuente y lo conecta con los artefactos SDD.
+Usa los commits con trailers `Refs:` y `Task:` (que task-implementer genera automáticamente)
+para inferir qué código implementa cada requisito.
+
+Con **GitNexus** instalado (`npm i -g gitnexus`), el análisis es mucho más profundo:
+call graphs, clusters de código, flujos de ejecución. Sin GitNexus, funciona en modo básico.
+
 ### ¿Puedo ver el estado del pipeline en cualquier momento?
 
 Sí, de tres formas:
@@ -1795,13 +2010,21 @@ Sí, de tres formas:
 | **C4 Model** | Diagramas de arquitectura en 4 niveles |
 | **SWEBOK** | Body of Knowledge de ingeniería de software |
 | **OWASP ASVS** | Estándar de verificación de seguridad |
+| **SSE** | Server-Sent Events (actualizaciones en tiempo real) |
+| **GitNexus** | Herramienta de code intelligence (call graph, clusters) |
+| **Design Tokens** | Variables de diseño exportables (colores, spacing, etc.) |
+| **WCAG** | Web Content Accessibility Guidelines |
+| **Blast Radius** | Impacto de un cambio en el resto del sistema |
+| **Code Intelligence** | Mapeo código ↔ artefactos SDD |
 
 ---
 
-## Resumen: los 7 comandos esenciales
+## Resumen: comandos esenciales
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
+│                                                                   │
+│  PIPELINE (en orden):                                             │
 │                                                                   │
 │  1.  /sdd:setup                    Inicializar proyecto           │
 │  2.  /sdd:requirements-engineer    Definir qué se necesita       │
@@ -1812,12 +2035,27 @@ Sí, de tres formas:
 │  7.  /sdd:task-generator           Generar tareas atómicas       │
 │  8.  /sdd:task-implementer         Implementar con TDD            │
 │                                                                   │
-│  Y para el día a día:                                             │
+│  LATERALES (en cualquier momento):                                │
+│                                                                   │
+│  /sdd:tech-designer                Explorar stack y arquitectura  │
+│  /sdd:ux-designer                  Diseño visual y accesibilidad │
+│  /sdd:security-auditor             Auditoría OWASP               │
+│  /sdd:req-change                   Gestión de cambios + cascada  │
+│                                                                   │
+│  UTILIDADES (cuando las necesites):                               │
 │                                                                   │
 │  /sdd:pipeline-status              ¿Dónde estoy?                 │
-│  /sdd:req-change                   Necesito cambiar algo          │
 │  /sdd:traceability-check           ¿Está todo conectado?         │
-│  /sdd:dashboard                    Quiero verlo visualmente       │
+│  /sdd:dashboard                    Verlo visualmente              │
+│  /sdd:code-index                   Conectar código con specs     │
+│  /sdd:session-summary              Resumen de sesión              │
+│                                                                   │
+│  ONBOARDING (proyecto existente):                                 │
+│                                                                   │
+│  /sdd:onboarding                   Diagnosticar proyecto          │
+│  /sdd:reverse-engineer             Código → artefactos SDD       │
+│  /sdd:reconcile                    Alinear specs ↔ código        │
+│  /sdd:import                       Importar docs externos         │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
