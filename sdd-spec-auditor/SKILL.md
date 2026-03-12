@@ -265,6 +265,19 @@ Decisiones arquitectónicas tomadas sin documentación formal.
 
 ---
 
+### Category Disambiguation Rules
+
+When a finding could belong to multiple categories, apply these rules to assign exactly ONE category:
+
+| Overlap | Disambiguation |
+|---|---|
+| **CAT-01 vs CAT-04** | CAT-01 = vague language ("reasonable", "appropriate"). CAT-04 = terminology inconsistency (synonyms, same concept with different names). If the word is vague → CAT-01. If two documents use different words for the same concept → CAT-04. |
+| **CAT-02 vs CAT-07** | CAT-02 = behavior assumed but never stated anywhere. CAT-07 = constraint IS stated in prose but lacks formal INV-ID. If the rule is not mentioned at all → CAT-02. If mentioned but not formalized → CAT-07. |
+| **CAT-03 vs CAT-06** | CAT-03 = a specific scenario is not handled ("what if timeout?"). CAT-06 = a structural element is missing (empty section, TBD, broken reference). If a specific scenario is missing from a populated section → CAT-03. If the entire section/field is missing or empty → CAT-06. |
+| **CAT-09 materiality** | Only flag missing ADRs for significant architectural decisions (data stores, auth mechanisms, infrastructure platforms, communication protocols). Common industry-standard choices (HTTP, JSON, REST, UTF-8) do NOT require ADRs. |
+
+> A finding MUST be classified under exactly ONE category. Dual-categorization is not permitted.
+
 ## Spec-Level Verification (3C Protocol)
 
 > Extends the 3-dimensional verification protocol (used post-implementation by `sdd-task-implementer`)
@@ -440,6 +453,113 @@ If a previous audit exists, perform regression analysis after defect detection:
 
 ---
 
+### Phase 7: Finding Consolidation
+
+After detecting all findings (Phase 5) and classifying them (Phase 6), consolidate findings to reduce noise and improve actionability.
+
+#### 7.1 Pattern Batching
+
+When the same defect type appears across multiple documents, report as ONE batched finding:
+
+```
+BAD:  INC-001: Missing BDD for UC-003
+      INC-002: Missing BDD for UC-005
+      INC-003: Missing BDD for UC-007
+      (3 separate findings)
+
+GOOD: INC-001: Missing BDD scenarios for UC-003, UC-005, UC-007
+      Locations: [list all affected files]
+      (1 batched finding with 3 locations)
+```
+
+#### 7.2 Family Grouping
+
+These finding families MUST be discovered and reported together in a single pass — never incrementally across iterations:
+
+| Family | What to check | How to check |
+|---|---|---|
+| Missing BDD | ALL UCs for BDD coverage | For each UC, verify at least 1 happy + 1 error BDD scenario exists |
+| Missing API error codes | ALL API contracts for error responses | For each endpoint, verify 401, 403, 404, 409, 429 are documented where applicable |
+| Terminology violations | ALL docs for glossary compliance | Grep for every "NO usar" term from glossary across all spec/ files |
+| Value inconsistencies | ALL shared values across ALL docs | For each value in LIMITS.md/PERFORMANCE.md, grep all spec/ files for that value |
+| Missing invariants | ALL UCs for unformalized constraints | Scan UC text for "must", "shall not", "always", "never", "at least", "at most" without INV-ID reference |
+
+#### 7.3 Cascade Dependency
+
+When fixing finding X will automatically resolve findings Y and Z, mark the dependency:
+
+```
+INC-005: Missing VALIDATION_ERROR in API-002-04 [CASCADE-DEP: INC-004]
+```
+
+Cascade-dependent findings are NOT separately tracked for fix/verification — they resolve when their parent is fixed.
+
+---
+
+### Convergence Protocol
+
+The audit process MUST converge. These rules replace the implicit unbounded loop.
+
+#### Maximum Audit Cycles
+
+```
+Cycle 1: DISCOVERY — Full comprehensive audit (Phases 0-7 above). All categories, all documents.
+Cycle 2: FIX — Apply corrections for findings with FIX disposition (Mode Fix).
+Cycle 3: VERIFICATION — Narrow-scope verification of fixes only (see Verification Rules below).
+```
+
+After Cycle 3, if Critical findings remain, present the user with explicit options:
+- Fix critical findings and run ONE more verification pass
+- Accept risk and proceed with documented acknowledgment
+
+**Hard limit: 5 cycles maximum.** If convergence is not reached in 5 cycles, remaining Medium/Low findings are automatically moved to baseline as `deferred`.
+
+#### Quality Gate Thresholds
+
+Replace the "ALL PASS" requirement with tiered thresholds:
+
+| Gate Level | Criteria | Can proceed to plan-architect? |
+|---|---|---|
+| **PASS** | 0 Critical, 0 High, ≤5 Medium (all Low accepted/deferred) | Yes |
+| **CONDITIONAL PASS** | 0 Critical, ≤2 High (documented), ≤10 Medium | Yes, with advisory warnings |
+| **FAIL** | Any Critical unresolved, or >2 High unresolved | No — must fix or accept |
+
+The auditor MUST recommend the appropriate gate level. The user decides whether to proceed.
+
+#### Verification Rules (Cycle 3)
+
+During verification, the auditor MUST:
+- ✅ Verify that each fixed finding is actually resolved
+- ✅ Check for regressions in documents directly modified by fixes
+- ✅ Check immediate dependents of modified documents (per Propagation Checklist)
+
+During verification, the auditor MUST NOT:
+- ❌ Perform a full Phase 1-7 sweep on unchanged documents
+- ❌ Discover new finding categories not found in the Discovery cycle
+- ❌ Apply deeper analysis than was applied in Discovery
+- ❌ Report new Low/Medium findings in documents NOT directly affected by fixes
+
+New findings discovered during verification:
+- If **Critical**: Report and require fix (extends verification by exactly 1 finding)
+- If **High**: Report but add to audit baseline for next full audit
+- If **Medium/Low**: Log as advisory note, do NOT count against the gate
+
+#### Triage Phase
+
+After Discovery (Cycle 1) and before Fix (Cycle 2), present ALL findings to the user for triage:
+
+| Disposition | Meaning | Default for... |
+|---|---|---|
+| `FIX` | Must be corrected before proceeding | All Critical, all High |
+| `ACCEPT` | Known limitation, documented and accepted | — |
+| `DEFER` | Will address later (set re-evaluation date) | — |
+| `WONT_FIX` | By design, not a defect in this context | — |
+
+Default for Medium: `FIX` (user can override to ACCEPT/DEFER).
+Default for Low: User's choice (present options).
+
+Only findings with `FIX` disposition proceed to Mode Fix. Others go directly to baseline.
+
 ## Audit Report Format
 
 ```markdown
@@ -559,9 +679,9 @@ Include this scorecard in the audit report after the Baseline Delta section:
 | Clarification Density | {N}/doc | 0 | {PASS/FAIL} |
 | Audit Pass Rate | {N}% | > 90% | {PASS/FAIL} |
 | Cross-Reference Validity | {N}% | 100% | {PASS/FAIL} |
-| **Overall Quality Gate** | | ALL PASS | **{PASS/FAIL}** |
+| **Overall Quality Gate** | | See Convergence Protocol | **{PASS/CONDITIONAL/FAIL}** |
 
-> **Gate rule:** downstream skills (sdd-plan-architect, sdd-task-generator) SHOULD NOT proceed if Overall Quality Gate = FAIL.
+> **Gate rule:** See "Quality Gate Thresholds" in the Convergence Protocol section. PASS = proceed. CONDITIONAL PASS = proceed with advisory. FAIL = must resolve Critical/High findings first.
 ```
 
 ---
@@ -595,6 +715,18 @@ Apply these filters BEFORE assigning severity to reduce noise:
        ├── Hinders comprehension/maintenance? → Medio
        └── Style/clarity improvement only? → Bajo
    ```
+
+### Persistence Escalation Rule
+
+Findings that persist across audit iterations MUST be escalated:
+
+| Persistence | Action |
+|---|---|
+| Found in 1 audit, not yet fixed | Normal severity — no change |
+| Persists across 2 audits without resolution | Severity escalates by 1 level (Low→Medium, Medium→High) |
+| Persists across 3+ audits | User MUST assign explicit disposition: `fix`, `accept`, `defer`, or `wont_fix`. Cannot remain unresolved. |
+
+> **Rationale:** Persistent findings create noise in audit reports and mask new issues. Escalation creates pressure to resolve or explicitly accept them.
 
 ---
 
@@ -685,15 +817,22 @@ Ask the user:
 Process in priority order: Critical → High → Medium → Low.
 Within each severity: CON first, then SIL, then others.
 
-**Atomic Cross-Check Rule:** When modifying any enum, Value Object, state, or entity field, verify and update ALL dependent documents in the same commit:
+**Propagation Checklist:** When modifying any spec document, verify and update ALL dependent documents atomically. Incomplete propagation is the #1 cause of audit regressions.
 
-| If you modify... | Also check and update... |
-|-------------------|--------------------------|
-| `domain/02-ENTITIES.md` | `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, related UCs |
-| `domain/03-VALUE-OBJECTS.md` | `02-ENTITIES.md` (field types), UCs and contracts using those VOs |
-| `domain/04-STATES.md` | `05-INVARIANTS.md`, UCs with state transitions, WFs |
-| `domain/05-INVARIANTS.md` | UCs that enforce those invariants, contracts that validate them |
+| If you modify... | You MUST also verify and update... |
+|---|---|
+| `domain/01-GLOSSARY.md` | ALL spec documents for term usage alignment |
+| `domain/02-ENTITIES.md` | `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, all UCs referencing modified entities, all API contracts with those entities in schemas |
+| `domain/03-VALUE-OBJECTS.md` | `02-ENTITIES.md` (field types), all UCs and contracts using those VOs, `05-INVARIANTS.md` if VO has constraints |
+| `domain/04-STATES.md` | `05-INVARIANTS.md`, all UCs with state transitions, all WFs, all BDD scenarios testing state changes |
+| `domain/05-INVARIANTS.md` | UCs that enforce those invariants, contracts that validate them, BDD scenarios that test them |
 | `contracts/PERMISSIONS-MATRIX.md` | ALL API contracts for endpoint-permission alignment |
+| Any UC exception flow | Corresponding API contract error codes, BDD error scenarios, `03-VALUE-OBJECTS.md` ErrorResponse |
+| Any enum value in any document | ALL documents that reference that enum (use grep to find all occurrences) |
+| `nfr/LIMITS.md` or `nfr/PERFORMANCE.md` | All WFs (timeouts), all API contracts (rate limits), all UCs (limits in text) |
+| Any terminology change | ALL spec documents for the old term (find-and-replace across entire spec/) |
+
+**Propagation Verification:** After applying fixes, run `grep -r "OLD_TERM\|OLD_VALUE" spec/` for every changed term or value to confirm zero residual occurrences of the old version.
 
 **Commit format:**
 ```

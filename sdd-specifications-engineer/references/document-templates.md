@@ -537,3 +537,262 @@ This document records all decisions made during the specification process, inclu
 |------------|------|----------|------|----------|
 | [Name] | [Role] | [Approved/Rejected/Modified] | [Date] | [Comments] |
 ```
+
+---
+
+## Template 9: State Machine Specification
+
+```markdown
+# State Machines: [Entity/Module Name]
+
+## SM-NNN: [Entity] State Machine
+
+### States
+
+| State | Description | Is Initial | Is Final |
+|-------|-------------|------------|----------|
+| [state_name] | [Description] | Yes/No | Yes/No |
+
+### Transitions
+
+| From | To | Trigger | Guard Condition | Action | Events Emitted | Timeout |
+|------|-----|---------|-----------------|--------|----------------|---------|
+| [from_state] | [to_state] | [event/action] | [condition or "—"] | [side effect] | [event name or "—"] | [duration or "—"] |
+
+### Derived State Rules (for composite entities)
+
+| Rule | Priority | Condition | Derived State |
+|------|----------|-----------|---------------|
+| R1 | 1 (highest) | [condition] | [derived_state] |
+
+### State Diagram (Mermaid)
+
+```mermaid
+stateDiagram-v2
+    [*] --> initial_state
+    initial_state --> next_state: trigger [guard]
+```
+
+### Related Invariants
+- INV-XXX-NNN: [invariant description]
+```
+
+---
+
+## Template 10: Invariant Specification
+
+```markdown
+# Business Invariants: [Domain Area]
+
+## INV-{AREA}-{NNN}: [Invariant Name]
+
+| Field | Value |
+|-------|-------|
+| **ID** | INV-{AREA}-{NNN} |
+| **Rule** | [Declarative rule in natural language] |
+| **Enforcement** | [Where: UC, API, DB, or all] |
+| **Related UCs** | UC-NNN, UC-NNN |
+| **Violation Error** | [ERROR_CODE — HTTP status] |
+
+**Validation (SQL CHECK):**
+```sql
+CHECK ([field] [operator] [value])
+```
+
+**Validation (Zod/TypeScript):**
+```typescript
+z.number().min(X).max(Y)
+```
+
+### Notes
+- [Any contextual notes about when/why this invariant exists]
+```
+
+---
+
+## Template 11: Workflow Specification
+
+```markdown
+# Workflow: WF-NNN — [Workflow Name]
+
+## Overview
+| Field | Value |
+|-------|-------|
+| **Trigger** | [What starts this workflow] |
+| **Total Timeout** | [Maximum duration] |
+| **Actors** | [Who/what participates] |
+| **Refs** | REQ-F-NNN, UC-NNN |
+
+## Steps
+
+| # | Name | Type | Timeout | Retry Policy | Input | Output | Error Handling | Compensation |
+|---|------|------|---------|-------------|-------|--------|----------------|--------------|
+| 1 | [step_name] | sync/async/manual | [duration] | [retries x backoff] | [schema ref] | [schema ref] | [what happens on failure] | [rollback action] |
+
+## Error Scenarios
+
+| Error | At Step | Action | Result State |
+|-------|---------|--------|-------------|
+| [error_type] | [step #] | [retry/abort/skip/compensate] | [final state] |
+
+## Events Emitted
+
+| Event | At Step | Payload | Consumers |
+|-------|---------|---------|-----------|
+| [event_name] | [step #] | [schema] | [who listens] |
+
+## Metrics
+
+| Metric | Target |
+|--------|--------|
+| Duration p50 | [value] |
+| Duration p99 | [value] |
+| Success rate | [value] |
+```
+
+---
+
+## Template 12: API Contract Specification
+
+```markdown
+# API Contract: API-{module}
+
+## API-{NNN}-{NN}: [Endpoint Name]
+
+| Field | Value |
+|-------|-------|
+| **Method** | GET/POST/PUT/PATCH/DELETE |
+| **Path** | `/api/v1/resource/{id}` |
+| **Auth** | JWT / HMAC / Public |
+| **Rate Limit** | [N requests/window per actor type] |
+| **Version** | v1 |
+| **Refs** | UC-NNN, REQ-F-NNN |
+
+### Request
+
+**Path Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| [param] | [type] | Yes/No | [description] |
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| [param] | [type] | Yes/No | [default] | [description] |
+
+**Request Body:**
+```json
+{
+  "field": "type — description"
+}
+```
+
+### Success Response (200/201)
+
+```json
+{
+  "field": "type — description"
+}
+```
+
+### Error Responses
+
+| HTTP | Error Code | Condition | Response Body |
+|------|-----------|-----------|---------------|
+| 400 | VALIDATION_ERROR | Invalid input fields | `{ "error": "VALIDATION_ERROR", "details": [...] }` |
+| 401 | UNAUTHORIZED | Missing or invalid token | `{ "error": "UNAUTHORIZED" }` |
+| 403 | FORBIDDEN | Insufficient permissions | `{ "error": "FORBIDDEN", "required": "permission" }` |
+| 404 | NOT_FOUND | Resource does not exist | `{ "error": "NOT_FOUND" }` |
+| 409 | CONFLICT | Concurrent modification | `{ "error": "CONFLICT", "detail": "..." }` |
+| 429 | RATE_LIMIT_EXCEEDED | Too many requests | `{ "error": "RATE_LIMIT_EXCEEDED", "retryAfter": N }` |
+
+> **Rule:** Every endpoint MUST document at minimum: 400 (if accepts input), 401 (if authenticated), 403 (if role-restricted), 404 (if accesses a resource by ID), 429 (if rate-limited). Remove rows that genuinely do not apply.
+```
+
+---
+
+## Template 13: BDD Test Specification
+
+```markdown
+# BDD Scenarios: UC-NNN — [Use Case Name]
+
+> **Refs:** UC-NNN, INV-XXX-NNN
+
+## Feature: [Feature description]
+
+As a [actor]
+I want [capability]
+So that [benefit]
+
+### Background
+Given [common precondition setup]
+
+### Scenario: Happy path — [description]
+Given [specific precondition]
+When [action]
+Then [expected outcome]
+And [side effects: events, state changes, audit logs]
+
+### Scenario: Alternative path — [description]
+Given [alternative precondition]
+When [action]
+Then [alternative outcome]
+
+### Scenario: Error — [error type]
+Given [precondition]
+When [action that triggers error]
+Then the system responds with error "[ERROR_CODE]"
+And [HTTP status]
+And [side effects or lack thereof]
+
+### Scenario: Edge case — [description]
+Given [edge case setup]
+When [action]
+Then [edge case outcome]
+
+### Scenario: Invariant enforcement — INV-XXX-NNN
+Given [setup that would violate invariant]
+When [action]
+Then the system rejects with error "[VIOLATION_ERROR_CODE]"
+And [state remains unchanged]
+```
+
+---
+
+## Template 14: Value Registry
+
+```markdown
+# Value Registry
+
+> Canonical source for all shared values. Every value that appears in 2+ spec documents MUST be registered here. When writing or modifying any spec document, check this registry first.
+
+## Timeouts
+
+| Value Name | Canonical Value | Unit | Source | Documents Using |
+|---|---|---|---|---|
+| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
+
+## Limits
+
+| Value Name | Canonical Value | Unit | Source | Documents Using |
+|---|---|---|---|---|
+| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
+
+## Rate Limits
+
+| Actor Type | Limit | Window | Source | Documents Using |
+|---|---|---|---|---|
+| [actor] | [N] | [seconds/minutes] | [REQ/RN reference] | [list of spec files] |
+
+## Enums
+
+| Enum Name | Values | Source | Documents Using |
+|---|---|---|---|
+| [enum_name] | [val1, val2, val3] | [entity/VO reference] | [list of spec files] |
+
+## Thresholds
+
+| Value Name | Canonical Value | Unit | Source | Documents Using |
+|---|---|---|---|---|
+| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
+```

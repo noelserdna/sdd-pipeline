@@ -293,18 +293,32 @@ Before presenting specifications to the user:
 
 ## Phase 6: Deliverables
 
+> **IMPORTANT:** The output directory is `spec/` (singular, no 's'). This is the canonical structure expected by all downstream SDD skills.
+
 ### 6.1 Required Deliverables
 
-1. **specs/README.md** - Navigation guide to all specification documents
-2. **specs/SRS/SRS-document.md** - Main SRS document (if IEEE 830 format chosen)
-3. **specs/SRS/traceability-matrix.md** - Complete REQ <-> SPEC mapping
-4. **specs/SRS/decisions-log.md** - All decisions made during specification
-5. **specs/functional/[module]/*** - Functional specifications per module
-6. **specs/nonfunctional/*** - Nonfunctional specification documents
+1. **spec/README.md** — Navigation guide and traceability overview
+2. **spec/domain/01-GLOSSARY.md** — Ubiquitous language (terms, definitions, "NO usar" synonyms)
+3. **spec/domain/02-ENTITIES.md** — Domain entities with attributes and relationships
+4. **spec/domain/03-VALUE-OBJECTS.md** — Value objects, enums, typed values, ErrorResponse catalog
+5. **spec/domain/04-STATES.md** — State machines for all stateful entities
+6. **spec/domain/05-INVARIANTS.md** — Business rules as formal invariants (INV-XXX-NNN)
+7. **spec/use-cases/UC-NNN-{slug}.md** — One file per use case
+8. **spec/workflows/WF-NNN-{slug}.md** — Multi-step processes spanning use cases
+9. **spec/contracts/API-{module}.md** — REST/GraphQL API contracts per module
+10. **spec/contracts/PERMISSIONS-MATRIX.md** — Role-based access control matrix
+11. **spec/tests/BDD-UC-NNN.md** — BDD scenarios per use case
+12. **spec/nfr/PERFORMANCE.md** — Performance targets (p99, throughput)
+13. **spec/nfr/LIMITS.md** — Rate limits, quotas, thresholds
+14. **spec/nfr/SECURITY.md** — Security requirements and controls
+15. **spec/CLARIFICATIONS.md** — Business rules (RN-NNN) from user decisions
+16. **spec/VALUE-REGISTRY.md** — Canonical shared values (timeouts, limits, enums) with cross-references
 
 ### 6.2 Optional Deliverables
 
-- **specs/interfaces/*** - Interface specifications
-- **specs/data/*** - Data model and dictionary
-- **specs/constraints/*** - Documented constraints and assumptions
-- **specs/modifications/*** - Requirements modification proposals
+- **spec/contracts/EVENTS-{module}.md** — Domain events and async contracts
+- **spec/adr/ADR-NNN-{slug}.md** — Architecture Decision Records
+- **spec/nfr/OBSERVABILITY.md** — Logging, metrics, alerting specs
+- **spec/runbooks/RB-NNN-{slug}.md** — Operational runbooks
+- **spec/tests/PROPERTY-TESTS.md** — Property-based test specifications
+- **spec/CLARIFICATIONS-PENDING.md** — Open clarification markers index

@@ -111,6 +111,37 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    - Write formal, unambiguous specification text
    - Include acceptance criteria
    - Include traceability (REQ -> SPEC mapping)
+   - Apply the **Error Flow Forcing Function** (step 6a below)
+   - Apply the **Invariant Extraction** process (step 6b below)
+
+   #### Step 6a: Error Flow Forcing Function
+
+   For EVERY step in a UC's Normal Flow, systematically answer these 5 questions and document each answer as an Exception Course entry:
+
+   | Question | If yes, create... |
+   |---|---|
+   | 1. What if this step fails (network, timeout, service down)? | Exception course with error code + HTTP status |
+   | 2. What if the input is invalid or missing? | Exception course with VALIDATION_ERROR + 400 |
+   | 3. What if authorization is denied? | Exception course with 403 + specific permission |
+   | 4. What if there is a concurrent conflict? | Exception course with 409 + conflict resolution |
+   | 5. What if a precondition was met when checked but became false during execution? | Exception course with race condition handling |
+
+   If any answer is "not applicable" for a specific step, document WHY in a comment. The goal is zero empty Exception Flows sections.
+
+   For each exception course created, also add:
+   - The corresponding error code to the API contract's error response table
+   - A BDD error scenario in the corresponding `tests/BDD-UC-NNN.md`
+
+   #### Step 6b: Invariant Extraction
+
+   After writing each UC, scan its text for constraint language and formalize as invariants:
+
+   1. Search for: "must", "shall not", "always", "never", "at most", "at least", "between X and Y", "unique", "only if", "requires", "cannot exceed", "minimum", "maximum"
+   2. For each constraint found:
+      - Check if a formal invariant already exists in `domain/05-INVARIANTS.md`
+      - If not: create an INV-{AREA}-{NNN} entry with declarative rule and validation
+      - Back-annotate the UC text with the INV-ID reference (e.g., "(see INV-SRV-003)")
+   3. Present extracted invariants to the user for confirmation before finalizing
 
    > **Research Questions:** When specifying technical decisions that require evaluation
    > of alternatives (e.g., REST vs GraphQL, encryption algorithm selection, database
@@ -314,6 +345,16 @@ Create the folder structure manually or use the PowerShell script:
 ### Ask Before Assuming
 NEVER make assumptions silently. Every decision point must be presented to the user with options. Use `AskUserQuestion` for every ambiguity, gap, or choice.
 
+### Glossary-First Writing
+The glossary (`domain/01-GLOSSARY.md`) is a controlled vocabulary. Once created, it governs ALL spec writing:
+- **Before using any domain term** in any spec document, verify it exists in the glossary
+- **If a new term is needed**, add it to the glossary FIRST, then use it in spec documents
+- **Never use synonyms** listed in the glossary's "NO usar" column
+- **After completing all spec documents**, run a final glossary compliance pass: for each "NO usar" synonym, verify zero occurrences across all spec/ files
+
+### Value Registry
+Before writing specifications, create `spec/VALUE-REGISTRY.md` listing every shared value (timeouts, limits, rate limits, enum values, thresholds) with its canonical definition and the list of documents that reference it. During spec writing, every numeric value or enum used in more than one document MUST be registered. This prevents the #1 source of cross-document contradictions.
+
 ### Traceability is Non-Negotiable
 Every specification MUST trace back to one or more requirements. Every requirement MUST have at least one specification. Orphans in either direction must be flagged.
 
@@ -385,6 +426,49 @@ sdd-task-implementer → src/, tests/
 **Input:** `requirements/REQUIREMENTS.md` (from `sdd-requirements-engineer`)
 **Output:** Complete `spec/` directory with all subdirectories populated
 **Next step:** Run `sdd-spec-auditor` to validate the generated specifications
+
+## Self-Validation Gate
+
+**MANDATORY**: Before declaring Mode 2 complete and updating pipeline-state.json, the specifications engineer MUST execute the following validation gate. This is NOT optional and NOT a separate mode invocation — it is the final step of Mode 2.
+
+### Step 1: Structural Validation (Mode 4 Auto-Check)
+
+Run the Mode 4 validation process on the just-generated specifications:
+- Verify every requirement has at least one specification artifact (UC, WF, contract, or INV)
+- Verify no orphan specifications exist (specs without requirement traceability)
+- Verify consistent terminology across all documents
+- Verify all cross-references (UC-NNN, WF-NNN, INV-XXX-NNN, ADR-NNN) resolve to existing documents
+- Verify no TBD/TODO/empty mandatory sections remain (except those marked with `[NEEDS CLARIFICATION]`)
+
+### Step 2: Pre-Flight Defect Scan
+
+Run these lightweight checks against ALL generated spec documents to catch the most common audit findings BEFORE handing off to sdd-spec-auditor:
+
+1. **Glossary compliance**: For every term in `domain/01-GLOSSARY.md` "NO usar" column, verify zero occurrences in any spec document. Flag violations.
+2. **Value consistency**: For every numeric value in `nfr/LIMITS.md` and `nfr/PERFORMANCE.md`, grep all spec documents. Flag any document using a different value for the same metric.
+3. **BDD coverage**: For every UC, verify at least one BDD scenario exists in `tests/BDD-UC-NNN.md` with both a happy-path and an error-path scenario. Flag UCs without BDD.
+4. **Error flow completeness**: For every UC, verify the "Exception Courses" or "Exception Flows" section is non-empty. Flag UCs with empty exception sections.
+5. **Invariant formalization**: Scan all UC text for constraint language ("must", "shall not", "always", "never", "at least", "at most", "between X and Y", "unique", "only if", "requires") that does NOT have a corresponding INV-ID reference. Flag unformalized constraints.
+6. **Cross-reference validity**: Verify every `UC-NNN`, `WF-NNN`, `INV-XXX-NNN`, `ADR-NNN`, `RN-NNN` reference resolves to an existing document or section.
+7. **API error responses**: For every API contract endpoint, verify standard error responses are documented (401 for auth endpoints, 403 for protected endpoints, 404 for resource endpoints, 429 for rate-limited endpoints). Flag missing standard errors.
+
+### Step 3: Fix Pre-Flight Findings
+
+If the pre-flight scan finds issues:
+- **Fix them immediately** before completing Mode 2 (these are self-inflicted defects, not user decisions)
+- Do NOT ask the user — these are mechanical completeness fixes
+- After fixing, re-run only the checks that failed
+
+### Step 4: Completion Gate
+
+Mode 2 is complete ONLY when:
+- All structural validations pass
+- All pre-flight defect scans pass (or remaining issues are marked with `[NEEDS CLARIFICATION]`)
+- The traceability matrix is complete
+
+Only then proceed to update `pipeline-state.json`.
+
+---
 
 ## Persist Summary
 
