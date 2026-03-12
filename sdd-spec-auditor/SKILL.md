@@ -864,61 +864,95 @@ Documents: {comma-separated list}
 
 After all corrections are applied and the baseline is updated, analyze whether the corrections impact upstream requirements.
 
-##### Step 4.1: Collect Correction Impacts
+##### Step 4.1: Classify Corrections by Traceability Tier
 
-For each corrected finding, determine its upstream impact:
+For each corrected finding, classify its upstream impact using the 3-Tier system:
 
-| Impact Type | Criteria | Example |
-|-------------|----------|---------|
-| `NONE` | Cosmetic fix, terminology alignment, format correction, filling a TBD with info already implied by REQ | Fixing a glossary term in a UC |
-| `MODIFY` | Correction changes the semantics of a behavior already covered by a REQ | REQ says "system detects X automatically" but correction clarifies it's manual |
-| `ADD` | Correction introduces new functionality (UC, invariant, API, state transition) with no tracing REQ | New UC for login added without any REQ for authentication |
+| Tier | Criteria | Examples | Action |
+|---|---|---|---|
+| **Tier 1** — User-visible behavior change | Correction changes behavior a REQ explicitly defined, OR introduces new user-facing functionality with no tracing REQ | Changing a timeout that a REQ specified; adding a new UC without REQ; new user notification flow | **Must propagate** to requirements via `sdd-req-change` |
+| **Tier 2** — Technical detail derived from existing REQ | Correction adds error flows, invariants, BDD scenarios, API details, or state transitions that are technical elaborations of behavior already covered by a REQ | Adding 404 to an API endpoint; formalizing an invariant from UC text; adding BDD edge case for existing UC | **Register** in `spec/DERIVED-SPECS.md` — no REQ needed |
+| **Tier 3** — Cosmetic/structural | Terminology fix, format correction, cross-reference fix, filling TBD with info already implied | Fixing a glossary term; reordering error table; adding missing cross-reference | **No action** needed |
+
+**Classification Decision Tree:**
+```
+Does this correction change user-visible behavior?
+├── YES → Does a REQ already define this behavior?
+│   ├── YES → Does the correction CONTRADICT the REQ?
+│   │   ├── YES → Tier 1 (MODIFY: REQ must be updated)
+│   │   └── NO  → Tier 2 (technical elaboration of existing REQ)
+│   └── NO  → Tier 1 (ADD: new REQ needed)
+└── NO  → Is it a technical detail (error code, invariant, BDD)?
+    ├── YES → Can it trace to an existing REQ indirectly?
+    │   ├── YES → Tier 2 (derived from REQ-X)
+    │   └── NO  → Tier 1 (new business rule without REQ)
+    └── NO  → Tier 3 (cosmetic)
+```
 
 ##### Step 4.2: Cross-Reference Against Requirements
 
-For each correction with impact `MODIFY` or `ADD`:
+For each Tier 1 and Tier 2 correction:
 
 1. **Identify the REQ(s)** that the corrected spec document traces to (via Refs field, UC→REQ mapping, or INV→REQ chain)
-2. **For `MODIFY`:** Compare the REQ's statement and acceptance criteria against the corrected spec. Flag if:
+2. **For Tier 1 (MODIFY):** Compare the REQ's statement and acceptance criteria against the corrected spec. Flag if:
    - The REQ statement contradicts the corrected behavior
    - The REQ acceptance criteria are incomplete (missing cases added by the correction)
    - The REQ's scope is narrower than what the correction defines
-3. **For `ADD`:** Verify there is truly no REQ that covers this functionality. Search:
+3. **For Tier 1 (ADD):** Verify there is truly no REQ that covers this functionality. Search:
    - Direct REQ references in the spec document
    - Implicit coverage via parent REQs or domain-level REQs
-   - If none found → flag as "new REQ needed"
+   - If none found → mark as `[PENDING REQ]`
+4. **For Tier 2:** Record the derived-from REQ in `spec/DERIVED-SPECS.md`
 
-##### Step 4.3: Generate Impact Summary
+##### Step 4.3: Update DERIVED-SPECS.md
+
+After classification, update `spec/DERIVED-SPECS.md` with ALL Tier 1 and Tier 2 corrections:
+
+```markdown
+## Audit-Derived Specifications (AUDIT-vX.X)
+
+| Spec Artifact | Finding ID | Derived From | Tier | Justification |
+|---|---|---|---|---|
+| INV-SRV-003 | INV-001 | REQ-F-008 | 2 | Formalization of "score between 0 and 100" |
+| EX3 in UC-005 | SIL-002 | REQ-F-012 | 2 | Error flow: timeout handling |
+| UC-011 (health check) | INC-005 | — | 1 | **[PENDING REQ]** New user-visible endpoint |
+| ADR-007 | ADR-001 | — | 2 | Technical decision, no REQ needed |
+```
+
+##### Step 4.4: Generate Impact Summary
 
 Present to the user:
 
 ```markdown
 ## Upstream Impact Analysis
 
-| # | Finding ID | Correction Summary | Impact | REQ Affected | CR Type | Description |
-|---|-----------|-------------------|--------|-------------|---------|-------------|
-| 1 | {ID} | {brief} | MODIFY | REQ-F-012 | Statement update | {what changed} |
-| 2 | {ID} | {brief} | ADD | (new) | New requirement | {what's missing} |
-| 3 | {ID} | {brief} | NONE | - | - | Cosmetic only |
+| # | Finding ID | Correction Summary | Tier | REQ Affected | Description |
+|---|---|---|---|---|---|
+| 1 | {ID} | {brief} | 1 (MODIFY) | REQ-F-012 | REQ needs update: {what changed} |
+| 2 | {ID} | {brief} | 1 (ADD) | [PENDING REQ] | New requirement needed: {what's missing} |
+| 3 | {ID} | {brief} | 2 | REQ-F-008 | Derived — registered in DERIVED-SPECS.md |
+| 4 | {ID} | {brief} | 3 | — | Cosmetic — no action |
 
-**Totals:** {N} MODIFY, {N} ADD, {N} NONE
+**Totals:** {N} Tier 1, {N} Tier 2, {N} Tier 3
+**Tier 1 pending REQs:** {N}
 ```
 
-##### Step 4.4: User Decision
+##### Step 4.5: Pipeline Gate and User Decision
 
-If ALL impacts are `NONE`:
-- Report "No upstream impact detected — requirements are aligned" and finish.
+**Pipeline Gate Rule:**
+- **≤3 Tier 1 items without REQs:** Advisory — pipeline can proceed. Items are registered as `[PENDING REQ]` in DERIVED-SPECS.md
+- **>3 Tier 1 items without REQs:** **Pipeline BLOCKED** — too many spec artifacts lack requirement backing. Must create REQs before proceeding to plan-architect.
 
-If there are any `MODIFY` or `ADD` impacts, ask the user:
+**User Decision (when Tier 1 items exist):**
 
-- **Option 1: Invoke req-change now** (Recommended) — Execute `/sdd-req-change` with pre-populated CRs from the impact analysis. Pass as context:
-  - Pre-populated CR table with: CR-ID, Type (ADD/MODIFY), REQ-ID (or "new"), description, source finding ID
+- **Option 1: Invoke req-change now** (Recommended) — Execute `/sdd-req-change` with pre-populated CRs. Pass:
+  - CR table with: CR-ID, Type (ADD/MODIFY), REQ-ID (or "new"), description, source finding ID, Tier
   - Note that spec documents are already corrected — only requirements need updating
   - Audit ID for traceability
-- **Option 2: Generate impact report only** — Write the impact analysis to `audits/UPSTREAM-IMPACT-AUDIT-vX.X.md` for manual review later
-- **Option 3: Skip** — Acknowledge the impacts but defer alignment to a later session
+- **Option 2: Generate impact report only** — Write to `audits/UPSTREAM-IMPACT-AUDIT-vX.X.md` for later review. Tier 1 items remain as `[PENDING REQ]`
+- **Option 3: Accept risk** — Acknowledge Tier 1 items as intentional spec-level additions without formal REQs. Mark as `[ACCEPTED WITHOUT REQ]` in DERIVED-SPECS.md with user justification
 
-> **Note:** If Option 1 is selected, the req-change skill handles all requirement modifications, maintaining separation of responsibilities. The spec-auditor only detects and classifies — it never writes to `requirements/`.
+> **Note:** If Option 1 is selected, the req-change skill handles all requirement modifications. The spec-auditor only detects and classifies — it never writes to `requirements/`.
 
 ### Fix Constraints
 
@@ -929,6 +963,45 @@ If there are any `MODIFY` or `ADD` impacts, ask the user:
 5. ALWAYS make atomic commits per correction
 6. NEVER skip a finding — every one MUST appear in corrections plan
 7. NEVER modify requirements directly — upstream impacts are detected and delegated to req-change
+8. ALWAYS classify corrections by Tier (1/2/3) and register Tier 1-2 in `spec/DERIVED-SPECS.md`
+
+---
+
+## Post-Audit Traceability Reconciliation
+
+After the complete audit+fix cycle finishes (Discovery → Fix → Verification), run a final traceability reconciliation before the pipeline advances to `sdd-plan-architect`.
+
+### Reconciliation Process
+
+1. **Scan all spec artifacts:** List every UC, WF, INV, API contract, BDD scenario, and ADR in `spec/`
+2. **For each artifact, check traceability:**
+   - Does it trace to a REQ in `requirements/REQUIREMENTS.md`? → OK
+   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 2? → OK (derived, documented)
+   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 1 with `[ACCEPTED WITHOUT REQ]`? → OK (accepted)
+   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 1 with `[PENDING REQ]`? → **Flag**
+   - Does it NOT appear anywhere? → **Untraced artifact** — must be classified
+
+3. **Report:**
+
+```markdown
+## Traceability Reconciliation Report
+
+| Status | Count | Details |
+|--------|-------|---------|
+| Traced to REQ | {N} | Fully traceable |
+| Derived (Tier 2) | {N} | Documented in DERIVED-SPECS.md |
+| Accepted without REQ (Tier 1) | {N} | User explicitly accepted |
+| Pending REQ (Tier 1) | {N} | **Action needed** |
+| Untraced | {N} | **Must classify** |
+
+**Pipeline gate:** {PASS / BLOCKED}
+```
+
+4. **Pipeline Gate:**
+   - **PASS** if: Pending REQ ≤ 3 AND Untraced = 0
+   - **BLOCKED** if: Pending REQ > 3 OR Untraced > 0
+
+5. **For untraced artifacts:** Present to user for classification (Tier 1/2/3) and register in DERIVED-SPECS.md
 
 ---
 
