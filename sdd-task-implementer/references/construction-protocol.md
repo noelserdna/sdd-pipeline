@@ -327,6 +327,115 @@
 
 ---
 
+## Protocol: E2E Browser Test Tasks
+
+**Input:** `test/E2E-SCENARIOS.md`, `spec/workflows/WF-*.md`, optionally `ux/WIREFRAMES.md`
+
+```
+1. READ E2E scenario from test/E2E-SCENARIOS.md
+   - Identify scenario ID (E2E-WF-NNN-NN)
+   - Identify steps, elements, assertions
+   - Identify auth fixture needed
+   - Identify tier (smoke/critical/full)
+2. SETUP Playwright project (if first E2E task)
+   - npm init playwright@latest (or add to existing)
+   - Configure playwright.config.ts:
+     - baseURL from environment
+     - projects: chromium (default), firefox + webkit (for full tier)
+     - retries: 2 in CI, 0 locally
+     - workers: parallel by default
+     - reporter: html for CI, list for local
+3. CREATE auth fixture (if first E2E task)
+   - tests/e2e/fixtures/auth.setup.ts
+   - Perform login once, save storageState
+   - All subsequent tests reuse stored auth
+4. CREATE page objects (from scenario Elements table)
+   - One page object per screen/view
+   - Use role-based locators (getByRole, getByLabel)
+   - Encapsulate multi-step actions as methods
+   - Location: tests/e2e/pages/{page}.page.ts
+5. IMPLEMENT test scenario
+   - Follow steps table from E2E-SCENARIOS.md exactly
+   - Each step maps to a Playwright action + assertion
+   - Include axe-core scan at navigation steps:
+     import AxeBuilder from '@axe-core/playwright';
+     const results = await new AxeBuilder({ page }).analyze();
+     expect(results.violations).toEqual([]);
+   - Tag with tier: test.describe.configure({ tag: '@smoke' })
+6. IMPLEMENT error variations
+   - Each row in the Variations table → a separate test
+   - Reuse page objects, change inputs/preconditions
+7. VERIFY
+   - npx playwright test {scenario-file} → all pass
+   - npx playwright test --grep @smoke → smoke tier passes
+   - No flaky failures on 3 consecutive runs
+8. COMMIT with traceability
+   - Refs: WF-NNN, UC-NNN
+   - Task: TASK-F{N}-{SEQ}
+```
+
+**Playwright config template:**
+
+```typescript
+// playwright.config.ts
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI ? 'html' : 'list',
+  use: {
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    // Auth setup — runs once before all tests
+    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: './tests/e2e/.auth/user.json' },
+      dependencies: ['setup'],
+    },
+    // Full tier includes additional browsers
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'], storageState: './tests/e2e/.auth/user.json' },
+      dependencies: ['setup'],
+      grep: /@full/,
+    },
+  ],
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+**Network interception (for third-party APIs):**
+
+```typescript
+// Mock external services, keep internal APIs real
+await page.route('**/api.stripe.com/**', route =>
+  route.fulfill({ status: 200, json: { id: 'pi_mock', status: 'succeeded' } })
+);
+// Internal API calls hit the real backend — do NOT mock these
+```
+
+**Anti-patterns:**
+- Mocking internal APIs in E2E (defeats the purpose)
+- Using `page.waitForTimeout()` instead of auto-retrying assertions
+- Sharing browser context between tests
+- Login-through-UI in every test instead of `storageState`
+- CSS selectors or XPath instead of role-based locators
+- Running E2E tests without a running server
+
+---
+
 ## Universal Pre-Implementation Checklist
 
 Before writing ANY code for any task type:

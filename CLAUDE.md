@@ -17,7 +17,7 @@ sdd-spec-auditor (Mode Audit)  →  audits/AUDIT-BASELINE.md
         ↓
 sdd-spec-auditor (Mode Fix)   →  corrected spec/ documents
         ↓
-sdd-test-planner  →  test/TEST-PLAN.md, test/TEST-MATRIX-*.md, test/PERF-SCENARIOS.md
+sdd-test-planner  →  test/TEST-PLAN.md, test/TEST-MATRIX-*.md, test/PERF-SCENARIOS.md, test/E2E-SCENARIOS.md
         ↓
 sdd-plan-architect  →  plan/ (fases/FASE-*.md, PLAN.md, ARCHITECTURE.md, fase-plans/)
         ↓
@@ -28,7 +28,7 @@ sdd-task-implementer  →  src/, tests/, git commits
 
 **Lateral skills** (invoke at any point):
 - `sdd-tech-designer` → `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md` — Technical architecture exploration across 12 dimensions (delivery channels, architecture style, tech stack, data strategy, auth, API, infrastructure, CI/CD, observability, cost, DX, i18n). Optional: consumed by plan-architect if exists.
-- `sdd-ux-designer` → `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/INTERACTION-MODEL.md`, `ux/DESIGN-TOKENS.json` — UI/UX design system across 12 dimensions (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Optional: consumed by plan-architect if exists.
+- `sdd-ux-designer` → `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/INTERACTION-MODEL.md`, `ux/DESIGN-TOKENS.json` — UI/UX design system across 12 dimensions (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Optional: consumed by plan-architect and test-planner (E2E scenarios) if exists.
 - `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`
 - `sdd-req-change` → Universal change entry point: manages ADD/MODIFY/DEPRECATE with maintenance classification (ISO 14764, Ch05) and optional pipeline cascade triggering (can re-trigger spec-auditor → test-planner → plan-architect → task-generator → task-implementer)
 
@@ -149,7 +149,7 @@ Lateral skills (`security-auditor`, `req-change`) store their state as additiona
 | requirements-engineer    | (user input)                 | `requirements/`           |
 | specifications-engineer  | `requirements/`              | `spec/`                   |
 | spec-auditor             | `spec/`                      | `audits/`, corrected `spec/` |
-| test-planner             | `spec/`, `audits/`           | `test/`                   |
+| test-planner             | `spec/`, `audits/`, `ux/` (optional) | `test/`                   |
 | plan-architect           | `spec/`, `audits/`, `test/`, `design/` (optional), `ux/` (optional)  | `plan/`                   |
 | task-generator           | `plan/`                      | `task/`                   |
 | task-implementer         | `task/`, `spec/`, `plan/`    | `src/`, `tests/`          |
@@ -159,7 +159,7 @@ Lateral skills (`security-auditor`, `req-change`) store their state as additiona
 - When stage N becomes stale, all stages N+1..7 are also marked stale (`status: "stale"`).
 - Lateral skills (`sdd-security-auditor`, `sdd-req-change`) do not participate in the linear chain but may invalidate specific stages.
 - Lateral skills (`sdd-tech-designer`) output to `design/` which is consumed optionally by `plan-architect` Phase 0.
-- Lateral skills (`sdd-ux-designer`) output to `ux/` which is consumed optionally by `plan-architect` Phase 0.
+- Lateral skills (`sdd-ux-designer`) output to `ux/` which is consumed optionally by `plan-architect` Phase 0 and `test-planner` Mode 5 (E2E enrichment only, non-staleness-triggering).
 - `sdd-req-change` is the primary pipeline cascade trigger: it reads/writes `pipeline-state.json` (Phases 0, 8, 9) and can invoke downstream skills via `--cascade={auto|manual|dry-run|plan-only}`. See `sdd-req-change/references/cascade-patterns.md` for full invalidation rules.
 
 **Re-run guidance** -- when a file changes in:

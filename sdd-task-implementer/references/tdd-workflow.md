@@ -168,6 +168,107 @@ Speed: Variable
 Location: tests/property/{module}.property.test.ts
 ```
 
+### Category 6: E2E Browser Tests
+
+**When:** E2E scenario tasks, workflow validation tasks, acceptance test tasks referencing `test/E2E-SCENARIOS.md`
+
+```
+Purpose: Validate complete user journeys end-to-end in a real browser
+Dependencies: Running dev/staging server, seeded test data
+Speed: < 30 seconds per scenario
+Location: tests/e2e/{workflow}.spec.ts
+Page objects: tests/e2e/pages/{page}.page.ts
+Fixtures: tests/e2e/fixtures/{fixture}.ts
+```
+
+**Structure (Playwright):**
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { LoginPage } from './pages/login.page';
+
+// Auth fixture: reuse storageState for all tests except the login test itself
+test.use({ storageState: './tests/e2e/.auth/user.json' });
+
+test.describe('E2E-WF-001: User Registration Flow', () => {
+  test('Happy path: complete registration', async ({ page }) => {
+    // Step 1: Navigate
+    await page.goto('/register');
+    await expect(page).toHaveTitle(/Create Account/i);
+
+    // Step 2: Accessibility scan
+    // (axe-core check — see construction-protocol.md for setup)
+
+    // Step 3: Fill form (use role-based locators)
+    await page.getByLabel('Email').fill('test@example.com');
+    await page.getByLabel('Password').fill('SecurePass123!');
+
+    // Step 4: Submit
+    await page.getByRole('button', { name: /register/i }).click();
+
+    // Step 5: Wait for result
+    await expect(page.getByText('Welcome')).toBeVisible();
+
+    // Step 6: Assert final state
+    await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test('Error variation: duplicate email', async ({ page }) => {
+    await page.goto('/register');
+    await page.getByLabel('Email').fill('existing@example.com');
+    await page.getByLabel('Password').fill('SecurePass123!');
+    await page.getByRole('button', { name: /register/i }).click();
+
+    // Assert error feedback
+    await expect(page.getByRole('alert')).toContainText('already in use');
+  });
+});
+```
+
+**Page Object pattern:**
+
+```typescript
+// tests/e2e/pages/login.page.ts
+import { Page, Locator, expect } from '@playwright/test';
+
+export class LoginPage {
+  readonly emailInput: Locator;
+  readonly passwordInput: Locator;
+  readonly submitButton: Locator;
+  readonly errorAlert: Locator;
+
+  constructor(private page: Page) {
+    this.emailInput = page.getByLabel('Email');
+    this.passwordInput = page.getByLabel('Password');
+    this.submitButton = page.getByRole('button', { name: /sign in/i });
+    this.errorAlert = page.getByRole('alert');
+  }
+
+  async login(email: string, password: string) {
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+    await this.submitButton.click();
+  }
+
+  async expectError(message: string) {
+    await expect(this.errorAlert).toContainText(message);
+  }
+}
+```
+
+**Selector priority (same as test/E2E-SCENARIOS.md):**
+1. `getByRole()` — preferred, tests accessibility
+2. `getByLabel()` — form fields
+3. `getByText()` — content assertions
+4. `getByTestId()` — fallback with justification
+
+**Critical rules:**
+- Each test gets its own browser context (Playwright default — do NOT share `page` across tests)
+- Auth via `storageState`, not login-through-UI for every test
+- All assertions use locator-based `expect(locator)`, never `expect(await page.textContent(...))`
+- Wait for stable state before interacting (no arbitrary `page.waitForTimeout()`)
+- E2E tests require a running server — document in task how to start it
+
 ---
 
 ## Test-First Decision Tree

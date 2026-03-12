@@ -85,6 +85,56 @@ PROPERTY: {INV-PREFIX-NNN description}
 
 ---
 
+## E2E Acceptance Testing
+
+End-to-end tests validate complete user journeys across multiple use cases. They are the highest-level automated tests in the pyramid.
+
+### Scenario Derivation from Workflows
+- **Input:** `spec/workflows/WF-*.md`
+- **Rule:** Every user-facing WF gets at least one happy-path E2E scenario + error variations
+- **Coverage unit:** Workflow (WF-*), not Requirement (REQ-*). REQs trace transitively via REQ→UC→WF→E2E
+- **Exempt from E2E:** Backend-only REQs, NFRs (covered by performance/security tests), library code
+
+### Selector Strategy (priority order)
+1. **`getByRole()`** — Preferred. Tests what users perceive. Catches accessibility regressions for free.
+   Example: `getByRole('button', { name: /submit/i })`
+2. **`getByLabel()`** — For form fields. Validates that labels are properly associated.
+3. **`getByText()`** — For content assertions and non-interactive elements.
+4. **`getByTestId()`** — Fallback when semantic selectors are ambiguous. Requires justification.
+5. **Never:** CSS selectors, XPath, or class-based selectors in specs. These break on refactor.
+
+### Anti-Flake Patterns
+| Cause | Mitigation |
+|-------|-----------|
+| Timing-dependent assertions | Use locator-based `expect(locator)` auto-retrying assertions, never `expect(await page.textContent(...))` |
+| Animation interference | `await expect(element).toBeVisible()` before interaction |
+| Test order dependency | Each test gets its own browser context (Playwright default) |
+| Non-deterministic data | Factories with deterministic seeds or isolated DB state |
+| Auth overhead | `storageState` reuse — one test validates login, all others reuse stored auth state |
+
+### Tiered Execution Model
+| Tier | What | Run time | Trigger |
+|------|------|----------|---------|
+| Smoke | P0 happy paths only | < 2 min | Every PR |
+| Critical | P0 + P1 (happy + key errors) | < 10 min | Every merge to main |
+| Full | All E2E scenarios | < 30 min | Nightly / release candidate |
+
+### Accessibility in E2E
+- Every E2E scenario includes an axe-core scan at terminal state
+- Use `@axe-core/playwright` for `expect(page).toPassAxe()`
+- axe-core catches ~57% of WCAG issues automatically
+- Keyboard navigation tests derived from `ux/ACCESSIBILITY-SPEC.md` keyboard matrix (when exists)
+
+### Project Type Adaptation
+| Project Type | E2E Approach | Framework |
+|-------------|-------------|-----------|
+| WEB-APP | Browser automation with page objects | Playwright |
+| API-ONLY | HTTP request chains, no browser | Playwright APIRequestContext or supertest |
+| CLI | Subprocess execution with I/O assertions | node:child_process / execa |
+| LIBRARY | No E2E — unit + integration sufficient | — |
+
+---
+
 ## Test Type Selection Matrix
 
 | Spec Element | Primary Technique | Secondary Technique | Test Level |
@@ -95,7 +145,8 @@ PROPERTY: {INV-PREFIX-NNN description}
 | UC exception flow | Use case testing | Error guessing | Integration |
 | API endpoint | Contract testing | Equivalence partition | Integration |
 | State machine | State transition | Boundary value | Unit/Integration |
-| Workflow (multi-UC) | Use case testing | Exploratory | E2E |
+| Workflow (multi-UC, user-facing) | E2E scenario testing | Accessibility scan | E2E |
+| Workflow (multi-UC, API-only) | API E2E chain | Contract testing | E2E |
 | Performance target | Load testing | Stress testing | Performance |
 | Security requirement | OWASP checklist | Error guessing | Security |
 | Rate limit | Boundary value | Stress testing | Integration |
