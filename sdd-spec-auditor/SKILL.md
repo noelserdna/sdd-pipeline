@@ -1,7 +1,7 @@
 ---
 name: sdd-spec-auditor
 description: "Audits, reviews, and validates technical specifications for defects. Performs systematic cross-document analysis to detect ambiguities, implicit rules, dangerous silences, contradictions, incomplete specs, weak invariants, evolution risks, and implicit decisions without ADRs. Use when: (1) Reviewing specs before planning or implementation, (2) Detecting quality defects in specification documents, (3) Fixing spec defects with Mode Fix, (4) Analyzing upstream impact of spec changes. Does NOT propose implementations or assume unspecified behavior. Triggers: 'audit specs', 'review specifications', 'spec quality', 'find ambiguities', 'fix specs', 'auditar especificaciones', 'revisar specs', 'calidad de specs'."
-version: "1.3.0"
+version: "1.4.0"
 hooks:
   Stop:
     - type: prompt
@@ -394,6 +394,14 @@ Before starting the audit, check for an existing audit baseline to avoid re-repo
 2. Identify broken references
 3. Identify orphan documents (not referenced by any other)
 4. Check bidirectional consistency (A says X, B says Y about same topic)
+
+### Phase 3.5: Value Registry Verification
+
+If `spec/VALUE-REGISTRY.md` exists, use it as the authoritative source for shared values:
+1. For every entry in the registry, grep ALL spec documents for that value name
+2. Verify the value is identical everywhere it appears
+3. Flag any document using a different value for the same metric
+4. If the registry does NOT exist, create a finding (CAT-06) recommending its creation, listing all discovered shared values (timeouts, limits, rate limits, enum values)
 
 ### Phase 4: Completeness Check
 
@@ -1074,9 +1082,10 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
 3. Set `stages["spec-auditor"].lastRun` = current ISO-8601
 4. Set `stages["spec-auditor"].summary`:
    - `artifacts`: list of files created/modified with labels (e.g., `{"file": "audits/AUDIT-BASELINE.md", "label": "Audit Baseline"}`)
-   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "gate_result": 1|0 }` (gate_result: 1=PASS, 0=FAIL)
-   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: FAIL — 2 critical unresolved")
-   - `nextStep`: `"Run /sdd-test-planner"` (if gate PASS) or `"Re-run /sdd-spec-auditor --mode=fix"` (if gate FAIL)
+   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "batched_findings": N, "gate_result": "PASS"|"CONDITIONAL"|"FAIL", "audit_cycle": N, "topFindingCategories": ["CAT-06", "CAT-03", "CAT-07"] }` (top 3 categories by frequency)
+   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: CONDITIONAL — 1 High documented")
+   - `nextStep`: `"Run /sdd-test-planner"` (if gate PASS/CONDITIONAL) or `"Run /sdd-spec-auditor --fix"` (if gate FAIL)
+   - `templateImprovements`: list of 1-3 recommendations for the spec-engineer based on most frequent finding categories (e.g., "UC template should require explicit error codes per step", "Add invariant extraction for constraint language in UCs"). These are consumed by the spec-engineer on the NEXT project run to apply extra scrutiny.
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)

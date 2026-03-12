@@ -1,7 +1,7 @@
 ---
 name: sdd-specifications-engineer
 description: "Professional software specifications engineer based on SWEBOK v4. Transforms requirements into formal specification documents. Use this skill when: (1) Translating requirements into technical specifications, (2) Creating Software Requirements Specification (SRS) documents, (3) Analyzing requirements for gaps and ambiguities before specification, (4) Building specification folder structures and documents, (5) Proposing modifications to deficient requirements. Triggers on phrases like 'create specifications', 'write specs', 'requirements to specifications', 'SRS document', 'specification document', 'translate requirements', 'spec from requirements', 'especificaciones', 'crear especificaciones'."
-version: "1.0.0"
+version: "1.1.0"
 ---
 
 # Specifications Engineer (SWEBOK v4)
@@ -91,21 +91,23 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
 1. Read [references/specification-workflow.md](references/specification-workflow.md) for the full specification process
 2. Read [references/document-templates.md](references/document-templates.md) for available templates
-3. **Ask the user** which specification format(s) to use:
+3. Read [references/template-checklist-alignment.md](references/template-checklist-alignment.md) for the template↔auditor alignment matrix
+4. **Check previous audit feedback:** If `pipeline-state.json` exists and has a previous `spec-auditor` summary with `topFindingCategories` or `templateImprovements`, read them and apply extra scrutiny to those areas during spec writing. This feedback loop prevents repeating the same defect patterns across projects.
+5. **Ask the user** which specification format(s) to use:
    - **SRS (IEEE 830-style)**: Formal specification document
    - **Use Case specifications**: For complex workflows
    - **User Stories + BDD Scenarios**: For agile teams
    - **Actor-Action specifications**: For contractual/regulatory contexts
    - **Model-based**: For architecturally complex systems
    - Recommend the most appropriate based on project context
-4. **Ask the user** about the project structure preferences:
+6. **Ask the user** about the project structure preferences:
    - Monolithic document vs. modular documents per feature/module
    - Naming conventions
    - Output directory
-5. Create the folder structure using the script or manually:
+7. Create the folder structure using the script or manually:
    - Run `scripts/create-spec-structure.ps1` for PowerShell environments
    - Or create the structure manually based on the template
-6. For each requirement, create the corresponding specification:
+8. For each requirement, create the corresponding specification:
    - Map requirement to specification section
    - Choose the appropriate specification technique
    - Write formal, unambiguous specification text
@@ -152,7 +154,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    > for deeper investigation. This enables early identification of research
    > needs during specification, avoiding costly rework downstream.
 
-7. Create the **Traceability Matrix**:
+9. Create the **Traceability Matrix**:
 
 ```
 | Requirement ID | Requirement Description | Specification ID | Specification Section | Status |
@@ -160,7 +162,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 | REQ-001        | ...                    | SPEC-001          | 3.1.1                | Done   |
 ```
 
-8. At each decision point during specification writing, ask the user:
+10. At each decision point during specification writing, ask the user:
    - When multiple design approaches exist
    - When specification granularity is unclear
    - When acceptance criteria could vary
@@ -441,6 +443,8 @@ Run the Mode 4 validation process on the just-generated specifications:
 - Verify no TBD/TODO/empty mandatory sections remain (except those marked with `[NEEDS CLARIFICATION]`)
 
 ### Step 2: Pre-Flight Defect Scan
+
+> **Detection patterns reference:** These checks are derived from `sdd-spec-auditor/references/detection-patterns.md`. If available, also load the auditor's grep patterns for CAT-01 (ambiguity words), CAT-04 (glossary synonyms), and CAT-06 (TBD/empty sections) to augment the checks below.
 
 Run these lightweight checks against ALL generated spec documents to catch the most common audit findings BEFORE handing off to sdd-spec-auditor:
 
