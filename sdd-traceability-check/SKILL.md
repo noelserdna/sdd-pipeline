@@ -29,21 +29,36 @@ Scan the following files using the patterns from `references/traceability-patter
 
 | ID Type | Source Files | Pattern |
 |---------|-------------|---------|
-| REQ | `requirements/REQUIREMENTS.md` | `REQ-\d{3}` |
-| UC | `spec/use-cases.md` | `UC-\d{3}` |
-| WF | `spec/workflows.md` | `WF-\d{3}` |
-| API | `spec/contracts.md` | `API-\d{3}` |
-| BDD | `spec/use-cases.md`, `test/` | `BDD-\d{3}` |
-| INV | `spec/domain-model.md`, `spec/invariants.md` | `INV-\d{3}` |
-| ADR | `spec/adr/ADR-*.md` | `ADR-\d{3}` |
-| NFR | `spec/nfr.md` | `NFR-\d{3}` |
-| RN | `spec/release-notes.md` | `RN-\d{3}` |
+| REQ | `requirements/REQUIREMENTS.md` | `REQ-(\d{3,4})` or `REQ-([A-Z]{1,4})-(\d{3,4})` |
+| UC | `spec/use-cases.md` | `UC-(\d{3,4})` |
+| WF | `spec/workflows.md` | `WF-(\d{3,4})` |
+| API | `spec/contracts.md` | `API-(\d{3,4})` or `API-([a-z][a-z0-9-]+)` |
+| BDD | `spec/use-cases.md`, `test/` | `BDD-(\d{3,4})` |
+| INV | `spec/domain-model.md`, `spec/invariants.md` | `INV-(\d{3,4})` or `INV-([A-Z]{2,6})-(\d{3,4})` |
+| ADR | `spec/adr/ADR-*.md` | `ADR-(\d{3,4})` |
+| NFR | `spec/nfr.md` | `NFR-(\d{3,4})` |
+| RN | `spec/release-notes.md` | `RN-(\d{3,4})` |
 
-Build a set of **defined IDs** per type.
+Build a set of **defined IDs** per type. Note that IDs may include scoped prefixes (e.g., `INV-SRV-001`, `REQ-EXT-002`).
 
 ### Step 2: Collect All Referenced IDs
 
 Scan ALL files in `requirements/`, `spec/`, `test/`, `plan/`, and `task/` for references to any ID pattern. Build a set of **referenced IDs** per type.
+
+**IMPORTANT — Range Expansion**: Before cross-referencing, expand all range notations (`..`) into individual IDs. Range notation uses the pattern `{PREFIX}-{START}..{END}` where START and END are numeric. Examples:
+
+| Raw Text | Expanded IDs |
+|----------|-------------|
+| `TASK-F1-003..008` | TASK-F1-003, TASK-F1-004, TASK-F1-005, TASK-F1-006, TASK-F1-007, TASK-F1-008 |
+| `INV-SRV-001..004` | INV-SRV-001, INV-SRV-002, INV-SRV-003, INV-SRV-004 |
+| `UC-001..005` | UC-001, UC-002, UC-003, UC-004, UC-005 |
+| `REQ-EXT-010..015` | REQ-EXT-010, REQ-EXT-011, ..., REQ-EXT-015 |
+
+Expansion rules:
+- Preserve original zero-padding width (e.g., `003` → 3-digit padding)
+- End must be >= Start; if not, flag as broken reference
+- Ranges appear frequently in index files (`TASK-INDEX.md`), traceability tables, and `Refs:` fields
+- See `references/traceability-patterns.md` § Range Expansion for the full regex pattern
 
 ### Step 3: Cross-Reference Analysis
 

@@ -48,9 +48,18 @@ Some documents use range notation. The dashboard must expand these:
 
 | Pattern | Example | Expansion |
 |---------|---------|-----------|
-| `{ID}..{ID}` | `INV-SEC-001..007` | INV-SEC-001 through INV-SEC-007 |
+| `{ID}..{END}` | `INV-SEC-001..007` | INV-SEC-001 through INV-SEC-007 |
+| `{ID}..{END}` (TASK) | `TASK-F1-003..008` | TASK-F1-003 through TASK-F1-008 |
+| `{ID} a {ID}` (Spanish) | `REQ-F-007 a REQ-F-019` | REQ-F-007 through REQ-F-019 |
 | `{ID}-{ID}` in lists | `REQ-001-005` | REQ-001 through REQ-005 (only when in range context) |
 | `{ID}, {ID}, {ID}` | `UC-001, UC-003, UC-005` | Three separate references |
+
+**Regex** (used in `generate.py`):
+```regex
+((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)(\d{3,4})\s*(?:\.\.|a|hasta|al|–|—|-\s+)\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)?(\d{3,4})
+```
+
+Note: The category segment uses `[A-Z][A-Z0-9]*` (not `[A-Z]+`) to support alphanumeric segments like `F1`, `F2`, `F10` in TASK IDs.
 
 ## Type-to-Stage Mapping
 

@@ -266,11 +266,12 @@ def normalize_id(id_str):
 
 # Pattern for range references: "REQ-F-007 a REQ-F-019", "UC-001..UC-005", "INV-SEC-001..007"
 # Captures: PREFIX-CAT-START {separator} PREFIX-CAT-END  or  PREFIX-CAT-START..END
+# Note: category segment uses [A-Z0-9]+ to support TASK-F1, TASK-F2, etc.
 _RANGE_PATTERN_FULL = re.compile(
-    r'((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z]+)?-)'  # prefix with optional category
+    r'((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)'  # prefix with optional category (e.g., -SRV-, -F1-, -EXT-)
     r'(\d{3,4})'                                                     # start number
     r'\s*(?:\.\.|\ba\b|\bhasta\b|\bal\b|–|—|-\s+)'                  # separator: .., a, hasta, al, en-dash, em-dash
-    r'\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z]+)?-)?'  # optional repeated prefix
+    r'\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)?'  # optional repeated prefix
     r'(\d{3,4})',                                                     # end number
     re.IGNORECASE
 )

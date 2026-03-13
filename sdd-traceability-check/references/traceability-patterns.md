@@ -8,15 +8,18 @@ These patterns identify where an ID is **defined** (first occurrence as a headin
 
 | Type | Regex (Definition) | Typical File |
 |------|-------------------|--------------|
-| REQ | `^#+\s*REQ-(\d{3})` or `\|\s*REQ-(\d{3})\s*\|` | `requirements/REQUIREMENTS.md` |
-| UC | `^#+\s*UC-(\d{3})` or `##\s+UC-(\d{3})` | `spec/use-cases.md` |
-| WF | `^#+\s*WF-(\d{3})` or `##\s+WF-(\d{3})` | `spec/workflows.md` |
-| API | `^#+\s*API-(\d{3})` or `##\s+API-(\d{3})` | `spec/contracts.md` |
-| BDD | `^#+\s*BDD-(\d{3})` or `Scenario:\s*BDD-(\d{3})` | `spec/use-cases.md`, `test/` |
-| INV | `^#+\s*INV-(\d{3})` or `\|\s*INV-(\d{3})\s*\|` | `spec/domain-model.md`, `spec/invariants.md` |
-| ADR | `^#+\s*ADR-(\d{3})` or filename `ADR-(\d{3})` | `spec/adr/ADR-*.md` |
-| NFR | `^#+\s*NFR-(\d{3})` or `\|\s*NFR-(\d{3})\s*\|` | `spec/nfr.md` |
-| RN | `^#+\s*RN-(\d{3})` or `\|\s*RN-(\d{3})\s*\|` | `spec/release-notes.md` |
+| REQ (simple) | `^#+\s*REQ-(\d{3,4})` or `\|\s*REQ-(\d{3,4})\s*\|` | `requirements/REQUIREMENTS.md` |
+| REQ (categorized) | `^#+\s*REQ-([A-Z]{1,4})-(\d{3,4})` | `requirements/REQUIREMENTS.md` |
+| UC | `^#+\s*UC-(\d{3,4})` or `##\s+UC-(\d{3,4})` | `spec/use-cases.md` |
+| WF | `^#+\s*WF-(\d{3,4})` or `##\s+WF-(\d{3,4})` | `spec/workflows.md` |
+| API (numeric) | `^#+\s*API-(\d{3,4})` or `##\s+API-(\d{3,4})` | `spec/contracts.md` |
+| API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` | `spec/contracts.md` |
+| BDD | `^#+\s*BDD-(\d{3,4})` or `Scenario:\s*BDD-(\d{3,4})` | `spec/use-cases.md`, `test/` |
+| INV (simple) | `^#+\s*INV-(\d{3,4})` or `\|\s*INV-(\d{3,4})\s*\|` | `spec/domain-model.md`, `spec/invariants.md` |
+| INV (scoped) | `^#+\s*INV-([A-Z]{2,6})-(\d{3,4})` or `\|\s*INV-([A-Z]{2,6})-(\d{3,4})\s*\|` | `spec/domain-model.md`, `spec/invariants.md` |
+| ADR | `^#+\s*ADR-(\d{3,4})` or filename `ADR-(\d{3,4})` | `spec/adr/ADR-*.md` |
+| NFR | `^#+\s*NFR-(\d{3,4})` or `\|\s*NFR-(\d{3,4})\s*\|` | `spec/nfr.md` |
+| RN | `^#+\s*RN-(\d{3,4})` or `\|\s*RN-(\d{3,4})\s*\|` | `spec/release-notes.md` |
 | TASK | `^#+\s*TASK-F(\d{1,2})-(\d{3,4})` or `\|\s*TASK-F(\d{1,2})-(\d{3,4})\s*\|` or `- \[.\]\s*.*TASK-F(\d{1,2})-(\d{3,4})` | `task/TASK-FASE-{N}.md` |
 
 ## ID Reference Pattern (Universal)
@@ -24,8 +27,10 @@ These patterns identify where an ID is **defined** (first occurrence as a headin
 To find **references** to any ID type across all files:
 
 ```regex
-(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN)-\d{3}
+(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN)[-‑](?:[A-Z]{0,6}[-‑])?\d{3,4}
 ```
+
+This matches both simple IDs (`INV-001`) and scoped IDs (`INV-SRV-001`, `REQ-EXT-002`).
 
 For TASK IDs (compound format):
 ```regex
@@ -33,6 +38,35 @@ TASK-F\d{1,2}-\d{3,4}
 ```
 
 These patterns match all ID types. After matching, group by type and cross-reference against definitions.
+
+## Range Expansion
+
+Documents frequently use `..` notation to abbreviate consecutive ID ranges. **These MUST be expanded before cross-referencing.**
+
+### Range Pattern
+
+```regex
+((?:REQ|UC|WF|API|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)(\d{3,4})\.\.\s*(\d{3,4})
+```
+
+This matches prefixes with alphanumeric category segments: `INV-SRV-`, `TASK-F1-`, `REQ-EXT-`, `UC-`, etc.
+
+### Examples
+
+| Raw Text | Prefix | Start | End | Expanded IDs |
+|----------|--------|-------|-----|-------------|
+| `TASK-F1-003..008` | `TASK-F1` | 003 | 008 | TASK-F1-003, TASK-F1-004, TASK-F1-005, TASK-F1-006, TASK-F1-007, TASK-F1-008 |
+| `INV-SRV-001..004` | `INV-SRV` | 001 | 004 | INV-SRV-001, INV-SRV-002, INV-SRV-003, INV-SRV-004 |
+| `REQ-EXT-010..015` | `REQ-EXT` | 010 | 015 | REQ-EXT-010, REQ-EXT-011, REQ-EXT-012, REQ-EXT-013, REQ-EXT-014, REQ-EXT-015 |
+| `UC-001..005` | `UC` | 001 | 005 | UC-001, UC-002, UC-003, UC-004, UC-005 |
+| `BDD-042..045` | `BDD` | 042 | 045 | BDD-042, BDD-043, BDD-044, BDD-045 |
+
+### Expansion Rules
+
+1. **Preserve zero-padding**: If start is `003`, all expanded IDs use 3-digit padding (003, 004, ..., 008).
+2. **Validate range**: End must be >= Start. If not, treat as a broken reference.
+3. **Cap range size**: If the range expands to more than 100 IDs, flag as suspicious but still expand.
+4. **Context**: Ranges appear in index files (`TASK-INDEX.md`), traceability tables, and Refs: fields.
 
 ## Traceability Direction
 
