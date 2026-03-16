@@ -167,7 +167,9 @@ STAGE_COUNT_UNITS = {
     "test-planner": "documents",
     "plan-architect": "phases",
     "task-generator": "tasks",
-    "task-implementer": "files",
+    "task-implementer": "src files",
+    "functional-tests": "tests",
+    "e2e-tests": "tests",
     "security-auditor": "findings",
     "req-change": "changes",
     "tech-designer": "dimensions",
@@ -919,6 +921,55 @@ def propagate_refs_to_reqs(reqs, ref_map, incoming, outgoing, max_depth=3):
     return result
 
 
+def propagate_refs_to_req_artifacts(artifacts, req_ids, ref_map, incoming, outgoing, ref_key, max_depth=3):
+    """Propagate codeRefs/testRefs from downstream artifacts to REQ nodes (Step 1.3b).
+
+    The existing propagate_refs_to_reqs() computes which REQs have transitive
+    coverage (used for statistics), but does NOT populate the ref arrays on
+    the REQ artifact objects.  This function fills that gap so the HTML
+    template — which reads req.codeRefs / req.testRefs directly — can display
+    the correct indicators.
+
+    Refs are copied with origin="propagated" and a propagatedFrom field
+    identifying the intermediate artifact that owns the original ref.
+    """
+    for req_id in req_ids:
+        art = artifacts.get(req_id)
+        if not art:
+            continue
+        # Skip REQs that already have direct refs
+        if art.get(ref_key):
+            continue
+        # BFS to collect refs from reachable non-REQ artifacts
+        collected = []
+        seen_files = set()
+        visited = {req_id}
+        queue = [(req_id, 0)]
+        while queue:
+            current, depth = queue.pop(0)
+            if depth > 0 and current in ref_map:
+                for ref in ref_map[current]:
+                    # Deduplicate by file path
+                    fpath = ref.get("file", "")
+                    if fpath and fpath in seen_files:
+                        continue
+                    if fpath:
+                        seen_files.add(fpath)
+                    propagated = dict(ref)
+                    propagated["origin"] = "propagated"
+                    propagated["propagatedFrom"] = current
+                    collected.append(propagated)
+            if depth >= max_depth:
+                continue
+            neighbors = list(outgoing.get(current, set())) + list(incoming.get(current, set()))
+            for neighbor in neighbors:
+                if neighbor not in visited and not neighbor.startswith("REQ-"):
+                    visited.add(neighbor)
+                    queue.append((neighbor, depth + 1))
+        if collected:
+            art[ref_key] = collected
+
+
 def apply_overrides(code_refs, overrides_path):
     """Apply manual overrides from .sdd/overrides.json (Step 1.5).
 
@@ -1094,13 +1145,52 @@ def _discover_test_dirs(project_dir):
     return candidates
 
 
+def _is_e2e_test(fpath, frel):
+    """Classify a test file as E2E based on path/filename conventions."""
+    lower = frel.lower().replace("\\", "/")
+    # Directory-based: e2e/, playwright/, cypress/ anywhere in path
+    if re.search(r'(?:^|/)(?:e2e|playwright|cypress)/', lower):
+        return True
+    # Filename-based: *.e2e.ts, *.e2e.js, *.pw.ts, *.spec.e2e.*
+    base = os.path.basename(lower)
+    if re.search(r'\.e2e\.', base) or re.search(r'\.pw\.', base):
+        return True
+    return False
+
+
 def scan_test_refs(project_dir):
     """Scan tests/ for Refs: comments and test descriptions referencing SDD artifacts."""
     test_dirs = _discover_test_dirs(project_dir)
+    # Also discover e2e-specific directories
+    for edir in ("e2e", "playwright", "cypress"):
+        epath = os.path.join(project_dir, edir)
+        if os.path.isdir(epath) and epath not in test_dirs:
+            test_dirs.append(epath)
+    # Also check */e2e/ one level deep
+    try:
+        for entry in os.listdir(project_dir):
+            if entry.startswith(".") or entry in SKIP_DIRS:
+                continue
+            subdir = os.path.join(project_dir, entry)
+            if os.path.isdir(subdir):
+                for edir in ("e2e", "playwright", "cypress"):
+                    epath = os.path.join(subdir, edir)
+                    if os.path.isdir(epath) and epath not in test_dirs:
+                        test_dirs.append(epath)
+    except OSError:
+        pass
+
     test_refs = []
     total_test_files = 0
     total_tests = 0
     tests_with_refs = 0
+    # Functional vs E2E breakdown
+    functional_files = 0
+    functional_tests = 0
+    functional_with_refs = 0
+    e2e_files = 0
+    e2e_tests = 0
+    e2e_with_refs = 0
     extensions = {".ts", ".js", ".tsx", ".jsx"}
 
     refs_pattern = re.compile(r'Refs?:\s*((?:(?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR|FASE|TASK)[-][A-Za-z0-9-]+(?:,\s*)?)+)')
@@ -1125,7 +1215,14 @@ def scan_test_refs(project_dir):
                     continue
 
                 frel = _rel_path(fpath, project_dir)
+                is_e2e = _is_e2e_test(fpath, frel)
+                if is_e2e:
+                    e2e_files += 1
+                else:
+                    functional_files += 1
                 current_describe = ""
+                file_tests = 0
+                file_refs = 0
 
                 for i, line in enumerate(lines):
                     # Track describe blocks
@@ -1137,6 +1234,7 @@ def scan_test_refs(project_dir):
                     tm = test_block_pattern.search(line)
                     if tm:
                         total_tests += 1
+                        file_tests += 1
 
                     # Find refs
                     ref_ids = []
@@ -1167,19 +1265,37 @@ def scan_test_refs(project_dir):
                             test_name = f"{fname}:{i+1}"
 
                         tests_with_refs += 1
+                        file_refs += 1
                         test_refs.append({
                             "file": frel,
                             "line": i + 1,
                             "testName": test_name,
-                            "framework": "vitest",
+                            "framework": "playwright" if is_e2e else "vitest",
                             "refIds": ref_ids,
+                            "testType": "e2e" if is_e2e else "functional",
                         })
 
+                # Accumulate per-type counters
+                if is_e2e:
+                    e2e_tests += file_tests
+                    e2e_with_refs += file_refs
+                else:
+                    functional_tests += file_tests
+                    functional_with_refs += file_refs
+
     print(f"  Tests: {total_test_files} files, {total_tests} tests, {tests_with_refs} with refs")
+    print(f"    Functional: {functional_files} files, {functional_tests} tests, {functional_with_refs} with refs")
+    print(f"    E2E:        {e2e_files} files, {e2e_tests} tests, {e2e_with_refs} with refs")
     return test_refs, {
         "totalTestFiles": total_test_files,
         "totalTests": total_tests,
         "testsWithRefs": tests_with_refs,
+        "functionalFiles": functional_files,
+        "functionalTests": functional_tests,
+        "functionalWithRefs": functional_with_refs,
+        "e2eFiles": e2e_files,
+        "e2eTests": e2e_tests,
+        "e2eWithRefs": e2e_with_refs,
     }
 
 
@@ -1580,6 +1696,8 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "plan-architect",
         "task-generator",
         "task-implementer",
+        "functional-tests",
+        "e2e-tests",
     ]
 
     if os.path.exists(pipeline_state_file):
@@ -1604,10 +1722,22 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         test_files = [f for f in os.listdir(test_dir) if f.lower().endswith(".md")]
         stage_counts["test-planner"] = stage_counts.get("test-planner", 0) + len(test_files)
 
-    # Count code + test files for task-implementer stage
-    impl_count = code_stats.get("totalFiles", 0) + test_stats.get("totalTestFiles", 0)
+    # Count code files for task-implementer stage (tests are shown separately)
+    impl_count = code_stats.get("totalFiles", 0)
     if impl_count > 0:
         stage_counts["task-implementer"] = impl_count
+
+    # Count functional and E2E tests for their dedicated stages
+    func_tests = test_stats.get("functionalTests", 0)
+    e2e_tests_count = test_stats.get("e2eTests", 0)
+    if func_tests > 0:
+        stage_counts["functional-tests"] = func_tests
+    elif test_stats.get("functionalFiles", 0) > 0:
+        stage_counts["functional-tests"] = test_stats["functionalFiles"]
+    if e2e_tests_count > 0:
+        stage_counts["e2e-tests"] = e2e_tests_count
+    elif test_stats.get("e2eFiles", 0) > 0:
+        stage_counts["e2e-tests"] = test_stats["e2eFiles"]
 
     # Fallback: when a stage is done/stale but count is 0, use summary.metrics from pipeline-state.json
     # This avoids showing misleading "0" for completed stages whose artifacts aren't captured by graph scanning
@@ -1645,11 +1775,11 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             if count > 0:
                 stage_counts["test-planner"] = count
 
-    # Fallback: count src/tests files with broader extensions for task-implementer if still 0
+    # Fallback: count src files with broader extensions for task-implementer if still 0 (excludes test dirs)
     if stage_counts.get("task-implementer", 0) == 0:
         broad_exts = {".ts", ".js", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".rb", ".cs", ".cpp", ".c", ".swift"}
         impl_fallback = 0
-        for search_dir in ["src", "app", "lib", "tests", "test"]:
+        for search_dir in ["src", "app", "lib"]:
             d = os.path.join(project_dir, search_dir)
             if os.path.isdir(d):
                 for root, dirs, filenames in os.walk(d):
@@ -1658,12 +1788,26 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         if impl_fallback > 0:
             stage_counts["task-implementer"] = impl_fallback
 
+    # Derive status for test stages (not tracked in pipeline-state.json)
+    _test_stage_status = {}
+    for tname, files_key, tests_key, refs_key in [
+        ("functional-tests", "functionalFiles", "functionalTests", "functionalWithRefs"),
+        ("e2e-tests", "e2eFiles", "e2eTests", "e2eWithRefs"),
+    ]:
+        fcount = test_stats.get(files_key, 0)
+        _test_stage_status[tname] = "done" if fcount > 0 else "pending"
+
     pipeline_stages = []
     for sname in stage_order:
         sd = stages_data.get(sname, {})
+        # Use derived status for test stages, pipeline-state for the rest
+        if sname in _test_stage_status:
+            status = _test_stage_status[sname]
+        else:
+            status = sd.get("status", "unknown")
         stage_entry = {
             "name": sname,
-            "status": sd.get("status", "unknown"),
+            "status": status,
             "lastRun": sd.get("lastRun"),
             "artifactCount": stage_counts.get(sname, 0),
             "stageLabel": summary_label_overrides.get(sname, STAGE_COUNT_UNITS.get(sname, "artifacts")),
@@ -1908,6 +2052,12 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     reqs_with_code_set = propagate_refs_to_reqs(req_ids, artifact_code_refs, incoming, outgoing)
     reqs_with_tests_set = propagate_refs_to_reqs(req_ids, artifact_test_refs, incoming, outgoing)
     reqs_with_commits_set = propagate_refs_to_reqs(req_ids, artifact_commit_refs, incoming, outgoing)
+
+    # ── Propagate refs to REQ artifacts (Step 1.3b) ──────────
+    # Fill codeRefs/testRefs on REQ nodes so the HTML template can display them.
+    # Without this, REQs show ✗ even when downstream artifacts have refs.
+    propagate_refs_to_req_artifacts(artifacts, req_ids, artifact_code_refs, incoming, outgoing, "codeRefs")
+    propagate_refs_to_req_artifacts(artifacts, req_ids, artifact_test_refs, incoming, outgoing, "testRefs")
 
     reqs_with_code = len(reqs_with_code_set)
     reqs_with_code_functional = len(reqs_with_code_set & functional_req_ids)
@@ -2343,6 +2493,9 @@ def main():
         print(f"REQs with Tests: {cov2['reqsWithTests']['count']}/{cov2['reqsWithTests']['total']} ({cov2['reqsWithTests']['percentage']}%)")
         print(f"Code files: {cs2['totalFiles']}, symbols: {cs2['totalSymbols']}, with refs: {cs2['symbolsWithRefs']}")
         print(f"Test files: {ts2['totalTestFiles']}, tests: {ts2['totalTests']}, with refs: {ts2['testsWithRefs']}")
+        if ts2.get("functionalFiles", 0) > 0 or ts2.get("e2eFiles", 0) > 0:
+            print(f"  Functional: {ts2.get('functionalFiles', 0)} files, {ts2.get('functionalTests', 0)} tests")
+            print(f"  E2E:        {ts2.get('e2eFiles', 0)} files, {ts2.get('e2eTests', 0)} tests")
 
     # Generate HTML
     print(f"\nGenerating HTML dashboard...")

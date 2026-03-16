@@ -90,10 +90,29 @@ PROPERTY: {INV-PREFIX-NNN description}
 End-to-end tests validate complete user journeys across multiple use cases. They are the highest-level automated tests in the pyramid.
 
 ### Scenario Derivation from Workflows
-- **Input:** `spec/workflows/WF-*.md`
+- **Input:** `spec/workflows/WF-*.md`, `spec/use-cases/UC-*.md`, `spec/contracts/API-*.md`, `ux/WIREFRAMES.md` (when exists)
 - **Rule:** Every user-facing WF gets at least one happy-path E2E scenario + error variations
 - **Coverage unit:** Workflow (WF-*), not Requirement (REQ-*). REQs trace transitively via REQ→UC→WF→E2E
 - **Exempt from E2E:** Backend-only REQs, NFRs (covered by performance/security tests), library code
+
+### Field-Level Completeness (Critical)
+E2E scenarios MUST be driven by a **field inventory** — not by narrative walkthrough of the workflow. The field inventory is built by cross-referencing three sources:
+
+1. **UC parameters:** Every input parameter listed in UC-*.md
+2. **API contract fields:** Every required/optional field in API-*.md request bodies
+3. **Wireframe elements:** Every interactive input element in ux/WIREFRAMES.md (when exists)
+
+**Why this matters:** A workflow-level E2E can cover WF-007 "Contract a Service" and still miss the `clienteId` field if the scenario author mentally skips from navigation to the most "interesting" fields. Field-level inventory forces enumeration of ALL fields, making omissions structurally impossible.
+
+For each field, the E2E must test behavioral categories:
+- **VALID**: Happy-path value → positive behavior (covered by happy-path scenario)
+- **EMPTY**: Required field left blank → validation error (one variation per required field)
+- **INVALID**: Wrong type/format/value → validation error (one variation per validated field)
+- **BOUNDARY**: Edge values from test matrices (optional, P2)
+- **CONDITIONAL**: Field visibility/value changes triggered by other fields (one scenario per trigger)
+- **INTERACTION**: Cascading effects between fields (one scenario per interaction chain)
+
+A **field coverage verification matrix** at the end of E2E-SCENARIOS.md ensures no field is left untested. Fields with status `INCOMPLETE` block scenario generation until resolved.
 
 ### Selector Strategy (priority order)
 1. **`getByRole()`** — Preferred. Tests what users perceive. Catches accessibility regressions for free.

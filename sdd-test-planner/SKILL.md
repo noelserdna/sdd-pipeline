@@ -383,25 +383,124 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
 2. **Read workflow and spec artifacts:**
    - `spec/workflows/WF-*.md` → extract user journeys, steps, actors, cross-UC flows
-   - `spec/use-cases/UC-*.md` → extract main flows, exception flows, parameters
+   - `spec/use-cases/UC-*.md` → extract main flows, exception flows, **ALL input parameters with types and required/optional**
    - `spec/tests/BDD-*.md` → extract existing acceptance criteria (reuse, don't duplicate)
-   - `spec/contracts/API-*.md` → extract endpoints involved in each workflow
+   - `spec/contracts/API-*.md` → extract endpoints involved in each workflow, **including ALL request body fields with required/optional and validation rules**
    - `requirements/REQUIREMENTS.md` → build transitive REQ→UC→WF mapping for traceability
 
 3. **Read UX artifacts (if `project_type = WEB-APP` and `ux/` exists):**
    - `ux/WIREFRAMES.md` → extract component inventory, interactive elements per screen
-   - `ux/INTERACTION-MODEL.md` → extract state diagrams, loading states, error states
+   - `ux/INTERACTION-MODEL.md` → extract state diagrams, loading states, error states, **conditional visibility rules**
    - `ux/ACCESSIBILITY-SPEC.md` → extract keyboard navigation matrix, ARIA mappings
 
-4. **Generate E2E scenarios per workflow:**
+4. **Build field inventory per workflow (MANDATORY):**
 
-   For each WF-* that involves user interaction:
-   - **Happy path scenario:** Walk the entire workflow from trigger to completion
-   - **Error variations:** One row per exception flow in the constituent UCs (use variation table, not separate scenarios)
-   - **Element references:** Inline the UI elements needed with role-based locator hints (when UX artifacts exist)
-   - **Accessibility gate:** Include axe-core scan assertion at each major navigation step
+   For each WF-* that will have E2E scenarios, enumerate ALL fields from three sources and cross-reference them:
 
-5. **Build transitive coverage matrix:**
+   ```
+   WF-007 Field Inventory (from UC-003, API-SRV-01, WIREFRAMES §WF-007):
+   | Field        | UC param | API field | Wireframe element          | Required | Type      | Validation rules         | Conditional? |
+   |--------------|----------|-----------|----------------------------|----------|-----------|--------------------------|--------------|
+   | clienteId    | UC-003.1 | body.clienteId | Cliente [v Buscar...]  | Yes      | select    | Must exist in system     | No           |
+   | tipoServicio | UC-003.2 | body.tipo      | (o) Fibra ( ) Movil    | Yes      | radio     | enum: fibra, movil       | No           |
+   | velocidad    | UC-003.3 | body.velocidad | Velocidad [v 300Mb...] | Yes      | select    | depends on tipoServicio  | Yes: only when tipoServicio=fibra |
+   | ...          | ...      | ...       | ...                        | ...      | ...       | ...                      | ...          |
+   ```
+
+   **Cross-validation rules (STOP on ERROR, warn on WARN):**
+   - `V-FIELD-01` (ERROR): Every `required` field in the API contract MUST appear in the inventory with a UC param source
+   - `V-FIELD-02` (ERROR): Every UC input parameter MUST appear in the inventory
+   - `V-FIELD-03` (ERROR): Every interactive input element in the wireframe MUST appear in the inventory (buttons excluded — only data-entry elements)
+   - `V-FIELD-04` (WARN): A field in UC/API but not in the wireframe → flag as `MISSING-UI` for user review
+   - `V-FIELD-05` (WARN): A wireframe element not in UC/API → flag as `UI-ONLY`, may need interaction step
+
+   **If any ERROR is found, present the table to the user and STOP. This is a spec inconsistency that must be resolved before generating scenarios.**
+
+5. **Build field behavioral matrix (MANDATORY):**
+
+   For each field in the inventory, define the behavioral scenarios it requires:
+
+   ```
+   WF-007 Field Behavioral Matrix:
+   | Field        | VALID              | EMPTY              | INVALID                | BOUNDARY           | CONDITIONAL                          |
+   |--------------|--------------------|--------------------|-----------------------|--------------------|--------------------------------------|
+   | clienteId    | Select existing    | Submit without →   | Non-existent ID →     | —                  | —                                    |
+   |              | client → proceed   | blocked/error msg  | error msg             |                    |                                      |
+   | tipoServicio | Select fibra →     | Submit without →   | —                     | —                  | fibra → show velocidad, plan fields  |
+   |              | show fibra fields  | blocked/error msg  |                       |                    | movil → show linea, portab fields    |
+   | velocidad    | Select 300Mb →     | Submit without →   | —                     | —                  | Only visible when tipoServicio=fibra |
+   |              | proceed            | blocked/error msg  |                       |                    | Hidden when tipoServicio=movil       |
+   ```
+
+   Behavioral categories:
+   - **VALID**: Standard happy-path value → expected positive behavior
+   - **EMPTY**: Required field left blank → expected validation error or submit block
+   - **INVALID**: Wrong type, format, or value → expected validation error message
+   - **BOUNDARY**: Edge values (min/max length, min/max numeric) → reuse from TEST-MATRIX if exists
+   - **CONDITIONAL**: Field visibility/value changes triggered by other fields → test that field appears/disappears/resets correctly
+
+   **Rules:**
+   - Every required field MUST have at least VALID + EMPTY behaviors defined
+   - Every field with validation rules MUST have at least one INVALID behavior
+   - Every field marked `Conditional? = Yes` MUST have CONDITIONAL behaviors for each trigger value
+   - Fields with interactions (e.g., selecting client loads client data) MUST document the interaction chain
+
+6. **Generate E2E scenarios from field behavioral matrix:**
+
+   For each WF-* that involves user interaction, generate scenarios **driven by the field behavioral matrix**, not by narrative walkthrough:
+
+   **a. Happy path scenario (P0):**
+   - One step per field in the inventory (ALL of them), filled with VALID values in the order they appear in the wireframe
+   - Final submit and assert postcondition
+   - **Every MAPPED field MUST have a Fill/Select/Click step.** If a field is missing from the steps, the scenario is incomplete.
+
+   **b. Required-field validation scenarios (P0):**
+   - For each required field: leave it empty, fill all others with valid values, attempt submit
+   - Assert: specific validation error message for that field (from UC exception flows or API 400 response)
+   - Combine into a variation table when possible (one row per required field)
+
+   **c. Invalid-value scenarios (P1):**
+   - For each field with INVALID behaviors in the matrix: fill with invalid value, fill all others with valid values, attempt submit
+   - Assert: specific validation error for that field
+   - Combine into a variation table
+
+   **d. Conditional behavior scenarios (P1):**
+   - For each CONDITIONAL field: test that changing the trigger field correctly shows/hides/resets dependent fields
+   - Example: select tipoServicio=fibra → assert velocidad field appears; switch to movil → assert velocidad disappears and linea field appears
+   - Include "field reset" behavior: if user fills conditional fields, then changes trigger → conditional fields should reset
+
+   **e. Field interaction scenarios (P1):**
+   - For each field interaction chain: test the full chain
+   - Example: select clienteId → client data loads → dependent fields auto-populate
+
+   **f. UC exception flow scenarios (P1/P2):**
+   - One row per exception flow in the constituent UCs (as before)
+   - These are ADDITIONAL to field-level scenarios — they cover business logic errors, not field validation
+
+   **g. Accessibility gate:**
+   - axe-core scan at each major navigation step
+   - Keyboard-only form completion (tab through all fields, submit with Enter)
+
+7. **Post-generation completeness check (MANDATORY):**
+
+   After generating all scenarios, build and output this verification matrix:
+
+   ```
+   WF-007 Field Coverage Verification:
+   | Field        | Happy path step? | Empty variation? | Invalid variation? | Conditional tested? | Interaction tested? | Status |
+   |--------------|-----------------|------------------|-------------------|--------------------|--------------------|--------|
+   | clienteId    | Step 3 ✅        | Var E2E-02 ✅     | Var E2E-05 ✅      | N/A                | E2E-WF-007-05 ✅   | COMPLETE |
+   | tipoServicio | Step 4 ✅        | Var E2E-03 ✅     | N/A                | E2E-WF-007-04 ✅   | N/A                | COMPLETE |
+   | velocidad    | Step 5 ✅        | Var E2E-04 ✅     | N/A                | E2E-WF-007-04 ✅   | N/A                | COMPLETE |
+   ```
+
+   **Completeness rules:**
+   - Every required field MUST have: happy path step + empty variation → otherwise status = `INCOMPLETE`
+   - Every field with validation rules MUST have: invalid variation → otherwise status = `INCOMPLETE`
+   - Every conditional field MUST have: conditional scenario → otherwise status = `INCOMPLETE`
+   - If ANY field has status `INCOMPLETE`, flag as finding and ask user whether to add the missing scenario or document exemption with justification
+
+8. **Build transitive coverage matrix:**
 
    Map each E2E scenario back to the REQs it covers transitively:
    ```
@@ -413,14 +512,14 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
    - `EXEMPT-NFR`: Non-functional REQ, covered by performance/security tests
    - `GAP`: User-facing REQ with no transitive E2E coverage → flag for review
 
-6. **Generate `test/E2E-SCENARIOS.md`:**
+9. **Generate `test/E2E-SCENARIOS.md`:**
 
 ```markdown
 # E2E Acceptance Scenarios
 
 > **Project:** {project name}
 > **Project type:** {WEB-APP | API-ONLY | CLI}
-> **Generated from:** spec/workflows/, spec/use-cases/
+> **Generated from:** spec/workflows/, spec/use-cases/, spec/contracts/
 > **UX enrichment:** {Yes — from ux/ | No — abstract scenarios}
 
 ## E2E Strategy
@@ -451,16 +550,36 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
 ---
 
+## Field Inventory: WF-{NNN}
+
+> Cross-referenced from: UC-{NNN} params, API-{NNN} body, WIREFRAMES §{screen}
+
+| Field | UC param | API field | Wireframe element | Required | Type | Validation rules | Conditional? |
+|-------|----------|-----------|-------------------|----------|------|-----------------|--------------|
+| {field1} | UC-{NNN}.1 | body.{f1} | {element desc} | Yes | {type} | {rules} | No |
+| {field2} | UC-{NNN}.2 | body.{f2} | {element desc} | Yes | {type} | {rules} | Yes: when {trigger} |
+| ... | ... | ... | ... | ... | ... | ... | ... |
+
+### Field Behavioral Matrix: WF-{NNN}
+
+| Field | VALID | EMPTY | INVALID | BOUNDARY | CONDITIONAL |
+|-------|-------|-------|---------|----------|-------------|
+| {field1} | {valid action → expected result} | {submit without → expected error} | {bad value → expected error} | {edge values if applicable} | {N/A or trigger→effect} |
+| {field2} | {valid action → expected result} | {submit without → expected error} | {N/A or bad value → error} | {N/A or edge values} | {trigger changes → field shows/hides/resets} |
+
+---
+
 ## Scenarios
 
-### E2E-WF-{NNN}-01: {Workflow title} — Happy Path
+### E2E-WF-{NNN}-01: {Workflow title} — Happy Path (P0)
 
 - **Workflow:** WF-{NNN}
 - **Use Cases:** UC-{NNN}, UC-{NNN}
 - **Requirements (transitive):** REQ-FUNC-{NNN}, REQ-FUNC-{NNN}
-- **Priority:** P{0|1|2}
-- **Tier:** {smoke | critical | full}
+- **Priority:** P0
+- **Tier:** smoke
 - **Auth fixture:** {authenticated | admin | unauthenticated}
+- **Fields covered:** ALL ({N} fields from inventory)
 
 #### Elements Referenced (when ux/ exists)
 
@@ -471,21 +590,86 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
 #### Steps
 
+> One step per field in inventory, in wireframe presentation order. No field may be skipped.
+
 | # | Action | Target | Assertion | Spec Ref |
 |---|--------|--------|-----------|----------|
 | 1 | Navigate to {url} | — | Page title = "{title}" | WF-{NNN} step 1 |
 | 2 | axe-core scan | full page | No violations | ACCESSIBILITY-SPEC |
-| 3 | Fill {field} | {element} | Field accepts input | UC-{NNN} §main.2 |
-| 4 | Click {button} | {element} | {expected feedback} | UC-{NNN} §main.3 |
-| 5 | Wait for {condition} | — | {assertion} | INTERACTION-MODEL §{state} |
-| 6 | Assert final state | — | {postcondition} | WF-{NNN} postcondition |
+| 3 | Fill/Select {field1} | {element} | Field accepts input, {interaction effect if any} | UC-{NNN} §main.{N} |
+| 4 | Fill/Select {field2} | {element} | Field accepts input, {conditional fields appear if applicable} | UC-{NNN} §main.{N} |
+| ... | (one step per field from inventory) | ... | ... | ... |
+| N | Click submit | {button} | {expected success feedback} | UC-{NNN} §main.{N} |
+| N+1 | Assert final state | — | {postcondition} | WF-{NNN} postcondition |
 
-#### Error Variations
+### E2E-WF-{NNN} — Required-Field Validation (P0)
+
+> One variation per required field. All other fields filled with valid values.
+
+| Variant ID | Empty field | Other fields | Action | Expected behavior | Spec Ref |
+|------------|-------------|-------------|--------|-------------------|----------|
+| E2E-WF-{NNN}-V01 | {field1} | All valid | Submit | Error: "{validation message}" | UC-{NNN} §exception.{N} |
+| E2E-WF-{NNN}-V02 | {field2} | All valid | Submit | Error: "{validation message}" | UC-{NNN} §exception.{N} |
+
+### E2E-WF-{NNN} — Invalid-Value Scenarios (P1)
+
+> One variation per field with validation rules. All other fields filled with valid values.
+
+| Variant ID | Field | Invalid value | Other fields | Expected behavior | Spec Ref |
+|------------|-------|---------------|-------------|-------------------|----------|
+| E2E-WF-{NNN}-IV01 | {field} | {invalid value} | All valid | Error: "{validation message}" | UC-{NNN} §exception.{N} |
+
+### E2E-WF-{NNN} — Conditional Behavior Scenarios (P1)
+
+> One scenario per conditional field trigger. Tests visibility, reset, and dependent field behavior.
+
+| Variant ID | Trigger field | Trigger value | Expected effect | Reset tested? | Spec Ref |
+|------------|---------------|---------------|-----------------|---------------|----------|
+| E2E-WF-{NNN}-CD01 | {trigger} | {value1} | {fields shown/hidden, values reset} | Yes | UC-{NNN} §main.{N}, INTERACTION-MODEL §{state} |
+| E2E-WF-{NNN}-CD02 | {trigger} | {value2} | {different fields shown/hidden} | Yes | UC-{NNN} §main.{N} |
+
+### E2E-WF-{NNN} — Field Interaction Scenarios (P1)
+
+> Tests interaction chains where one field's value affects others (auto-populate, cascading selects, etc.)
+
+| Variant ID | Source field | Action | Affected fields | Expected effect | Spec Ref |
+|------------|-------------|--------|-----------------|-----------------|----------|
+| E2E-WF-{NNN}-FI01 | {field} | {select value} | {field2, field3} | {auto-populated/filtered/enabled} | UC-{NNN} §main.{N} |
+
+### E2E-WF-{NNN} — UC Exception Flows (P1/P2)
+
+> Business logic errors beyond field validation (e.g., duplicate detection, insufficient permissions, external service failures).
 
 | Variant ID | Diverges at step | Input change | Expected behavior | Spec Ref |
 |------------|------------------|-------------|-------------------|----------|
-| E2E-WF-{NNN}-02 | Step 3 | {invalid input} | Error: "{message}" | UC-{NNN} §exception.1 |
-| E2E-WF-{NNN}-03 | Step 4 | {precondition not met} | Redirect to {page} | UC-{NNN} §exception.2 |
+| E2E-WF-{NNN}-EX01 | Step {N} | {precondition not met} | {error/redirect/fallback} | UC-{NNN} §exception.{N} |
+
+### E2E-WF-{NNN} — Accessibility (P1)
+
+> Keyboard-only and screen-reader scenarios.
+
+| Variant ID | Scenario | Steps | Assertion | Spec Ref |
+|------------|----------|-------|-----------|----------|
+| E2E-WF-{NNN}-A11Y-01 | Keyboard-only completion | Tab through all {N} fields, fill each, Enter to submit | All fields reachable, submit succeeds | ACCESSIBILITY-SPEC |
+
+---
+
+## Field Coverage Verification
+
+> Post-generation completeness check. Every field MUST have COMPLETE status.
+
+### WF-{NNN}
+
+| Field | Happy path step? | Empty variation? | Invalid variation? | Conditional tested? | Interaction tested? | Status |
+|-------|-----------------|------------------|-------------------|--------------------|--------------------|--------|
+| {field1} | Step {N} ✅ | V01 ✅ | IV01 ✅ | N/A | FI01 ✅ | COMPLETE |
+| {field2} | Step {N} ✅ | V02 ✅ | N/A | CD01 ✅ | N/A | COMPLETE |
+
+**Completeness rules:**
+- Required field without empty variation → `INCOMPLETE`
+- Field with validation rules without invalid variation → `INCOMPLETE`
+- Conditional field without conditional scenario → `INCOMPLETE`
+- Any `INCOMPLETE` → flag as finding, ask user for exemption or add missing scenario
 
 ---
 
@@ -497,12 +681,30 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 - **Use Cases:** UC-{NNN}, UC-{NNN}
 - **Type:** API E2E (no browser)
 
+#### Request Body Field Inventory
+
+| Field | Required | Type | Validation | Source |
+|-------|----------|------|-----------|--------|
+| {field1} | Yes | {type} | {rules} | API-{NNN}, UC-{NNN} |
+
 #### Steps
 
 | # | Method | Endpoint | Body/Params | Assert status | Assert body | Spec Ref |
 |---|--------|----------|-------------|---------------|-------------|----------|
-| 1 | POST | /api/{resource} | {payload} | 201 | {schema} | API-{NNN} |
-| 2 | GET | /api/{resource}/{id} | — | 200 | status = "{expected}" | API-{NNN} |
+| 1 | POST | /api/{resource} | {ALL required fields} | 201 | {schema} | API-{NNN} |
+| 2 | GET | /api/{resource}/{id} | — | 200 | {all fields present} | API-{NNN} |
+
+#### Required-Field Validation (API)
+
+| Variant | Missing field | Assert status | Assert body | Spec Ref |
+|---------|--------------|---------------|-------------|----------|
+| E2E-API-{NNN}-V01 | {field1} | 400 | error.field = "{field1}" | API-{NNN} §validation |
+
+#### Invalid-Value Validation (API)
+
+| Variant | Field | Invalid value | Assert status | Assert body | Spec Ref |
+|---------|-------|---------------|---------------|-------------|----------|
+| E2E-API-{NNN}-IV01 | {field1} | {invalid} | 400/422 | error: "{message}" | API-{NNN} §validation |
 
 ---
 
@@ -510,7 +712,7 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
 | REQ ID | Type | E2E Coverage | Justification if excluded |
 |--------|------|-------------|---------------------------|
-| REQ-FUNC-{NNN} | UI-func | E2E-WF-{NNN}-01 | — |
+| REQ-FUNC-{NNN} | UI-func | E2E-WF-{NNN}-01 + {N} variations | — |
 | REQ-FUNC-{NNN} | API-only | — | EXEMPT-BACKEND: no user-facing flow |
 | REQ-NFR-{NNN} | Perf | — | EXEMPT-NFR: covered by PERF-SCENARIOS.md |
 | REQ-FUNC-{NNN} | UI-func | — | GAP: needs WF or E2E scenario |
@@ -570,7 +772,7 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["test-planner"].lastRun` = current ISO-8601
 4. Set `stages["test-planner"].summary`:
    - `artifacts`: list of files created in `test/` with labels (e.g., `{"file": "test/TEST-PLAN.md", "label": "Test Strategy"}`)
-   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "perf_scenarios": N, "e2e_scenarios": N, "invariants_mapped": N, "test_gaps": N }`
+   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "invariants_mapped": N, "test_gaps": N }`
    - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing")
    - `nextStep`: `"Run /sdd-plan-architect"`
    - `generatedAt`: current ISO-8601

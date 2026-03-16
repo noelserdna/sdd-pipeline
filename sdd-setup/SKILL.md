@@ -122,6 +122,42 @@ Inform the user about the code intelligence feature:
 - Run after `/sdd-dashboard` to enable code-aware blast radius analysis
 - This is optional and can be configured later
 
+### Step 5.7.5: Optional — Pipeline Status Line
+
+If user wants always-visible pipeline status at the bottom of Claude Code:
+
+1. Copy status line script:
+   ```
+   sdd-skills/automation/status-line/sdd-status-line.sh → .claude/hooks/sdd-status-line.sh
+   ```
+2. Make executable: `chmod +x .claude/hooks/sdd-status-line.sh`
+3. Add to `.claude/settings.json`:
+   ```json
+   "statusLine": {
+     "type": "command",
+     "command": "bash .claude/hooks/sdd-status-line.sh"
+   }
+   ```
+
+The status line displays: `SDD [4/7] audit !1stale | $0.42`
+- `[N/7]`: stages completed
+- Active stage name (short: req/spec/audit/test/plan/tasks/impl)
+- `!Nstale` / `xNerr`: warning counts
+- `> next`: recommended next stage
+- `OK`: all stages done
+- `$cost`: session cost from Claude Code
+
+This is display-only, zero API cost, reads `pipeline-state.json` on each assistant message. Requires `jq` or `node`.
+
+Present as opt-in option table:
+```
+┌──────────────────────────────────────────┐
+│ 5.7.5 Pipeline Status Line (display-only)│
+│   [A] Install status line  ← recommended │
+│   [B] Skip                               │
+└──────────────────────────────────────────┘
+```
+
 ### Step 5.7: Optional — Quality Gate Hooks
 
 If user wants quality gate enforcement:
@@ -178,6 +214,7 @@ Report results:
 | Hook: sdd-context-augment (H5) | Installed |
 | Git hook: commit-msg (traceability) | Installed / Skipped (no .git) |
 | Hook: quality gates (H7-H8) | Opt-in / Configured / Skipped |
+| Status Line: sdd-status-line | Opt-in / Configured / Skipped |
 | Agent: sdd-constitution-enforcer (A1) | Installed |
 | Agent: sdd-cross-auditor (A2) | Installed |
 | Agent: sdd-context-keeper (A3) | Installed |

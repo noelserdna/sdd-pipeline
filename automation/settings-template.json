@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "bash .claude/hooks/sdd-status-line.sh"
+  },
   "hooks": {
     "SessionStart": [
       {

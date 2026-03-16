@@ -166,6 +166,43 @@ else
   fi
 fi
 
+# Step 5.7.5: Install status line (opt-in, installed by default)
+echo ""
+info "Step 5.7.5: Installing pipeline status line..."
+SL_SRC="$SDD_SKILLS/automation/status-line/sdd-status-line.sh"
+SL_DST=".claude/hooks/sdd-status-line.sh"
+if [ -f "$SL_SRC" ]; then
+  cp "$SL_SRC" "$SL_DST"
+  chmod +x "$SL_DST"
+  info "  sdd-status-line.sh installed"
+
+  # Add statusLine to settings.json if not already present
+  if [ -f "$SETTINGS" ]; then
+    HAS_STATUSLINE=$(jq -r '.statusLine // empty' "$SETTINGS" 2>/dev/null) || HAS_STATUSLINE=""
+    if [ -z "$HAS_STATUSLINE" ]; then
+      if [ "$JQ_AVAILABLE" = true ]; then
+        TMPFILE="${SETTINGS}.tmp.$$"
+        jq '. + {"statusLine": {"type": "command", "command": "bash .claude/hooks/sdd-status-line.sh"}}' "$SETTINGS" > "$TMPFILE" 2>/dev/null && mv "$TMPFILE" "$SETTINGS"
+        info "  statusLine added to settings.json"
+      else
+        node -e "
+          const fs = require('fs');
+          const s = JSON.parse(fs.readFileSync('$SETTINGS', 'utf8'));
+          if (!s.statusLine) {
+            s.statusLine = {type: 'command', command: 'bash .claude/hooks/sdd-status-line.sh'};
+            fs.writeFileSync('$SETTINGS', JSON.stringify(s, null, 2));
+          }
+        " 2>/dev/null
+        info "  statusLine added (node fallback)"
+      fi
+    else
+      warn "  statusLine already configured — preserved"
+    fi
+  fi
+else
+  warn "  sdd-status-line.sh not found in source repo — skipped"
+fi
+
 # Step 6: Initialize pipeline state
 echo ""
 info "Step 6: Initializing pipeline state..."
@@ -234,6 +271,12 @@ if [ -f "pipeline-state.json" ]; then
 else
   error "  pipeline-state.json: MISSING"
   ERRORS=$((ERRORS + 1))
+fi
+
+if [ -x ".claude/hooks/sdd-status-line.sh" ]; then
+  info "  Status line: OK"
+else
+  warn "  Status line: NOT INSTALLED (optional)"
 fi
 
 echo ""

@@ -11,6 +11,8 @@
 #
 # Exceptions:
 #   - spec-auditor (Mode Fix): spec/ is allowed (by design)
+#   - task-implementer: Edit on task/TASK-FASE-*.md is allowed (checkbox updates)
+#                       Write on task/* is blocked (full overwrite protection)
 #   - req-change: requirements/ and spec/ are allowed (lateral skill)
 #   - pipeline-state.json: always allowed (infrastructure, not pipeline artifact)
 #   - No pipeline-state.json or no running stage: permissive mode (allow all)
@@ -22,7 +24,8 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 PROJECT_DIR=$(echo "$PROJECT_DIR" | sed 's|\\|/|g')
 PIPELINE_STATE="$PROJECT_DIR/pipeline-state.json"
 
-# Extract file_path from hook input
+# Extract tool_name and file_path from hook input
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // .toolName // empty' 2>/dev/null) || TOOL_NAME=""
 FILE_PATH=$(echo "$INPUT" | jq -r '.toolInput.file_path // .tool_input.file_path // empty' 2>/dev/null) || FILE_PATH=""
 
 # If we can't determine the file path, allow
@@ -84,6 +87,7 @@ fi
 is_prohibited() {
   local stage="$1"
   local path="$2"
+  local tool="$3"
 
   case "$stage" in
     test-planner)
@@ -103,7 +107,12 @@ is_prohibited() {
       ;;
     task-implementer)
       case "$path" in
-        requirements/*|spec/*|audits/*|test/*|plan/*|task/*) return 0 ;;
+        requirements/*|spec/*|audits/*|test/*|plan/*) return 0 ;;
+        task/TASK-FASE-*.md)
+          # Allow Edit (checkbox updates), block Write (full overwrite)
+          [ "$tool" = "Write" ] && return 0
+          ;;
+        task/*) return 0 ;;
       esac
       ;;
     # spec-auditor: spec/ is allowed (Mode Fix), but requirements/ is not
@@ -128,7 +137,7 @@ is_prohibited() {
   return 1
 }
 
-if is_prohibited "$RUNNING_STAGE" "$REL_PATH"; then
+if is_prohibited "$RUNNING_STAGE" "$REL_PATH" "$TOOL_NAME"; then
   REASON="SDD Art. 4 Violation: Stage '$RUNNING_STAGE' cannot modify upstream artifact '$REL_PATH'. Upstream artifacts are immutable during downstream execution. Complete the current stage first, or use sdd-req-change for controlled modifications."
   ESCAPED_REASON=$(echo "$REASON" | jq -Rs . 2>/dev/null || node -e "console.log(JSON.stringify('$REASON'))")
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":$ESCAPED_REASON}}"

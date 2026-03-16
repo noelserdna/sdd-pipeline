@@ -85,11 +85,14 @@ fi
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Update pipeline-state.json atomically
-# Only transition pending/stale -> running (don't touch done/error/already-running)
+# Transitions pending/stale/done -> running on artifact writes.
+# "done" stages revert to "running" because new writes mean the stage is actively changing.
+# Skills set "done" explicitly on completion (writing to pipeline-state.json, which H3 skips).
+# "error" and "running" are left untouched.
 update_with_jq() {
   local tmpfile="${PIPELINE_STATE}.tmp.$$"
   jq --arg stage "$STAGE" --arg now "$NOW" '
-    if .stages[$stage].status == "pending" or .stages[$stage].status == "stale" then
+    if .stages[$stage].status == "pending" or .stages[$stage].status == "stale" or .stages[$stage].status == "done" then
       .stages[$stage].status = "running" |
       .stages[$stage].lastRun = $now |
       .stages[$stage].staleReason = null |
@@ -111,7 +114,8 @@ update_with_node() {
       if (!state.stages[stage]) {
         state.stages[stage] = { status: 'pending', outputHash: null, lastRun: null, staleReason: null };
       }
-      if (state.stages[stage].status === 'pending' || state.stages[stage].status === 'stale') {
+      const st = state.stages[stage].status;
+      if (st === 'pending' || st === 'stale' || st === 'done') {
         state.stages[stage].status = 'running';
         state.stages[stage].lastRun = now;
         state.stages[stage].staleReason = null;

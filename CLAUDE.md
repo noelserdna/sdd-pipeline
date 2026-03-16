@@ -70,9 +70,11 @@ automation/
 │   ├── sdd-constitution-enforcer.md     # A1: Validates against 11 SDD Constitution articles
 │   ├── sdd-cross-auditor.md             # A2: Cross-references skill definitions for mismatches
 │   └── sdd-context-keeper.md            # A3: Maintains informal project context
+├── status-line/
+│   └── sdd-status-line.sh              # Pipeline status line for Claude Code CLI (opt-in)
 ├── scripts/
 │   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
-├── settings-template.json               # P1: Settings template with H1-H3 core hook configs
+├── settings-template.json               # P1: Settings template with H1-H3 core hook configs + statusLine
 ├── settings-optional-quality-gates.json # P2: Opt-in prompt/agent quality gate hooks (H7-H8)
 └── INSTALL.md                           # Manual installation guide
 ```
@@ -190,6 +192,9 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 
 **Git hooks** (installed by `sdd-setup` into target `.git/hooks/`):
 - **commit-msg**: Enforces traceability trailers (`Refs:` and/or `Task:`) on commit messages, ensuring every commit links back to SDD artifacts.
+
+**Status Line** (opt-in via `/sdd-setup` Step 5.7.5):
+- **Pipeline Status Line** (`sdd-status-line.sh`): Always-visible pipeline progress at the bottom of Claude Code CLI. Reads `pipeline-state.json` on each assistant message. Display-only, zero API cost. Shows: `SDD [4/7] test !1stale | $0.42`. Requires `jq` or `node`.
 
 **Optional hooks** (opt-in via `/sdd-setup` Step 5.7):
 - **H7 — Stop Quality Gate** (prompt hook): Pipeline consistency check at session end.
