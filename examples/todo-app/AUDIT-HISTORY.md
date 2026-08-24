@@ -4,4 +4,4 @@ Resultados del `sdd-pipeline-auditor` sobre este proyecto, por versión del plug
 
 | Fecha | Pipeline version | Resultado | Bugs | Mejoras | Notas |
 |---|---|---|---|---|---|
-| — | — | pendiente de la primera ejecución (F4) | — | — | — |
+| 2026-08-25 | 4.0.0-beta.1 | smoke (`tests/e2e/20-smoke.sh` hasta FASE-0): OK | 0 | 1 (bug del script check-ignore, corregido) | gate PASS; FASE-1 con Streams A∥B; 105 tests; sin intervención humana. Pendiente: ejecución completa del `sdd-pipeline-auditor` |

@@ -11,9 +11,9 @@ Proyecto: `examples/todo-app` (10 requisitos aprobados). Plugin cargado con `--p
 | audit | `sdd-spec-auditor` | 21 min | **Gate PASS** (0 críticos, 0 altos, 4 medios abiertos, 9 bajos diferidos), Mode Fix aplicado |
 | test | `sdd-test-planner` | 30 min | TEST-PLAN, 7 matrices, PERF-SCENARIOS, E2E |
 | plan | `sdd-plan-architect --skip-clarify` | 27 min | ARCHITECTURE, FASE-0-FOUNDATION, FASE-1-CORE con Stream A (`src/api`) ∥ Stream B (`src/cli`) → Integración |
-| tasks | `sdd-task-generator` | _pendiente_ | |
-| impl (FASE-0) | `sdd-task-implementer --fase=0` | _pendiente_ | |
+| tasks | `sdd-task-generator` | 24 min | FASE-0: 23 tasks (serial); FASE-1: 27 tasks con **Stream A (7, `src/api`) ∥ Stream B (8, `src/cli`) → verificación (12)**; V-15..V-18 PASS |
+| impl (FASE-0) | `sdd-task-implementer --fase=0` | 27 min | 23/23 tasks, 23 commits con `Refs:`/`Task:`, 105 tests verdes ×3 (Node 18/20/22), tags `fase-0-foundation` y `fase-0-verified`, `feedback/IMPL-FEEDBACK-FASE-0.md`; nextStep `--fase=1 --stream base` |
 
-Total hasta `plan`: ~1 h 55 min. Todas las comprobaciones del script en verde salvo un bug del propio script (`git check-ignore -q` con varias rutas), corregido después.
+Total hasta `plan`: ~1 h 55 min; hasta FASE-0 implementada: ~2 h 45 min (sin intervención humana). Todas las comprobaciones del script en verde salvo un bug del propio script (`git check-ignore -q` con varias rutas), corregido después.
 
 Cómo repetir: `tests/e2e/20-smoke.sh --until plan --keep` y continuar con `tests/e2e/20-smoke.sh --dir <proyecto> --from tasks`.

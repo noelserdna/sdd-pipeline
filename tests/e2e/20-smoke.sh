@@ -76,7 +76,9 @@ fi
 stop_if_done impl
 if active impl; then
   run impl "/sdd-task-implementer --fase=0 — implement FASE-0 completely, test-first, one commit per task with Refs:/Task: trailers, without asking questions (take recommended options)."
-  [ "$(jq -r '.stages["task-implementer"].status' pipeline-state.json)" = "done" ] && ok "task-implementer done" || echo "WARN task-implementer no done: $(jq -r '.stages["task-implementer"].status' pipeline-state.json)"
+  st=$(jq -r '.stages["task-implementer"].status' pipeline-state.json); done0=$(jq -r '.stages["task-implementer"].summary.metrics.tasks_completed // 0' pipeline-state.json)
+  if [ "$st" = "done" ] || { [ "$st" = "running" ] && [ "$done0" -gt 0 ]; }; then ok "task-implementer $st (FASE-0: $done0 tasks; running = quedan FASEs)"; else bad "task-implementer status=$st tasks_completed=$done0"; fi
+  [ "$(grep -c '^- \[x\] TASK-' task/TASK-FASE-0.md)" = "$(grep -c '^- \[[ x]\] TASK-' task/TASK-FASE-0.md)" ] && ok "todas las tasks de FASE-0 marcadas" || bad "tasks de FASE-0 sin marcar"
   n=$(git log --format=%B | grep -cE '^(Refs|Task):' || true); [ "$n" -ge 2 ] && ok "trailers Refs:/Task: ($n)" || bad "trailers"
   git tag -l 'fase-0-verified' | grep -q . && ok "tag fase-0-verified" || echo "WARN sin tag fase-0-verified"
 fi

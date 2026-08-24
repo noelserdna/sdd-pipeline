@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 4.0.0 (en curso) — repositorio unificado `noelserdna/sdd-pipeline`
+### Repositorio unificado `noelserdna/sdd-pipeline`
 
 **Breaking**
 - Nuevo id de plugin: `sdd-pipeline@noelserdna` (antes `sdd@noelserdna-claude-plugin-sdd` y `sdd-pipeline@sdd-pipeline-local`). Desinstala el antiguo antes de instalar (ver `docs/migracion.md`).
@@ -19,7 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Servidor MCP como bundle único `server/dist/server.js` (esbuild, sin `node_modules`), versión inyectada en build, tests (`npm test`).
 - Validación y CI: `scripts/validate-plugin.mjs`, `check-paths.sh`, `check-version.sh`, `tests/hooks`, `tests/e2e`, GitHub Actions (ubuntu + macos, node 18/22).
 - `examples/todo-app/`: proyecto de juguete con requisitos aprobados para las pruebas E2E.
-- `docs/legacy/INVENTARIO.md`, `docs/coste-contexto.md` (always-on ~4.8k tok con 23 skills + 5 agentes).
+- `docs/legacy/INVENTARIO.md`, `docs/coste-contexto.md` (always-on ~3.4k tok con 24 skills + 5 agentes tras recortar las descripciones a ≤ 350 chars), `docs/medidas.md` (smoke real: ~2 h 45 min hasta FASE-0 implementada sin intervención humana).
+- **Multi-sesión**: `SDD_ROLE` como identidad de sesión (`.claude/sdd-sessions.json`, `templates/sdd-sessions.example.json`); hooks con dos raíces (`PROJECT_DIR` del worktree, `STATE_ROOT` común por `git-common-dir`) y lock portable (`hooks/lib/sdd-common.sh`); H1 muestra rol, pares vivos y último handoff y exporta `SDD_PLUGIN_ROOT`/`SDD_STATE_ROOT`; H2 aplica la posesión por rol; status line con `[rol]`.
+- **Streams**: `sdd-task-generator` Phase 3b (tabla *Stream Ownership*, `Streams:` en TASK-ORDER, V-15..V-18, G-04 HALT); `sdd-task-implementer` Mode 7 `--fase N --stream X` (worktree, sin tags, Phase 9-S) y Mode 8 `--integrate --fase N` (`references/integration-protocol.md`); freno `stale` antes de cada task; eventos de medición y `scripts/sdd-bench.sh`.
+- **Coordinación**: skill `sdd-lead` (despacho tras cada puerta humana, recepción de handoffs, respuestas), `references/handoff-protocol.md` (paso Handoff en 12 skills, `summary.handoff` en pipeline-state), `references/async-questions.md` (preguntas bloqueantes a `.sdd/questions-<rol>.md`), `scripts/sdd-up.sh` (tmux + `claude -n` + `/color`).
+- `sdd-setup` reducido al modelo plugin: estado, hook git `commit-msg` (`scripts/install-git-hooks.sh`), política `.gitignore`, status line opcional, `--multisession`, detección de instalaciones antiguas; `scripts/migrate-hooks-v3.sh`.
+- `scripts/release.sh` (versión única en `plugin.json`), `tests/setup`, `tests/bench`, `tests/e2e/{20-smoke,30-multisession,40-migration}`, `docs/{instalacion,migracion,multisesion,pruebas-manuales,archivado}.md`.
 
 **Changed**
 - Hook H5 (`sdd-augment-hook.js`) ya no se dispara en `Grep|Glob`.
