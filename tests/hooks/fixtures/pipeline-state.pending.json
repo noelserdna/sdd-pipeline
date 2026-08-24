@@ -1,0 +1,16 @@
+{
+  "sddVersion": "4.0.0",
+  "hooksVersion": 2,
+  "currentStage": "requirements-engineer",
+  "lastUpdated": "",
+  "stages": {
+    "requirements-engineer":   { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null,
+                                 "summary": { "note": "must survive H3" } },
+    "specifications-engineer": { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "spec-auditor":            { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "test-planner":            { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "plan-architect":          { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "task-generator":          { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "task-implementer":        { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null }
+  }
+}

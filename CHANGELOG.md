@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 4.0.0 (en curso) — repositorio unificado `noelserdna/sdd-pipeline`
+
+**Breaking**
+- Nuevo id de plugin: `sdd-pipeline@noelserdna` (antes `sdd@noelserdna-claude-plugin-sdd` y `sdd-pipeline@sdd-pipeline-local`). Desinstala el antiguo antes de instalar (ver `docs/migracion.md`).
+- Los hooks los aporta el plugin (`hooks/hooks.json` con `${CLAUDE_PLUGIN_ROOT}`); `sdd-setup` ya no copia hooks ni agentes al proyecto. `pipeline-state.json` pasa a `hooksVersion: 3`.
+- `version:` desaparece del frontmatter de las skills; la única fuente de versión es `.claude-plugin/plugin.json`.
+
+**Added**
+- Fusión de `sdd-skills` (upstream), `claude-plugin-sdd` (empaquetado) y el fork `sdd-pipeline`: 24 skills (incluido el bloque brownfield y la nueva `sdd-lead`), 5 agentes (`sdd-orchestrator`, `sdd-pipeline-auditor`, `sdd-context-keeper`, `sdd-constitution-enforcer`, `sdd-cross-auditor`), dashboard agrupado por fases, gap-detector con revisión humana.
+- Servidor MCP como bundle único `server/dist/server.js` (esbuild, sin `node_modules`), versión inyectada en build, tests (`npm test`).
+- Validación y CI: `scripts/validate-plugin.mjs`, `check-paths.sh`, `check-version.sh`, `tests/hooks`, `tests/e2e`, GitHub Actions (ubuntu + macos, node 18/22).
+- `examples/todo-app/`: proyecto de juguete con requisitos aprobados para las pruebas E2E.
+- `docs/legacy/INVENTARIO.md`, `docs/coste-contexto.md` (always-on ~4.8k tok con 23 skills + 5 agentes).
+
+**Changed**
+- Hook H5 (`sdd-augment-hook.js`) ya no se dispara en `Grep|Glob`.
+- Comandos `/sdd:<skill>` → `/sdd-<skill>` en docs y en el servidor MCP.
+
+**Removed**
+- `install-sdd-automation.sh`, `automation/INSTALL.md`, `settings-template.json`, rutas del autor (`~/programacion/sdd-skills`, cache `noelserdna-plugins`).
+
+
 ## [3.1.0] - 2026-03-16
 
 ### Added

@@ -1,0 +1,17 @@
+{
+  "sddVersion": "4.0.0",
+  "hooksVersion": 2,
+  "currentStage": "task-implementer",
+  "lastUpdated": "2026-01-01T00:00:00Z",
+  "stages": {
+    "requirements-engineer":   { "status": "done", "outputHash": "aaa", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null,
+                                 "summary": { "reqCount": 12, "handoff": { "to": "example-lead", "sentAt": "2026-01-01T00:00:00Z", "result": "sent" } } },
+    "specifications-engineer": { "status": "done", "outputHash": "bbb", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null },
+    "spec-auditor":            { "status": "done", "outputHash": "ccc", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null,
+                                 "summary": { "defects": 3, "handoff": { "to": "example-lead", "sentAt": "2026-01-02T00:00:00Z", "result": "skipped:lead-absent" } } },
+    "test-planner":            { "status": "done", "outputHash": "ddd", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null },
+    "plan-architect":          { "status": "done", "outputHash": "eee", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null },
+    "task-generator":          { "status": "done", "outputHash": "fff", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null },
+    "task-implementer":        { "status": "running", "outputHash": null, "lastRun": "2026-01-01T00:00:00Z", "staleReason": null }
+  }
+}

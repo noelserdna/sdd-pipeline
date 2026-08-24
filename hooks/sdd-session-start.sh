@@ -1,22 +1,72 @@
 #!/bin/bash
 # H1: SDD Pipeline Status Injection at Session Start
-# Hook type: PreToolUse (SessionStart) | Timeout: 10s
-# Reads pipeline-state.json and injects pipeline context into the session.
-# Also reads dashboard/traceability-graph.json (if present) for coverage stats.
+# Hook type: SessionStart (startup|resume|compact) | Timeout: 10s
+# Lee $STATE_ROOT/pipeline-state.json (raíz del .git común, compartida por todos los
+# worktrees) e inyecta el contexto del pipeline. Lee dashboard/traceability-graph.json
+# (si existe) para la cobertura. Con rol (SDD_ROLE o registro de sesiones) añade
+# "Rol: … | Pares vivos: …" y exporta SDD_STATE_ROOT / SDD_PLUGIN_ROOT vía CLAUDE_ENV_FILE.
 
 set -euo pipefail
 
-# shellcheck disable=SC2034  # F2: se usa para leer .cwd
+SDD_LIB="$(dirname "${BASH_SOURCE[0]}")/lib/sdd-common.sh"
+if [ ! -f "$SDD_LIB" ]; then echo "sdd-session-start: falta $SDD_LIB" >&2; exit 0; fi
+# shellcheck source=lib/sdd-common.sh
+. "$SDD_LIB"
+
 INPUT=$(cat)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-# Normalize Windows paths
-PROJECT_DIR=$(echo "$PROJECT_DIR" | sed 's|\\|/|g')
-PIPELINE_STATE="$PROJECT_DIR/pipeline-state.json"
+sdd_roots "$INPUT"
+PIPELINE_STATE="$STATE_ROOT/pipeline-state.json"
+GRAPH_FILE="$STATE_ROOT/dashboard/traceability-graph.json"
+
+ROLE=$(sdd_role) || ROLE=""
+ROLE_FROM_REGISTRY=0
+if [ -n "$ROLE" ] && [ -z "${SDD_ROLE:-}" ]; then ROLE_FROM_REGISTRY=1; fi
+
+# --- CLAUDE_ENV_FILE (solo SessionStart): variables para el resto de la sesión ---
+env_quote() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/[\\"$`]/\\&/g')"; }
+write_env_file() {
+  local f="${CLAUDE_ENV_FILE:-}"
+  [ -n "$f" ] || return 0
+  if [ -e "$f" ]; then [ -w "$f" ] || return 0; else [ -w "$(dirname "$f")" ] || return 0; fi
+  {
+    if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+      printf 'export SDD_PLUGIN_ROOT=%s\n' "$(env_quote "$CLAUDE_PLUGIN_ROOT")"
+    fi
+    printf 'export SDD_STATE_ROOT=%s\n' "$(env_quote "$STATE_ROOT")"
+    if [ "$ROLE_FROM_REGISTRY" = 1 ]; then
+      # Rol deducido del registro de sesiones (~/.claude/sessions/<pid>.json → .name → sdd-sessions.json).
+      # Ese registro NO está documentado por Claude Code; la vía oficial es `SDD_ROLE=<rol> claude`.
+      printf 'export SDD_ROLE=%s\n' "$(env_quote "$ROLE")"
+    fi
+  } >> "$f" 2>/dev/null || true
+}
+write_env_file
+
+# --- Contexto de rol (solo si hay rol) ---
+role_context() {
+  [ -n "$ROLE" ] || return 0
+  local owns stages peers
+  owns=$(sdd_role_owns "$ROLE" | tr '\n' ' ') || owns=""
+  owns="${owns% }"
+  stages=$(sdd_role_stages "$ROLE" | tr '\n' ' ') || stages=""
+  stages="${stages% }"
+  peers=$(sdd_peers | tr '\n' ',' | sed -e 's/,$//' -e 's/,/, /g') || peers=""
+  printf 'Rol: %s (posee: %s; stages: %s) | Pares vivos: %s' "$ROLE" "${owns:--}" "${stages:--}" "${peers:-ninguno}"
+}
+
+emit() {
+  local context="$1" rc escaped
+  rc=$(role_context) || rc=""
+  [ -n "$rc" ] && context="$context | $rc"
+  context="${context:0:10000}"
+  escaped=$(sdd_json_string "$context")
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":$escaped}}"
+  exit 0
+}
 
 # If no pipeline-state.json, report fresh pipeline
 if [ ! -f "$PIPELINE_STATE" ]; then
-  echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"SDD Pipeline: No pipeline-state.json found. Fresh pipeline — all stages pending. Run /sdd-setup to initialize automation."}}'
-  exit 0
+  emit "SDD Pipeline: No pipeline-state.json found. Fresh pipeline — all stages pending. Run /sdd-setup to initialize automation."
 fi
 
 # Try jq first, fall back to node
@@ -38,10 +88,10 @@ parse_with_jq() {
 }
 
 parse_with_node() {
-  node -e "
+  SDD_STATE_FILE="$PIPELINE_STATE" node -e "
     const fs = require('fs');
     try {
-      const state = JSON.parse(fs.readFileSync('$PIPELINE_STATE', 'utf8'));
+      const state = JSON.parse(fs.readFileSync(process.env.SDD_STATE_FILE, 'utf8'));
       const entries = Object.entries(state.stages || {});
       const done = entries.filter(([,v]) => v.status === 'done').length;
       const stale = entries.filter(([,v]) => v.status === 'stale').map(([k]) => k);
@@ -65,8 +115,6 @@ CONTEXT=$(parse_with_jq) || CONTEXT=$(parse_with_node) || CONTEXT="SDD Pipeline:
 [ -z "$CONTEXT" ] && CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
 
 # Try to append traceability coverage stats from graph
-GRAPH_FILE="$PROJECT_DIR/dashboard/traceability-graph.json"
-
 if [ -f "$GRAPH_FILE" ]; then
   coverage_with_jq() {
     jq -r '
@@ -82,10 +130,10 @@ if [ -f "$GRAPH_FILE" ]; then
   }
 
   coverage_with_node() {
-    node -e "
+    SDD_GRAPH_FILE="$GRAPH_FILE" node -e "
       const fs = require('fs');
       try {
-        const g = JSON.parse(fs.readFileSync('$GRAPH_FILE', 'utf8'));
+        const g = JSON.parse(fs.readFileSync(process.env.SDD_GRAPH_FILE, 'utf8'));
         const tc = (g.statistics || {}).traceabilityCoverage || {};
         const orph = (g.statistics || {}).orphans || [];
         const code = Math.floor((tc.reqsWithCode || {}).functionalPercentage || (tc.reqsWithCode || {}).percentage || 0);
@@ -99,8 +147,32 @@ if [ -f "$GRAPH_FILE" ]; then
   [ -n "$COVERAGE" ] && CONTEXT="$CONTEXT $COVERAGE"
 fi
 
-# Escape for JSON output
-ESCAPED=$(echo "$CONTEXT" | jq -Rs . 2>/dev/null || node -e "console.log(JSON.stringify(require('fs').readFileSync('/dev/stdin','utf8').trim()))")
+# Handoff del último stage done que lo registre (stages[*].summary.handoff = {to, sentAt, result})
+handoff_with_jq() {
+  jq -r '
+    [ (.stages // {}) | to_entries[] | select(.value.status == "done")
+      | ((.value.summary? | objects | .handoff?) // null) as $h | select($h != null)
+      | "handoff: " + (($h.to // "?") | tostring) + " " + (($h.result // "?") | tostring) ]
+    | last // empty
+  ' "$PIPELINE_STATE" 2>/dev/null
+}
 
-echo "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":$ESCAPED}}"
-exit 0
+handoff_with_node() {
+  SDD_STATE_FILE="$PIPELINE_STATE" node -e "
+    const fs = require('fs');
+    try {
+      const state = JSON.parse(fs.readFileSync(process.env.SDD_STATE_FILE, 'utf8'));
+      const done = Object.values(state.stages || {}).filter((v) => v && v.status === 'done'
+        && v.summary && typeof v.summary === 'object' && v.summary.handoff);
+      if (done.length) {
+        const h = done[done.length - 1].summary.handoff;
+        console.log('handoff: ' + (h.to == null ? '?' : h.to) + ' ' + (h.result == null ? '?' : h.result));
+      }
+    } catch(e) {}
+  " 2>/dev/null
+}
+
+HANDOFF=$(handoff_with_jq) || HANDOFF=$(handoff_with_node) || HANDOFF=""
+[ -n "$HANDOFF" ] && CONTEXT="$CONTEXT | $HANDOFF"
+
+emit "$CONTEXT"

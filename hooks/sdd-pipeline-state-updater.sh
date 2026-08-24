@@ -6,51 +6,69 @@
 # NOTE: The "summary" field in each stage is EXCLUSIVELY managed by skills on completion.
 # This hook must NOT modify or remove the "summary" field. The jq/node updates below
 # only touch status/lastRun/staleReason/currentStage/lastUpdated, preserving summary intact.
+#
+# Dos raíces (hooks/lib/sdd-common.sh): REL_PATH se clasifica respecto al toplevel git del
+# fichero (worktree incluido); pipeline-state.json vive SIEMPRE en STATE_ROOT (raíz del .git
+# común), así varios worktrees comparten un único estado. Lectura-modificación-escritura bajo
+# sdd_lock (mkdir atómico) → jq a fichero temporal en el mismo directorio → mv.
 
 set -euo pipefail
 
+SDD_LIB="$(dirname "${BASH_SOURCE[0]}")/lib/sdd-common.sh"
+if [ ! -f "$SDD_LIB" ]; then echo "sdd-pipeline-state-updater: falta $SDD_LIB" >&2; exit 0; fi
+# shellcheck source=lib/sdd-common.sh
+. "$SDD_LIB"
+
 INPUT=$(cat)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-PROJECT_DIR=$(echo "$PROJECT_DIR" | sed 's|\\|/|g')
-PIPELINE_STATE="$PROJECT_DIR/pipeline-state.json"
 
 # Check if the write was successful
-TOOL_SUCCESS=$(echo "$INPUT" | jq -r '.toolResponse.success // .tool_response.success // "true"' 2>/dev/null) || TOOL_SUCCESS="true"
-if [ "$TOOL_SUCCESS" != "true" ]; then
+TOOL_SUCCESS=$(printf '%s' "$INPUT" | sdd_json_get - '.toolResponse.success // .tool_response.success // "true"') || TOOL_SUCCESS="true"
+if [ "$TOOL_SUCCESS" = "false" ]; then
   exit 0
 fi
 
 # Extract file_path
-FILE_PATH=$(echo "$INPUT" | jq -r '.toolInput.file_path // .tool_input.file_path // empty' 2>/dev/null) || FILE_PATH=""
+FILE_PATH=$(printf '%s' "$INPUT" | sdd_json_get - '.toolInput.file_path // .tool_input.file_path // empty') || FILE_PATH=""
 if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# Normalize
-FILE_PATH=$(echo "$FILE_PATH" | sed 's|\\|/|g')
-REL_PATH="${FILE_PATH#$PROJECT_DIR/}"
-if [ "$REL_PATH" = "$FILE_PATH" ]; then
-  exit 0
-fi
+sdd_roots "$INPUT" "$FILE_PATH"
+PIPELINE_STATE="$STATE_ROOT/pipeline-state.json"
+
+# Not under the project: skip
+case "$REL_PATH" in
+  /*|[A-Za-z]:/*) exit 0 ;;
+esac
 
 # Skip pipeline-state.json itself (avoid infinite loop)
 if [ "$REL_PATH" = "pipeline-state.json" ]; then
   exit 0
 fi
 
-# Map path to pipeline stage
+# Defensa: REL_PATH ya es relativo al worktree; si aun así llega una copia bajo .claude/worktrees/, ignorar
+case "$REL_PATH" in
+  .claude/worktrees/*) exit 0 ;;
+esac
+
+# Map path to pipeline stage (specific audit prefixes BEFORE the generic audits/* rule)
 path_to_stage() {
   local path="$1"
   case "$path" in
-    requirements/*)  echo "requirements-engineer" ;;
-    spec/*)          echo "specifications-engineer" ;;
-    audits/*)        echo "spec-auditor" ;;
-    test/*)          echo "test-planner" ;;
-    plan/*)          echo "plan-architect" ;;
-    task/*)          echo "task-generator" ;;
-    src/*|tests/*)   echo "task-implementer" ;;
-    feedback/*)      echo "task-implementer" ;;
-    *)               echo "" ;;
+    requirements/*)           echo "requirements-engineer" ;;
+    spec/*)                   echo "specifications-engineer" ;;
+    audits/SECURITY-*)        echo "security-auditor" ;;
+    audits/GAP-*)             echo "gap-detector" ;;
+    audits/UPSTREAM-IMPACT-*) echo "spec-auditor" ;;
+    audits/*)                 echo "spec-auditor" ;;
+    design/*)                 echo "tech-designer" ;;
+    ux/*)                     echo "ux-designer" ;;
+    test/*)                   echo "test-planner" ;;
+    plan/*)                   echo "plan-architect" ;;
+    task/*)                   echo "task-generator" ;;
+    src/*|tests/*)            echo "task-implementer" ;;
+    feedback/*)               echo "task-implementer" ;;
+    *)                        echo "" ;;
   esac
 }
 
@@ -61,12 +79,24 @@ if [ -z "$STAGE" ]; then
   exit 0
 fi
 
-# Initialize pipeline-state.json if it doesn't exist
+# Serialize every read-modify-write of the shared state (worktrees, async hooks)
+sdd_lock "$PIPELINE_STATE" || exit 0
+
+# Initialize pipeline-state.json if it doesn't exist (under lock)
 if [ ! -f "$PIPELINE_STATE" ]; then
-  cat > "$PIPELINE_STATE" <<'INIT_EOF'
+  # Version comes from the plugin manifest; sdd-setup normally creates this file first.
+  SDD_VER="unknown"
+  for _root in "${CLAUDE_PLUGIN_ROOT:-}" "${SDD_PLUGIN_ROOT:-}" "$(dirname "${BASH_SOURCE[0]}")/.."; do
+    if [ -n "$_root" ] && [ -f "$_root/.claude-plugin/plugin.json" ]; then
+      SDD_VER=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_root/.claude-plugin/plugin.json" | head -1)
+      [ -n "$SDD_VER" ] && break
+      SDD_VER="unknown"
+    fi
+  done
+  cat > "$PIPELINE_STATE" <<INIT_EOF
 {
-  "sddVersion": "2.4.0",
-  "hooksVersion": 2,
+  "sddVersion": "$SDD_VER",
+  "hooksVersion": 3,
   "currentStage": "requirements-engineer",
   "lastUpdated": "",
   "stages": {
@@ -88,10 +118,13 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Transitions pending/stale/done -> running on artifact writes.
 # "done" stages revert to "running" because new writes mean the stage is actively changing.
 # Skills set "done" explicitly on completion (writing to pipeline-state.json, which H3 skips).
-# "error" and "running" are left untouched.
+# "error" and "running" are left untouched. The stage key is created if it does not exist.
 update_with_jq() {
+  sdd_has_jq || return 1
   local tmpfile="${PIPELINE_STATE}.tmp.$$"
-  jq --arg stage "$STAGE" --arg now "$NOW" '
+  if jq --arg stage "$STAGE" --arg now "$NOW" '
+    .stages = (.stages // {}) |
+    .stages[$stage] = (.stages[$stage] // { status: "pending", outputHash: null, lastRun: null, staleReason: null }) |
     if .stages[$stage].status == "pending" or .stages[$stage].status == "stale" or .stages[$stage].status == "done" then
       .stages[$stage].status = "running" |
       .stages[$stage].lastRun = $now |
@@ -101,16 +134,22 @@ update_with_jq() {
     else
       .lastUpdated = $now
     end
-  ' "$PIPELINE_STATE" > "$tmpfile" 2>/dev/null && mv "$tmpfile" "$PIPELINE_STATE"
+  ' "$PIPELINE_STATE" > "$tmpfile" 2>/dev/null; then
+    mv "$tmpfile" "$PIPELINE_STATE"
+  else
+    rm -f "$tmpfile"
+    return 1
+  fi
 }
 
 update_with_node() {
-  node -e "
+  sdd_has_node || return 1
+  SDD_STATE_FILE="$PIPELINE_STATE" SDD_STAGE="$STAGE" SDD_NOW="$NOW" node -e "
     const fs = require('fs');
+    const file = process.env.SDD_STATE_FILE, stage = process.env.SDD_STAGE, now = process.env.SDD_NOW;
     try {
-      const state = JSON.parse(fs.readFileSync('$PIPELINE_STATE', 'utf8'));
-      const stage = '$STAGE';
-      const now = '$NOW';
+      const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!state.stages || typeof state.stages !== 'object') state.stages = {};
       if (!state.stages[stage]) {
         state.stages[stage] = { status: 'pending', outputHash: null, lastRun: null, staleReason: null };
       }
@@ -122,7 +161,9 @@ update_with_node() {
         state.currentStage = stage;
       }
       state.lastUpdated = now;
-      fs.writeFileSync('$PIPELINE_STATE', JSON.stringify(state, null, 2));
+      const tmp = file + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
+      fs.renameSync(tmp, file);
     } catch(e) {
       // Silent fail for async hook
     }
@@ -131,4 +172,5 @@ update_with_node() {
 
 update_with_jq || update_with_node || true
 
+sdd_unlock "$PIPELINE_STATE"
 exit 0

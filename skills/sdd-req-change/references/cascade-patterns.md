@@ -297,7 +297,8 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
   },
   "highlights": ["0% coverage -> Plan for 100%"],
   "nextStep": "Run /sdd-plan-architect",
-  "generatedAt": "2026-03-04T15:30:00Z"
+  "generatedAt": "2026-03-04T15:30:00Z",
+  "handoff": { "to": "miseia-lead", "sentAt": "2026-03-04T15:30:41Z", "result": "sent" }
 }
 ```
 
@@ -308,6 +309,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `highlights` | array of strings | Max 5 items | Notable observations or decisions |
 | `nextStep` | string | — | Recommended next action |
 | `generatedAt` | string (ISO-8601) | — | When this summary was generated |
+| `handoff` | object `{to, sentAt, result}` | Optional; station mode only | Written by the handoff protocol (plugin-root `references/handoff-protocol.md`) after the summary. `to`: lead session name or `null`; `sentAt`: ISO-8601; `result`: `sent`, `skipped:no-tools`, `skipped:lead-absent`, `skipped:self`, `failed:<reason>` |
 
 ### Per-Skill Metric Keys
 
@@ -332,3 +334,4 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 3. **Overwritten on re-run**: When a stage completes again, `summary` is fully replaced with the new data.
 4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, and `ux-designer` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
 5. **Hook-safe**: The H3 state-updater hook does NOT modify `summary` — it is exclusively managed by skills.
+6. **Handoff patch**: `summary.handoff` is absent in single-session mode. In station mode it is added with a minimal patch (jq under lock, tmp → mv) after Persist Summary and after the skill's local gate question; it is never a full rewrite of the file, and it is replaced together with `summary` on re-run. Readers (H1, `sdd-pipeline-status`, `sdd-lead`, dashboard) must tolerate its absence.

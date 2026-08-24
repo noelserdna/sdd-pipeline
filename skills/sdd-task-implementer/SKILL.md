@@ -685,6 +685,15 @@ Read these files before coding:
 
 El implementer DEBE pausar y reportar al usuario en estas situaciones:
 
+Every PAUSE block ends with two lines, so that a human or the lead can answer it without reading the code:
+
+```
+  Question: <the exact decision needed>
+  Options: [A] <option> (recommended)  [B] <option>  [C] <option>
+```
+
+**Station mode** (`SDD_ROLE` set, or a role resolved from `.claude/sdd-sessions.json`, and the role is not `sdd-lead`): do not stop and wait for the user. Follow the plugin-root `references/async-questions.md`: append the PAUSE as a `Q-<role>-NNN [OPEN]` block to `$STATE_ROOT/.sdd/questions-<role>.md` (copy `Question:` / `Options:` verbatim; `Blocks:` = the task and its dependents), mark the task `[!]`, continue with tasks that do not depend on it, and when none remain run Persist Summary and the handoff with `status=blocked questions=<n> file=<path>`, then end the turn. Build failures and unexpected test regressions block everything: hand off immediately. Without a role: stop and wait, as below.
+
 ### PAUSE: Ambiguity
 
 ```
@@ -1020,3 +1029,4 @@ After completing a FASE or a batch of tasks, update `pipeline-state.json`:
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)
+7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).

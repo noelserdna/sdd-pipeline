@@ -30,6 +30,8 @@ jobs:
         run: node scripts/validate-plugin.mjs
       - name: check-paths / check-version
         run: bash scripts/check-paths.sh && bash scripts/check-version.sh
+      - name: B1 validación estática (tests/e2e/00-validate.sh, sin CLI de claude)
+        run: sudo apt-get install -y -qq shellcheck jq && bash tests/e2e/00-validate.sh
       - name: claude plugin validate --strict
         continue-on-error: true
         run: |
@@ -65,3 +67,14 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y -qq jq
       - run: bash tests/hooks/run.sh
+
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get install -y -qq jq
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: bash tests/setup/run.sh

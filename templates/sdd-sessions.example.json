@@ -1,0 +1,39 @@
+{
+  "$schema": "sdd-sessions-v1",
+  "project": "example",
+  "roles": {
+    "sdd-lead": {
+      "name": "example-lead",
+      "color": "blue",
+      "owns": ["requirements/*", "changes/*", "feedback/*", ".claude/*", "pipeline-state.json"],
+      "stages": ["requirements-engineer", "req-change"]
+    },
+    "sdd-spec": {
+      "name": "example-spec",
+      "color": "cyan",
+      "owns": ["spec/*", "audits/AUDIT-*", "audits/UPSTREAM-*", "audits/CORRECTIONS-*", "changes/*"],
+      "stages": ["specifications-engineer", "spec-auditor", "req-change"]
+    },
+    "sdd-plan": {
+      "name": "example-plan",
+      "color": "green",
+      "owns": ["design/*", "ux/*", "test/*", "plan/*", "task/*", "audits/SECURITY-*"],
+      "stages": ["tech-designer", "ux-designer", "security-auditor", "test-planner", "plan-architect", "task-generator"]
+    },
+    "impl-f1a": {
+      "name": "example-impl-f1a",
+      "color": "red",
+      "owns": ["src/*", "tests/*", "feedback/*", "task/TASK-FASE-*.md", ".sdd/*"],
+      "stages": ["task-implementer"],
+      "fase": 1,
+      "stream": "A",
+      "worktree": "../example-f1a"
+    },
+    "sdd-qa": {
+      "name": "example-qa",
+      "color": "purple",
+      "owns": [".sdd/*", "audits/GAP-*", "dashboard/*"],
+      "stages": ["gap-detector", "traceability-check", "dashboard"]
+    }
+  }
+}

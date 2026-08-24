@@ -60,6 +60,12 @@ Output a formatted report:
 - Invalidated Stages: plan-architect, task-generator
 - Cascade Mode: manual
 
+### Handoffs (multi-session only)
+
+| Stage | To | Sent | Result |
+|-------|----|------|--------|
+| spec-auditor | todo-lead | 2026-08-24T18:40:12Z | sent |
+
 ### Recommended Next Action
 > Run `sdd-spec-auditor` to re-audit the updated specifications.
 
@@ -73,3 +79,4 @@ Output a formatted report:
 - READ-ONLY: Never modify any files.
 - Report facts only; do not execute pipeline stages.
 - If `pipeline-state.json` has the extended schema (with `lastChange`), include that section; otherwise skip it.
+- Include the **Handoffs** section only when at least one stage has `summary.handoff` (see `references/handoff-protocol.md` at the plugin root); show `to`, `sentAt` and `result` (`sent`, `skipped:*`, `failed:*`). Also print the current session role when `SDD_ROLE` is set.

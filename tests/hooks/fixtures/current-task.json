@@ -1,0 +1,8 @@
+{
+  "taskId": "TASK-F1-003",
+  "fase": 1,
+  "refs": ["UC-001", "INV-USR-002"],
+  "stream": "A",
+  "role": "impl-f1a",
+  "startedAt": "2026-01-03T10:00:00Z"
+}

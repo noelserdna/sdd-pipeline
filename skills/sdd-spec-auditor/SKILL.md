@@ -953,6 +953,8 @@ Present to the user:
 
 > **Note:** If Option 1 is selected, the req-change skill handles all requirement modifications. The spec-auditor only detects and classifies — it never writes to `requirements/`.
 
+> **Station mode** (`SDD_ROLE` set, or a role resolved from `.claude/sdd-sessions.json`, and the role is not `sdd-lead`): do not pick an option. Write the Upstream Impact table, leave Tier 1 items as `[PENDING REQ]`, append the decision as a `Q-<role>-NNN [OPEN]` block (Options 1/2/3 above as A/B/C, A recommended; `Blocks:` = pipeline gate to plan-architect) to `$STATE_ROOT/.sdd/questions-<role>.md` following the plugin-root `references/async-questions.md`, finish the audit report and Persist Summary, then send the handoff with `status=blocked questions=<n> file=<path>` and end the turn. On resume, apply the `[ANSWERED]` option exactly as if the user had chosen it. Without a role: ask the user as above.
+
 ### Fix Constraints
 
 1. NEVER generate code — only specification text, invariants, ADRs
@@ -1161,3 +1163,4 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)
+7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).

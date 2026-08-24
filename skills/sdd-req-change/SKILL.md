@@ -1715,3 +1715,4 @@ After generating the change report and optionally executing cascade, update `pip
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)
+7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
