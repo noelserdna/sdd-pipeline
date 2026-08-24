@@ -19,3 +19,10 @@ claude plugin marketplace add /ruta/al/repo      # o noelserdna/sdd-pipeline
 claude plugin install sdd-pipeline@noelserdna
 claude plugin details sdd-pipeline
 ```
+
+## Experimento: conflictos en `task/TASK-FASE-N.md` con dos Streams (2026-08-24)
+
+`docs/experimentos/exp-2-worktrees.sh 5`: dos ramas marcan `[x]` tasks alternas (una por commit) sobre bloques de task de 7 líneas,
+10 merges `--no-ff` → **0 conflictos**; todas las marcas llegan a `main`. La variante adversa (checkboxes en líneas contiguas, sin
+bloque) sí conflictúa: por eso el formato de task de `sdd-task-generator` (bloque Commit/Acceptance/Refs/Revert/Review por task) es
+requisito del modo Stream, y el implementer mantiene "checkbox-first" (el `[x]` viaja en el commit de cada task).

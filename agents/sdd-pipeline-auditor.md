@@ -1,14 +1,14 @@
 ---
 name: sdd-pipeline-auditor
 description: |
-  End-to-end audit of the SDD pipeline. Executes ALL 23 skills on a test project, verifies artifacts, implements all FASEs, runs E2E tests with Playwright, and documents bugs, improvements, and spec deviations. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking across runs.
+  End-to-end audit of the SDD pipeline. Executes ALL 24 skills on a test project, verifies artifacts, implements all FASEs, runs E2E tests with Playwright, and documents bugs, improvements, and spec deviations. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking across runs.
 
   Use this agent when the user wants to validate that the SDD pipeline works correctly, test all skills end-to-end, or audit the quality of the SDD system.
 
   <example>
   Context: User wants to verify the SDD pipeline works
   user: "audit pipeline"
-  assistant: "I'll launch the pipeline auditor to run a full end-to-end test of all 23 SDD skills."
+  assistant: "I'll launch the pipeline auditor to run a full end-to-end test of all 24 SDD skills."
   <commentary>
   Direct request to audit the pipeline. Launch the auditor agent which will create a test project, execute every skill, implement code, run E2E tests, and produce a structured report.
   </commentary>
@@ -26,7 +26,7 @@ description: |
   <example>
   Context: User wants to validate a new version of the pipeline
   user: "test all skills end to end"
-  assistant: "I'll launch a full pipeline audit on a test project to verify all 23 skills produce correct, traceable, working software."
+  assistant: "I'll launch a full pipeline audit on a test project to verify all 24 skills produce correct, traceable, working software."
   <commentary>
   Comprehensive test request. The auditor handles this autonomously without asking the user questions during execution.
   </commentary>
@@ -144,15 +144,15 @@ Run tests?                  → Bash (npx vitest, npx playwright)
 
 ### Phase 0: Setup
 1. Create test project directory (permanent location, NOT /tmp)
-2. Scaffold project (SvelteKit + TypeScript or user-specified stack)
+2. Scaffold project: by default copy `examples/todo-app` from the plugin root (fixed Node + TypeScript + vitest stack, requirements already approved, so AUDIT-HISTORY.md stays comparable across runs); otherwise SvelteKit + TypeScript or the user-specified stack
 3. `git init` + initial commit
-4. Invoke `Skill: sdd-pipeline:sdd-setup` to install automation
+4. Invoke `Skill: sdd-pipeline:sdd-setup` (creates pipeline-state.json with `hooksVersion: 3`, the git commit-msg hook and the .gitignore policy; hooks, agents and the MCP server come from the plugin itself — nothing is copied into `.claude/hooks/`)
 5. Install Playwright AND `@axe-core/playwright` from the start — **never skip a11y E2E tests**
    ```bash
    npm install --save-dev @playwright/test @axe-core/playwright
    npx playwright install chromium
    ```
-6. Verify: hooks, agents, settings, pipeline-state, git hook, Playwright, axe-core
+6. Verify: `claude plugin details sdd-pipeline` lists 24 skills, 5 agents, hooks and the `sdd` MCP server; pipeline-state (`hooksVersion: 3`); git commit-msg hook; Playwright + axe-core (record as N/A when the project has no UI, e.g. `examples/todo-app`, whose E2E tests are CLI-level with vitest)
 7. Create AUDIT-LOG.md, read AUDIT-HISTORY.md if exists (regression check)
 
 ### Phase 1: Spec Pipeline (requirements → specs → audit)
@@ -187,6 +187,12 @@ Launch 3 background agents simultaneously:
 
 After each step: verify artifacts, count IDs, check pipeline-state, log to AUDIT-LOG.
 After Phase 3: invoke A1 (constitution check).
+
+### Phase 3b: Multi-session (worktrees, roles, handoffs)
+1. Run `bash <plugin-root>/tests/e2e/30-multisession.sh` (no model needed) and record the result
+2. Verify `task/TASK-FASE-1.md` has a **Stream Ownership** table and `task/TASK-ORDER.md` a `Streams:` line per FASE (V-15..V-18)
+3. If FASE-1 has ≥ 2 streams: implement them in two worktrees (`git worktree add ../<proj>-f1a -b feat/fase-1-a fase-1-foundation`, `--fase 1 --stream A` / `--stream B`), then `--integrate --fase 1` in the main checkout; log merges, conflicts in `task/TASK-FASE-1.md`, PAUSEs and `.sdd/bench/BENCH-FASE-1.md` (`scripts/sdd-bench.sh --fase 1`)
+4. Verify `sdd-lead` Status mode reads `.claude/sdd-sessions.json` + `pipeline-state.json` without live sessions (no messages are sent during the audit)
 
 ### Phase 4: E2E Tests (MANDATORY)
 1. Write Playwright tests from test/E2E-SCENARIOS.md (dedicated agent)
@@ -345,7 +351,7 @@ Free-form observations.
 - ALWAYS wait for background agents before verifying their output
 - ALWAYS commit code with Refs: and Task: trailers
 - ALWAYS create deviations/DEV-NNN.md for spec disagreements
-- ALWAYS append to AUDIT-HISTORY.md (never overwrite)
+- ALWAYS append to AUDIT-HISTORY.md (never overwrite); for `examples/todo-app` the file is the versioned `examples/todo-app/AUDIT-HISTORY.md` in the plugin repository, and every run records `Pipeline version:` from `.claude-plugin/plugin.json`
 - ALWAYS check for regressions from previous runs
 - ALWAYS invoke A1 after each major phase
 - ALWAYS run gap-detector after implementation and produce `audits/GAP-ANALYSIS-REVIEW.md`
