@@ -288,7 +288,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 | G1: Specs exist | `spec/` has domain/, use-cases/, contracts/ | STOP: "Run sdd-specifications-engineer" |
 | G2: Audit-clean | `audits/AUDIT-BASELINE.md` exists with 0 findings | WARN: "Run sdd-spec-auditor, audit not clean" |
 | G3: FASE files exist | `plan/fases/FASE-*.md` exist | AUTO: Run Phase 1B to generate FASE files |
-| G4: Requirements exist | `spec/requirements/REQUIREMENTS.md` exists | WARN: "Run sdd-requirements-engineer, recommended" |
+| G4: Requirements exist | `requirements/REQUIREMENTS.md` exists | WARN: "Run sdd-requirements-engineer, recommended" |
 | G5: Security audit | `audits/SECURITY-AUDIT-BASELINE.md` exists | WARN: "Run sdd-security-auditor, recommended" |
 
 **Behavior:**
@@ -333,7 +333,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 1. **Inventory** — Scan all `.md` files under `spec/` (excluding `temp_files/`, `CHANGELOG.md`). For each file, extract IDs (UC-NNN, ADR-NNN, INV-XXX-NNN, WF-NNN, RN-NNN) and classify by type.
 
-2. **Classification** — Apply phase assignment algorithm (see `references/phase-assignment-rules.md`) to assign each spec to one or more phases. Priority order: INV prefix → UC number → ADR content → BDD test → Contract module → Workflow → Domain section → NFR/Runbook → Keyword fallback. If any spec has zero phases assigned, ask the user.
+2. **Classification** — Apply phase assignment algorithm (see `references/phase-assignment-rules.md`) to assign each spec to one or more phases. Priority order: INV prefix → UC number → ADR content → BDD test → Contract module → Workflow → Domain section → NFR/Runbook → Keyword fallback → **Delivery Channel / UI pages** (Rule 8). If any spec has zero phases assigned, ask the user. **CRITICAL:** If the System Vision Gate identifies a web/mobile delivery channel, every FASE with user-facing UCs MUST include UI deliverables (pages, routes, components) — see Rule 8 and `references/fase-template.md` §6B.
 
 3. **Dependency Analysis** — Define dependency graph, verify DAG property via topological sort. If cycle detected: STOP and report.
 
@@ -589,22 +589,23 @@ For each decision that warrants formal documentation:
 
 | View | Source | Template |
 |------|--------|----------|
-| C4 System Context (L1) | 01-SYSTEM-CONTEXT.md, contracts/ | architecture-patterns.md §1.2 |
-| C4 Container Diagram (L2) | ADRs (technology), CLAUDE.md | architecture-patterns.md §1.3 |
+| C4 System Context (L1) | 01-SYSTEM-CONTEXT.md, contracts/, `design/TECHNICAL-DESIGN.md` (if exists) | architecture-patterns.md §1.2 |
+| C4 Container Diagram (L2) | ADRs (technology), CLAUDE.md, `design/TECHNICAL-DESIGN.md` (if exists) | architecture-patterns.md §1.3 |
 | C4 Component Diagram (L3) | domain/, use-cases/, contracts/ | architecture-patterns.md §1.4 |
-| Deployment View | ADRs, NFR, FASE-0 | architecture-patterns.md §2 |
+| Deployment View | ADRs, NFR, FASE-0, `design/TECHNICAL-DESIGN.md` (if exists) | architecture-patterns.md §2 |
 | Physical Data Model | domain/02-ENTITIES.md, 03-VALUE-OBJECTS.md | plan-templates.md §ARCHITECTURE |
 | Integration Map | contracts/, workflows/ | architecture-patterns.md §3 |
-| Security Architecture | nfr/SECURITY.md, ADR-002 | architecture-patterns.md §3.1 |
+| Security Architecture | nfr/SECURITY.md, ADR-002, `audits/SECURITY-AUDIT-BASELINE.md` (if exists) | architecture-patterns.md §3.1 |
+| Quality Attributes | `design/QUALITY-ATTRIBUTES.md` (if exists), NFR | architecture-patterns.md |
 
 **Process:**
 
 1. Read all relevant specs (listed above)
 2. For each view:
    a. Extract elements from specs
-   b. Apply decisions from CLARIFY-LOG.md and RESEARCH.md
+   b. Apply decisions from CLARIFY-LOG.md, RESEARCH.md, and `design/TECHNICAL-DESIGN.md` (if exists)
    c. Generate ASCII diagram + element table
-   d. Cross-reference with ADRs
+   d. Cross-reference with ADRs and `design/QUALITY-ATTRIBUTES.md` (if exists)
 
 3. Generate physical data model:
    a. Read all entities from domain/02-ENTITIES.md
@@ -682,13 +683,14 @@ For each FASE file found in Phase 0:
    - FASE-specific technical decisions
    - Component implementation details (interface sketches from contracts)
    - API implementation notes (endpoints, middleware, validation)
+   - **UI deliverables** (pages/routes, components, forms) — REQUIRED for FASEs with user-facing UCs when delivery channel is web/mobile/desktop. Each page must map to its UC(s). Reference wireframes from `ux/WIREFRAMES.md` if available. See `references/fase-template.md` §6B.
    - Data changes (new tables, migrations)
    - Test strategy (unit, integration, BDD mapping)
    - **Test Coverage Map** (Source File → Test File):
      - For each source file with testable logic, map to its corresponding test file
-     - Classify each source file: `logic` | `entity` | `service` | `state-machine` | `infrastructure`
+     - Classify each source file: `logic` | `entity` | `service` | `state-machine` | `infrastructure` | `page` | `component`
      - Infrastructure files (thin wrappers, enum constants, event publishers) → mark as excluded with justification
-     - Priority: HIGH (domain logic, state machines, services), MEDIUM (mappers, validators), LOW (config, constants)
+     - Priority: HIGH (domain logic, state machines, services), MEDIUM (mappers, validators, pages), LOW (config, constants)
    - Dependencies on shared components from other FASEs
    - Acceptance criteria (from UCs + INVs)
 

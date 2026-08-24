@@ -254,6 +254,28 @@ Some specs span multiple phases. Handle with **section qualifiers**:
 
 ---
 
+## Rule 8: By Delivery Channel (UI Pages)
+
+**How to detect:** Check the System Vision Gate's "Delivery Channels" dimension. If it includes web, mobile, or desktop, the project has a user-facing presentation layer that must be planned.
+
+**How to assign:**
+
+1. **Identify user-facing UCs**: Any UC where the primary actor is a human user (not a system/API client) requires a UI page or screen.
+2. **Map UCs to pages**: Group related UCs into pages (e.g., UC-001 Register + UC-002 Login → Auth pages; UC-004 Create Post + UC-006 View Timeline → Timeline page with compose form).
+3. **Assign pages to FASEs**: Each page belongs to the same FASE as the UC(s) it implements. The page is a deliverable of that FASE, not a separate FASE.
+4. **Shared components**: UI components used across multiple pages (nav bar, error toast, user avatar) belong to the earliest FASE that needs them.
+5. **Full-stack frameworks**: When using SvelteKit, Next.js, Remix, or similar, API routes AND pages are in the same project — both must appear in the FASE's deliverables.
+
+**Decision table template:**
+
+| UC ID | Page/Route | Components | Assigned FASE | Rationale |
+|-------|------------|------------|---------------|-----------|
+| UC-{NNN} | `/{path}` | {component list} | FASE-{N} | {same FASE as the UC's backend} |
+
+**Anti-pattern:** Creating all backend FASEs without any UI deliverables, then hoping a "frontend FASE" will appear later. This never happens — the UI must be part of each feature FASE.
+
+---
+
 ## Conflict Resolution
 
 When a spec matches multiple rules pointing to different phases:

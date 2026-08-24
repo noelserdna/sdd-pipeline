@@ -4,7 +4,7 @@ description: "Detects implementation gaps between specifications and code. Compa
 version: "1.0.0"
 context: fork
 agent: Explore
-allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Write(.sdd/*)
+allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Write(.sdd/*), Write(audits/*)
 ---
 
 # SDD Gap Detector
@@ -326,6 +326,61 @@ BDD-020, BDD-033
 
 ---
 
+### Phase 5: Human Review Document
+
+**Purpose:** Generate a structured review document listing every ORPHAN, MISSING, and SCHEMA finding as a line item requiring a human decision. The LLM NEVER decides whether orphan code should stay or go — that is a human judgment call.
+
+> **Principle:** Over-delivery (gold plating) is as harmful as under-delivery. Code without requirement backing introduces untested surface area, breaks traceability, and consumes maintenance budget. But only a human can decide whether to promote the feature to a formal REQ or remove it.
+
+#### 5.1 Write `audits/GAP-ANALYSIS-REVIEW.md`
+
+For each finding from Phase 3, create a structured entry:
+
+```markdown
+### {TYPE}-{NNN}: {Short title}
+- **File:** `{file path}:{line}`
+- **Origin:** {Where the code/spec came from — REQ, audit recommendation, implementation decision}
+- **What it does:** {Brief description}
+- **Why it's {orphan|missing|schema drift}:** {Explanation referencing specific REQ or spec gap}
+- **Risk of {removing|not implementing|keeping as-is}:** {Concrete consequence}
+- **Decision:** `________` **Rationale:** _______________________
+```
+
+#### 5.2 Decision Options
+
+Include this legend at the top of the document:
+
+| Decision | Meaning | Action |
+|----------|---------|--------|
+| **PROMOTE** | The feature is valuable — promote to formal REQ via `/sdd-req-change` | Create REQ, update specs, keep code |
+| **REMOVE** | The feature was not requested — remove the code | Delete code, update tests |
+| **ACCEPT** | Keep as-is without formal REQ (document rationale) | No code change, add rationale |
+| **DEFER** | Decide later | No action now |
+
+#### 5.3 Processing Instructions
+
+Include at the bottom:
+
+```
+## How to process this document
+1. Review each finding
+2. Write your decision (PROMOTE / REMOVE / ACCEPT / DEFER) and rationale
+3. For PROMOTE decisions: run `/sdd-req-change` to create the formal REQ
+4. For REMOVE decisions: delete the code and update affected tests
+5. For ACCEPT decisions: no code change, rationale serves as documentation
+6. Commit this document with decisions as the audit trail
+```
+
+#### 5.4 Rules
+
+- **NEVER** auto-fix findings — all decisions are human
+- **NEVER** recommend REMOVE or PROMOTE — present facts neutrally, let the human decide
+- **ALWAYS** include "Risk of removing/not implementing" so the human can make an informed choice
+- For ORPHAN items that come from security audit recommendations (INFO/RECOMMENDATION severity), explicitly note: "Origin: audit recommendation, not a formal REQ"
+- For ORPHAN items that are testing infrastructure (`NODE_ENV` guards, test env vars), note: "Origin: implementation convenience for testability"
+
+---
+
 ## Constraints
 
 - **C-01**: READ-ONLY on `spec/` and `src/` — never modify source or spec files
@@ -344,6 +399,7 @@ BDD-020, BDD-033
 | Artifact | Location | Description |
 |----------|----------|-------------|
 | Gap analysis JSON | `.sdd/gap-analysis.json` | Structured results with all gaps, orphans, mismatches |
+| Human review document | `audits/GAP-ANALYSIS-REVIEW.md` | Each finding as a decision item for human review (PROMOTE/REMOVE/ACCEPT/DEFER) |
 | Console summary | (stdout) | Human-readable summary table |
 
 ## Integration with Other Skills

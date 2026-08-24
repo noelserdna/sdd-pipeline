@@ -100,7 +100,7 @@ WF-\d{3}           → verify spec/workflows/WF-{NNN}.md exists
 INV-[A-Z]+-\d{3}   → verify exists in spec/domain/05-INVARIANTS.md
 ADR-\d{3}          → verify spec/adr/ADR-{NNN}*.md exists
 RN-\d{3}           → verify exists in spec/CLARIFICATIONS.md
-REQ-[A-Z]+-\d{3}   → verify exists in spec/requirements/REQUIREMENTS.md
+REQ-[A-Z]+-\d{3}   → verify exists in requirements/REQUIREMENTS.md
 BDD-[a-z-]+        → verify spec/tests/BDD-{name}.md exists
 API-[a-z-]+        → verify spec/contracts/API-{name}.md exists
 ```

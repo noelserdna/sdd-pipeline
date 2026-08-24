@@ -153,15 +153,48 @@ For complex phases, sub-section by area:
 |----------|--------|-------------|
 ```
 
+### 6B. Entregables de UI (REQUIRED if delivery channel includes web/mobile)
+
+> **Rule:** If the System Vision Gate identifies a web, mobile, or desktop delivery channel, EVERY FASE that implements user-facing UCs MUST include this section listing the pages/components to build. Omit ONLY for API-only projects or purely infrastructure FASEs (e.g., FASE-0 with no user-facing routes).
+
+```markdown
+## Entregables de UI
+
+### Páginas / Rutas
+
+| Ruta | Componente | UC | Descripción |
+|------|------------|----|-------------|
+| `/{path}` | `+page.svelte` | UC-{NNN} | {What the page does} |
+
+### Componentes Compartidos
+
+| Componente | Usado en | Descripción |
+|------------|----------|-------------|
+| `{ComponentName}` | {pages list} | {What it renders} |
+```
+
+**Notes:**
+- Routes/pages are framework-specific: SvelteKit uses `+page.svelte`, Next.js uses `page.tsx`, etc.
+- Each page MUST map to at least one UC (no orphan pages)
+- If `ux/WIREFRAMES.md` exists, reference wireframe IDs for each page
+- Forms must reference validation schemas from `spec/domain/03-VALUE-OBJECTS.md`
+
 ### 7. Verificación (REQUIRED)
 
 ```markdown
 ## Verificación
 
 \```bash
-# {Description of what to verify}
+# API verification
 curl -X {METHOD} /api/v1/{path}
 # Esperar: {Expected result}
+\```
+
+\```markdown
+# UI verification (if delivery channel includes web/mobile)
+- [ ] Navigate to /{path} → page renders without errors
+- [ ] {User action} → {expected visual result}
+- [ ] Form validation shows errors for invalid input
 \```
 ```
 

@@ -87,13 +87,14 @@ sdd-skills/automation/agents/sdd-cross-auditor.md         → .claude/agents/sdd
 sdd-skills/automation/agents/sdd-context-keeper.md        → .claude/agents/sdd-context-keeper.md
 ```
 
-### Step 4.5: Copy Augment Hook
+### Step 4.5: Copy Augment Hook and Trace Map Updater
 
 ```
-sdd-skills/automation/hooks/sdd-context-augment.sh → .claude/hooks/sdd-context-augment.sh
+sdd-skills/automation/hooks/sdd-augment-hook.js      → .claude/hooks/sdd-augment-hook.js
+sdd-skills/automation/hooks/sdd-trace-map-updater.sh → .claude/hooks/sdd-trace-map-updater.sh
 ```
 
-Make it executable: `chmod +x .claude/hooks/sdd-context-augment.sh`
+Make them executable: `chmod +x .claude/hooks/sdd-augment-hook.js .claude/hooks/sdd-trace-map-updater.sh`
 
 ### Step 5: Configure Settings
 
@@ -194,9 +195,9 @@ If `pipeline-state.json` already exists:
 
 Run verification checks:
 
-1. All 4 hook scripts exist and are executable (H1-H3 + H5 augment)
+1. All 5 hook scripts exist and are executable (H1-H3, H5 augment, H6 trace-map)
 2. All 3 agent definitions exist
-3. `settings.json` contains the 5 hook configurations (H1-H5)
+3. `settings.json` contains the 6 hook configurations (H1-H6)
 4. `pipeline-state.json` exists and is valid JSON
 5. MCP server built (`server/dist/index.js` exists)
 
@@ -211,7 +212,8 @@ Report results:
 | Hook: sdd-upstream-guard (H2) | Installed |
 | Hook: sdd-pipeline-state-updater (H3) | Installed |
 | Hook: stop-hook (H4) | Configured in settings |
-| Hook: sdd-context-augment (H5) | Installed |
+| Hook: sdd-augment-hook.js (H5) | Installed |
+| Hook: sdd-trace-map-updater (H6) | Installed |
 | Git hook: commit-msg (traceability) | Installed / Skipped (no .git) |
 | Hook: quality gates (H7-H8) | Opt-in / Configured / Skipped |
 | Status Line: sdd-status-line | Opt-in / Configured / Skipped |

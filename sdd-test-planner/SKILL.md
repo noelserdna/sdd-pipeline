@@ -208,11 +208,13 @@ Use when the user wants a comprehensive test plan for the project.
 
 ### Mode 2: Generate Test Matrices
 
-Use when the user wants detailed input/output matrices for complex use cases.
+Use when the user wants detailed input/output matrices for use cases.
+
+**Scope:** If the user does not specify a UC, generate matrices for ALL use cases in `spec/use-cases/`. One file per UC: `test/TEST-MATRIX-UC-NNN.md`.
 
 **Process:**
 
-1. **Read target UC spec** (`spec/use-cases/UC-NNN-*.md`)
+1. **Read target UC spec(s)** — single UC if specified, or ALL UCs in `spec/use-cases/`
 2. **Extract inputs:** All parameters, preconditions, actor roles
 3. **Apply test design techniques** (SWEBOK v4 Ch04 §3):
 

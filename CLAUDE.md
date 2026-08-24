@@ -65,16 +65,19 @@ automation/
 ├── hooks/                               # Hook scripts (installed to target .claude/hooks/)
 │   ├── sdd-session-start.sh             # H1: Pipeline status injection at session start
 │   ├── sdd-upstream-guard.sh            # H2: Upstream artifact immutability guard
-│   └── sdd-pipeline-state-updater.sh    # H3: Auto-update pipeline-state.json on writes
+│   ├── sdd-pipeline-state-updater.sh    # H3: Auto-update pipeline-state.json on writes
+│   ├── sdd-augment-hook.js              # H5: Enriches tool context with SDD traceability data
+│   └── sdd-trace-map-updater.sh         # H6: Auto-updates traceability map on writes
 ├── agents/                              # Agent definitions (installed to target .claude/agents/)
 │   ├── sdd-constitution-enforcer.md     # A1: Validates against 11 SDD Constitution articles
 │   ├── sdd-cross-auditor.md             # A2: Cross-references skill definitions for mismatches
-│   └── sdd-context-keeper.md            # A3: Maintains informal project context
+│   ├── sdd-context-keeper.md            # A3: Maintains informal project context
+│   └── sdd-pipeline-auditor.md          # A4: End-to-end pipeline audit with regression tracking
 ├── status-line/
 │   └── sdd-status-line.sh              # Pipeline status line for Claude Code CLI (opt-in)
 ├── scripts/
 │   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
-├── settings-template.json               # P1: Settings template with H1-H3 core hook configs + statusLine
+├── settings-template.json               # P1: Settings template with H1-H3, H5-H6 hook configs + statusLine
 ├── settings-optional-quality-gates.json # P2: Opt-in prompt/agent quality gate hooks (H7-H8)
 └── INSTALL.md                           # Manual installation guide
 ```
@@ -119,6 +122,39 @@ Reference implementations and external tools used as inspiration/comparison for 
 - **Clarification-first**: Skills never assume — they ask the user via structured option tables
 - **Baseline auditing**: First audit creates baseline; subsequent audits only report new/regression findings
 - **Revert strategies**: Each task documents rollback approach (SAFE, COUPLED, MIGRATION, CONFIG)
+- **Specs are the source of truth** (Art. 12 — see below)
+
+## Article 12: Specification Primacy
+
+This is the foundational principle of SDD. It governs all implementation and testing:
+
+**1. Tests verify specifications, NEVER the code.** A test is a formal assertion that the code conforms to the spec. If a test fails, the defect is in the code — fix the code, not the test. Tests must NEVER be adapted to match code behavior that deviates from specifications.
+
+**2. Specs may be wrong — but only humans decide.** During implementation or testing, a developer (or LLM) may discover that a specification is impractical, contradictory, or a poor design decision. When this happens:
+- **DO NOT** silently change the spec
+- **DO NOT** silently change the test to match the "better" behavior
+- **DO NOT** implement the "better" behavior and ignore the spec
+- **DO** create a **Spec Deviation Report** in `deviations/DEV-NNN.md`:
+
+```markdown
+# DEV-NNN: {title}
+
+- **Spec:** {spec ID and text, e.g., RN-004: "Registration does not auto-login"}
+- **Observed during:** {implementation/testing of TASK-XX or E2E-XX}
+- **Deviation:** {what the implementer thinks should be different and why}
+- **Impact:** {what would change if the spec were amended}
+- **Recommendation:** AMEND | KEEP | NEEDS-DISCUSSION
+- **Status:** PENDING-REVIEW
+```
+
+- The implementer must **implement the spec as written** (not the "better" version)
+- A human reviews the deviation and either:
+  - **Keeps the spec** → no changes needed
+  - **Amends the spec** → triggers `sdd-req-change` with proper cascade
+
+**3. The cascade is: human decision → req-change → spec update → test update → code update.** Never the reverse. Code never drives specs; specs always drive code.
+
+This principle prevents silent drift between specifications and implementation, which is the #1 cause of "the code is the documentation" entropy in software projects.
 
 ## Pipeline State Management
 
@@ -188,7 +224,8 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - **H2 — Upstream Guard** (`sdd-upstream-guard.sh`): Blocks downstream skills from modifying upstream artifacts (Art. 4). Event: `PreToolUse` (matcher: `Edit|Write`). Uses `hookSpecificOutput` wrapper.
 - **H3 — State Updater** (`sdd-pipeline-state-updater.sh`): Auto-updates `pipeline-state.json` on writes. Event: `PostToolUse` (matcher: `Write`, async).
 - **H4 — Stop Hook** (inline prompt in settings): Verifies pipeline state consistency on session end. Uses haiku model.
-- **H5 — Context Augment** (`sdd-context-augment.sh`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`).
+- **H5 — Context Augment** (`sdd-augment-hook.js`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`). JavaScript (Node.js).
+- **H6 — Trace Map Updater** (`sdd-trace-map-updater.sh`): Auto-updates traceability map on spec/code writes. Event: `PostToolUse` (matcher: `Write|Edit`, async).
 
 **Git hooks** (installed by `sdd-setup` into target `.git/hooks/`):
 - **commit-msg**: Enforces traceability trailers (`Refs:` and/or `Task:`) on commit messages, ensuring every commit links back to SDD artifacts.
@@ -204,10 +241,11 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - `sdd-task-implementer` Stop hook: Prompt verifying Refs:/Task: trailers on last commit.
 - `sdd-spec-auditor` Stop hook: Prompt verifying P0/P1 findings are addressed.
 
-**Agents** (delegated by Claude or user):
-- **A1 — Constitution Enforcer**: Validates operations against the 11 SDD Constitution articles. Model: haiku.
-- **A2 — Cross-Auditor**: Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
-- **A3 — Context Keeper**: Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
+**Agents** (installed to target `.claude/agents/` via `/sdd-setup`):
+- **A1 — Constitution Enforcer** (`sdd-constitution-enforcer.md`): Validates operations against the 11 SDD Constitution articles. Model: haiku.
+- **A2 — Cross-Auditor** (`sdd-cross-auditor.md`): Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
+- **A3 — Context Keeper** (`sdd-context-keeper.md`): Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
+- **A4 — Pipeline Auditor** (`sdd-pipeline-auditor.md`): End-to-end pipeline audit. Executes ALL 23 skills on a test project, verifies artifacts, runs E2E tests, documents bugs/improvements. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking. Model: opus. Has project memory.
 
 **Pipeline State Schema** (authoritative source: `sdd-req-change/references/cascade-patterns.md`):
 - Uses `lastRun` (not `completedAt`), no `inputHash`, adds `staleReason`, `error` status, `lastChange` block.

@@ -606,7 +606,87 @@ def scan_commits(project_dir):
             "files": files,
         })
 
+    # Fallback: if %(trailers:...) found nothing, scan commit body for Refs:/Task: lines.
+    # This handles commits where Refs:/Task: are in the body but not detected as formal git trailers
+    # (e.g., wrong paragraph position, extra content after trailers, older git versions).
+    if not commits:
+        print("  Trailer-based scan found 0 commits. Trying body-based fallback...")
+        commits = _scan_commits_body_fallback(project_dir)
+
     print(f"  Found {len(commits)} commits with Refs:/Task: trailers")
+    return commits
+
+
+# Regex for extracting Refs: and Task: from commit body text
+_BODY_REFS_RE = re.compile(r'(?:^|\n)\s*Refs:\s*(.+)', re.MULTILINE)
+_BODY_TASK_RE = re.compile(r'(?:^|\n)\s*Task:\s*(TASK-F\d{1,2}-\d{3,4})\s*$', re.MULTILINE)
+
+
+def _scan_commits_body_fallback(project_dir):
+    """Fallback commit scan: search body text for Refs:/Task: patterns via --grep."""
+    COMMIT_DELIM = "---COMMIT-BODY-END---"
+    try:
+        result = subprocess.run(
+            [
+                "git", "log", "--all", "--name-only", "--grep=Refs:",
+                f"--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%b{COMMIT_DELIM}"
+            ],
+            capture_output=True, text=True, cwd=project_dir, timeout=60
+        )
+        if result.returncode != 0:
+            return []
+    except Exception:
+        return []
+
+    commits = []
+    for chunk in result.stdout.split(COMMIT_DELIM):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+
+        # Split only on first 5 null bytes — body (%b) is in the 6th field and may contain newlines
+        parts = chunk.split("\x00", 5)
+        if len(parts) < 5:
+            continue
+
+        full_sha = parts[0].strip()
+        short_sha = parts[1]
+        subject = parts[2]
+        author = parts[3]
+        date = parts[4]
+        body_and_files = parts[5] if len(parts) > 5 else ""
+
+        # Body and files are mixed — split by COMMIT_DELIM remnants then by blank lines
+        # Files come after body, separated by newlines from --name-only
+        body_text = body_and_files
+
+        # Extract Refs: from body
+        refs_match = _BODY_REFS_RE.search(body_text)
+        ref_ids = _parse_validated_refs(refs_match.group(1)) if refs_match else []
+
+        # Extract Task: from body
+        task_match = _BODY_TASK_RE.search(body_text)
+        task_id = task_match.group(1) if task_match else None
+
+        if not ref_ids and not task_id:
+            continue
+
+        # Extract file paths — lines after the body that look like file paths
+        all_lines = body_and_files.split("\n")
+        files = [f.strip() for f in all_lines if f.strip() and "/" in f.strip() and not f.strip().startswith("Refs:") and not f.strip().startswith("Task:")]
+
+        commits.append({
+            "sha": short_sha,
+            "fullSha": full_sha,
+            "message": subject,
+            "author": author,
+            "date": date,
+            "taskId": task_id,
+            "refIds": ref_ids,
+            "files": files,
+        })
+
+    print(f"  Body fallback found {len(commits)} commits")
     return commits
 
 
@@ -1954,10 +2034,13 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     orphans = sorted(all_defined - all_referenced)
 
     # Find broken references: IDs referenced but never defined
+    # Exclude structural IDs that are valid cross-reference targets but don't have
+    # their own artifact definitions (FASE-N headers, API group headers like API-AUTH)
+    _STRUCTURAL_ID_RE = re.compile(r'^(FASE-\d{1,2}|API-[A-Z]+)$')
     broken_refs = []
     broken_ids = set()
     for (src, tgt, sfile, line) in references:
-        if tgt not in artifacts and tgt not in broken_ids:
+        if tgt not in artifacts and tgt not in broken_ids and not _STRUCTURAL_ID_RE.match(tgt):
             broken_ids.add(tgt)
             broken_refs.append({
                 "ref": tgt,

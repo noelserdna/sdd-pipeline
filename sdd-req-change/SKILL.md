@@ -90,7 +90,7 @@ Aligned with SWEBOK v4 Ch01 (Software Requirements), Change Management and Ch05 
 
 **Steps:**
 1. Glob all `.md` files under `spec/` — build manifest with IDs, types, versions
-2. Read `spec/requirements/REQUIREMENTS.md` — extract all REQ IDs, categories, traceability
+2. Read `requirements/REQUIREMENTS.md` — extract all REQ IDs, categories, traceability
 3. Read `spec/domain/01-GLOSSARY.md` — load ubiquitous language (MANDATORY reference)
 4. Read `spec/CLARIFICATIONS.md` — load business rules (RN-*)
 5. Read `spec/CHANGELOG.md` — identify current spec version
@@ -109,7 +109,7 @@ Aligned with SWEBOK v4 Ch01 (Software Requirements), Change Management and Ch05 
 | Gate | Check | Action if Fails |
 |------|-------|-----------------|
 | G1: Specs exist | `spec/domain/`, `spec/use-cases/`, `spec/contracts/` present | STOP: "Run sdd-specifications-engineer first" |
-| G2: REQUIREMENTS.md exists | `spec/requirements/REQUIREMENTS.md` present | STOP: "Run sdd-requirements-engineer first" |
+| G2: REQUIREMENTS.md exists | `requirements/REQUIREMENTS.md` present | STOP: "Run sdd-requirements-engineer first" |
 | G3: Glossary exists | `spec/domain/01-GLOSSARY.md` present | STOP: "Cannot proceed without ubiquitous language" |
 | G4: Audit-clean (warning only) | `AUDIT-BASELINE.md` has 0 open findings | WARN: "Specs have open audit findings. Changes may conflict." |
 | G5: Pipeline state (info only) | `pipeline-state.json` exists and is readable | INFO: "No pipeline state found. Will create after changes." |

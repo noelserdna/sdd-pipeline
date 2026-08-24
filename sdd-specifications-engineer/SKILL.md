@@ -433,6 +433,17 @@ Maintain a living index of all open markers:
 
 When a marker is resolved in a future session, remove the HTML comment from the spec, move the row's `Resolved` column to the resolution date, and record the decision in `spec/CLARIFICATIONS.md` as a business rule (RN-NNN).
 
+**Always create this file**, even if empty (no pending clarifications). This prevents downstream skills from having to check for file existence:
+
+```markdown
+# Pending Clarifications
+
+| ID | Document | Question | Inserted | Resolved |
+|----|----------|----------|----------|----------|
+
+(No pending clarifications)
+```
+
 ---
 
 ## Pipeline Integration
