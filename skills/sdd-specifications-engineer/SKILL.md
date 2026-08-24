@@ -1,6 +1,6 @@
 ---
 name: sdd-specifications-engineer
-description: "Professional software specifications engineer based on SWEBOK v4. Transforms requirements into formal specification documents. Use this skill when: (1) Translating requirements into technical specifications, (2) Creating Software Requirements Specification (SRS) documents, (3) Analyzing requirements for gaps and ambiguities before specification, (4) Building specification folder structures and documents, (5) Proposing modifications to deficient requirements. Triggers on phrases like 'create specifications', 'write specs', 'requirements to specifications', 'SRS document', 'specification document', 'translate requirements', 'spec from requirements', 'especificaciones', 'crear especificaciones'."
+description: "Transforms requirements into formal specs (SRS) per SWEBOK v4: analyzes gaps and ambiguities first, builds the spec/ folder structure, proposes fixes to deficient requirements. Triggers: 'create specifications', 'write specs', 'requirements to specifications', 'SRS document', 'translate requirements', 'spec from requirements', 'especificaciones'."
 ---
 
 # Specifications Engineer (SWEBOK v4)

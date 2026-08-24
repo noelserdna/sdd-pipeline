@@ -1,6 +1,6 @@
 ---
 name: sdd-req-change
-description: "Manages the full lifecycle of requirements changes AND pipeline cascade: ADD, MODIFY, and DEPRECATE requirements with bidirectional propagation through all specification documents and optional downstream pipeline re-execution. Use this skill when: (1) Adding new features or requirements, (2) Modifying existing requirements and propagating changes, (3) Deprecating requirements with proper impact analysis, (4) Requesting a new feature that needs to flow through the entire pipeline, (5) Handling corrective/adaptive/preventive maintenance changes, (6) Triggering re-planning and re-tasking after spec changes. Triggers on phrases like 'change requirement', 'add requirement', 'deprecate requirement', 'modify requirement', 'new feature', 'I need', 'fix this', 'update dependency', 'retire feature', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'requirements change', 'pipeline cascade'."
+description: "Requirement changes (req-change): ADD, MODIFY, DEPRECATE propagated to specs; optional pipeline cascade. Triggers: 'change requirement', 'add requirement', 'deprecate requirement', 'new feature', 'I need', 'fix this', 'update dependency', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'pipeline cascade'."
 ---
 
 # Skill: sdd-req-change — Requirements Change Manager & Pipeline Cascade Trigger

@@ -1,6 +1,6 @@
 ---
 name: sdd-code-index
-description: "Index project code for deep traceability. Bridges GitNexus code intelligence with SDD artifacts — maps call graphs, symbols, and execution flows to requirements. Use when: (1) Enriching traceability after implementation with symbol-level code refs, (2) Building commit-to-requirement inference from git history, (3) Preparing for reconciliation with deep code analysis, (4) Improving dashboard coverage data with code intelligence. Triggers: 'index code', 'code intelligence', 'code traceability', 'map code to requirements', 'indexar codigo', 'inteligencia de codigo', 'enrich traceability'."
+description: "Indexes code via GitNexus (call graphs, symbols, flows) and maps it to requirements: symbol-level traceability, commit-to-requirement inference from git history, reconciliation prep. Triggers: 'index code', 'code intelligence', 'code traceability', 'map code to requirements', 'indexar codigo', 'inteligencia de codigo', 'enrich traceability'."
 ---
 
 # SDD Code Index — GitNexus Bridge

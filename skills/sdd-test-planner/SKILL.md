@@ -1,6 +1,6 @@
 ---
 name: sdd-test-planner
-description: "Professional software test planning skill based on SWEBOK v4 Chapter 04 (Software Testing). Generates comprehensive test strategies, test matrices, performance scenarios, and E2E acceptance scenarios from specifications. Use this skill when: (1) Creating test plans from specifications, (2) Generating test matrices with input combinations and boundary values, (3) Defining test coverage targets per FASE, (4) Creating performance test scenarios from NFRs, (5) Auditing test coverage of existing specs, (6) Generating E2E acceptance scenarios from workflows. Triggers on phrases like 'test plan', 'test strategy', 'test matrix', 'performance tests', 'test coverage', 'e2e scenarios', 'end to end', 'acceptance tests', 'playwright', 'plan de pruebas', 'estrategia de testing', 'cobertura de tests', 'tests e2e', 'tests de aceptacion'."
+description: "Test planning per SWEBOK v4: strategy, matrices, coverage per FASE, performance (NFRs) and E2E acceptance scenarios. Triggers: 'test plan', 'test strategy', 'test matrix', 'performance tests', 'test coverage', 'e2e scenarios', 'acceptance tests', 'playwright', 'plan de pruebas', 'estrategia de testing', 'cobertura de tests', 'tests de aceptacion'."
 ---
 
 # SDD Test Planner Skill

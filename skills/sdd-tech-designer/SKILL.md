@@ -1,6 +1,6 @@
 ---
 name: sdd-tech-designer
-description: "Technical architecture and design exploration across 12 dimensions (delivery channels, architecture style, tech stack, data strategy, auth, API, infrastructure, CI/CD, observability, cost, DX, i18n). Analyzes specifications with ATAM-lite quality attribute evaluation. Use when: (1) Making technology stack decisions before planning, (2) Evaluating architecture trade-offs (monolith vs microservices, SQL vs NoSQL), (3) Documenting technical decisions as ADR drafts, (4) Exploring infrastructure and deployment options. Outputs to design/. Triggers: 'technical design', 'tech stack', 'architecture decision', 'design exploration', 'diseno tecnico', 'stack tecnologico', 'ADR'."
+description: "Explores technical architecture across 12 dimensions (delivery, style, tech stack, data, auth, API, infra, CI/CD, observability, cost, DX, i18n) with ATAM-lite evaluation; drafts ADRs. Outputs to design/. Triggers: 'technical design', 'tech stack', 'architecture decision', 'design exploration', 'diseno tecnico', 'stack tecnologico', 'ADR'."
 ---
 
 # SDD Tech Designer Skill

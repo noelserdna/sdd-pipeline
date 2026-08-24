@@ -1,6 +1,6 @@
 ---
 name: sdd-reverse-engineer
-description: "Analyzes existing source code and tests to generate complete SDD artifacts (requirements, specifications, test plan, architecture plan, retroactive tasks) with full traceability. Performs deep code analysis to extract entities, routes, state machines, invariants, and business rules. Documents dead code, tech debt, workarounds, and orphan code as findings with severity markers. Operates as a lateral entry point to bootstrap the SDD pipeline for brownfield projects. Triggers on phrases like 'reverse engineer', 'extract specs from code', 'bootstrap SDD', 'code to requirements', 'analyze existing code', 'brownfield to SDD'."
+description: "Bootstraps SDD from existing code and tests: generates requirements, specs, test plan, architecture and retroactive tasks with traceability; extracts entities, routes, state machines, invariants, tech debt. Triggers: 'reverse engineer', 'extract specs from code', 'bootstrap SDD', 'code to requirements', 'analyze existing code', 'brownfield to SDD'."
 ---
 
 # Skill: sdd-reverse-engineer — Code → SDD Artifact Generator

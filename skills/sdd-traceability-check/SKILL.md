@@ -1,6 +1,6 @@
 ---
 name: sdd-traceability-check
-description: "Verifies the full SDD traceability chain REQ-UC-WF-API-BDD-INV-ADR-TASK-COMMIT-CODE-TEST across all spec artifacts. Finds orphaned references, broken links, and untraced inferred refs. Use when: (1) Validating cross-document references before releasing, (2) Finding orphaned requirements or specs without upstream links, (3) Checking commit-to-requirement traceability after implementation, (4) Auditing inferred refs for promotion to direct links. Triggers: 'check traceability', 'find orphans', 'broken links', 'trace chain', 'verificar trazabilidad', 'referencias rotas', 'traceability audit'."
+description: "Verifies the SDD traceability chain REQ-UC-WF-API-BDD-INV-ADR-TASK-COMMIT-CODE-TEST across artifacts: orphaned references, broken links, untraced inferred refs, commit-to-requirement links. Triggers: 'check traceability', 'find orphans', 'broken links', 'trace chain', 'verificar trazabilidad', 'referencias rotas', 'traceability audit'."
 context: fork
 agent: Explore
 allowed-tools: Read, Grep, Glob

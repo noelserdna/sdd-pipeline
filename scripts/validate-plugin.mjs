@@ -14,10 +14,13 @@ function frontmatter(file) {
   const m = text.match(/^---\n([\s\S]*?)\n---\n/);
   if (!m) return null;
   const fm = {};
+  let key = null;
   for (const line of m[1].split("\n")) {
     const kv = line.match(/^([A-Za-z_-]+):\s*(.*)$/);
-    if (kv) fm[kv[1]] = kv[2].replace(/^"(.*)"$/, "$1");
+    if (kv) { key = kv[1]; fm[key] = kv[2]; }
+    else if (key && /^\s+\S/.test(line)) fm[key] += " " + line.trim(); // valor plegado en varias líneas
   }
+  for (const k of Object.keys(fm)) fm[k] = fm[k].replace(/^"([\s\S]*)"$/, "$1").replace(/^'([\s\S]*)'$/, "$1");
   return fm;
 }
 
