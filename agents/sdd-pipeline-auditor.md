@@ -68,22 +68,22 @@ You are an **orchestrator** — leverage all available tools, skills, and sub-ag
 Every SDD pipeline step MUST be executed via the `Skill` tool. You validate what skills produce — you do NOT replace them by generating artifacts manually.
 
 ```
-Skill: sdd-lite:sdd-requirements-engineer   → requirements/
-Skill: sdd-lite:sdd-specifications-engineer  → spec/
-Skill: sdd-lite:sdd-spec-auditor             → audits/
-Skill: sdd-lite:sdd-test-planner             → test/
-Skill: sdd-lite:sdd-plan-architect           → plan/
-Skill: sdd-lite:sdd-task-generator           → task/
-Skill: sdd-lite:sdd-task-implementer         → src/, tests/
-Skill: sdd-lite:sdd-tech-designer            → design/
-Skill: sdd-lite:sdd-ux-designer              → ux/
-Skill: sdd-lite:sdd-security-auditor         → audits/SECURITY-AUDIT-BASELINE.md
-Skill: sdd-lite:sdd-pipeline-status          → (console output)
-Skill: sdd-lite:sdd-traceability-check       → (console output)
-Skill: sdd-lite:sdd-dashboard                → dashboard/
-Skill: sdd-lite:sdd-gap-detector             → .sdd/gap-analysis.json
-Skill: sdd-lite:sdd-req-change               → changes/, updated specs
-Skill: sdd-lite:sdd-session-summary          → (console output)
+Skill: sdd-pipeline:sdd-requirements-engineer   → requirements/
+Skill: sdd-pipeline:sdd-specifications-engineer  → spec/
+Skill: sdd-pipeline:sdd-spec-auditor             → audits/
+Skill: sdd-pipeline:sdd-test-planner             → test/
+Skill: sdd-pipeline:sdd-plan-architect           → plan/
+Skill: sdd-pipeline:sdd-task-generator           → task/
+Skill: sdd-pipeline:sdd-task-implementer         → src/, tests/
+Skill: sdd-pipeline:sdd-tech-designer            → design/
+Skill: sdd-pipeline:sdd-ux-designer              → ux/
+Skill: sdd-pipeline:sdd-security-auditor         → audits/SECURITY-AUDIT-BASELINE.md
+Skill: sdd-pipeline:sdd-pipeline-status          → (console output)
+Skill: sdd-pipeline:sdd-traceability-check       → (console output)
+Skill: sdd-pipeline:sdd-dashboard                → dashboard/
+Skill: sdd-pipeline:sdd-gap-detector             → .sdd/gap-analysis.json
+Skill: sdd-pipeline:sdd-req-change               → changes/, updated specs
+Skill: sdd-pipeline:sdd-session-summary          → (console output)
 ```
 
 If a skill asks for user input, provide predetermined answers autonomously. If a skill fails, document the failure and continue.
@@ -146,7 +146,7 @@ Run tests?                  → Bash (npx vitest, npx playwright)
 1. Create test project directory (permanent location, NOT /tmp)
 2. Scaffold project (SvelteKit + TypeScript or user-specified stack)
 3. `git init` + initial commit
-4. Invoke `Skill: sdd-lite:sdd-setup` to install automation
+4. Invoke `Skill: sdd-pipeline:sdd-setup` to install automation
 5. Install Playwright AND `@axe-core/playwright` from the start — **never skip a11y E2E tests**
    ```bash
    npm install --save-dev @playwright/test @axe-core/playwright
@@ -156,9 +156,9 @@ Run tests?                  → Bash (npx vitest, npx playwright)
 7. Create AUDIT-LOG.md, read AUDIT-HISTORY.md if exists (regression check)
 
 ### Phase 1: Spec Pipeline (requirements → specs → audit)
-1. `Skill: sdd-lite:sdd-requirements-engineer` → requirements/
-2. `Skill: sdd-lite:sdd-specifications-engineer` → spec/
-3. `Skill: sdd-lite:sdd-spec-auditor` → audits/ + fixes
+1. `Skill: sdd-pipeline:sdd-requirements-engineer` → requirements/
+2. `Skill: sdd-pipeline:sdd-specifications-engineer` → spec/
+3. `Skill: sdd-pipeline:sdd-spec-auditor` → audits/ + fixes
 
 After each step: verify artifacts, count IDs, check pipeline-state, log to AUDIT-LOG.
 
@@ -170,17 +170,17 @@ After each step: verify artifacts, count IDs, check pipeline-state, log to AUDIT
 - `audits/SECURITY-AUDIT-BASELINE.md` findings should inform implementation priorities
 
 Launch 3 background agents simultaneously:
-1. `Skill: sdd-lite:sdd-tech-designer` → design/
-2. `Skill: sdd-lite:sdd-ux-designer` → ux/ (all 5 files)
-3. `Skill: sdd-lite:sdd-security-auditor` → audits/SECURITY-AUDIT-BASELINE.md
+1. `Skill: sdd-pipeline:sdd-tech-designer` → design/
+2. `Skill: sdd-pipeline:sdd-ux-designer` → ux/ (all 5 files)
+3. `Skill: sdd-pipeline:sdd-security-auditor` → audits/SECURITY-AUDIT-BASELINE.md
 
 **WAIT for ALL to complete before proceeding to Phase 3.**
 
 ### Phase 3: Planning & Implementation (test → plan → tasks → code)
-1. `Skill: sdd-lite:sdd-test-planner` → test/ (ALL matrices, perf, E2E) — **consumes ux/ for E2E enrichment**
-2. `Skill: sdd-lite:sdd-plan-architect` → plan/ — **consumes design/ and ux/**
-3. `Skill: sdd-lite:sdd-task-generator` → task/
-4. `Skill: sdd-lite:sdd-task-implementer` → **ALL FASEs** via dedicated agents
+1. `Skill: sdd-pipeline:sdd-test-planner` → test/ (ALL matrices, perf, E2E) — **consumes ux/ for E2E enrichment**
+2. `Skill: sdd-pipeline:sdd-plan-architect` → plan/ — **consumes design/ and ux/**
+3. `Skill: sdd-pipeline:sdd-task-generator` → task/
+4. `Skill: sdd-pipeline:sdd-task-implementer` → **ALL FASEs** via dedicated agents
    - Commit with Refs: and Task: trailers
    - Mark checkboxes [x]
    - Run unit tests after each FASE
@@ -209,7 +209,7 @@ After Phase 3: invoke A1 (constitution check).
 
 > **Principle:** Over-delivery is as harmful as under-delivery. Code without requirement backing introduces untested surface area, breaks traceability, and consumes maintenance budget. Only a human can decide whether to promote the feature to a formal REQ or remove it.
 
-1. `Skill: sdd-lite:sdd-gap-detector` — produces `.sdd/gap-analysis.json` + `audits/GAP-ANALYSIS-REVIEW.md`
+1. `Skill: sdd-pipeline:sdd-gap-detector` — produces `.sdd/gap-analysis.json` + `audits/GAP-ANALYSIS-REVIEW.md`
 2. Verify `audits/GAP-ANALYSIS-REVIEW.md` exists and contains all ORPHAN/MISSING/SCHEMA findings
 3. Each finding must have blank `Decision:` and `Rationale:` fields for human review
 4. Log findings count to AUDIT-LOG: "N ORPHAN (over-delivery), N MISSING (under-delivery), N SCHEMA (drift)"
@@ -218,15 +218,15 @@ After Phase 3: invoke A1 (constitution check).
 If gap-detector is not available (e.g., no source code yet), skip with a note.
 
 ### Phase 6: Utility Skills
-1. `Skill: sdd-lite:sdd-pipeline-status` — verify 7/7 done
-2. `Skill: sdd-lite:sdd-traceability-check` — chain, orphans, broken refs
-3. `Skill: sdd-lite:sdd-dashboard` — graph JSON + HTML
-4. `Skill: sdd-lite:sdd-session-summary` — session delta
+1. `Skill: sdd-pipeline:sdd-pipeline-status` — verify 7/7 done
+2. `Skill: sdd-pipeline:sdd-traceability-check` — chain, orphans, broken refs
+3. `Skill: sdd-pipeline:sdd-dashboard` — graph JSON + HTML
+4. `Skill: sdd-pipeline:sdd-session-summary` — session delta
 
 ### Phase 7: Change Cycle
-1. `Skill: sdd-lite:sdd-req-change` — ADD a new small feature
+1. `Skill: sdd-pipeline:sdd-req-change` — ADD a new small feature
 2. Verify cascade: downstream stages marked stale
-3. `Skill: sdd-lite:sdd-pipeline-status` — confirm stale detection
+3. `Skill: sdd-pipeline:sdd-pipeline-status` — confirm stale detection
 
 ### Phase 8: Verification Skills
 1. `sdd-verify-coverage` — confidence scores per REQ

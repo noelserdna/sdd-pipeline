@@ -43,13 +43,63 @@ button{font-family:var(--font);cursor:pointer}
 .header-version{font-size:10px;color:var(--text3);background:var(--surface2);padding:2px 6px;border-radius:4px;margin-left:8px}
 
 /* Pipeline Bar */
-.pipeline{padding:16px 24px;display:flex;gap:4px;align-items:center;overflow-x:auto}
+.pipeline{padding:16px 24px;display:flex;gap:10px;align-items:stretch;overflow-x:auto}
 .pipeline-stage{flex:1;min-width:110px;padding:10px 12px;border-radius:var(--radius);text-align:center;border:1px solid transparent;transition:transform .15s}
 .pipeline-stage:hover{transform:translateY(-1px)}
 .pipeline-stage .stage-name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .pipeline-stage .stage-count{font-size:20px;font-weight:700;margin-top:2px}
 .pipeline-stage .stage-status{font-size:10px;margin-top:2px;opacity:.8}
 .pipeline-arrow{width:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
+
+/* Pipeline groups: las cinco fases de ingenieria. El grupo es solo un marco de
+   lectura, asi que su cromatismo se mantiene neutro y el color sigue estando
+   donde importa: el estado de cada etapa. */
+/* El grupo si puede comprimirse (min-width:0): con fit-content la fila entera
+   desbordaba el viewport y la ultima fase quedaba fuera de vista. El solape
+   entre el total de una fase y el nombre de la siguiente se evita en el head,
+   recortando el rotulo cuando no cabe en vez de invadir al vecino. */
+.pipeline-group{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.pipeline-group-head{display:flex;align-items:baseline;gap:8px;padding:0 2px 5px;border-bottom:1px solid var(--border);overflow:hidden}
+/* El rotulo es metadato, no titular: se le baja el cuerpo y el tracking para que
+   quepa en fases estrechas. El recorte con puntos suspensivos queda como ultimo
+   recurso en pantallas muy pequenas. */
+.pipeline-group-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.35px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pipeline-group-total{font-size:10px;font-weight:600;color:var(--text3);font-variant-numeric:tabular-nums;margin-left:auto;flex-shrink:0}
+.pipeline-group-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:currentColor}
+.pipeline-group-stages{display:flex;gap:4px;align-items:stretch;flex:1}
+.pipeline-group-stages .pipeline-stage{display:flex;flex-direction:column;justify-content:center}
+/* El punto de estado del grupo hereda el color de la misma escala st-*, pero sin
+   su fondo: solo interesa el matiz. */
+.gs-done{color:var(--green)}
+.gs-running{color:var(--yellow)}
+.gs-partial{color:var(--orange)}
+.gs-pending{color:var(--gray)}
+.gs-unknown{color:var(--text3)}
+.stage-lateral-tag{font-size:9px;opacity:.65;margin-top:3px;font-style:italic}
+/* Caja secundaria: mismo lenguaje, menor peso. Es una etapa complementaria de la
+   principal de su grupo, no una etapa de segunda. */
+/* La condicion de secundaria afecta al PESO TIPOGRAFICO, nunca al ancho: el
+   ancho lo decide en exclusiva el volumen de artefactos (flex-grow, ver
+   sizeWeight). Cuando principal y secundaria tenian minimos distintos, una caja
+   de 9 artefactos salia mas ancha que una de 12 solo por su categoria, que es
+   justo la logica que esta barra pretende comunicar. */
+.pipeline-stage.is-secondary{padding:8px 10px}
+.pipeline-stage.is-secondary .stage-name{font-size:9px;letter-spacing:.4px;opacity:.85}
+.pipeline-stage.is-secondary .stage-count{font-size:14px;font-weight:600}
+.pipeline-stage.is-secondary .stage-status{font-size:9px}
+.pipeline-stage.is-secondary .stage-lateral-tag{font-size:8px}
+/* Un unico suelo de legibilidad para todas las cajas, sea principal o
+   secundaria, para que dos cajas nunca se ordenen por categoria en vez de por
+   volumen.
+   flex-basis:0 es imprescindible: con `auto` el ancho de partida es el del
+   contenido, asi que lo fijaba la palabra mas larga del rotulo ("ARCHITECT"
+   reservaba 96px) y una etapa de 9 artefactos salia mas ancha que una de 12.
+   Con basis 0 el reparto depende solo del peso por volumen. */
+/* Sin overflow-wrap:anywhere: partia palabras a mitad ("REQUIREMENT S",
+   "ARCHITE CT"). El min-width explicito ya anula el min-content automatico del
+   flex item, que era lo que impedia que basis:0 mandase. */
+.pipeline-stage.is-primary,
+.pipeline-stage.is-secondary{flex-basis:0;flex-shrink:1;min-width:64px}
 .st-done{background:#162e23;color:var(--green)}
 .st-running{background:#2e2a10;color:var(--yellow)}
 .st-error{background:#2e1616;color:var(--red)}
@@ -80,7 +130,7 @@ button{font-family:var(--font);cursor:pointer}
 .matrix-section{padding:0 24px 24px}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
-thead{position:sticky;top:100px;z-index:80}
+thead th{background:var(--surface2)}
 th{background:var(--surface2);color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
 th:hover{color:var(--text)}
 th .sort-icon{margin-left:4px;opacity:.4;font-size:10px}
@@ -182,15 +232,14 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
         <tr>
           <th data-col="id">ID <span class="sort-icon">&#9650;</span></th>
           <th data-col="title">Title <span class="sort-icon">&#9650;</span></th>
-          <th data-col="priority">Priority <span class="sort-icon">&#9650;</span></th>
-          <th data-col="uc">UC <span class="sort-icon">&#9650;</span></th>
-          <th data-col="wf">WF <span class="sort-icon">&#9650;</span></th>
+          <th data-col="uc">Use Case <span class="sort-icon">&#9650;</span></th>
+          <th data-col="wf">Workflow <span class="sort-icon">&#9650;</span></th>
           <th data-col="api">API <span class="sort-icon">&#9650;</span></th>
-          <th data-col="bdd">BDD <span class="sort-icon">&#9650;</span></th>
-          <th data-col="inv">INV <span class="sort-icon">&#9650;</span></th>
+          <th data-col="bdd">Scenario <span class="sort-icon">&#9650;</span></th>
+          <th data-col="inv">Invariant <span class="sort-icon">&#9650;</span></th>
+          <th data-col="adr">Decision <span class="sort-icon">&#9650;</span></th>
           <th data-col="code">Code <span class="sort-icon">&#9650;</span></th>
           <th data-col="test">Test <span class="sort-icon">&#9650;</span></th>
-          <th data-col="status">Status <span class="sort-icon">&#9650;</span></th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -225,23 +274,92 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
   $("hdr-time").textContent = DATA.generatedAt ? new Date(DATA.generatedAt).toLocaleString() : "";
 
   // --- Pipeline Bar ---
+  // Las etapas se pintan agrupadas en las cinco fases de ingenieria que define
+  // pipeline.groups. La agrupacion viene del generador, no se decide aqui: este
+  // codigo solo la recorre.
   var pipeEl = $("pipeline");
   var stages = (DATA.pipeline && DATA.pipeline.stages) || [];
-  stages.forEach(function(s, i){
-    if (i > 0) {
-      var arrow = ce("span");
-      arrow.className = "pipeline-arrow";
-      arrow.innerHTML = '<svg width="16" height="10" viewBox="0 0 16 10"><path d="M0 5h12M9 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      pipeEl.appendChild(arrow);
-    }
+  var laterals = (DATA.pipeline && DATA.pipeline.lateralStages) || [];
+  var groups = (DATA.pipeline && DATA.pipeline.groups) || [];
+
+  // Peso visual de una caja segun su numero de artefactos.
+  //
+  // Escala logaritmica y no lineal: los recuentos de un pipeline real van de 7 a
+  // 835 (120x). En proporcion directa, la caja de 7 quedaria reducida a un hilo
+  // ilegible mientras una sola se comeria la fila. El logaritmo comprime ese
+  // rango a ~3x, que sigue comunicando "esta tiene mucho mas que aquella" sin
+  // que ninguna deje de leerse. El +0.35 evita que una etapa a 0 desaparezca.
+  function sizeWeight(count) {
+    return Math.log10((count || 0) + 1) + 0.35;
+  }
+
+  function stageBox(s){
     var div = ce("div");
-    div.className = "pipeline-stage st-" + (s.status || "unknown");
+    // Las secundarias se pintan reducidas; el nombre completo queda en el title
+    // para que reducir la caja no cueste informacion.
+    div.className = "pipeline-stage st-" + (s.status || "unknown")
+      + (s.secondary ? " is-secondary" : " is-primary");
     var count = (s.status === "pending" || s.status === "unknown") && !s.artifactCount ? "\u2014" : String(s.artifactCount || 0);
-    div.innerHTML = '<div class="stage-name">' + esc(s.name.replace(/-/g, " ")) + '</div>'
+    // El ancho de la caja refleja su volumen de artefactos.
+    div.style.flexGrow = sizeWeight(s.artifactCount).toFixed(3);
+    var fullName = s.name.replace(/-/g, " ");
+    var shown = s.displayName || fullName;
+    div.title = fullName + ": " + (s.artifactCount || 0) + " " + (s.stageLabel || "artifacts") + " (" + (s.status || "unknown") + ")";
+    div.innerHTML = '<div class="stage-name">' + esc(shown) + '</div>'
       + '<div class="stage-count">' + count + '</div>'
-      + '<div class="stage-status">' + esc(s.status || "unknown") + '</div>';
-    pipeEl.appendChild(div);
-  });
+      + '<div class="stage-status">' + esc(s.status || "unknown") + '</div>'
+      + (s.lateral ? '<div class="stage-lateral-tag">lateral</div>' : '');
+    return div;
+  }
+
+  function arrowEl(){
+    var arrow = ce("span");
+    arrow.className = "pipeline-arrow";
+    arrow.innerHTML = '<svg width="16" height="10" viewBox="0 0 16 10"><path d="M0 5h12M9 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return arrow;
+  }
+
+  if (groups.length) {
+    var byName = {};
+    stages.concat(laterals).forEach(function(s){ byName[s.name] = s });
+
+    groups.forEach(function(g, gi){
+      if (gi > 0) pipeEl.appendChild(arrowEl());
+
+      var wrap = ce("div");
+      wrap.className = "pipeline-group";
+      // El grupo pesa lo que suman sus cajas, de modo que la proporcion es
+      // coherente en los dos niveles: entre fases y dentro de cada fase.
+      var groupWeight = (g.stages || []).reduce(function(acc, name){
+        var st = byName[name];
+        return acc + (st ? sizeWeight(st.artifactCount) : 0);
+      }, 0);
+      wrap.style.flexGrow = (groupWeight || 1).toFixed(3);
+
+      var head = ce("div");
+      head.className = "pipeline-group-head";
+      head.innerHTML = '<span class="pipeline-group-dot gs-' + esc(g.status || "unknown") + '"></span>'
+        + '<span class="pipeline-group-name">' + esc(g.label || g.id) + '</span>'
+        + '<span class="pipeline-group-total">' + String(g.artifactCount || 0) + '</span>';
+      head.title = (g.label || g.id) + ": " + (g.artifactCount || 0) + " artefactos (" + (g.status || "unknown") + ")";
+      wrap.appendChild(head);
+
+      var row = ce("div");
+      row.className = "pipeline-group-stages";
+      (g.stages || []).forEach(function(name){
+        var s = byName[name];
+        if (s) row.appendChild(stageBox(s));
+      });
+      wrap.appendChild(row);
+      pipeEl.appendChild(wrap);
+    });
+  } else {
+    // Compatibilidad con grafos generados antes de que existieran los grupos.
+    stages.forEach(function(s, i){
+      if (i > 0) pipeEl.appendChild(arrowEl());
+      pipeEl.appendChild(stageBox(s));
+    });
+  }
 
   // --- Build indexes ---
   var artById = {};
@@ -257,7 +375,13 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
   });
 
   // --- Trace helpers ---
-  var TRACE_TYPES = ["UC","WF","API","BDD","INV"];
+  // Tipos que se PINTAN como columna de la matriz.
+  var TRACE_TYPES = ["UC","WF","API","BDD","INV","ADR"];
+  // Tipos que PUNTUAN para el estado de cobertura. ADR queda fuera a proposito:
+  // un ADR documenta una decision tecnica puntual y no es exigible a cada
+  // requisito (solo el 27% tiene uno), asi que contarlo permitiria alcanzar
+  // "covered" por tener una decision en lugar de casos de uso o pruebas.
+  var COVERAGE_TYPES = ["UC","WF","API","BDD","INV"];
 
   function getRelated(reqId, targetType) {
     var ids = {};
@@ -309,7 +433,7 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
     var testCount = (req.testRefs || []).length;
 
     var specParts = 0;
-    TRACE_TYPES.forEach(function(t){ if (Object.keys(chain[t]).length > 0) specParts++ });
+    COVERAGE_TYPES.forEach(function(t){ if (Object.keys(chain[t]).length > 0) specParts++ });
     var implParts = (codeCount > 0 ? 1 : 0) + (testCount > 0 ? 1 : 0);
 
     if (specParts >= 3 && codeCount > 0 && testCount > 0) return "covered";
@@ -497,14 +621,12 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
       tdTitle.title = row.art.title || "";
       tr.appendChild(tdTitle);
 
-      // Priority
-      var tdPri = ce("td");
-      if (row.art.priority) {
-        tdPri.innerHTML = '<span class="cell-priority ' + priClass(row.art.priority) + '">' + esc(row.art.priority) + '</span>';
-      }
-      tr.appendChild(tdPri);
+      // Priority y Status no tienen columna propia: la prioridad ya se filtra
+      // desde la barra superior y el estado se sigue calculando para ese filtro,
+      // pero ocupaban dos columnas sin aportar a la lectura de la trazabilidad,
+      // que es de lo que va esta tabla.
 
-      // Trace columns: UC, WF, API, BDD, INV
+      // Trace columns: UC, WF, API, BDD, INV, ADR
       TRACE_TYPES.forEach(function(t){
         var td = ce("td");
         td.style.textAlign = "center";
@@ -530,12 +652,6 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
       tdTest.innerHTML = '<span class="' + tInd.cls + '" title="' + tc + ' test refs">' + tInd.sym + '</span>';
       tr.appendChild(tdTest);
 
-      // Status
-      var tdSt = ce("td");
-      var statusLabels = { covered: "Covered", partial: "Partial", missing: "Missing" };
-      tdSt.innerHTML = '<span class="status-badge ' + row.status + '">' + (statusLabels[row.status] || row.status) + '</span>';
-      tr.appendChild(tdSt);
-
       // Click to expand
       tr.addEventListener("click", function(){ toggleExpand(row.art.id) });
       tb.appendChild(tr);
@@ -546,7 +662,10 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
       expandTr.id = "expand-" + row.art.id;
       if (expandedId === row.art.id) expandTr.classList.add("open");
       var expandTd = ce("td");
-      expandTd.colSpan = 11;
+      // Se cuentan las cabeceras reales en vez de fijar un numero: al anadir la
+      // columna de decisiones el valor fijo se quedo corto y la fila desplegada
+      // dejaba de abarcar toda la tabla.
+      expandTd.colSpan = document.querySelectorAll("#matrix thead th").length || 10;
       expandTd.innerHTML = '<div class="expand-content">' + buildTraceTree(row) + '</div>';
       expandTr.appendChild(expandTd);
       tb.appendChild(expandTr);
@@ -607,8 +726,12 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
       html += '<div class="tree-line"><span class="t-miss">\u2717</span> UC <span class="t-miss">\u2190 MISSING</span></div>';
     }
 
-    // Standalone WF/API/BDD/INV not reachable from UCs (direct to REQ)
-    ["WF","API","BDD","INV"].forEach(function(t){
+    // Artefactos enlazados directamente al REQ y no alcanzables desde un UC.
+    // Se deriva de TRACE_TYPES (menos UC, que es la raiz de las ramas de arriba)
+    // para que cualquier tipo nuevo en la matriz aparezca tambien aqui: cuando
+    // esta lista era literal, ADR salia con tick en la columna pero no figuraba
+    // en el detalle.
+    TRACE_TYPES.filter(function(t){ return t !== "UC" }).forEach(function(t){
       var arts = chain[t] || {};
       Object.keys(arts).forEach(function(artId){
         // Check if already shown via UC path

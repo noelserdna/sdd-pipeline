@@ -153,7 +153,10 @@ TYPE_TO_STAGE = {
     "API": "specifications-engineer",
     "BDD": "specifications-engineer",
     "INV": "specifications-engineer",
-    "ADR": "specifications-engineer",
+    # Los ADR se contabilizan aparte, en su propia caja dentro de Arquitectura:
+    # son decisiones de diseno, no especificaciones funcionales. Se mueven de
+    # etapa (en vez de duplicarse) para que no se cuenten dos veces.
+    "ADR": "architecture-decisions",
     "NFR": "specifications-engineer",
     "RN": "specifications-engineer",
     "FASE": "plan-architect",
@@ -166,6 +169,8 @@ STAGE_COUNT_UNITS = {
     "spec-auditor": "findings",
     "test-planner": "documents",
     "plan-architect": "phases",
+    "architecture-decisions": "decisions",
+    "plan-documents": "documents",
     "task-generator": "tasks",
     "task-implementer": "src files",
     "functional-tests": "tests",
@@ -175,6 +180,97 @@ STAGE_COUNT_UNITS = {
     "tech-designer": "dimensions",
     "ux-designer": "artifacts",
 }
+
+# Agrupacion de las etapas del pipeline en las cinco fases de ingenieria.
+#
+# El orden de la lista es el orden de renderizado, y el orden dentro de cada
+# grupo es el orden de las cajas. Las etapas laterales (req-change,
+# security-auditor, tech-designer, ux-designer) se colocan en su grupo
+# correspondiente en lugar de quedar sueltas al margen del pipeline.
+#
+# Criterio de reparto: test-planner produce el PLAN de pruebas, que se escribe
+# antes de implementar y es por tanto una especificacion; VERIFICACION agrupa
+# solo la ejecucion real de tests.
+#
+# Esta tabla es el unico sitio donde se define la agrupacion: el HTML la lee del
+# JSON, asi que para recolocar una etapa basta con moverla aqui y regenerar.
+STAGE_GROUPS = [
+    ("requisitos", "Requisitos", [
+        "requirements-engineer",
+    ]),
+    ("especificaciones", "Especificaciones", [
+        "specifications-engineer",
+        "architecture-decisions",
+        "ux-designer",
+    ]),
+    # Planificacion agrupa lo que se decide ANTES de escribir codigo: en que fases
+    # se divide el trabajo, en que tareas se descompone cada fase y como se va a
+    # probar. task-generator produce documentos en task/, no implementacion.
+    # Orden narrativo: primero el material donde se planifica (PLAN.md,
+    # ARCHITECTURE.md, planes por fase), luego las fases que salen de ahi y las
+    # tareas en que se descomponen.
+    ("planificacion", "Planificacion", [
+        "plan-documents",
+        "plan-architect",
+        "task-generator",
+        "test-planner",
+    ]),
+    ("implementacion", "Implementacion", [
+        "task-implementer",
+    ]),
+    ("verificacion", "Verificacion", [
+        "functional-tests",
+        "e2e-tests",
+    ]),
+]
+
+# Etapas que se pintan como caja reducida. No son menos importantes: son
+# complementos de la etapa principal de su grupo, y darles el mismo peso visual
+# que a specifications-engineer (108 artefactos frente a 6) desequilibraba la
+# lectura de la fila.
+SECONDARY_STAGES = {
+    "architecture-decisions",
+    "plan-documents",
+    "ux-designer",
+    "test-planner",
+    "spec-auditor",
+    "security-auditor",
+}
+
+# Rotulo de visualizacion cuando el nombre interno resulta largo para la caja.
+STAGE_DISPLAY_NAMES = {
+    "architecture-decisions": "ADR",
+    "plan-documents": "Plan docs",
+}
+
+# Indice inverso etapa -> id de grupo, derivado de STAGE_GROUPS para que no haya
+# dos fuentes de verdad que puedan divergir.
+STAGE_TO_GROUP = {
+    stage_name: group_id
+    for group_id, _label, stage_names in STAGE_GROUPS
+    for stage_name in stage_names
+}
+
+
+def aggregate_group_status(statuses):
+    """Estado agregado de un grupo a partir del de sus etapas.
+
+    Se prioriza lo que el usuario necesita ver primero: si algo esta corriendo,
+    el grupo esta corriendo; si hay mezcla de hecho y pendiente, es parcial.
+    """
+    present = [s for s in statuses if s]
+    if not present:
+        return "unknown"
+    if any(s == "running" for s in present):
+        return "running"
+    known = [s for s in present if s != "unknown"]
+    if not known:
+        return "unknown"
+    if all(s == "done" for s in known):
+        return "done"
+    if all(s in ("pending", "unknown") for s in known):
+        return "pending"
+    return "partial"
 
 
 # ──────────────────────────────────────────────────────────
@@ -1774,6 +1870,8 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "spec-auditor",
         "test-planner",
         "plan-architect",
+        "plan-documents",
+        "architecture-decisions",
         "task-generator",
         "task-implementer",
         "functional-tests",
@@ -1795,6 +1893,22 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     if os.path.isdir(audits_dir):
         audit_files = [f for f in os.listdir(audits_dir) if f.lower().endswith(".md")]
         stage_counts["spec-auditor"] = stage_counts.get("spec-auditor", 0) + len(audit_files)
+
+    # Documentos de planificacion: el material donde se elabora el trabajo
+    # (PLAN.md, ARCHITECTURE.md, CLARIFY-LOG.md y los planes detallados por fase).
+    # Se excluye plan/fases/ a proposito: esos .md ya se cuentan como artefactos
+    # FASE en la caja de plan-architect y sumarlos aqui los duplicaria.
+    plan_dir = os.path.join(project_dir, "plan")
+    if os.path.isdir(plan_dir):
+        fases_dir = os.path.join(plan_dir, "fases")
+        plan_docs = 0
+        for root, dirs, filenames in os.walk(plan_dir):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            if os.path.abspath(root) == os.path.abspath(fases_dir):
+                continue
+            plan_docs += sum(1 for f in filenames if f.lower().endswith(".md"))
+        if plan_docs:
+            stage_counts["plan-documents"] = plan_docs
 
     # Count test plan documents for test-planner stage
     test_dir = os.path.join(project_dir, "test")
@@ -1877,6 +1991,16 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         fcount = test_stats.get(files_key, 0)
         _test_stage_status[tname] = "done" if fcount > 0 else "pending"
 
+    # architecture-decisions tampoco vive en pipeline-state.json: es una caja
+    # derivada del recuento de ADR, asi que su estado se infiere igual que el de
+    # las etapas de test.
+    _test_stage_status["architecture-decisions"] = (
+        "done" if stage_counts.get("architecture-decisions", 0) > 0 else "pending"
+    )
+    _test_stage_status["plan-documents"] = (
+        "done" if stage_counts.get("plan-documents", 0) > 0 else "pending"
+    )
+
     pipeline_stages = []
     for sname in stage_order:
         sd = stages_data.get(sname, {})
@@ -1891,6 +2015,9 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             "lastRun": sd.get("lastRun"),
             "artifactCount": stage_counts.get(sname, 0),
             "stageLabel": summary_label_overrides.get(sname, STAGE_COUNT_UNITS.get(sname, "artifacts")),
+            "group": STAGE_TO_GROUP.get(sname),
+            "secondary": sname in SECONDARY_STAGES,
+            "displayName": STAGE_DISPLAY_NAMES.get(sname),
         }
         if sd.get("summary"):
             stage_entry["summary"] = sd["summary"]
@@ -1909,12 +2036,42 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                 "lastRun": ld.get("lastRun"),
                 "artifactCount": stage_counts.get(lname, 0),
                 "stageLabel": summary_label_overrides.get(lname, STAGE_COUNT_UNITS.get(lname, "artifacts")),
+                "group": STAGE_TO_GROUP.get(lname),
+                "lateral": True,
+                "secondary": lname in SECONDARY_STAGES,
+                "displayName": STAGE_DISPLAY_NAMES.get(lname),
             }
             if ld.get("summary"):
                 lateral_entry["summary"] = ld["summary"]
             lateral_stages.append(lateral_entry)
     if lateral_stages:
         pipeline_data["lateralStages"] = lateral_stages
+
+    # Agrupacion en las cinco fases de ingenieria. Se emite como dato (no como
+    # maquetacion) para que el HTML solo tenga que recorrerlo, y para que
+    # cualquier consumidor del grafo pueda usar la misma agrupacion.
+    by_name = {}
+    for entry in pipeline_stages:
+        by_name[entry["name"]] = entry
+    for entry in lateral_stages:
+        by_name[entry["name"]] = entry
+
+    pipeline_groups = []
+    for order, (group_id, group_label, member_names) in enumerate(STAGE_GROUPS, start=1):
+        # Solo se listan las etapas realmente presentes: un pipeline parcial no
+        # debe pintar cajas fantasma de etapas que nunca se ejecutaron.
+        members = [by_name[n] for n in member_names if n in by_name]
+        if not members:
+            continue
+        pipeline_groups.append({
+            "id": group_id,
+            "label": group_label,
+            "order": order,
+            "stages": [m["name"] for m in members],
+            "artifactCount": sum(m.get("artifactCount", 0) or 0 for m in members),
+            "status": aggregate_group_status([m.get("status") for m in members]),
+        })
+    pipeline_data["groups"] = pipeline_groups
 
     # Deduplicate relationships
     seen_rels = set()
