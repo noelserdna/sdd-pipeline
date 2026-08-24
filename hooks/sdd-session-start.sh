@@ -6,6 +6,7 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC2034  # F2: se usa para leer .cwd
 INPUT=$(cat)
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 # Normalize Windows paths

@@ -11,11 +11,11 @@ export function getNextStepHint(toolName: string, args?: any): string {
     case "sdd_context":
       return `\n\n---\n**Next:** Use \`sdd_impact({ artifact_id: "${args?.artifact_id ?? "..."}", direction: "downstream" })\` to see blast radius before making changes.`;
     case "sdd_impact":
-      return "\n\n---\n**Next:** Review depth=1 first (WILL_BREAK). Run `/sdd:req-change` to manage the change formally.";
+      return "\n\n---\n**Next:** Review depth=1 first (WILL_BREAK). Run `/sdd-req-change` to manage the change formally.";
     case "sdd_coverage":
       return "\n\n---\n**Next:** For each gap, use `sdd_trace` to understand why coverage is missing.";
     case "sdd_trace":
-      return "\n\n---\n**Next:** Broken links? Run `/sdd:traceability-check` for full chain verification.";
+      return "\n\n---\n**Next:** Broken links? Run `/sdd-traceability-check` for full chain verification.";
     case "sdd_gaps":
       return "\n\n---\n**Next:** Use `sdd_gaps({ format: \"detail\" })` for full findings, or `sdd_trace` on specific artifacts to investigate gaps.";
     default:

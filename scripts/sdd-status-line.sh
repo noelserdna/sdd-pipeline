@@ -13,6 +13,7 @@
 set -euo pipefail
 
 # Read session JSON from stdin (Claude Code provides this)
+# shellcheck disable=SC2034  # F2: se usa para leer .cwd
 SESSION_JSON=$(cat)
 
 # Locate pipeline-state.json relative to project dir

@@ -1,7 +1,6 @@
 ---
 name: sdd-plan-architect
 description: "Generates implementation plans from technical specifications. Bridges specs and code through FASE generation, interactive clarification, technical research, and architecture design. Consumes design/ and ux/ if available. Use when: (1) Creating implementation phases (FASEs) from specs, (2) Generating architecture and per-FASE implementation plans, (3) Clarifying implementation gaps with structured questions, (4) Regenerating or auditing existing FASE files. Outputs to plan/ (PLAN.md, ARCHITECTURE.md, fases/, fase-plans/). Does NOT modify specs. Triggers: 'create plan', 'generate FASEs', 'implementation plan', 'architecture plan', 'plan from specs', 'generar plan', 'planificar implementacion', 'crear fases'."
-version: "1.2.0"
 ---
 
 # SDD Plan Architect Skill

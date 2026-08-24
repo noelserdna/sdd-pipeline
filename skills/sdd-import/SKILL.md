@@ -1,7 +1,6 @@
 ---
 name: sdd-import
 description: "Imports external documentation into SDD format. Supports 6 source formats: Jira (JSON/CSV exports), OpenAPI/Swagger (YAML/JSON), Markdown/README, Notion (exported markdown/CSV), CSV, and Excel (.xlsx). Auto-detects format, parses input, maps fields to SDD requirements and specifications, shows a preview for user confirmation, generates SDD artifacts, and performs quality checks. Handles merge with existing artifacts. Triggers on phrases like 'import docs', 'import from Jira', 'import OpenAPI', 'convert to SDD', 'import requirements', 'import from Notion', 'import CSV', 'import Excel'."
-version: "1.0.0"
 ---
 
 # Skill: sdd-import — External Documentation → SDD Format Converter

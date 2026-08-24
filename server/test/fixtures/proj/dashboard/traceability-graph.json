@@ -1,0 +1,86 @@
+{
+  "$schema": "traceability-graph-v3",
+  "generatedAt": "2026-08-24T19:55:37.724Z",
+  "projectName": "fixture-proj",
+  "pipeline": {
+    "currentStage": "specifications-engineer",
+    "stages": [
+      {
+        "name": "requirements-engineer",
+        "status": "done",
+        "lastRun": "2026-08-24T00:00:00Z",
+        "artifactCount": 1
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "REQ-001",
+      "type": "REQ",
+      "category": "functional",
+      "title": "Crear tarea",
+      "file": "requirements/REQUIREMENTS.md",
+      "line": 10,
+      "priority": "P1",
+      "stage": "requirements-engineer",
+      "classification": null,
+      "codeRefs": [],
+      "testRefs": [],
+      "commitRefs": []
+    },
+    {
+      "id": "UC-001",
+      "type": "UC",
+      "category": null,
+      "title": "Usuario crea una tarea",
+      "file": "spec/use-cases/UC-001.md",
+      "line": 1,
+      "priority": null,
+      "stage": "specifications-engineer",
+      "classification": null,
+      "codeRefs": [],
+      "testRefs": [],
+      "commitRefs": []
+    }
+  ],
+  "relationships": [
+    {
+      "source": "UC-001",
+      "target": "REQ-001",
+      "type": "implements"
+    }
+  ],
+  "statistics": {
+    "totalArtifacts": 2,
+    "byType": {
+      "REQ": 1,
+      "UC": 1
+    },
+    "totalRelationships": 1,
+    "traceabilityCoverage": {},
+    "orphans": [],
+    "brokenReferences": [],
+    "codeStats": {
+      "totalFiles": 0,
+      "totalSymbols": 0,
+      "symbolsWithRefs": 0
+    },
+    "testStats": {
+      "totalTestFiles": 0,
+      "totalTests": 0,
+      "testsWithRefs": 0
+    },
+    "commitStats": {
+      "totalCommits": 0,
+      "commitsWithRefs": 0,
+      "commitsWithTasks": 0,
+      "uniqueTasksCovered": 0
+    },
+    "classificationStats": {
+      "byDomain": {},
+      "byLayer": {},
+      "byCategory": {}
+    },
+    "adoptionStats": null
+  }
+}

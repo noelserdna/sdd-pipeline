@@ -1,7 +1,6 @@
 ---
 name: sdd-spec-auditor
 description: "Audits, reviews, and validates technical specifications for defects. Performs systematic cross-document analysis to detect ambiguities, implicit rules, dangerous silences, contradictions, incomplete specs, weak invariants, evolution risks, and implicit decisions without ADRs. Use when: (1) Reviewing specs before planning or implementation, (2) Detecting quality defects in specification documents, (3) Fixing spec defects with Mode Fix, (4) Analyzing upstream impact of spec changes. Does NOT propose implementations or assume unspecified behavior. Triggers: 'audit specs', 'review specifications', 'spec quality', 'find ambiguities', 'fix specs', 'auditar especificaciones', 'revisar specs', 'calidad de specs'."
-version: "1.4.0"
 hooks:
   Stop:
     - type: prompt

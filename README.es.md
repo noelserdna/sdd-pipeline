@@ -125,7 +125,7 @@ El servidor MCP se configura via `~/.claude/.mcp.json` (global) o `<proyecto>/.m
 
 **Como encuentra el grafo:** Al iniciar, el servidor busca `dashboard/traceability-graph.json` desde el `cwd` subiendo hasta 6 directorios padre. Si no encuentra ningun grafo, degrada gracefully (devuelve resultados vacios, sin crash). Esto significa:
 
-- En proyectos **con** artefactos SDD: funcionalidad completa tras ejecutar `/sdd:dashboard`
+- En proyectos **con** artefactos SDD: funcionalidad completa tras ejecutar `/sdd-dashboard`
 - En proyectos **sin** artefactos SDD: el servidor carga pero todas las consultas devuelven resultados vacios
 
 **Prerrequisitos:** Node.js 18+. Tras reiniciar Claude Code, se te pedira aprobar el servidor MCP "sdd" en el primer uso.

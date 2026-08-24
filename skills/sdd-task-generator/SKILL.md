@@ -1,7 +1,6 @@
 ---
 name: sdd-task-generator
 description: "Generates implementation task documents from FASE files and plans. Decomposes each FASE into atomic, reversible tasks with conventional commit messages, spec traceability, review checklists, and revert strategies. Use when: (1) Creating work items from implementation plans, (2) Generating per-FASE task files with dependency graphs, (3) Preparing tasks for git-based development workflow (1 task = 1 commit). Outputs to task/ (TASK-FASE-*.md, TASK-INDEX.md, TASK-ORDER.md). Does NOT modify specs or plan. Triggers: 'generate tasks', 'create tasks', 'task from plan', 'decompose FASEs', 'generar tareas', 'crear tareas', 'descomponer fases'."
-version: "1.1.0"
 ---
 
 # SDD Task Generator Skill

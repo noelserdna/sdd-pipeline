@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
+      - name: bash -n y bits de ejecución
+        run: |
+          for f in hooks/*.sh scripts/*.sh; do bash -n "$f"; test -x "$f" || { echo "sin +x: $f"; exit 1; }; done
+          test -x hooks/sdd-augment-hook.js
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: validate-plugin.mjs (manifiestos, skills, agentes, hooks, mcp)
+        run: node scripts/validate-plugin.mjs
+      - name: check-paths / check-version
+        run: bash scripts/check-paths.sh && bash scripts/check-version.sh
+      - name: claude plugin validate --strict
+        continue-on-error: true
+        run: |
+          npm i -g @anthropic-ai/claude-code
+          claude plugin validate ./ --strict
+
+  server:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 22]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: dist/server.js reproducible
+        run: git diff --exit-code -- dist
+      - run: npm test
+
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y -qq jq
+      - run: bash tests/hooks/run.sh

@@ -32,7 +32,7 @@ function getGraphOrEmpty(): { graph: TraceabilityGraph; index: GraphIndex } {
 export function createSDDServer(): McpServer {
   const server = new McpServer({
     name: "sdd",
-    version: "1.0.0",
+    version: process.env.SDD_VERSION ?? "0.0.0",
   });
 
   // -----------------------------------------------------------------------

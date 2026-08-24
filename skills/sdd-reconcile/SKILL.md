@@ -1,7 +1,6 @@
 ---
 name: sdd-reconcile
 description: "Detects drift between existing SDD artifacts (requirements, specifications) and the current codebase, classifies each divergence (new functionality, removed feature, behavioral change, refactoring, bug/defect, ambiguous), applies automatic reconciliation rules where safe, and asks the user for decisions on ambiguous cases. Updates specs and requirements to match reality without ever modifying source code. Triggers on phrases like 'reconcile specs', 'detect drift', 'sync specs with code', 'spec-code alignment', 'fix drift', 'reconcile SDD'."
-version: "1.0.0"
 ---
 
 # Skill: sdd-reconcile — Spec-Code Drift Detection & Alignment

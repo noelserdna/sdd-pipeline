@@ -1,0 +1,41 @@
+{
+  "description": "SDD pipeline guardrails: pipeline status injection at session start, upstream immutability guard, pipeline-state and trace-map updates, traceability context on file access.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-session-start.sh", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-upstream-guard.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-augment-hook.js", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh", "timeout": 10, "async": true }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-trace-map-updater.sh", "timeout": 10, "async": true }
+        ]
+      }
+    ]
+  }
+}

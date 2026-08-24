@@ -1,7 +1,6 @@
 ---
 name: sdd-verify-coverage
 description: "LLM-based verification of requirement coverage. Uses structured binary prompts to check if source code implements specified requirements. Produces confidence-scored verification results. Use when: 'verify coverage', 'check implementation', 'are requirements implemented', 'verificar cobertura', 'coverage verification', 'LLM verification'."
-version: 1.0.0
 context: fork
 agent: Explore
 allowed-tools: Read, Grep, Glob, Write

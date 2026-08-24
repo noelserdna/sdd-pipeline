@@ -6,7 +6,6 @@ description: "Generates a visual HTML traceability dashboard from SDD pipeline a
   Triggers: 'dashboard', 'visualize pipeline', 'traceability dashboard',
   'show traceability', 'generar dashboard', 'visualizar trazabilidad',
   'show dashboard', 'pipeline visualization', 'ver dashboard'."
-version: "4.0.0"
 ---
 
 # SDD Traceability Dashboard

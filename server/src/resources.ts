@@ -75,13 +75,13 @@ export function readResource(
     const doneStages = stages.filter((s) => s.status === "done");
 
     // Determine next action
-    let nextAction = "Run /sdd:requirements-engineer to start the pipeline";
+    let nextAction = "Run /sdd-requirements-engineer to start the pipeline";
     const pendingStage = stages.find((s) => s.status === "pending" || s.status === "running");
     if (pendingStage) {
-      nextAction = `Continue with /sdd:${pendingStage.name}`;
+      nextAction = `Continue with /sdd-${pendingStage.name}`;
     }
     if (staleStages.length > 0) {
-      nextAction = `Re-run /sdd:${staleStages[0].name} (stale)`;
+      nextAction = `Re-run /sdd-${staleStages[0].name} (stale)`;
     }
 
     return {
@@ -133,7 +133,7 @@ export function readResource(
             "",
             "Each artifact has: id, type, category, title, file, line, priority, stage, classification?, codeRefs[], testRefs[], commitRefs[]",
             "",
-            "codeIntelligence (optional, from /sdd:code-index): symbols[], callGraph[], processes[], stats",
+            "codeIntelligence (optional, from /sdd-code-index): symbols[], callGraph[], processes[], stats",
             "",
             "Full schema: see skills/dashboard/references/graph-schema.md",
           ].join("\n"),

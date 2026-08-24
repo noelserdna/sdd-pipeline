@@ -1,0 +1,23 @@
+{
+  "name": "noelserdna",
+  "owner": {
+    "name": "Andres Leon",
+    "url": "https://github.com/noelserdna"
+  },
+  "description": "Claude Code plugins by Andres Leon",
+  "plugins": [
+    {
+      "name": "sdd-pipeline",
+      "source": "./",
+      "version": "4.0.0-alpha.1",
+      "category": "development",
+      "description": "Specification-Driven Development pipeline (SWEBOK v4): 23 skills, 5 agents, 5 hooks and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation.",
+      "tags": ["sdd", "swebok", "specification-driven", "traceability"],
+      "author": {
+        "name": "Andres Leon",
+        "url": "https://github.com/noelserdna"
+      },
+      "homepage": "https://github.com/noelserdna/sdd-pipeline"
+    }
+  ]
+}

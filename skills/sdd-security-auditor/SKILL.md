@@ -1,7 +1,6 @@
 ---
 name: sdd-security-auditor
 description: "Audits the security posture of technical specifications based on OWASP ASVS v4, CWE, and SWEBOK v4. Detects missing threat models, auth gaps, unprotected data, weak crypto, missing validation, incident response gaps, and compliance issues. Use when: (1) Performing security review of specs before implementation, (2) Generating a Security Posture Scorecard with 10 dimensions, (3) Getting OWASP/CWE-referenced findings for spec gaps, (4) Complementing spec-auditor with security-focused analysis. Does NOT propose implementations or assume unspecified behavior. Triggers: 'security audit', 'security review', 'threat model', 'OWASP', 'security posture', 'auditoria de seguridad', 'revisar seguridad', 'vulnerabilities in specs'."
-version: "1.0.0"
 ---
 
 # SDD Security Auditor Skill

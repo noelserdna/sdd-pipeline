@@ -1,29 +1,22 @@
-# External resources (22MB+)
-recursos/
+# macOS / editores
+.DS_Store
 
-# Claude Code local settings
+# Claude Code: ajustes locales y worktrees efímeros
 .claude/settings.local.json
+.claude/worktrees/
 
-# Accidental files
-nul
-
-# Dashboard screenshots (generated, not source)
-dashboard-*.png
-
-# Playwright MCP cache
-.playwright-mcp/
-
-# Ideas and brainstorming (local only)
-ideas/
-
-# Analysis artifacts (research, can be regenerated)
-ANALYSIS-REQ-CHANGE-MAINTENANCE.md
-CROSS-ANALYSIS-AUDIT.md
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
 
-# MCP Server dependencies (dist/ is committed for plugin distribution)
+# MCP server: dependencias no versionadas; dist/server.js SÍ se versiona (bundle reproducible)
 server/node_modules/
-server/package-lock.json
+server/dist/*
+!server/dist/server.js
+
+# Artefactos generados / locales
+dashboard-*.png
+.playwright-mcp/
+recursos/
+ideas/
+nul

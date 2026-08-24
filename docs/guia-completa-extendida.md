@@ -1619,7 +1619,7 @@ Para ver cambios en tiempo real mientras trabajas (sin regenerar el dashboard):
 
 ```bash
 # Levantar el servidor
-node ~/.claude/plugins/cache/noelserdna-plugins/sdd/*/server/dist/dashboard-entry.js
+node "$SDD_PLUGIN_ROOT/server/dist/server.js"   # SDD_PLUGIN_ROOT lo exporta el hook SessionStart del plugin
 
 # O con puerto personalizado
 SDD_DASHBOARD_PORT=4000 node .../dashboard-entry.js

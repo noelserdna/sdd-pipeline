@@ -1,7 +1,6 @@
 ---
 name: sdd-onboarding
 description: "Detects the current state of any project and generates an SDD adoption plan. Scans for existing SDD artifacts, non-SDD documentation, code, tests, and infrastructure to classify the project into one of 8 scenarios (greenfield, brownfield bare, SDD drift, partial SDD, brownfield with docs, tests-as-spec, multi-team, fork/migration). Produces a read-only diagnostic report with a step-by-step action plan specifying which SDD skills to run and in what order. Triggers on phrases like 'onboard project', 'adopt SDD', 'start SDD', 'diagnose project', 'project assessment', 'SDD readiness'."
-version: "1.0.0"
 ---
 
 # Skill: sdd-onboarding — Project Detector & SDD Adoption Planner

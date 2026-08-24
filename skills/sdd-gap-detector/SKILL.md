@@ -1,7 +1,6 @@
 ---
 name: sdd-gap-detector
 description: "Detects implementation gaps between specifications and code. Compares API contracts, use cases, and BDD scenarios against actual source code to find MISSING endpoints, ORPHAN code, and SCHEMA mismatches. Use when: 'detect gaps', 'find missing implementations', 'what's not implemented', 'orphan code', 'gap analysis', 'verify implementation completeness', 'qué falta por implementar', 'código huérfano'."
-version: "1.0.0"
 context: fork
 agent: Explore
 allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Write(.sdd/*), Write(audits/*)

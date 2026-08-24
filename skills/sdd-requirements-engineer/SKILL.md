@@ -1,7 +1,6 @@
 ---
 name: sdd-requirements-engineer
 description: "Professional software requirements engineering assistant based on SWEBOK v4. Use this skill when: (1) Eliciting or gathering software requirements from stakeholders, (2) Writing or formatting requirements (user stories, use cases, BDD scenarios), (3) Auditing or reviewing requirements for quality (ambiguity, testability, completeness, consistency), (4) Analyzing and prioritizing requirements, (5) Creating requirements specification documents, (6) Managing requirements changes and traceability. Triggers on phrases like 'gather requirements', 'write requirements', 'review requirements', 'audit requirements', 'user stories', 'use cases', 'acceptance criteria', 'requirements specification', 'requirements quality'."
-version: "1.0.0"
 ---
 
 # Requirements Engineer (SWEBOK v4)

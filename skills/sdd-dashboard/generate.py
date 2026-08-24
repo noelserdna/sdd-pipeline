@@ -300,11 +300,6 @@ def resolve_template(project_dir):
         os.path.join(SCRIPT_DIR, "references", "html-template.md"),
         # 2. Project's own dashboard/references (legacy)
         os.path.join(project_dir, "dashboard", "references", "html-template.md"),
-        # 3. Plugin cache (Cloudflare plugin location)
-        os.path.normpath(os.path.join(
-            os.path.expanduser("~"), ".claude", "plugins", "cache", "noelserdna-plugins", "sdd",
-            "1.8.0", "skills", "dashboard", "references", "html-template.md"
-        )),
     ]
     return next((p for p in candidates if os.path.exists(p)), candidates[0])
 

@@ -1,1 +1,0 @@
-{"version":3,"file":"gaps.d.ts","sourceRoot":"","sources":["../../src/tools/gaps.ts"],"names":[],"mappings":"AAmCA,eAAO,MAAM,SAAS;;;;;;;;;;;;;;;;CAmBrB,CAAC;AAMF,UAAU,QAAQ;IAChB,QAAQ,CAAC,EAAE,SAAS,GAAG,QAAQ,GAAG,UAAU,GAAG,KAAK,CAAC;IACrD,MAAM,CAAC,EAAE,SAAS,GAAG,QAAQ,CAAC;CAC/B;AAsCD,wBAAgB,WAAW,CAAC,IAAI,EAAE,QAAQ,GAAG,MAAM,CAiFlD"}

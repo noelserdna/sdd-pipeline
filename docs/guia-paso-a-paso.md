@@ -1473,7 +1473,7 @@ Si quieres que el dashboard se actualice en tiempo real mientras trabajas
 ```bash
 # Busca la ruta del plugin
 # En Mac/Linux:
-node ~/.claude/plugins/cache/noelserdna-plugins/sdd/*/server/dist/dashboard-entry.js
+node "$SDD_PLUGIN_ROOT/server/dist/server.js"   # SDD_PLUGIN_ROOT lo exporta el hook SessionStart del plugin
 
 # El server arranca en http://localhost:3001
 # SSE stream en http://localhost:3001/events

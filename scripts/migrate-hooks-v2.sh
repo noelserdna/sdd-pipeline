@@ -19,6 +19,7 @@ SETTINGS="$PROJECT_DIR/.claude/settings.json"
 PIPELINE_STATE="$PROJECT_DIR/pipeline-state.json"
 
 # Colors (if terminal supports them)
+# shellcheck disable=SC2034
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

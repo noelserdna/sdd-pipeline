@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "sdd-pipeline",
+  "version": "4.0.0-alpha.1",
+  "description": "Specification-Driven Development pipeline (SWEBOK v4): 23 skills, 5 agents, 5 hooks and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation.",
+  "author": {
+    "name": "Andres Leon",
+    "url": "https://github.com/noelserdna"
+  },
+  "homepage": "https://github.com/noelserdna/sdd-pipeline",
+  "repository": "https://github.com/noelserdna/sdd-pipeline",
+  "license": "MIT",
+  "keywords": ["sdd", "swebok", "specification-driven", "requirements", "traceability", "mcp", "worktree"]
+}

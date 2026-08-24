@@ -1,26 +1,27 @@
 {
   "name": "@sdd/mcp-server",
-  "version": "3.0.0",
-  "description": "MCP server for SDD traceability graph — exposes pipeline state, artifact queries, impact analysis, and coverage gaps as tools/resources/prompts.",
+  "version": "4.0.0-alpha.1",
+  "description": "SDD traceability MCP server, bundled for the sdd-pipeline Claude Code plugin",
+  "private": true,
   "type": "module",
-  "main": "dist/index.js",
-  "bin": {
-    "sdd-server": "dist/index.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^22.0.0"
-  },
+  "main": "dist/server.js",
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "MIT"
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node build.mjs",
+    "test": "node --import tsx --test test/*.test.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "0.25.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
 }
