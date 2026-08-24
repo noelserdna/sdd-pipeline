@@ -6,8 +6,10 @@ Medido con `claude plugin details sdd-pipeline` tras instalar desde el marketpla
 |---|---|---|---|---|---|---|
 | sdd-pipeline 3.1.0 (local) | 2026-08-24 | 17 | 3 | ~5.743 tok | — | baseline previa a la fusión |
 | sdd-pipeline 4.0.0-alpha.1 | 2026-08-24 | 23 | 5 | **~4.806 tok** | sdd-req-change ~16,2k | hooks y MCP no cuentan como contexto |
+| sdd-pipeline 4.0.0-alpha.2 | 2026-08-24 | 24 | 5 | ~4.880 tok | sdd-req-change ~16,2k | + sdd-lead |
+| sdd-pipeline 4.0.0-beta.1 (+descripciones ≤ 350) | 2026-08-24 | 24 | 5 | **~3.390 tok** | sdd-req-change ~16,2k | tras recortar 19 descriptions (de 403-934 a ≤ 350 chars) |
 
-Per-componente (always-on): las 23 skills entre ~90 y ~240 tok; agentes: `sdd-pipeline-auditor` ~550, `sdd-orchestrator` ~410, resto ≤ ~50.
+Per-componente (always-on, alpha.1): las 23 skills entre ~90 y ~240 tok; agentes: `sdd-pipeline-auditor` ~550, `sdd-orchestrator` ~410, resto ≤ ~50.
 
 Umbral acordado: si el always-on supera **8.000 tok**, dividir en `sdd-pipeline` (core) + `sdd-brownfield` en el mismo marketplace. Con 4.806 no procede.
 

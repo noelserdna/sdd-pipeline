@@ -1,11 +1,6 @@
 ---
 name: sdd-dashboard
-description: "Generates a visual HTML traceability dashboard from SDD pipeline artifacts.
-  Scans all pipeline directories, extracts artifact IDs and cross-references,
-  builds a structured JSON graph, and produces a self-contained HTML dashboard.
-  Triggers: 'dashboard', 'visualize pipeline', 'traceability dashboard',
-  'show traceability', 'generar dashboard', 'visualizar trazabilidad',
-  'show dashboard', 'pipeline visualization', 'ver dashboard'."
+description: "Generates a self-contained HTML traceability dashboard from SDD artifacts: scans pipeline dirs, extracts IDs and cross-references, builds the JSON graph used by the MCP server. Triggers: 'dashboard', 'visualize pipeline', 'traceability dashboard', 'show traceability', 'generar dashboard', 'visualizar trazabilidad', 'ver dashboard'."
 ---
 
 # SDD Traceability Dashboard
