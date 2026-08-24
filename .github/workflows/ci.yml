@@ -78,3 +78,4 @@ jobs:
       - run: sudo apt-get install -y -qq jq
       - run: git config --global user.email ci@example.com && git config --global user.name ci
       - run: bash tests/setup/run.sh
+      - run: bash tests/bench/run.sh

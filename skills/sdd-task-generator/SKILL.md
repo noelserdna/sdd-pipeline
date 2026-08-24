@@ -1,6 +1,6 @@
 ---
 name: sdd-task-generator
-description: "Generates implementation task documents from FASE files and plans. Decomposes each FASE into atomic, reversible tasks with conventional commit messages, spec traceability, review checklists, and revert strategies. Use when: (1) Creating work items from implementation plans, (2) Generating per-FASE task files with dependency graphs, (3) Preparing tasks for git-based development workflow (1 task = 1 commit). Outputs to task/ (TASK-FASE-*.md, TASK-INDEX.md, TASK-ORDER.md). Does NOT modify specs or plan. Triggers: 'generate tasks', 'create tasks', 'task from plan', 'decompose FASEs', 'generar tareas', 'crear tareas', 'descomponer fases'."
+description: "Generates implementation task documents from FASE files and plans: atomic tasks (1 task = 1 commit) with commit messages, spec traceability, revert strategies and Stream Ownership for parallel worktrees. Outputs to task/. Does NOT modify specs or plan. Triggers: 'generate tasks', 'create tasks', 'task from plan', 'decompose FASEs', 'generar tareas', 'crear tareas', 'descomponer fases'."
 ---
 
 # SDD Task Generator Skill
@@ -20,6 +20,7 @@ Generar documentos de tareas accionables a partir de FASE files y planes de impl
 5. **Trazabilidad completa** a specs, FASEs, requisitos e invariantes
 6. **Marcadores de paralelismo** para ejecucion concurrente
 7. **Checkpoints de verificacion** por fase
+8. **Stream Ownership** por FASE: particion de las tasks en Streams con write-sets disjuntos, cada uno implementable en un worktree propio (`sdd-task-implementer --stream`)
 
 ## When to Use This Skill
 
@@ -230,6 +231,7 @@ Validates existing task files against current FASE + plan state without modifyin
 - Missing tasks for new plan sections
 - Broken dependency chains
 - Orphan tasks (no FASE mapping)
+- Stream Ownership drift: recomputes Phase 3b from the write-sets of the existing tasks and compares the result with the published `## Stream Ownership` table and the `Streams:` lines of `TASK-ORDER.md`; runs V-15..V-18 on the published table (a file shared by two work Streams → V-15 ERROR)
 
 ### Mode 5: Incremental Generation (cascade)
 
@@ -241,11 +243,12 @@ Generates only new or changed tasks for a single FASE, preserving already-comple
 
 **Behavior:**
 
-1. **Diff against existing tasks:** Compare the regenerated FASE plan (`plan/PLAN-FASE-{N}.md`) against the existing `task/TASK-FASE-{N}.md`.
+1. **Diff against existing tasks:** Compare the regenerated FASE plan (`plan/fase-plans/PLAN-FASE-{N}.md`) against the existing `task/TASK-FASE-{N}.md`.
 2. **Preserve completed tasks:** Tasks already marked as done (`[x]`) or that have not changed are left untouched. Already-completed tasks are NEVER regenerated.
 3. **Generate delta only:** Only produce task entries for new plan items or plan items whose scope/acceptance criteria changed since the last generation.
 4. **Cascade traceability:** Every new or modified task includes a `Source: CASCADE-{change-report-id}` annotation linking back to the `sdd-req-change` change report that triggered the regeneration.
 5. **Update indexes:** Append new tasks to `TASK-INDEX.md` and update `TASK-ORDER.md` dependency graph to incorporate the delta.
+6. **Recompute Stream Ownership:** Re-run Phase 3b for the FASE over the full task set (existing + delta). A completed task keeps its Stream; if a new task would join two existing work Streams, it goes to `integración` and the conflict is reported (V-15/V-18).
 
 **Requirements:**
 - `--fase` is mandatory when using `--incremental` (full-generation incremental is not supported).
@@ -279,11 +282,12 @@ task/
 ```
 INPUTS TO READ:
 1. plan/fases/FASE-*.md                     (ALL FASE files)
-2. plan/PLAN-FASE-*.md                      (ALL per-FASE plans)
+2. plan/fase-plans/PLAN-FASE-*.md           (ALL per-FASE plans)
 3. plan/ARCHITECTURE.md                     (architecture views)
 4. plan/PLAN.md                             (global plan)
 5. spec/domain/01-GLOSSARY.md               (ubiquitous language)
 6. task/TASK-INDEX.md                        (existing tasks if any)
+7. pipeline-state.json                       (stage status, for G-04; absent = no staleness info)
 ```
 
 **Validation Gates:**
@@ -293,7 +297,10 @@ INPUTS TO READ:
 | G-01 | At least one FASE file exists | HALT: run `sdd-plan-architect` first |
 | G-02 | Plan artifacts exist for target FASE(s) | HALT: run `sdd-plan-architect` first |
 | G-03 | Glossary exists | WARN: proceed with caution |
-| G-04 | FASE files are current (not stale vs specs) | WARN: consider running `sdd-plan-architect --audit-fases` |
+| G-04 | Plan is current: `stages["plan-architect"].status != "stale"` in `pipeline-state.json` | HALT: run `sdd-plan-architect` first (plan is stale: `{staleReason}`) |
+| G-05 | FASE files are newer than `spec/` (mtime heuristic; only check when `pipeline-state.json` is absent) | WARN: consider running `sdd-plan-architect --audit-fases` |
+
+> G-04 replaces the previous WARN: generating tasks from a stale plan would publish write-sets and Streams that no longer match the specs, and the implementer would branch worktrees from them. `spec-auditor` stale is covered transitively (the `sdd-req-change` cascade marks `plan-architect` stale whenever it marks `spec-auditor` stale).
 
 ### Phase 1: FASE Analysis
 
@@ -368,6 +375,74 @@ For each PLAN-FASE-{N}.md, extract:
 5. **Integration Phase**: Wiring, event handlers, background jobs
 6. **Test Phase**: Unit tests, integration tests, BDD scenarios
 7. **Verification Phase**: End-to-end validation, checkpoint
+
+### Phase 3b: Stream Assignment
+
+**Goal:** Partition the tasks of each FASE into **Streams** with pairwise-disjoint write-sets, so that each work Stream can be implemented in its own git worktree (`sdd-task-implementer --fase N --stream A`) and merged back by `--integrate --fase N`. The result is the `## Stream Ownership` table (source of truth for the implementer's task filter) and the `Streams:` line in `TASK-ORDER.md`.
+
+**Write-set of a task** = every backticked path after the `|` on the task line (comma-separated when the task touches more than one file) plus every path listed in its optional `- **Files:**` bullet. Paths mentioned only in Acceptance/Refs/Review are reads, not writes.
+
+**Algorithm (per FASE, after Phase 3 assigned every task to an internal phase):**
+
+```
+1. base := tasks of internal phases Setup (1) and Foundation (2).
+   - Run in the main checkout BEFORE any worktree is opened.
+   - The implementer tags the last base commit with checkpoint `fase-{N}-foundation`
+     (branch point of every worktree of this FASE).
+
+2. Work graph G over the tasks of Domain (3), Contracts (4), Integration (5)
+   and any other internal phase between Foundation and Tests:
+   - node  = task
+   - edge(A, B) if write-set(A) ∩ write-set(B) ≠ ∅
+                or A is `blocked-by` B (or B is `blocked-by` A)
+   - connected components of G → candidate Streams
+
+3. Wiring extraction (repeat until no candidate passes):
+   - Candidate: a task whose write-set contains a shared entry point / index / barrel
+     (`src/index.ts`, `src/app.ts`, `src/routes/index.ts`, `migrations/index.*`,
+     any `index.ts` re-exporting ≥ 2 directories) or whose `blocked-by` list spans
+     ≥ 2 top-level source directories.
+   - Test: remove the candidate from G. If the tasks it was connected to now fall into
+     ≥ 2 components, the candidate touches ≥ 2 components → it leaves its component
+     and goes to Stream `integración` (main checkout, after `--integrate --fase N`).
+   - A component emptied by the extraction disappears. If NO work task is left
+     (every work task was wiring), keep them all in Stream A and leave `integración` empty.
+
+4. Letter the remaining components A, B, C… by task count, largest first
+   (tie → the component containing the lowest task ID).
+
+5. Tests (internal phase 6):
+   - A test task whose test files cover source files of exactly ONE work Stream
+     (Coverage Map §7.4 Source → Test) joins that Stream; its test paths are added
+     to the Stream's Owns.
+   - Any other test task (integration/BDD/e2e across Streams) → Stream `verificación`.
+
+6. Verification (internal phase 7) → Stream `verificación` (main checkout, implementer Phase 9).
+   Rollback checkpoints belong to the main checkout only: `fase-{N}-foundation` after the
+   last base task and `fase-{N}-verified` after Verification. Worktrees never create tags.
+```
+
+**Owns (write-set) column:** the smallest set of globs that covers every file of the Stream's write-set and matches no file of any other Stream (e.g. `src/api/**`). List exact paths when a directory is shared (typical for `base` and `integración`, e.g. `package.json, src/index.ts`).
+
+**Branch names:** `feat/fase-{N}-{stream}` with the Stream letter in lower case (`feat/fase-1-a`, `feat/fase-1-b`). Only work Streams (A, B, C…) get a worktree; `base`, `integración` and `verificación` run in the main checkout.
+
+**Single-Stream FASE:** a FASE whose work graph yields one component is valid. The table is written the same way (base + A + integración/verificación) and `TASK-ORDER.md` marks it `Streams: serial`.
+
+**Stream Ownership table** (mandatory in every `TASK-FASE-{N}.md`, right after "Parallel Execution Plan"; it replaces the former free-text Stream lists — do NOT add new markers to the task lines):
+
+```markdown
+## Stream Ownership
+
+| Stream | Tasks | Owns (write-set) | Runs in |
+|--------|-------|------------------|---------|
+| base | TASK-F1-001, TASK-F1-002 | package.json, src/index.ts | main checkout, before worktrees (checkpoint `fase-1-foundation`) |
+| A | TASK-F1-003, TASK-F1-005 | src/api/**, tests/api/** | worktree `feat/fase-1-a` |
+| B | TASK-F1-004, TASK-F1-006 | src/cli/**, tests/cli/** | worktree `feat/fase-1-b` |
+| integración | TASK-F1-009 | src/index.ts | main checkout, after `--integrate --fase 1` |
+| verificación | TASK-F1-010 | — | main checkout, Phase 9 |
+```
+
+Row order is fixed: `base`, work Streams A…Z, `integración`, `verificación`. A Stream with no tasks is still listed with `—` in Tasks and Owns.
 
 ### Phase 4: Commit Message Generation
 
@@ -476,9 +551,9 @@ Every task includes a review checklist following this pattern:
 
 Generate documents using templates from `references/`:
 
-1. **Per-FASE task file** (`TASK-FASE-{N}.md`): All tasks for one FASE
+1. **Per-FASE task file** (`TASK-FASE-{N}.md`): All tasks for one FASE, including the `## Stream Ownership` table from Phase 3b
 2. **Global index** (`TASK-INDEX.md`): Summary of all tasks across FASEs
-3. **Implementation order** (`TASK-ORDER.md`): Dependency graph, critical path, parallel opportunities
+3. **Implementation order** (`TASK-ORDER.md`): Dependency graph, critical path, parallel opportunities, one `Streams:` line per FASE and the Stream of every task in Cross-FASE Dependencies
 
 ### Phase 8: Validation
 
@@ -502,6 +577,12 @@ Generate documents using templates from `references/`:
 | V-12 | All file paths use project conventions from CLAUDE.md | WARN |
 | V-13 | Every source file in Coverage Map §7.4 has a corresponding test task | ERROR |
 | V-14 | Every file in Coverage Map Exclusions has a justified reason | WARN |
+| V-15 | Write-sets of the work Streams (A, B, C…) are pairwise disjoint (no file, no glob overlap) | ERROR |
+| V-16 | Every task belongs to exactly one Stream (`base`, A…Z, `integración`, `verificación`); no task missing from the table, none listed twice | ERROR |
+| V-17 | Verification-phase tasks and rollback checkpoints appear only in Stream `verificación` / the main checkout; no checkpoint is assigned to a worktree Stream | ERROR |
+| V-18 | Every `blocked-by` of a Stream task points to the same Stream, to `base`, or to a task of an earlier FASE | WARN |
+
+V-15..V-18 are computed from the `## Stream Ownership` table of each `TASK-FASE-{N}.md`. `--audit` recomputes the table (Phase 3b) from the current task write-sets, compares it with the published one, and reports both the drift and any V-15..V-18 finding.
 
 ---
 
@@ -515,7 +596,7 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 > **Input:** plan/fases/FASE-{N}-{slug}.md + plan/PLAN-FASE-{N}.md
 > **Generated:** {YYYY-MM-DD}
 > **Total tasks:** {count}
-> **Parallel capacity:** {max concurrent streams}
+> **Parallel capacity:** {number of work Streams from Stream Ownership}
 > **Critical path:** {count} tasks, ~{estimate}
 
 ---
@@ -526,6 +607,7 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 |--------|-------|
 | Total tasks | {N} |
 | Parallelizable | {N} ({%}) |
+| Work Streams | {N} (A: {n} tasks, B: {n} tasks) |
 | Setup phase | {N} tasks |
 | Foundation phase | {N} tasks |
 | Domain phase | {N} tasks |
@@ -620,7 +702,24 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 
 ### Parallel Execution Plan
 
-{Groups of tasks that can run concurrently}
+{One line per work Stream: what it delivers; the task lists live in the table below}
+
+## Stream Ownership
+
+| Stream | Tasks | Owns (write-set) | Runs in |
+|--------|-------|------------------|---------|
+| base | {TASK-F{N}-001, ...} | {exact paths} | main checkout, before worktrees (checkpoint `fase-{N}-foundation`) |
+| A | {tasks} | {globs} | worktree `feat/fase-{N}-a` |
+| B | {tasks} | {globs} | worktree `feat/fase-{N}-b` |
+| integración | {tasks or —} | {exact paths or —} | main checkout, after `--integrate --fase {N}` |
+| verificación | {TASK-F{N}-{LAST}} | — | main checkout, Phase 9 |
+
+### Rollback Checkpoints
+
+| Checkpoint | After Task | Tag | Runs in |
+|-----------|------------|-----|---------|
+| Foundation | {last base task} | `fase-{N}-foundation` | main checkout |
+| Verified | TASK-F{N}-{LAST} | `fase-{N}-verified` | main checkout |
 ```
 
 ---
@@ -682,10 +781,13 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 - {count} tasks, {parallel count} parallelizable
 - Critical path: {N} sequential tasks
 - Estimated review cycles: {N}
+- Streams: serial
 
 ### Wave 2: Core Capabilities
 **FASE-1** (depends on: FASE-0)
-...
+- {count} tasks, {parallel count} parallelizable
+- Critical path: {N} sequential tasks
+- Streams: base(2) → A(2) ∥ B(2) → integración(1) → verificación(1)
 
 ### Wave N: {Title}
 **FASE-{N}** (depends on: ...)
@@ -693,9 +795,9 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 
 ## Cross-FASE Dependencies
 
-| From | To | Reason |
-|------|----|--------|
-| TASK-F0-005 | TASK-F1-001 | F1 uses encryption from F0 |
+| From (Stream) | To (Stream) | Reason |
+|---------------|-------------|--------|
+| TASK-F0-005 (base) | TASK-F1-001 (A) | F1 uses encryption from F0 |
 | ... | ... | ... |
 
 ## MVP Strategy
@@ -714,6 +816,8 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 | CP-3 | FASE-0,1,2 | CV analysis operational |
 | ... | ... | ... |
 ```
+
+**`Streams:` line rules:** one per FASE, inside its Wave entry. Format `Streams: base(n) → A(n) ∥ B(n) [∥ C(n)…] → integración(n) → verificación(n)` with the task count of each Stream in parentheses (a Stream with no tasks is written `integración(0)`). When the FASE has a single work Stream, write exactly `Streams: serial`. In Cross-FASE Dependencies, every task carries its Stream in parentheses.
 
 ---
 
@@ -764,6 +868,18 @@ main
        ├── ...
        └── TASK-F{N}-{LAST}  (commit)
        → PR: "feat: implement FASE-{N} - {Title}"
+```
+
+With more than one work Stream (Stream Ownership table), the FASE branches per Stream from the Foundation checkpoint:
+
+```
+main (or feat/fase-{N})
+  ├── base tasks (commits) ──── tag fase-{N}-foundation
+  ├── worktree feat/fase-{N}-a  ← Stream A tasks (commits, no tags)
+  ├── worktree feat/fase-{N}-b  ← Stream B tasks (commits, no tags)
+  ├── git merge --no-ff feat/fase-{N}-a, feat/fase-{N}-b   (sdd-task-implementer --integrate --fase {N})
+  ├── integración tasks (commits)
+  └── verificación task ──────── tag fase-{N}-verified
 ```
 
 ### Commit Discipline
@@ -844,6 +960,10 @@ git branch -D feat/fase-0
 | "Circular dependency detected" | Task ordering error | Review dependency annotations |
 | "Task touches >5 files" | Task too broad | Split into smaller tasks |
 | "Orphan task (no FASE)" | Task lost traceability | Assign to correct FASE or remove |
+| "Plan is stale" (G-04) | `sdd-req-change` cascade marked `plan-architect` stale | Run `sdd-plan-architect` (affected FASEs), then regenerate tasks |
+| "Shared file between Streams" (V-15) | Two work Streams write the same file | Move the shared file's task to `integración`, or merge the two Streams |
+| "Task in no/two Streams" (V-16) | Stream table out of date | Re-run Phase 3b (`--regen` or `--fase N`) |
+| "Checkpoint in worktree Stream" (V-17) | Verification/checkpoint assigned to A/B/C | Move it to `verificación` |
 
 ---
 
@@ -856,8 +976,8 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["task-generator"].lastRun` = current ISO-8601
 4. Set `stages["task-generator"].summary`:
    - `artifacts`: list of files created in `task/` with labels (e.g., `{"file": "task/TASK-FASE-1.md", "label": "FASE 1 Tasks"}`)
-   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N }`
-   - `highlights`: top 3-5 notable observations (e.g., "42 tasks across 7 FASEs", "65% parallelizable", "8 coupled-revert tasks")
+   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N, "streamsPerFase": { "1": 2, "2": 1 } }` (`streamsPerFase` = number of work Streams A, B, C… per FASE; `1` = serial)
+   - `highlights`: top 3-5 notable observations (e.g., "42 tasks across 7 FASEs", "65% parallelizable", "8 coupled-revert tasks") plus one line per FASE with more than one work Stream, e.g. "FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)"
    - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`

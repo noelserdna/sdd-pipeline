@@ -43,7 +43,7 @@ CHECK-C11: Criterios de Exito met
   - Each criterio from plan/fases/FASE-{N}-*.md verified
   - Evidence documented for each
 
-CHECK-C12: Checkpoint tags placed
+CHECK-C12: Checkpoint tags placed (main checkout only — Stream worktrees place no tags)
   - Internal phase checkpoints exist
   - Final FASE checkpoint exists
 ```
@@ -74,13 +74,17 @@ Detailed procedure for verifying that each task has a corresponding atomic commi
 
 2. **Search by Task trailer** (preferred — most reliable):
    ```bash
-   git log --all --oneline --grep='Task: TASK-F{N}-{SEQ}'
+   git log HEAD --oneline --grep='Task: TASK-F{N}-{SEQ}'
    ```
 
 3. **Fallback: search by subject match** if no Task trailer found:
    ```bash
-   git log --all --oneline --grep='{commit subject from task}'
+   git log HEAD --oneline --grep='{commit subject from task}'
    ```
+
+   Search `HEAD` only, never `--all`: commits on Stream branches (`feat/fase-N-x`) that `--integrate` has not merged yet
+   do not count as implemented. Inside a Stream worktree `HEAD` is the Stream branch, so only that Stream's tasks
+   (plus `base`, committed before the branch point) can PASS.
 
 4. **Verify file scope** — the commit should only touch files listed in the task:
    ```bash

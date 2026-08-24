@@ -1,0 +1,15 @@
+{
+  "sddVersion": "4.0.0-alpha.2",
+  "hooksVersion": 3,
+  "currentStage": "task-generator",
+  "lastUpdated": "2026-08-24T10:00:00Z",
+  "stages": {
+    "requirements-engineer":    { "status": "done", "outputHash": null, "lastRun": "2026-08-24T08:00:00Z", "staleReason": null },
+    "specifications-engineer":  { "status": "done", "outputHash": null, "lastRun": "2026-08-24T08:30:00Z", "staleReason": null },
+    "spec-auditor":             { "status": "done", "outputHash": null, "lastRun": "2026-08-24T09:00:00Z", "staleReason": null },
+    "test-planner":             { "status": "done", "outputHash": null, "lastRun": "2026-08-24T09:15:00Z", "staleReason": null },
+    "plan-architect":           { "status": "stale", "outputHash": null, "lastRun": "2026-08-24T09:30:00Z", "staleReason": "CHG-001: UC-002 modified after planning" },
+    "task-generator":           { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
+    "task-implementer":         { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null }
+  }
+}

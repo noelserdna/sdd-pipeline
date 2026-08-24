@@ -92,7 +92,7 @@ Verify the TASK → COMMIT link in the extended traceability chain.
 
 2. **Extract commits with `Refs:` and `Task:` trailers** (single call with null-byte delimiters):
    ```bash
-   git log --all --name-only --format='%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly)---COMMIT-END---' | head -5000
+   git log HEAD --name-only --format='%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly)---COMMIT-END---' | head -5000
    ```
    Parse by splitting on `---COMMIT-END---`, then split header on `\x00`. Files follow on separate lines after the header.
 

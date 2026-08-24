@@ -105,3 +105,8 @@ Q-sdd-spec-001 — Create REQs for AUD-017/AUD-022 via req-change now, report on
 - **`sdd-lead` Status mode** shows it in the `Handoff` column of its role table.
 
 Readers must tolerate a missing `handoff` object (3.x state files, forks that could not write).
+
+
+## Optional tokens
+
+- `stream=<X>` — sent only by `sdd-task-implementer --stream X` (Phase 9-S "Stream Complete"); identifies the Stream just finished in its worktree. Parsers must tolerate its absence.

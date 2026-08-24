@@ -105,6 +105,8 @@ specManifest = {
 
 Build a "code manifest" — what the system ACTUALLY does.
 
+Scan scope: the current checkout only. Every scan below (2.2, 2.3, 2.4) excludes `node_modules/`, build output and `.claude/worktrees/**` — ephemeral Claude Code worktrees that may hold unmerged Stream branches (`feat/fase-N-x`) and would otherwise be reported as ORPHAN or counted twice. Sibling worktrees created with `git worktree add ../<project>-fNx` live outside the checkout and are never scanned.
+
 #### 2.1 Detect Project Language and Framework
 
 Detect the project's language and framework by checking for:

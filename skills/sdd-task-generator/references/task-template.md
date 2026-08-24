@@ -13,7 +13,7 @@
 > **Input:** plan/fases/FASE-{N}-{slug}.md + plan/PLAN-FASE-{N}.md
 > **Generated:** {YYYY-MM-DD}
 > **Total tasks:** {count}
-> **Parallel capacity:** {max concurrent streams}
+> **Parallel capacity:** {number of work Streams from Stream Ownership}
 > **Critical path:** {count} tasks
 
 ---
@@ -24,6 +24,7 @@
 |--------|-------|
 | Total tasks | {N} |
 | Parallelizable | {N} ({%}) |
+| Work Streams | {N} (A: {n} tasks, B: {n} tasks) |
 | Setup phase | {N} tasks |
 | Foundation phase | {N} tasks |
 | Domain phase | {N} tasks |
@@ -160,17 +161,40 @@ graph TD
 
 ### Parallel Execution Plan
 
-**Stream A:** TASK-F{N}-003, TASK-F{N}-004, TASK-F{N}-007
-**Stream B:** TASK-F{N}-002, TASK-F{N}-005, TASK-F{N}-008
-**Stream C:** TASK-F{N}-006, TASK-F{N}-009
+**Stream A:** {what it delivers, e.g. "API surface"} — see Stream Ownership
+**Stream B:** {what it delivers, e.g. "CLI"} — see Stream Ownership
+
+## Stream Ownership
+
+| Stream | Tasks | Owns (write-set) | Runs in |
+|--------|-------|------------------|---------|
+| base | TASK-F{N}-001, TASK-F{N}-002 | package.json, src/index.ts | main checkout, before worktrees (checkpoint `fase-{N}-foundation`) |
+| A | TASK-F{N}-003, TASK-F{N}-005 | src/api/**, tests/api/** | worktree `feat/fase-{N}-a` |
+| B | TASK-F{N}-004, TASK-F{N}-006 | src/cli/**, tests/cli/** | worktree `feat/fase-{N}-b` |
+| integración | TASK-F{N}-009 | src/index.ts | main checkout, after `--integrate --fase {N}` |
+| verificación | TASK-F{N}-{LAST} | — | main checkout, Phase 9 |
 
 ### Rollback Checkpoints
 
-| Checkpoint | After Task | Safe Revert Point | Verified By |
-|-----------|------------|-------------------|-------------|
-| CP-1 | TASK-F{N}-{X} | git tag fase-{N}-cp-1 | {verification command} |
-| CP-2 | TASK-F{N}-{Y} | git tag fase-{N}-cp-2 | {verification command} |
+| Checkpoint | After Task | Tag | Runs in |
+|-----------|------------|-----|---------|
+| Foundation | TASK-F{N}-002 | `fase-{N}-foundation` | main checkout |
+| Verified | TASK-F{N}-{LAST} | `fase-{N}-verified` | main checkout |
 ```
+
+### Stream Ownership Rules
+
+| Rule | Detail |
+|------|--------|
+| Source of truth | `sdd-task-implementer --stream X` filters tasks by this table, never by markers on the task lines |
+| Row order | `base`, then work Streams `A`…`Z` (largest first), then `integración`, then `verificación`; empty Streams are listed with `—` |
+| `base` | Setup + Foundation tasks; main checkout before any worktree; last commit tagged `fase-{N}-foundation` |
+| Work Streams | Connected components of the Domain/Contracts/Integration write-set + `blocked-by` graph (SKILL.md Phase 3b); write-sets pairwise disjoint (V-15) |
+| `integración` | Wiring tasks that touch ≥ 2 components (`src/index.ts`, `routes/index.ts`, migration indexes, barrels); main checkout after `--integrate --fase {N}` |
+| `verificación` | Verification-phase tasks and cross-Stream test tasks; main checkout, implementer Phase 9 (V-17) |
+| Owns | Smallest globs covering the Stream's write-set and no file of another Stream; exact paths when a directory is shared |
+| Runs in | `worktree \`feat/fase-{N}-{stream lower-case}\`` for A…Z; `main checkout, …` for the rest |
+| Single Stream | Table still written (base + A + integración/verificación); `TASK-ORDER.md` says `Streams: serial` |
 
 ---
 
@@ -178,6 +202,8 @@ graph TD
 
 ```markdown
 - [ ] {TASK-ID} [P?] {Description} | `{file_path}`
+  - blocked-by: {TASK-ID, ...}
+  - **Files:** `{extra_path}`, `{extra_path}`
   - **Commit:** `{type}({scope}): {message}`
   - **Acceptance:**
     - {criterion with specific values, not vague}
@@ -194,7 +220,9 @@ graph TD
 | Task ID | YES | Format: `TASK-F{N}-{SEQ}` |
 | [P] marker | NO | Only if parallelizable |
 | Description | YES | Imperative mood, specific, with file path |
-| File path | YES | Exact path from project root |
+| File path | YES | Exact path from project root; comma-separate several paths after the `\|` when the task touches more than one file |
+| blocked-by | NO | Task IDs this task depends on (same FASE or earlier); drives Stream assignment (V-18) |
+| Files | NO | Extra paths the task creates/modifies; together with the file path(s) they form the task's write-set (Stream Ownership) |
 | Commit | YES | Conventional commit format |
 | Acceptance | YES | At least 1 criterion, specific values |
 | Refs | YES | At least FASE reference |
