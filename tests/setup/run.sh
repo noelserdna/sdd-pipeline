@@ -139,7 +139,7 @@ out="$(bash "$SCRIPTS/sdd-up.sh" --dry-run sdd-lead 2>&1)"
 if contains "$out" "SDD_ROLE=sdd-lead"; then pass "sdd-up --dry-run: SDD_ROLE=sdd-lead"; else bad "sdd-up --dry-run: sin SDD_ROLE ($out)"; fi
 if contains "$out" "SDD_STATE_ROOT=$P"; then pass "sdd-up --dry-run: SDD_STATE_ROOT = checkout principal"; else bad "sdd-up --dry-run: SDD_STATE_ROOT ($out)"; fi
 if contains "$out" "tmux new-session -d -s my-project-lead -c $P -e SDD_ROLE=sdd-lead -e SDD_STATE_ROOT=$P 'claude -n my-project-lead'"; then pass "sdd-up --dry-run: comando tmux (>= 3.2, -e)"; else bad "sdd-up --dry-run: comando tmux ($out)"; fi
-if contains "$out" "tmux send-keys -t =my-project-lead '/color blue' Enter"; then pass "sdd-up --dry-run: /color"; else bad "sdd-up --dry-run: /color ($out)"; fi
+if contains "$out" "tmux send-keys -t my-project-lead:0.0 '/color blue' Enter"; then pass "sdd-up --dry-run: /color"; else bad "sdd-up --dry-run: /color ($out)"; fi
 if contains "$out" "tmux attach -t =my-project-lead"; then pass "sdd-up --dry-run: instrucciones de conexión"; else bad "sdd-up --dry-run: sin instrucciones ($out)"; fi
 check "sdd-up --dry-run: no lanza tmux" sh -c "! grep -q 'new-session' '$FAKE_LOG' 2>/dev/null"
 out="$(FAKE_TMUX_VER=3.1c bash "$SCRIPTS/sdd-up.sh" --dry-run sdd-lead 2>&1)"
@@ -154,7 +154,7 @@ if contains "$out" "SDD_STATE_ROOT=$P"; then pass "sdd-up -d DIR: localiza el ch
 rm -f "$FAKE_LOG"
 bash "$SCRIPTS/sdd-up.sh" sdd-lead >/dev/null 2>&1
 if grep -q "^tmux new-session -d -s my-project-lead -c $P -e SDD_ROLE=sdd-lead -e SDD_STATE_ROOT=$P claude -n my-project-lead$" "$FAKE_LOG" 2>/dev/null; then pass "sdd-up: new-session con -e"; else bad "sdd-up: new-session ($(cat "$FAKE_LOG" 2>/dev/null))"; fi
-if grep -q "^tmux send-keys -t =my-project-lead /color blue Enter$" "$FAKE_LOG" 2>/dev/null; then pass "sdd-up: send-keys /color tras el arranque"; else bad "sdd-up: send-keys"; fi
+if grep -q "^tmux send-keys -t my-project-lead:0.0 /color blue Enter$" "$FAKE_LOG" 2>/dev/null; then pass "sdd-up: send-keys /color tras el arranque"; else bad "sdd-up: send-keys"; fi
 git tag fase-1-foundation
 bash "$SCRIPTS/sdd-up.sh" impl-f1a >/dev/null 2>&1
 check "sdd-up: crea el worktree del rol" test -d "$tmp/my-project-f1a"

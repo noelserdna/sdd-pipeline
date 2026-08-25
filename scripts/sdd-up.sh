@@ -229,7 +229,7 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
         ready=false; i=0
         while [ $i -lt 20 ]; do
           # sin capture-pane (tmux antiguo o entorno de test) → mejor esfuerzo: esperar 2 s y enviar
-          if ! pane=$(tmux capture-pane -t "=$NAME" -p 2>/dev/null); then sleep 2; ready=best-effort; break; fi
+          if ! pane=$(tmux capture-pane -t "$NAME:0.0" -p 2>/dev/null); then sleep 2; ready=best-effort; break; fi
           if printf '%s' "$pane" | grep -q 'trust this folder'; then
             echo "  [sdd-up] $NAME: Claude pide confirmar la confianza en la carpeta; acéptala en tmux y ejecuta '/color $COLOR' a mano"
             ready=skip; break
@@ -239,10 +239,10 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
         done
         # skip = diálogo de confianza en pantalla (no teclear encima); en cualquier otro caso se envía (inofensivo si llega antes del prompt)
         if [ "$ready" != skip ]; then
-          tmux send-keys -t "=$NAME" "/color $COLOR" Enter 2>/dev/null || echo "  [sdd-up] $NAME: no se pudo enviar /color $COLOR (hazlo a mano)"
+          tmux send-keys -t "$NAME:0.0" "/color $COLOR" Enter 2>/dev/null || echo "  [sdd-up] $NAME: no se pudo enviar /color $COLOR (hazlo a mano)"
         fi
       else
-        echo "  (wait for prompt) tmux send-keys -t =$NAME '/color $COLOR' Enter"
+        echo "  (wait for prompt) tmux send-keys -t $NAME:0.0 '/color $COLOR' Enter"
       fi
     fi
     LAUNCHED+=("$NAME")
