@@ -13,7 +13,8 @@
 #      or a tmux session with that name exists;
 #   2. creates the role's worktree when configured and missing:
 #      git worktree add <wt> -b feat/fase-<N>-<stream> fase-<N>-foundation  (HEAD if the tag is missing);
-#   3. tmux new-session -d -s <name> -c <dir> -e SDD_ROLE=<role> -e SDD_STATE_ROOT=<root> "claude -n <name>"
+#   3. tmux new-session -d -s <name> -c <dir> -e SDD_ROLE=<role> -e SDD_STATE_ROOT=<root> "claude [$SDD_CLAUDE_ARGS] -n <name>"
+#      (SDD_CLAUDE_ARGS: flags extra para claude, p. ej. "--plugin-dir /ruta/al/plugin" para probar una versión local)
 #      (tmux < 3.2 has no -e: the variables are passed through env(1));
 #   4. waits ~2 s and sends "/color <color>" to the new session.
 # Without tmux the equivalent manual command is printed instead.
@@ -217,9 +218,9 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
   # 3. Launch
   if [ "$HAS_TMUX" = true ]; then
     if [ "$TMUX_E" = true ]; then
-      run tmux new-session -d -s "$NAME" -c "$DIR" -e "SDD_ROLE=$role" -e "SDD_STATE_ROOT=$ROOT" "claude -n $NAME"
+      run tmux new-session -d -s "$NAME" -c "$DIR" -e "SDD_ROLE=$role" -e "SDD_STATE_ROOT=$ROOT" "claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
     else
-      run tmux new-session -d -s "$NAME" -c "$DIR" "env SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude -n $NAME"
+      run tmux new-session -d -s "$NAME" -c "$DIR" "env SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
     fi
     # 4. Colour the session once claude has had a moment to start
     if [ -n "$COLOR" ]; then
@@ -229,7 +230,7 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
     LAUNCHED+=("$NAME")
   else
     log "tmux not found — start this session manually in a new terminal:"
-    echo "  cd '$DIR' && SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude -n $NAME"
+    echo "  cd '$DIR' && SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
     [ -n "$COLOR" ] && echo "  then type: /color $COLOR"
   fi
 done
