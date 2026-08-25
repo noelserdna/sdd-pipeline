@@ -218,19 +218,37 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
   # 3. Launch
   if [ "$HAS_TMUX" = true ]; then
     if [ "$TMUX_E" = true ]; then
-      run tmux new-session -d -s "$NAME" -c "$DIR" -e "SDD_ROLE=$role" -e "SDD_STATE_ROOT=$ROOT" "claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
+      run tmux new-session -d -s "$NAME" -c "$DIR" -e "SDD_ROLE=$role" -e "SDD_STATE_ROOT=$ROOT" "claude${SDD_CLAUDE_ARGS:+ $SDD_CLAUDE_ARGS} -n $NAME"
     else
-      run tmux new-session -d -s "$NAME" -c "$DIR" "env SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
+      run tmux new-session -d -s "$NAME" -c "$DIR" "env SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude${SDD_CLAUDE_ARGS:+ $SDD_CLAUDE_ARGS} -n $NAME"
     fi
     # 4. Colour the session once claude has had a moment to start
     if [ -n "$COLOR" ]; then
-      if [ "$DRY_RUN" = false ]; then sleep 2; else echo "  sleep 2"; fi
-      run tmux send-keys -t "=$NAME" "/color $COLOR" Enter
+      if [ "$DRY_RUN" = false ]; then
+        # esperar a que el panel exista y claude muestre su prompt (máx. ~15 s); nunca abortar por esto
+        ready=false; i=0
+        while [ $i -lt 30 ]; do
+          pane=$(tmux capture-pane -t "=$NAME" -p 2>/dev/null || true)
+          if printf '%s' "$pane" | grep -q 'trust this folder'; then
+            echo "  [sdd-up] $NAME: Claude pide confirmar la confianza en la carpeta; acéptala en tmux y ejecuta '/color $COLOR' a mano"
+            ready=skip; break
+          fi
+          if printf '%s' "$pane" | grep -q '❯'; then ready=true; break; fi
+          sleep 0.5; i=$((i+1))
+        done
+        if [ "$ready" = true ]; then
+          tmux send-keys -t "=$NAME" "/color $COLOR" Enter 2>/dev/null || echo "  [sdd-up] $NAME: no se pudo enviar /color $COLOR (hazlo a mano)"
+        elif [ "$ready" = false ]; then
+          echo "  [sdd-up] $NAME: claude no mostró el prompt a tiempo; ejecuta '/color $COLOR' a mano"
+        fi
+      else
+        echo "  (wait for prompt) tmux send-keys -t =$NAME '/color $COLOR' Enter"
+      fi
     fi
     LAUNCHED+=("$NAME")
   else
     log "tmux not found — start this session manually in a new terminal:"
-    echo "  cd '$DIR' && SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude ${SDD_CLAUDE_ARGS:-} -n $NAME"
+    echo "  cd '$DIR' && SDD_ROLE=$role SDD_STATE_ROOT='$ROOT' claude${SDD_CLAUDE_ARGS:+ $SDD_CLAUDE_ARGS} -n $NAME"
     [ -n "$COLOR" ] && echo "  then type: /color $COLOR"
   fi
 done
