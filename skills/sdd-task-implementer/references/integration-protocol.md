@@ -1,5 +1,7 @@
 # Integration Protocol (`--integrate --fase N`)
 
+> **Role requirement.** When `SDD_ROLE` is set, the role must own the `integración`/`verificación` write-set (`src/*`, `tests/*`, `.github/*`, config files, `task/TASK-FASE-*.md`, `.sdd/*`) or the upstream guard will deny the writes and the run will PAUSE. The default `sdd-lead` role in `templates/sdd-sessions.example.json` owns it; alternatively run `--integrate` without `SDD_ROLE`.
+
 > Brings the Stream branches of a FASE back into the main checkout: one `--no-ff` merge per Stream, then the
 > `integración` and `verificación` tasks, then the normal FASE checkpoint. Every task commit keeps its own SHA and
 > its `Refs:`/`Task:` trailers, so traceability (`git log HEAD`) survives the merge. Squashing is forbidden.

@@ -5,26 +5,79 @@
     "sdd-lead": {
       "name": "example-lead",
       "color": "blue",
-      "owns": ["requirements/*", "changes/*", "feedback/*", ".claude/*", "pipeline-state.json"],
-      "stages": ["requirements-engineer", "req-change"]
+      "owns": [
+        "requirements/*",
+        "changes/*",
+        "feedback/*",
+        ".claude/*",
+        "pipeline-state.json",
+        "src/*",
+        "tests/*",
+        ".github/*",
+        "package.json",
+        "package-lock.json",
+        "*.config.*",
+        "tsconfig*.json",
+        "task/TASK-FASE-*.md",
+        ".sdd/*",
+        "dashboard/*"
+      ],
+      "stages": [
+        "req-change",
+        "requirements-engineer",
+        "task-implementer"
+      ],
+      "note": "The lead runs --integrate in the main checkout, so it owns the integración/verificación write-set."
     },
     "sdd-spec": {
       "name": "example-spec",
       "color": "cyan",
-      "owns": ["spec/*", "audits/AUDIT-*", "audits/UPSTREAM-*", "audits/CORRECTIONS-*", "changes/*"],
-      "stages": ["specifications-engineer", "spec-auditor", "req-change"]
+      "owns": [
+        "spec/*",
+        "audits/AUDIT-*",
+        "audits/UPSTREAM-*",
+        "audits/CORRECTIONS-*",
+        "changes/*"
+      ],
+      "stages": [
+        "specifications-engineer",
+        "spec-auditor",
+        "req-change"
+      ]
     },
     "sdd-plan": {
       "name": "example-plan",
       "color": "green",
-      "owns": ["design/*", "ux/*", "test/*", "plan/*", "task/*", "audits/SECURITY-*"],
-      "stages": ["tech-designer", "ux-designer", "security-auditor", "test-planner", "plan-architect", "task-generator"]
+      "owns": [
+        "design/*",
+        "ux/*",
+        "test/*",
+        "plan/*",
+        "task/*",
+        "audits/SECURITY-*"
+      ],
+      "stages": [
+        "tech-designer",
+        "ux-designer",
+        "security-auditor",
+        "test-planner",
+        "plan-architect",
+        "task-generator"
+      ]
     },
     "impl-f1a": {
       "name": "example-impl-f1a",
       "color": "red",
-      "owns": ["src/*", "tests/*", "feedback/*", "task/TASK-FASE-*.md", ".sdd/*"],
-      "stages": ["task-implementer"],
+      "owns": [
+        "src/*",
+        "tests/*",
+        "feedback/*",
+        "task/TASK-FASE-*.md",
+        ".sdd/*"
+      ],
+      "stages": [
+        "task-implementer"
+      ],
       "fase": 1,
       "stream": "A",
       "worktree": "../example-f1a"
@@ -32,8 +85,16 @@
     "sdd-qa": {
       "name": "example-qa",
       "color": "purple",
-      "owns": [".sdd/*", "audits/GAP-*", "dashboard/*"],
-      "stages": ["gap-detector", "traceability-check", "dashboard"]
+      "owns": [
+        ".sdd/*",
+        "audits/GAP-*",
+        "dashboard/*"
+      ],
+      "stages": [
+        "gap-detector",
+        "traceability-check",
+        "dashboard"
+      ]
     }
   }
 }
