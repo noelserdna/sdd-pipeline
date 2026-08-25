@@ -228,7 +228,8 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
         # esperar a que el panel exista y claude muestre su prompt (máx. ~15 s); nunca abortar por esto
         ready=false; i=0
         while [ $i -lt 30 ]; do
-          pane=$(tmux capture-pane -t "=$NAME" -p 2>/dev/null || true)
+          # sin capture-pane (tmux antiguo o entorno de test) → mejor esfuerzo: esperar 2 s y enviar
+          if ! pane=$(tmux capture-pane -t "=$NAME" -p 2>/dev/null); then sleep 2; ready=best-effort; break; fi
           if printf '%s' "$pane" | grep -q 'trust this folder'; then
             echo "  [sdd-up] $NAME: Claude pide confirmar la confianza en la carpeta; acéptala en tmux y ejecuta '/color $COLOR' a mano"
             ready=skip; break
@@ -236,11 +237,12 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
           if printf '%s' "$pane" | grep -q '❯'; then ready=true; break; fi
           sleep 0.5; i=$((i+1))
         done
-        if [ "$ready" = true ]; then
-          tmux send-keys -t "=$NAME" "/color $COLOR" Enter 2>/dev/null || echo "  [sdd-up] $NAME: no se pudo enviar /color $COLOR (hazlo a mano)"
-        elif [ "$ready" = false ]; then
-          echo "  [sdd-up] $NAME: claude no mostró el prompt a tiempo; ejecuta '/color $COLOR' a mano"
-        fi
+        case "$ready" in
+          true|best-effort)
+            tmux send-keys -t "=$NAME" "/color $COLOR" Enter 2>/dev/null || echo "  [sdd-up] $NAME: no se pudo enviar /color $COLOR (hazlo a mano)" ;;
+          false)
+            echo "  [sdd-up] $NAME: claude no mostró el prompt a tiempo; ejecuta '/color $COLOR' a mano" ;;
+        esac
       else
         echo "  (wait for prompt) tmux send-keys -t =$NAME '/color $COLOR' Enter"
       fi
