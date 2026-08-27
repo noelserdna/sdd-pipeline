@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Visibilidad en la consola: hook `sdd-activity-log` (`.sdd/activity.jsonl`: sesiones, skills, agentes y subagentes, paradas), status line con `refreshInterval: 5` que muestra rol, etapas, skill en curso, minutos y subagentes activos, `subagentStatusLine` con tipo · descripción · tiempo · tokens por subagente (instalados por `/sdd-setup`), y panel de terminal `scripts/sdd-watch.sh`.
+- `scripts/sdd-profile.sh` y `docs/perfilado.md`: perfilado de una skill (duración, turnos, tokens, herramientas, volumen leído/escrito).
+- `sdd-up.sh`: `SDD_CLAUDE_ARGS` (p. ej. `--plugin-dir`), worktrees por defecto en `.claude/worktrees/<rol>` (heredan la confianza de carpeta), espera al prompt antes de `/color` y detecta el diálogo de confianza.
+- `tests/e2e/50-streams.sh`: FASE por Streams en dos worktrees con roles + `--integrate` + bench; `docs/medidas.md` con las ejecuciones reales.
+
+### Changed
+- Rendimiento de las etapas largas: `sdd-spec-auditor` con informe compacto (≤ 25 k chars), fan-out por dimensión en 4 subagentes sonnet y lectura por índice (21,4 → 9,9 min de pared, informe −75 %); `sdd-specifications-engineer` sin redundancia y con presupuesto por artefacto (−55 % de salida estimado); `sdd-test-planner` (matrices densas por UC en subagentes sonnet, E2E por niveles) y `sdd-plan-architect` (lectura por índice, RESEARCH solo bajo demanda, sección obligatoria "Módulos y Conjuntos de Escritura"); subagentes `[P]` del implementer con `model: sonnet` salvo `CLAUDE_CODE_SUBAGENT_MODEL`.
+- `sdd-lead` posee el write-set de integración (las tasks de verificación de `--integrate` escriben en `tests/`, `.github/` y configuración).
+
+### Removed
+- `skills/sdd-specifications-engineer/scripts/create-spec-structure.ps1` (obsoleto).
+
 ## [4.0.0] - 2026-08-25
 
 ### Repositorio unificado `noelserdna/sdd-pipeline`

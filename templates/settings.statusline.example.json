@@ -3,5 +3,9 @@
     "type": "command",
     "command": "bash .claude/sdd-status-line.sh",
     "refreshInterval": 5
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "bash .claude/sdd-subagent-status.sh"
   }
 }

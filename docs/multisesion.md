@@ -59,6 +59,8 @@ Protocolos detallados: [`references/handoff-protocol.md`](../references/handoff-
 
 ## Ver qué está pasando
 
+Dentro de la propia consola de Claude Code: la status line (`/sdd-setup`, paso 3) muestra `[rol] SDD [n/7] <etapa> · <skill> <min> · <k> agentes` y se repinta cada 5 s; el panel de agentes (`←`) muestra cada subagente como `▶ <tipo> · <descripción> · <tiempo> · <tokens>k (<%>)`. Fuera de la consola, el panel `sdd-watch.sh` descrito a continuación.
+
 Con varias estaciones abiertas no se ve desde fuera qué skill corre en cada una, cuántos subagentes hay lanzados ni desde cuándo. Para eso el hook `hooks/sdd-activity-log.sh` deja una línea JSON por evento en `$SDD_STATE_ROOT/.sdd/activity.jsonl` (siempre en el checkout principal, también desde un worktree) y `scripts/sdd-watch.sh` la pinta en un panel que se repinta solo.
 
 ```

@@ -23,7 +23,10 @@ printf '%s' "$input" | jq -r -c --argjson now "$now" '
   | (if (.contextWindowSize // 0) > 0 and $tok > 0 then " (\(($tok*100/.contextWindowSize)|floor)%)" else "" end) as $pct
   | ((.description // .label // "") | tostring) as $desc
   | (if (.status // "") == "running" or (.status // "") == "" then "▶" else "■" end) as $icon
-  | ([ $icon + " " + ((.name // .type // "agent")|tostring), $desc, $dur, (if $tok > 0 then "\(($tok/1000)|floor)k tok\($pct)" else "" end) ]
+  | ((.type // "") | tostring) as $type | ((.name // "") | tostring) as $name
+  | (if $type != "" and $type != "local_agent" then $type elif $name != "" and $name != "local_agent" then $name else "agent" end) as $kind
+  | (if $name != "" and $name != "local_agent" and $name != $kind then $kind + " [" + $name + "]" else $kind end) as $who
+  | ([ $icon + " " + $who, $desc, $dur, (if $tok > 0 then "\(($tok/1000)|floor)k tok\($pct)" else "" end) ]
      | map(select(. != "")) | join(" · ")) as $row
   | {id: .id, content: ($row | if length > $cols then .[0:($cols-1)] + "…" else . end)}
 ' 2>/dev/null || true

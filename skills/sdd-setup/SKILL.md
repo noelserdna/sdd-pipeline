@@ -121,14 +121,15 @@ The script is **copied** into the project because `.claude/settings.json` cannot
 ```bash
 mkdir -p .claude
 cp "$SDD_PLUGIN_ROOT/scripts/sdd-status-line.sh" .claude/sdd-status-line.sh && chmod +x .claude/sdd-status-line.sh
+cp "$SDD_PLUGIN_ROOT/scripts/sdd-subagent-status.sh" .claude/sdd-subagent-status.sh && chmod +x .claude/sdd-subagent-status.sh
 [ -f .claude/settings.json ] || echo '{}' > .claude/settings.json
 jq -s '.[0] * .[1]' .claude/settings.json "$SDD_PLUGIN_ROOT/templates/settings.statusline.example.json" \
   > .claude/settings.json.tmp && mv .claude/settings.json.tmp .claude/settings.json
 ```
 
-Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(".claude/settings.json","utf8"));s.statusLine={type:"command",command:"bash .claude/sdd-status-line.sh",refreshInterval:5};fs.writeFileSync(".claude/settings.json",JSON.stringify(s,null,2)+"\n")'`.
+Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(".claude/settings.json","utf8"));s.statusLine={type:"command",command:"bash .claude/sdd-status-line.sh",refreshInterval:5};s.subagentStatusLine={type:"command",command:"bash .claude/sdd-subagent-status.sh"};fs.writeFileSync(".claude/settings.json",JSON.stringify(s,null,2)+"\n")'`.
 
-If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `[<role>] SDD [4/7] audit !1stale > test · spec-auditor 8m · 4 agentes` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode; then the running skill with elapsed minutes and the number of active subagents, read from `.sdd/activity.jsonl`). `refreshInterval: 5` re-runs it every 5 s even while the session is idle waiting for subagents. It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
+If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `[<role>] SDD [4/7] audit !1stale > test · spec-auditor 8m · 4 agentes` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode; then the running skill with elapsed minutes and the number of active subagents, read from `.sdd/activity.jsonl`). `refreshInterval: 5` re-runs it every 5 s even while the session is idle waiting for subagents. The same step installs `subagentStatusLine` (`.claude/sdd-subagent-status.sh`): every subagent row in the agent panel shows `▶ <type> · <description> · <elapsed> · <tokens>k (<% of its context>)`. It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
 
 ### Step 4: Versioning policy
 
@@ -148,7 +149,7 @@ bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --gitignore-only
 
 The script warns when `pipeline-state.json` is already tracked and prints the `git rm --cached pipeline-state.json` command: show it to the user, do not run it.
 
-**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.claude/sdd-status-line.sh`, `.gitignore` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
+**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.claude/sdd-status-line.sh`, `.claude/sdd-subagent-status.sh`, `.gitignore` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
 
 **4.3 `--multisession`.** Instantiate the roles file from the plugin template, replacing its project name with the project slug (directory name in kebab-case), and copy the launcher:
 
