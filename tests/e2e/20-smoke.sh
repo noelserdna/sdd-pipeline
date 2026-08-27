@@ -46,7 +46,7 @@ if active setup; then
 fi
 stop_if_done specs
 if active specs; then
-  run specs "/sdd-specifications-engineer — requirements/REQUIREMENTS.md is approved. Generate spec/ completely without asking questions; take the recommended option for any clarification and record it in spec/CLARIFICATIONS.md."
+  run specs "/sdd-specifications-engineer --fanout — launching the requirement lanes is requested explicitly. requirements/REQUIREMENTS.md is approved. Generate spec/ completely without asking questions; take the recommended option for any clarification and record it in spec/CLARIFICATIONS.md."
   [ -d spec/use-cases ] && ok "spec/use-cases" || bad "spec/use-cases"
 fi
 stop_if_done audit
@@ -60,7 +60,7 @@ if active audit; then
 fi
 stop_if_done test
 if active test; then
-  run test "/sdd-test-planner — generate test/ from spec/ without asking questions."
+  run test "/sdd-test-planner --fanout — launching the matrix and E2E subagents is requested explicitly. generate test/ from spec/ without asking questions."
   [ -f test/TEST-PLAN.md ] && ok "TEST-PLAN.md" || bad "TEST-PLAN.md"
   nsub2=$(grep -c '"event":"subagent-start"' .sdd/activity.jsonl 2>/dev/null || echo 0)
   [ "${nsub2:-0}" -gt "${nsub:-0}" ] && ok "matrices en subagentes ($((nsub2 - ${nsub:-0})) lanzados)" || echo "WARN matrices sin fan-out"
@@ -80,14 +80,14 @@ if active plan; then
 fi
 stop_if_done tasks
 if active tasks; then
-  run tasks "/sdd-task-generator — generate task/ for all FASEs without asking questions."
+  run tasks "/sdd-task-generator --fanout — launching one subagent per FASE is requested explicitly. generate task/ for all FASEs without asking questions."
   [ -f task/TASK-ORDER.md ] && ok "TASK-ORDER.md" || bad "TASK-ORDER.md"
   grep -q "## Stream Ownership" task/TASK-FASE-1.md 2>/dev/null && ok "Stream Ownership en TASK-FASE-1" || echo "WARN sin tabla Stream Ownership"
   grep -q "Streams:" task/TASK-ORDER.md && ok "Streams: en TASK-ORDER" || echo "WARN sin línea Streams:"
 fi
 stop_if_done impl
 if active impl; then
-  run impl "/sdd-task-implementer --fase=0 — implement FASE-0 completely, test-first, one commit per task with Refs:/Task: trailers, without asking questions (take recommended options)."
+  run impl "/sdd-task-implementer --fase=0 --parallel — giving the [P] tasks to parallel agents is requested explicitly. implement FASE-0 completely, test-first, one commit per task with Refs:/Task: trailers, without asking questions (take recommended options)."
   st=$(jq -r '.stages["task-implementer"].status' pipeline-state.json); done0=$(jq -r '.stages["task-implementer"].summary.metrics.tasks_completed // 0' pipeline-state.json)
   if [ "$st" = "done" ] || { [ "$st" = "running" ] && [ "$done0" -gt 0 ]; }; then ok "task-implementer $st (FASE-0: $done0 tasks; running = quedan FASEs)"; else bad "task-implementer status=$st tasks_completed=$done0"; fi
   [ "$(grep -c '^- \[x\] TASK-' task/TASK-FASE-0.md)" = "$(grep -c '^- \[[ x]\] TASK-' task/TASK-FASE-0.md)" ] && ok "todas las tasks de FASE-0 marcadas" || bad "tasks de FASE-0 sin marcar"
