@@ -49,6 +49,24 @@ Cobertura equivalente: 6 UC, 1 WF, 4 contratos, 5 ADR, 17 invariantes, 47 BDD, 6
 
 **Toda la ganancia vino de escribir menos y leer por índice: el fan-out no se activó ni una vez** (0 eventos `subagent-start` en `.sdd/activity.jsonl`). La skill lo explicó en su informe: *"he ejecutado en modo secuencial en lugar de fan-out porque la guía de esta sesión prohíbe lanzar subagentes sin petición explícita"*. En el perfilado aislado, donde sí se lanzaron los 4 auditores, la auditoría bajó a 9,9 min con un informe mayor: queda margen pendiente de resolver esa fricción (ver "Pendiente" abajo).
 
+### Fan-out arreglado y verificado (4.0.3, 2026-08-27)
+
+El fan-out no se activaba porque la instrucción de la skill se leía como una preferencia frente a la política del entorno
+sobre lanzar subagentes. En 4.0.3 el protocolo declara que los auditores por dimensión son **parte del contrato de la
+skill** (solo lectura, cuatro, sin anidar) y añade `--fanout`/`--sequential`. Medición sobre el mismo `spec/` de 88 k chars:
+
+| | secuencial (4.0.2) | fan-out (4.0.3) |
+|---|---|---|
+| Modo registrado | `metrics.mode = sequential` | `metrics.mode = fanout`, 4 auditores sonnet |
+| Tiempo de pared | 11 min | **5 min** (−55 %) |
+| Coste | — | **8,19 $** (frente a 16,8 $ del secuencial de 4.0.0 y 18 $ del fan-out sin acotar de 4.0.2) |
+| Tokens de salida | — | 23,9 k (los auditores devuelven JSON compacto) |
+| Leído | — | 415 k chars repartidos entre los 4 auditores, no en el hilo principal |
+| Informe | 10,1 k chars | 12,5 k chars |
+
+Es decir: acotar la lectura del auditor por secciones (>8 k chars) bajó el coste **a menos de la mitad** a la vez que el
+tiempo. El pipeline completo con fan-out en auditoría y matrices debería quedar por debajo de 1 h 30.
+
 ### Pendiente
-- Hacer que el fan-out de `sdd-spec-auditor` y `sdd-test-planner` se active de forma fiable: la instrucción de la skill compite con la política del entorno sobre lanzar subagentes. Opciones: flag explícito `--fanout`, que el prompt de invocación lo pida, o documentar `CLAUDE_CODE_SUBAGENT_MODEL` + petición explícita en el smoke.
-- Acotar la lectura de cada auditor por dimensión a las secciones de su índice (hoy leen su ámbito entero): en el perfilado el coste subió de 16,8 $ a 18 $ pese a la mitad de tiempo.
+- Repetir la comparación completa con 4.0.3 (fan-out activo en auditoría y en las matrices de test) para actualizar el total de 1 h 39.
+- Auditor E2E completo (`sdd-pipeline-auditor`) sobre `examples/todo-app` y `sdd-watch` → dashboard HTML.
