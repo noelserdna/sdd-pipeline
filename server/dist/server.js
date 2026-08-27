@@ -31228,7 +31228,7 @@ function getGraphOrEmpty() {
 function createSDDServer() {
   const server = new McpServer({
     name: "sdd",
-    version: "4.0.3"
+    version: "4.1.0"
   });
   server.tool(
     "sdd_query",

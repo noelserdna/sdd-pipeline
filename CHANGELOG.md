@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-08-27
+
 ### Added
 - **Paralelismo como contrato de la skill en todo el pipeline** (`docs/perfilado.md` §"Paralelismo por etapa"): `sdd-specifications-engineer` (carriles de 2-3 requisitos + carril transversal, con catálogo de ids y esqueletos de WF/ADR fijados antes en el hilo principal), `sdd-task-generator` (un subagente por FASE; índice, orden y validaciones globales en el principal), `sdd-task-implementer` (tasks `[P]` en lotes de 4, sin commitear) y `sdd-test-planner` (además de las matrices, los tiers Critical/Full de E2E cuando son el camino crítico). Flags `--fanout`/`--parallel` y `--sequential` en todas; `metrics.mode` y el número de agentes en Persist Summary.
 
