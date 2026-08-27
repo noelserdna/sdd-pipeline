@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Paralelismo como contrato de la skill en todo el pipeline** (`docs/perfilado.md` §"Paralelismo por etapa"): `sdd-specifications-engineer` (carriles de 2-3 requisitos + carril transversal, con catálogo de ids y esqueletos de WF/ADR fijados antes en el hilo principal), `sdd-task-generator` (un subagente por FASE; índice, orden y validaciones globales en el principal), `sdd-task-implementer` (tasks `[P]` en lotes de 4, sin commitear) y `sdd-test-planner` (además de las matrices, los tiers Critical/Full de E2E cuando son el camino crítico). Flags `--fanout`/`--parallel` y `--sequential` en todas; `metrics.mode` y el número de agentes en Persist Summary.
+
+### Fixed
+- Presupuesto de `plan/` escalado también por Stream de trabajo (`+4 000` por Stream adicional): el exceso medido estaba concentrado en la FASE con dos Streams, no repartido. El smoke tolera un 15 % antes de avisar.
+- `scripts/check-paths.sh` fallaba dentro de un worktree enlazado (ahí `.git` es un fichero con ruta absoluta).
+
+
 ## [4.0.3] - 2026-08-27
 
 ### Fixed

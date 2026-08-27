@@ -70,3 +70,28 @@ tiempo. El pipeline completo con fan-out en auditoría y matrices debería queda
 ### Pendiente
 - Repetir la comparación completa con 4.0.3 (fan-out activo en auditoría y en las matrices de test) para actualizar el total de 1 h 39.
 - Auditor E2E completo (`sdd-pipeline-auditor`) sobre `examples/todo-app` y `sdd-watch` → dashboard HTML.
+
+## Tercera pasada (4.0.3, 2026-08-27): el fan-out se activa, y lo que enseña comparar tres ejecuciones
+
+| Etapa | v1 (4.0.0) | v2 (4.0.2) | v3 (4.0.3) | Notas de v3 |
+|---|---|---|---|---|
+| setup | 2 min | 1 min | 1 min | |
+| specs | 35 min | 22 min | **18 min** | aún sin fan-out (llega en 4.1.0) |
+| auditoría | 21 min | 11 min | 17 min | **fan-out activo** (4 carriles, el más lento 7 m 55 s); los ~9 min restantes son el ciclo de corrección de un **P0 real** que v2 no encontró |
+| tests | 30 min | 10 min | 11 min | fan-out activo (3 agentes, 2-4,5 min) **sin ganancia**: las matrices no eran el camino crítico |
+| plan | 27 min | 17 min | 19 min | `plan/` 91,2 k chars (3 FASEs, una con 2 Streams) |
+| tasks | 24 min | 14 min | **35 min** | 75 tasks frente a 41 de v2 (55 % `[P]`), `task/` 113 k chars; sin fan-out (llega en 4.1.0) |
+| FASE-0 | 27 min | 24 min | 18 min | 18 tasks, 19 commits, 79 tests verdes, tag `fase-0-verified`; sin agentes `[P]` (llega en 4.1.0) |
+| **Total** | **2 h 46** | **1 h 39** | **1 h 59** | |
+
+Salida: `spec/` 96,2 k · `test/` 64,2 k · `plan/` 91,2 k · `task/` 112,9 k. Subagentes lanzados: 4 en auditoría, 3 en tests, **0 en el resto**.
+
+Tres lecciones, todas incorporadas al código:
+
+1. **Comparar relojes sin mirar el volumen ni los hallazgos engaña.** v3 auditó un `spec/` un 10 % mayor, encontró un P0
+   que exigió un ADR y una operación de API nuevos, y generó 75 tasks frente a 41. Las etapas no son comparables una a
+   una; hay que mirar `audit_cycle`, `total_findings`, `total_tasks` y los `*_chars` junto al tiempo.
+2. **Paralelizar lo que no está en el camino crítico no sirve** (test-planner: 3 agentes y el mismo tiempo). Por eso
+   4.1.0 delega también los tiers Critical/Full de E2E.
+3. **Las dos etapas más lentas de v3 (`tasks` 35 min y `specs` 18 min) eran justo las que no tenían paralelismo.**
+   4.1.0 lo añade a las dos, más los agentes `[P]` del implementer.
