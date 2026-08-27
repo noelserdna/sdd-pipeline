@@ -417,7 +417,7 @@ printf '{"sddVersion":"t","hooksVersion":3,"currentStage":"requirements-engineer
 mkdir -p "$act2/.sdd"
 printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-spec-auditor","args":"audit"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
 if [ "$(jq -r '.stages["spec-auditor"].status' "$act2/pipeline-state.json")" = running ] && [ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ]; then pass "activity-log: marca la etapa running al arrancar la skill"; else bad "activity-log: etapa no marcada ($(jq -c .stages "$act2/pipeline-state.json"))"; fi
-[ "$(jq -r '.stages["requirements-engineer"].status' "$act2/pipeline-state.json")" = done ] && pass "activity-log: no toca otras etapas" || bad "activity-log: pisó otra etapa"
+[ "$(jq -r '.stages["requirements-engineer"].status' "$act2/pipeline-state.json")" = "done" ] && pass "activity-log: no toca otras etapas" || bad "activity-log: pisó otra etapa"
 printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-pipeline-status"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
 [ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ] && pass "activity-log: una skill de solo lectura no cambia la etapa" || bad "activity-log: pipeline-status cambió la etapa"
 rm -rf "$act2"
