@@ -375,7 +375,9 @@ contains "$wout" "sdd-task-implementer" && ! contains "$wout" "skill  /sdd-task-
 contains "$wout" "2 activo(s)" && pass "sdd-watch: 2 subagentes activos (agent-1 y agent-3; agent-2 parado)" || bad "sdd-watch agentes: $wout"
 asec=$(printf '%s\n' "$wout" | awk '/^Agentes/{f=1; next} /^Sesiones/{f=0} f')   # solo la sección Agentes
 contains "$asec" "agent-1" && contains "$asec" "Buscar usos de X" && contains "$asec" "agent-3" && ! contains "$asec" "agent-2" && pass "sdd-watch: agentes activos con descripción del agent-start previo; agent-2 (parado) fuera" || bad "sdd-watch agente activo: $asec"
-contains "$wout" "6/7 done" && contains "$wout" "etapa  task-implementer" && pass "sdd-watch: Pipeline N/7 y etapa running" || bad "sdd-watch pipeline: $wout"
+# el skill-start de /sdd-spec-auditor marca spec-auditor running (venía done): 5/7 done y esa es la etapa en curso
+contains "$wout" "5/7 done" && contains "$wout" "etapa  spec-auditor" && pass "sdd-watch: Pipeline N/7 y etapa running" || bad "sdd-watch pipeline: $wout"
+[ "$(jq -r '.stages["spec-auditor"].status' "$act/pipeline-state.json")" = "running" ] && pass "H10: el skill-start marcó spec-auditor running en el estado" || bad "H10 no marcó spec-auditor running"
 contains "$wout" "TASK-F1-003" && contains "$wout" "TASK-F1-009" && pass "sdd-watch: task del principal y del worktree" || bad "sdd-watch tasks: $wout"
 contains "$wout" "example-lead" && contains "$wout" "skipped:lead-absent" && pass "sdd-watch: handoffs (to, result)" || bad "sdd-watch handoffs: $wout"
 printf '# Questions — sdd-spec\n\n## Q-sdd-spec-001 [OPEN] skill=x context=y\nQuestion: ?\nAnswer:\n\n## Q-sdd-spec-002 [ANSWERED] skill=x context=y\nAnswer: A\n' > "$act/.sdd/questions-sdd-spec.md"
@@ -393,8 +395,8 @@ mv "$tmp/alog.bak" "$alog"; rm -f "$act/.sdd/activity.1.jsonl"
 if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
   h10 "PATH=$bin SDD_ROLE=sdd-plan" "$(ev "$act" d4d4d4d4-0004 SubagentStart ',"agent_id":"agent-4","agent_type":"Explore"')"
   check "sin jq: H10 escribe la línea con node (role, stage, task)" \
-    jq -e -s 'last | .event == "subagent-start" and .agent_id == "agent-4" and .role == "sdd-plan" and .stage == "task-implementer" and .task == "TASK-F1-003"' "$alog"
-  wout=$(PATH="$bin" bash "$WATCH" --once --root "$act" 2>&1) && contains "$wout" "3 activo(s)" && contains "$wout" "/sdd-spec-auditor --fix" && contains "$wout" "6/7 done" && pass "sin jq: sdd-watch --once por node" || bad "sin jq: sdd-watch: $wout"
+    jq -e -s 'last | .event == "subagent-start" and .agent_id == "agent-4" and .role == "sdd-plan" and .stage == "spec-auditor" and .task == "TASK-F1-003"' "$alog"
+  wout=$(PATH="$bin" bash "$WATCH" --once --root "$act" 2>&1) && contains "$wout" "3 activo(s)" && contains "$wout" "/sdd-spec-auditor --fix" && contains "$wout" "5/7 done" && pass "sin jq: sdd-watch --once por node" || bad "sin jq: sdd-watch: $wout"
   wout2=$(bash "$WATCH" --once --root "$act" 2>&1) || true
   # misma salida salvo la cabecera (hora) y las duraciones (la pasada con node tarda ~1 s más)
   wnorm() { grep -v '^SDD watch' | sed -E 's/[0-9]+h [0-9]{2}m/DUR/g; s/[0-9]+m [0-9]{2}s/DUR/g; s/ [0-9]+s$/ DUR/; s/ [0-9]+s  / DUR  /g'; }
