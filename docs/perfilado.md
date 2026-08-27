@@ -95,3 +95,28 @@ Al comparar etapas hay que mirar `audit_cycle` y el número de hallazgos, no sol
 
 Desequilibrio observado en los carriles del auditor: contratos 5 min frente a ~8 min de dominio, casos de uso y NFR.
 Repartir por tamaño de ámbito en vez de por dimensión fija daría algo más de margen.
+
+## Cómo pedir el paralelismo de forma determinista (medido en la cuarta pasada)
+
+El texto de la skill declara el fan-out como parte de su contrato, pero **no basta**: un entorno que pide contención
+antes de lanzar subagentes puede degradar la skill a un solo hilo, y lo hace en silencio. Evidencia de las pasadas 3 y 4
+sobre el mismo proyecto:
+
+| Etapa | Petición explícita en la invocación | 3ª pasada | 4ª pasada |
+|---|---|---|---|
+| `sdd-spec-auditor` | sí (`--fanout` + una frase) | fan-out (4 carriles) | fan-out (4 carriles) |
+| `sdd-test-planner` | no | fan-out (3 agentes) | **secuencial** (`"esta sesión lleva la instrucción explícita de no lanzar el Agent tool salvo petición tuya"`) |
+| `sdd-specifications-engineer` | no | — (no tenía fan-out) | fan-out (3 carriles) |
+
+Conclusión: **pasa el flag** (`--fanout`, o `--parallel` en el implementer) siempre que se supere el umbral, y añade una
+frase a la invocación ("lanzar los N carriles se pide explícitamente"). Eso convierte el criterio de la skill en petición
+del que llama, que es lo único determinista. `sdd-orchestrator` y `sdd-lead` ya lo hacen; `tests/e2e/20-smoke.sh` también,
+para que las mediciones sean comparables. Si aun así una etapa reporta `metrics.mode: sequential`, el motivo está en
+`summary.highlights`.
+
+### Reparto por tamaño, no por número (pendiente)
+
+Los carriles siguen desequilibrados porque se reparten por cantidad de elementos y no por tamaño estimado:
+specs R1 8 m 23 s / R2 4 m 57 s / X 3 m 15 s; auditor NFR 7 m 59 s / DOM 5 m 31 s. El camino crítico lo marca el carril
+más lento, así que equilibrarlos por tamaño (chars del ámbito, número de AC o de operaciones) es la siguiente mejora con
+recorrido real.

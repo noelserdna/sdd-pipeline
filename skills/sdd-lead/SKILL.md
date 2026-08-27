@@ -47,7 +47,7 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 2. Check `pipeline-state.json`: upstream stages `done` and none `stale`. Otherwise show the problem and stop.
 3. Ask the human, **literally**, the gate question of the phase that precedes `<stage>` (Gate table) and wait. Anything other than an explicit go (revisions, "wait", a question back) means no dispatch.
 4. `ListAgents`: the owner's session (`roles[<role>].name`) must be alive. If not, print `.claude/sdd/sdd-up.sh <role>` for the human to run and stop. Never start it yourself; never `tmux send-keys`.
-5. `SendMessage { to: roles[<role>].name, message: "GO stage=<stage> root=<STATE_ROOT>[ fase=N][ stream=X]; reread pipeline-state.json\n<at most 2 lines: skill to run, what the gate expects>", notify_when_idle: true }`.
+5. `SendMessage { to: roles[<role>].name, message: "GO stage=<stage> root=<STATE_ROOT>[ fase=N][ stream=X][ --fanout|--parallel when the stage is above its threshold, see `docs/perfilado.md`]; reread pipeline-state.json\n<at most 2 lines: skill to run, what the gate expects>", notify_when_idle: true }`.
 6. Tell the human what happens next: the station runs the skill and sends a `stage=… status=…` handoff; you get one notice when it goes idle.
 
 ### Gate table (copied from `agents/sdd-orchestrator.md`; ask verbatim, then dispatch what follows)
