@@ -9,7 +9,7 @@
     {
       "name": "sdd-pipeline",
       "source": "./",
-      "version": "4.0.1",
+      "version": "4.0.2",
       "category": "development",
       "description": "Specification-Driven Development pipeline (SWEBOK v4): 24 skills, 5 agents, 5 hooks and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation.",
       "tags": [

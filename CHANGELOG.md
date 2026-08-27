@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-08-27
+
 ### Changed
 - `subagentStatusLine`: cada fila muestra el modelo del subagente y su actividad actual (`label`), además de descripción, tiempo y tokens.
 
