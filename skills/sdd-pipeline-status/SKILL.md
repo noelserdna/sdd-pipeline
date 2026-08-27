@@ -66,6 +66,15 @@ Output a formatted report:
 |-------|----|------|--------|
 | spec-auditor | todo-lead | 2026-08-24T18:40:12Z | sent |
 
+### Recent Activity (only if `.sdd/activity.jsonl` exists)
+
+| Time (UTC) | Event | Detail | Session | Role |
+|------------|-------|--------|---------|------|
+| 10:12:23 | skill-start | /sdd-security-auditor | 3f1c9a2b | sdd-plan |
+| 10:12:40 | subagent-start | Explore agent-abc123 | 3f1c9a2b | sdd-plan |
+
+Running: skill `/sdd-security-auditor` since 10:12Z (session 3f1c9a2b); 1 subagent active. Live panel: `scripts/sdd-watch.sh --root <STATE_ROOT>`.
+
 ### Recommended Next Action
 > Run `sdd-spec-auditor` to re-audit the updated specifications.
 
@@ -80,3 +89,4 @@ Output a formatted report:
 - Report facts only; do not execute pipeline stages.
 - If `pipeline-state.json` has the extended schema (with `lastChange`), include that section; otherwise skip it.
 - Include the **Handoffs** section only when at least one stage has `summary.handoff` (see `references/handoff-protocol.md` at the plugin root); show `to`, `sentAt` and `result` (`sent`, `skipped:*`, `failed:*`). Also print the current session role when `SDD_ROLE` is set.
+- Include the **Recent Activity** section only when `$STATE_ROOT/.sdd/activity.jsonl` exists (written by the `sdd-activity-log.sh` hook: one JSON line per event with `ts`, `event`, `session`, `role`, `skill`, `agent_type`, `agent_id`, `stage`, `task`). Read the last 8 lines; a `skill-start` with no later `stop` in the same session is the skill currently running; a `subagent-start` with no later `subagent-stop` for the same `agent_id` is an active subagent. Do not read more than the last ~50 lines.

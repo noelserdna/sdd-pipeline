@@ -313,4 +313,95 @@ else
   echo "skip sin jq: git/node no operativos con PATH mínimo en esta máquina"
 fi
 
+# ---------------------------------------------------------------- 15. H10 activity log (.sdd/activity.jsonl) + sdd-watch.sh
+ACT_HOOK="$HOOKS/sdd-activity-log.sh"
+WATCH="$ROOT/scripts/sdd-watch.sh"
+check "bash -n sdd-watch.sh" bash -n "$WATCH"
+# h10 ENV json  → alimenta el hook con el JSON tal cual
+h10() {
+  local envs="$1" json="$2"
+  # shellcheck disable=SC2086
+  printf '%s' "$json" | env $envs bash "$ACT_HOOK" 2>/dev/null
+}
+# ev cwd session event extra-json(",k":v...)
+ev() { printf '{"session_id":"%s","cwd":"%s","hook_event_name":"%s"%s}' "$2" "$1" "$3" "${4:-}"; }
+act="$tmp/act"; git init -q "$act" && git -C "$act" commit -q --allow-empty -m init
+cp "$FIX/pipeline-state.impl-running.json" "$act/pipeline-state.json"
+mkdir -p "$act/.sdd"; cp "$FIX/current-task.json" "$act/.sdd/current-task.json"
+alog="$act/.sdd/activity.jsonl"
+h10 "" "$(ev "$act" a1a1a1a1-0001 SessionStart ',"source":"startup"')"
+h10 "SDD_ROLE=sdd-spec" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-spec-auditor","args":"--fix"}')"
+h10 "" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Agent","tool_input":{"subagent_type":"Explore","description":"Buscar usos de X","prompt":"..."}')"
+h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStart ',"agent_id":"agent-1","agent_type":"Explore"')"
+h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStart ',"agent_id":"agent-2","agent_type":"general-purpose"')"
+h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStop ',"agent_id":"agent-2","agent_type":"general-purpose","last_assistant_message":"ok"')"
+h10 "" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Bash","tool_input":{"command":"ls"}')"
+h10 "" "$(ev "$act" b2b2b2b2-0002 UserPromptExpansion ',"expansion_type":"slash_command","command_name":"sdd-task-implementer","command_args":"--fase 1"')"
+h10 "" "$(ev "$act" b2b2b2b2-0002 Stop ',"stop_hook_active":false,"last_assistant_message":"done"')"
+check "H10 crea <principal>/.sdd/activity.jsonl" test -f "$alog"
+check "H10 activity.jsonl: JSON válido línea a línea" jq -e . "$alog"
+check "H10 no deja .lock" no_lock "$alog"
+[ "$(wc -l < "$alog" | tr -d ' ')" = 8 ] && pass "H10 8 líneas (PreToolUse Bash no se registra)" || bad "H10 líneas: $(wc -l < "$alog")"
+check "H10 session-start: session(8), role -, cwd ., stage running, task del breadcrumb, source" \
+  jq -e -s '.[0] | .event == "session-start" and .session == "a1a1a1a1" and .role == "-" and .cwd == "." and .stage == "task-implementer" and .task == "TASK-F1-003" and .source == "startup" and (.ts | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' "$alog"
+check "H10 skill-start (PreToolUse Skill): skill, args, via=tool, role SDD_ROLE" \
+  jq -e -s '.[1] | .event == "skill-start" and .skill == "sdd-spec-auditor" and .args == "--fix" and .via == "tool" and .role == "sdd-spec"' "$alog"
+check "H10 agent-start (PreToolUse Agent): agent_type=subagent_type, description" \
+  jq -e -s '.[2] | .event == "agent-start" and .agent_type == "Explore" and .description == "Buscar usos de X" and (has("agent_id") | not)' "$alog"
+check "H10 subagent-start/stop: agent_id, agent_type" \
+  jq -e -s '(.[3] | .event == "subagent-start" and .agent_id == "agent-1" and .agent_type == "Explore") and (.[5] | .event == "subagent-stop" and .agent_id == "agent-2")' "$alog"
+check "H10 UserPromptExpansion → skill-start via=prompt (command_name/command_args)" \
+  jq -e -s '.[6] | .event == "skill-start" and .skill == "sdd-task-implementer" and .args == "--fase 1" and .via == "prompt" and .session == "b2b2b2b2"' "$alog"
+check "H10 stop: sin campos de tool" jq -e -s '.[7] | .event == "stop" and (has("skill") | not)' "$alog"
+# desde un worktree: se escribe en el principal, cwd absoluto (fuera de STATE_ROOT), task del worktree
+awt="$tmp/act-wt"; git -C "$act" worktree add -q "$awt" >/dev/null 2>&1
+mkdir -p "$awt/.sdd"; sed 's/TASK-F1-003/TASK-F1-009/' "$FIX/current-task.json" > "$awt/.sdd/current-task.json"
+h10 "" "$(ev "$awt" c3c3c3c3-0003 SubagentStart ',"agent_id":"agent-3","agent_type":"Plan"')"
+[ ! -e "$awt/.sdd/activity.jsonl" ] && pass "H10 desde worktree NO crea activity.jsonl en el worktree" || bad "H10 creó activity.jsonl en el worktree"
+check "H10 desde worktree: línea en el principal con cwd absoluto y task del worktree" \
+  jq -e -s --arg wt "$awt" '.[8] | .event == "subagent-start" and .cwd == $wt and .task == "TASK-F1-009"' "$alog"
+# proyectos sin SDD: ni .sdd/ ni pipeline-state.json → no se escribe nada
+plain="$tmp/plain"; git init -q "$plain" && git -C "$plain" commit -q --allow-empty -m init
+h10 "" "$(ev "$plain" e9e9e9e9-0009 Stop '')"
+h10 "" "$(ev "$nogit" e9e9e9e9-0009 SubagentStart ',"agent_id":"a","agent_type":"Explore"')"
+[ ! -e "$plain/.sdd" ] && [ ! -e "$nogit/.sdd" ] && pass "H10 sin .sdd/ ni pipeline-state.json no escribe nada" || bad "H10 escribió en un proyecto sin SDD"
+# entrada rota / vacía → exit 0
+printf '{not json' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 JSON roto → exit 0" || bad "H10 JSON roto falla"
+printf '' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 stdin vacío → exit 0" || bad "H10 stdin vacío falla"
+# sdd-watch.sh --once
+wout=$(bash "$WATCH" --once --root "$act" 2>&1) && pass "sdd-watch --once exit 0" || bad "sdd-watch --once falla: $wout"
+contains "$wout" "/sdd-spec-auditor --fix" && pass "sdd-watch muestra la skill en curso (skill-start sin stop)" || bad "sdd-watch sin skill en curso: $wout"
+contains "$wout" "sdd-task-implementer" && ! contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: skill cerrada por stop no aparece en Ahora (sí en Actividad)" || bad "sdd-watch: skill cerrada por stop: $wout"
+contains "$wout" "2 activo(s)" && pass "sdd-watch: 2 subagentes activos (agent-1 y agent-3; agent-2 parado)" || bad "sdd-watch agentes: $wout"
+asec=$(printf '%s\n' "$wout" | awk '/^Agentes/{f=1; next} /^Sesiones/{f=0} f')   # solo la sección Agentes
+contains "$asec" "agent-1" && contains "$asec" "Buscar usos de X" && contains "$asec" "agent-3" && ! contains "$asec" "agent-2" && pass "sdd-watch: agentes activos con descripción del agent-start previo; agent-2 (parado) fuera" || bad "sdd-watch agente activo: $asec"
+contains "$wout" "6/7 done" && contains "$wout" "etapa  task-implementer" && pass "sdd-watch: Pipeline N/7 y etapa running" || bad "sdd-watch pipeline: $wout"
+contains "$wout" "TASK-F1-003" && contains "$wout" "TASK-F1-009" && pass "sdd-watch: task del principal y del worktree" || bad "sdd-watch tasks: $wout"
+contains "$wout" "example-lead" && contains "$wout" "skipped:lead-absent" && pass "sdd-watch: handoffs (to, result)" || bad "sdd-watch handoffs: $wout"
+printf '# Questions — sdd-spec\n\n## Q-sdd-spec-001 [OPEN] skill=x context=y\nQuestion: ?\nAnswer:\n\n## Q-sdd-spec-002 [ANSWERED] skill=x context=y\nAnswer: A\n' > "$act/.sdd/questions-sdd-spec.md"
+wout=$(bash "$WATCH" --once --root "$act" 2>&1) || true
+contains "$wout" "questions-sdd-spec.md" && contains "$wout" "1 [OPEN]" && pass "sdd-watch: preguntas [OPEN] por fichero" || bad "sdd-watch preguntas: $wout"
+wout=$(bash "$WATCH" --once --root "$nogit" 2>&1) && contains "$wout" "sin actividad registrada" && contains "$wout" "sin pipeline-state.json" && pass "sdd-watch sin SDD: exit 0 y 'sin actividad registrada'" || bad "sdd-watch sin SDD: $wout"
+# rotación > 5 MB → activity.1.jsonl
+mv "$alog" "$tmp/alog.bak"
+awk 'BEGIN { for (i = 0; i < 100000; i++) print "{\"ts\":\"2026-01-01T00:00:00Z\",\"event\":\"stop\",\"session\":\"a1a1a1a1\"}" }' > "$alog"   # ~5,9 MB (sin `yes | head`: SIGPIPE + pipefail)
+h10 "" "$(ev "$act" a1a1a1a1-0001 Stop '')"
+[ -f "$act/.sdd/activity.1.jsonl" ] && [ "$(wc -l < "$alog" | tr -d ' ')" = 1 ] && pass "H10 rota activity.jsonl → activity.1.jsonl al superar 5 MB" || bad "H10 no rotó"
+check "H10 tras rotar: JSON válido" jq -e . "$alog"
+mv "$tmp/alog.bak" "$alog"; rm -f "$act/.sdd/activity.1.jsonl"
+# sin jq (PATH mínimo con node): hook y watch por node
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  h10 "PATH=$bin SDD_ROLE=sdd-plan" "$(ev "$act" d4d4d4d4-0004 SubagentStart ',"agent_id":"agent-4","agent_type":"Explore"')"
+  check "sin jq: H10 escribe la línea con node (role, stage, task)" \
+    jq -e -s 'last | .event == "subagent-start" and .agent_id == "agent-4" and .role == "sdd-plan" and .stage == "task-implementer" and .task == "TASK-F1-003"' "$alog"
+  wout=$(PATH="$bin" bash "$WATCH" --once --root "$act" 2>&1) && contains "$wout" "3 activo(s)" && contains "$wout" "/sdd-spec-auditor --fix" && contains "$wout" "6/7 done" && pass "sin jq: sdd-watch --once por node" || bad "sin jq: sdd-watch: $wout"
+  wout2=$(bash "$WATCH" --once --root "$act" 2>&1) || true
+  # misma salida salvo la cabecera (hora) y las duraciones (la pasada con node tarda ~1 s más)
+  wnorm() { grep -v '^SDD watch' | sed -E 's/[0-9]+h [0-9]{2}m/DUR/g; s/[0-9]+m [0-9]{2}s/DUR/g; s/ [0-9]+s$/ DUR/; s/ [0-9]+s  / DUR  /g'; }
+  [ "$(printf '%s\n' "$wout" | wnorm)" = "$(printf '%s\n' "$wout2" | wnorm)" ] && pass "sdd-watch: salida idéntica con jq y con node (salvo hora/duraciones)" || bad "sdd-watch: jq y node difieren: $(diff <(printf '%s\n' "$wout" | wnorm) <(printf '%s\n' "$wout2" | wnorm) 2>&1 | head -5)"
+else
+  echo "skip sin jq (H10/watch): node no operativo con PATH mínimo"
+fi
+git -C "$act" worktree remove --force "$awt" >/dev/null 2>&1 || true
+
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }

@@ -130,6 +130,7 @@ Declared in [`hooks/hooks.json`](hooks/hooks.json) and run from the plugin direc
 | `sdd-augment-hook.js` | PreToolUse Read/Edit/Write | Adds traceability context for the file being touched |
 | `sdd-pipeline-state-updater.sh` | PostToolUse Write | Marks the stage that owns the written path as `running` (locked, worktree-aware) |
 | `sdd-trace-map-updater.sh` | PostToolUse Write/Edit | Accumulates file → task/refs mappings in `.sdd/trace-map.json` |
+| `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Appends one JSON line per event to `.sdd/activity.jsonl` (skill, subagents, session, role, stage, task) for the live panel `scripts/sdd-watch.sh` |
 
 `sdd-setup` additionally installs a git `commit-msg` hook that requires `Refs:` / `Task:` trailers on `feat`, `fix`, `perf`, `test` and `refactor` commits (bypass: `[skip-sdd]` or `SDD_SKIP_VERIFY=1`), and can add an optional status line and opt-in quality gates (`Stop`, `TaskCompleted`).
 
@@ -179,7 +180,8 @@ examples/todo-app toy project for E2E tests          tests/       hooks, setup, 
 
 ```bash
 node scripts/validate-plugin.mjs        # manifests, skills, agents, hooks, mcp
-bash tests/hooks/run.sh                 # hook behaviour (roles, worktrees, locking)
+bash tests/hooks/run.sh                 # hook behaviour (roles, worktrees, locking, activity log)
+scripts/sdd-watch.sh --root ../my-app   # live panel: stages, running skill, subagents, sessions, handoffs, questions (--once for a snapshot)
 bash tests/e2e/run-all.sh               # B1 static validation + B2 real install in an isolated CLAUDE_CONFIG_DIR
 cd server && npm ci && npm run check && npm run build && npm test
 claude --plugin-dir . -p "/sdd-pipeline-status"   # try the plugin without installing it

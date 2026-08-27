@@ -130,6 +130,7 @@ Declarados en [`hooks/hooks.json`](hooks/hooks.json) y ejecutados desde el direc
 | `sdd-augment-hook.js` | PreToolUse Read/Edit/Write | Añade contexto de trazabilidad del fichero que se toca |
 | `sdd-pipeline-state-updater.sh` | PostToolUse Write | Marca como `running` la etapa dueña de la ruta escrita (con lock, consciente de worktrees) |
 | `sdd-trace-map-updater.sh` | PostToolUse Write/Edit | Acumula mapeos fichero → task/refs en `.sdd/trace-map.json` |
+| `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Añade una línea JSON por evento a `.sdd/activity.jsonl` (skill, subagentes, sesión, rol, etapa, task) para el panel en vivo `scripts/sdd-watch.sh` |
 
 `sdd-setup` instala además un hook git `commit-msg` que exige trailers `Refs:` / `Task:` en commits `feat`, `fix`, `perf`, `test` y `refactor` (bypass: `[skip-sdd]` o `SDD_SKIP_VERIFY=1`), y puede añadir una status line opcional y quality gates opt-in (`Stop`, `TaskCompleted`).
 
@@ -179,7 +180,8 @@ examples/todo-app proyecto de juguete para E2E       tests/       hooks, setup, 
 
 ```bash
 node scripts/validate-plugin.mjs        # manifiestos, skills, agentes, hooks, mcp
-bash tests/hooks/run.sh                 # comportamiento de los hooks (roles, worktrees, lock)
+bash tests/hooks/run.sh                 # comportamiento de los hooks (roles, worktrees, lock, activity log)
+scripts/sdd-watch.sh --root ../mi-app   # panel en vivo: etapas, skill en curso, subagentes, sesiones, handoffs, preguntas (--once para una foto)
 bash tests/e2e/run-all.sh               # B1 validación estática + B2 instalación real en un CLAUDE_CONFIG_DIR aislado
 cd server && npm ci && npm run check && npm run build && npm test
 claude --plugin-dir . -p "/sdd-pipeline-status"   # probar el plugin sin instalarlo

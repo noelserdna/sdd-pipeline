@@ -57,6 +57,42 @@ Roles por defecto (`templates/sdd-sessions.example.json`):
 
 Protocolos detallados: [`references/handoff-protocol.md`](../references/handoff-protocol.md), [`references/async-questions.md`](../references/async-questions.md). Diseño y revisión: [`multisesion/`](multisesion/).
 
+## Ver qué está pasando
+
+Con varias estaciones abiertas no se ve desde fuera qué skill corre en cada una, cuántos subagentes hay lanzados ni desde cuándo. Para eso el hook `hooks/sdd-activity-log.sh` deja una línea JSON por evento en `$SDD_STATE_ROOT/.sdd/activity.jsonl` (siempre en el checkout principal, también desde un worktree) y `scripts/sdd-watch.sh` la pinta en un panel que se repinta solo.
+
+```
+tmux split-window -h -t <proyecto>-lead \
+  "bash <plugin>/scripts/sdd-watch.sh --root /ruta/al/checkout/principal"   # panel junto a la sesión lead
+scripts/sdd-watch.sh --root ../todo-app --interval 2                          # en otra terminal
+scripts/sdd-watch.sh --once --root ../todo-app                                # una sola pasada, para pegar en un informe
+```
+
+`<plugin>` es la ruta de instalación (`~/.claude/plugins/…/sdd-pipeline` o el checkout con `--plugin-dir`). Sin `--root` usa `SDD_STATE_ROOT` o la raíz del `.git` común del cwd. Cada `N` segundos (5 por defecto) limpia la pantalla y muestra:
+
+| Sección | Qué muestra | Fuente |
+|---|---|---|
+| **Pipeline** | cada stage `done/running/stale/pending` con `lastRun`, contador `N/7`, `currentStage` | `pipeline-state.json` |
+| **Ahora** | etapa `running`; skill en curso por sesión (último `skill-start` sin `stop` posterior) y desde cuándo; task actual del principal y de cada worktree de `git worktree list` | `activity.jsonl`, `.sdd/current-task.json` |
+| **Agentes** | subagentes activos (`subagent-start` sin `subagent-stop`): tipo, descripción, sesión/rol, duración; total lanzados en la última hora | `activity.jsonl` |
+| **Sesiones** | sesiones vivas del mismo repo: nombre, estado (`busy/idle/waiting`), rol, pid | `~/.claude/sessions/*.json`, `.claude/sdd-sessions.json` |
+| **Handoffs** | stages con `summary.handoff`: destino, resultado, hora | `pipeline-state.json` |
+| **Preguntas** | ficheros `.sdd/questions-<rol>.md` con su nº de `[OPEN]` | `.sdd/` |
+| **Bench** | últimos 5 eventos (si existe) | `.sdd/bench/events.jsonl` |
+| **Actividad reciente** | últimas 8 líneas del log (`HH:MM:SS evento detalle [rol]`, UTC) | `activity.jsonl` |
+
+Eventos registrados (campo `event`) y de qué hook salen:
+
+| `event` | Hook | Campos propios |
+|---|---|---|
+| `session-start` / `session-end` | `SessionStart` (`startup\|resume`) / `SessionEnd` | `source` / `reason` |
+| `skill-start` | `PreToolUse` con `tool_name=Skill` (Claude invoca la skill) y `UserPromptExpansion` (el humano teclea `/skill`; ese camino **no** pasa por `PreToolUse`) | `skill`, `args`, `via=tool\|prompt`, `in_agent` si ocurre dentro de un subagente |
+| `agent-start` | `PreToolUse` con `tool_name=Agent` (o `Task`, nombre antiguo) | `agent_type` (`subagent_type`), `description` |
+| `subagent-start` / `subagent-stop` | `SubagentStart` / `SubagentStop` | `agent_type`, `agent_id` |
+| `stop` | `Stop` (fin de turno del agente principal) | — |
+
+Campos comunes: `ts` (ISO UTC), `session` (8 primeros caracteres de `session_id`), `role` (`SDD_ROLE` o registro de sesiones; `-` sin rol), `cwd` (relativo al principal), `stage` (primer stage `running`), `task` (`taskId` del `.sdd/current-task.json` del worktree). El hook no escribe nada en proyectos sin `.sdd/` ni `pipeline-state.json`, siempre sale con 0 y rota el fichero a `activity.1.jsonl` al superar 5 MB. Como `SubagentStart` no trae la descripción, el panel la toma del `agent-start` anterior de la misma sesión y tipo (heurística). Una skill que termina el turno para preguntar al humano deja de contar como "en curso" hasta la siguiente invocación.
+
 ## Límites conocidos
 
 - `~/.claude/sessions/<pid>.json`, `CLAUDE_PID` y el socket de mensajería no están documentados por Claude Code: los hooks degradan a "sin rol" si cambian.
