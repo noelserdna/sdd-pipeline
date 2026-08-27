@@ -67,7 +67,7 @@ Cinco etapas paralelizan trabajo mecánico dentro de una sola sesión. El vocabu
 |---|---|---|---|---|---|---|
 | `sdd-specifications-engineer` | carriles R de 2-3 requisitos funcionales (UC + BDD + decisiones de contrato) + un carril transversal X (`nfr/`, `adr/`, `PROPERTY-TESTS`) | más de 4 requisitos funcionales | `--fanout` | `--sequential` | Modo 1, catálogo de ids (fase A) y documentos compartidos (`domain/01..05`, `VALUE-REGISTRY`, `CLARIFICATIONS`); luego contratos, workflows, `DERIVED-SPECS`, `TRACEABILITY-MATRIX`, `README`, gate y Persist Summary | `metrics.mode` + `metrics.spec_agents` |
 | `sdd-spec-auditor` | dimensión del corpus: 4 auditores fijos (DOM, UC/WF, CON/BDD, NFR/ADR) | `spec/` con > 8 ficheros **o** > 40 k chars | `--fanout` | `--sequential` | índice, referencias cruzadas, cobertura REQ y huérfanos, marcadores, SC03/SH05, baseline y regresión, deduplicación, revisión de la evidencia de cada P0/P1, Gate e informe | `metrics.mode` = `fanout` \| `sequential` |
-| `sdd-test-planner` | grupo de 2-3 UC → una `TEST-MATRIX-UC-*.md` cada uno | más de 3 UC | `--fanout` | `--sequential` | `TEST-PLAN.md` (y su §3 Design Decisions, escrita **antes** de lanzar: es el contrato de convenciones), `PERF-SCENARIOS.md`, `E2E-SCENARIOS.md`, verificación de ficheros e ids, plegado de gaps en §4 | `summary.highlights` (el motivo de la degradación) |
+| `sdd-test-planner` | grupo de 2-3 UC → una `TEST-MATRIX-UC-*.md` cada uno; además los tiers Critical/Full de E2E cuando son el camino crítico (> 1 workflow o > 20 escenarios) | más de 3 UC | `--fanout` | `--sequential` | `TEST-PLAN.md` (y su §3 Design Decisions, escrita **antes** de lanzar: es el contrato de convenciones), `PERF-SCENARIOS.md`, `E2E-SCENARIOS.md`, verificación de ficheros e ids, plegado de gaps en §4 | `summary.highlights` (el motivo de la degradación) |
 | `sdd-task-generator` | una FASE → un `task/TASK-FASE-N.md` cada uno (máx. 4 simultáneos) | 2 o más FASEs con artefactos de plan | `--fanout` | `--sequential` | contrato transversal fijado **antes** del fan-out (numeración `TASK-F{N}-{SEQ}`, convenciones de commit, rutas, glosario, plantillas y la tabla *Módulos y Conjuntos de Escritura* de cada FASE, semilla de sus Streams); después, `TASK-INDEX.md` y `TASK-ORDER.md` (Waves, dependencias cross-FASE, matriz de trazabilidad) y las validaciones globales V-04, V-09, V-11 y V-15..V-18 sobre los JSON devueltos | `metrics.mode` + `metrics.task_agents` |
 | `sdd-task-implementer` | una task marcada `[P]` (máx. 4 simultáneos por lote) | hay tasks `[P]` con sus dependencias satisfechas en el lote | `--parallel` | `--sequential` | la Phase 7 (checklist de revisión) de cada task, **todos los commits** (git no admite commits en paralelo) y la verificación de FASE (Phase 9) | `metrics.mode` = `parallel` \| `sequential` |
 
@@ -79,3 +79,19 @@ Reglas comunes a las cinco:
 - **Reintento:** un subagente que falla o devuelve JSON inválido se relanza una vez; si vuelve a fallar, el principal hace ese trozo en secuencial y lo deja escrito.
 - **Eje distinto:** `--stream X` de `sdd-task-implementer` **no** es fan-out: son sesiones y worktrees separados sobre write-sets disjuntos ([`multisesion.md`](multisesion.md)). Los dos ejes se componen — dentro de un worktree de Stream, sus tasks `[P]` siguen yendo a subagentes.
 - **Comprobar que se activó:** la status line y `scripts/sdd-watch.sh` muestran los subagentes vivos como `N agentes`; en el log, un evento `subagent-start` por cada uno en `.sdd/activity.jsonl`.
+
+## Lección de la tercera medición (2026-08-27): paralelizar lo que está en el camino crítico
+
+`sdd-test-planner` con fan-out activo (3 subagentes de matrices, 2-4,5 min cada uno) tardó **11 min**, frente a los
+10 min de la pasada secuencial: las matrices no eran el cuello de botella. El hilo principal seguía escribiendo
+`TEST-PLAN`, `PERF-SCENARIOS` y 40 escenarios E2E mientras los agentes ya habían terminado. Corregido delegando también
+los tiers Critical/Full de E2E (`skills/sdd-test-planner/SKILL.md`, Full Run Order paso 4).
+
+En `sdd-spec-auditor` ocurrió lo contrario y conviene no confundirlo: los 17 min de la tercera pasada frente a los 11 de
+la segunda **no** son una regresión del fan-out — el descubrimiento en paralelo tardó ~8 min (el carril más lento) y el
+resto fue el ciclo de corrección de un **P0 real** que la pasada secuencial no había encontrado (`add` validaba el
+título después de cargar el almacén, dejando `AC-006-08` insatisfacible; se resolvió con un ADR y una operación nueva).
+Al comparar etapas hay que mirar `audit_cycle` y el número de hallazgos, no solo el reloj.
+
+Desequilibrio observado en los carriles del auditor: contratos 5 min frente a ~8 min de dominio, casos de uso y NFR.
+Repartir por tamaño de ámbito en vez de por dimensión fija daría algo más de margen.
