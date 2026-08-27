@@ -182,4 +182,23 @@ else
   OUTPUT="SDD: no jq/node"
 fi
 
-printf "%s%s" "$PREFIX" "$OUTPUT"
+# ── Actividad en curso (.sdd/activity.jsonl del hook sdd-activity-log): skill · tiempo · agentes activos ─────────
+ACTIVITY=""
+ACT_FILE="${STATE_ROOT:-${PROJECT_DIR:-.}}/.sdd/activity.jsonl"
+if [ -s "$ACT_FILE" ] && command -v jq >/dev/null 2>&1; then
+  ACTIVITY=$(tail -n 400 "$ACT_FILE" 2>/dev/null | jq -r -s --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    def secs: (sub("\\.[0-9]+";"") | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime);
+    [ .[] | select(type=="object") ] as $ev
+    | ($ev | map(select(.event=="skill-start")) | last) as $sk
+    | (if $sk == null then null else ($ev | map(select(.event=="stop" and .session==$sk.session and .ts > $sk.ts)) | length) end) as $stopped
+    | ($ev | map(select(.event=="subagent-start") | .agent_id) | unique) as $started
+    | ($ev | map(select(.event=="subagent-stop") | .agent_id) | unique) as $stopped_agents
+    | (($started - $stopped_agents) | length) as $active
+    | (if $sk != null and $stopped == 0 then
+         (($now | secs) - ($sk.ts | secs)) as $d
+         | " · " + ($sk.skill|tostring) + " " + (if $d >= 3600 then "\($d/3600|floor)h\(($d%3600)/60|floor)m" else "\($d/60|floor)m" end)
+       else "" end)
+      + (if $active > 0 then " · \($active) agente" + (if $active > 1 then "s" else "" end) else "" end)
+  ' 2>/dev/null) || ACTIVITY=""
+fi
+printf "%s%s%s" "$PREFIX" "$OUTPUT" "$ACTIVITY"
