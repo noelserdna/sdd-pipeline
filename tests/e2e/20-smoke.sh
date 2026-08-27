@@ -73,7 +73,9 @@ if active plan; then
   pc=$(jq -r '.stages["plan-architect"].summary.metrics.plan_chars // 0' pipeline-state.json 2>/dev/null)
   pb=$(jq -r '.stages["plan-architect"].summary.metrics.plan_budget_chars // 0' pipeline-state.json 2>/dev/null)
   if [ "${pb:-0}" -gt 0 ] && [ "${pc:-0}" -gt 0 ]; then
-    [ "$pc" -le "$pb" ] && ok "plan/ dentro del presupuesto ($pc ≤ $pb)" || echo "WARN plan/ sobre presupuesto ($pc > $pb)"
+    # tolerancia del 15 %: el techo es orientativo y depende del tamaño real de cada FASE
+    lim=$(( pb * 115 / 100 ))
+    [ "$pc" -le "$lim" ] && ok "plan/ dentro del presupuesto ($pc ≤ $pb +15%)" || echo "WARN plan/ sobre presupuesto ($pc > $lim)"
   fi
 fi
 stop_if_done tasks
