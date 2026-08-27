@@ -95,3 +95,33 @@ Tres lecciones, todas incorporadas al código:
    4.1.0 delega también los tiers Critical/Full de E2E.
 3. **Las dos etapas más lentas de v3 (`tasks` 35 min y `specs` 18 min) eran justo las que no tenían paralelismo.**
    4.1.0 lo añade a las dos, más los agentes `[P]` del implementer.
+
+## Cuarta pasada (4.1.0, 2026-08-27): paralelismo completo
+
+| Etapa | v2 (4.0.2) | v3 (4.0.3) | **v4 (4.1.0)** | Carriles en v4 |
+|---|---|---|---|---|
+| setup | 1 | 1 | **1** | — |
+| specs | 22 | 18 | 20 | 3 (R1 8 m 23 s · R2 4 m 57 s · X 3 m 15 s) |
+| auditoría | 11 | 17 | 18 | 4 (5 m 31 s – 7 m 59 s) |
+| tests | 10 | 11 | 11 | **0** (se degradó a secuencial) |
+| plan | 17 | 19 | **12** | — |
+| tasks | 14 | 35 | **26** | 3 (11 m 48 s · 12 m 10 s · **21 m 51 s**) |
+| FASE-0 | 24 | 18 | 21 | **0** (se degradó a secuencial) |
+| **Total** | 1 h 39 | 1 h 59 | **1 h 49** | 10 subagentes |
+
+Resultado: 15 tasks de FASE-0, 17 commits, **159 tests verdes**, `fase-0-verified`; salida total 386,9 k chars
+(`spec/` 76,8 k · `test/` 99,3 k · `plan/` 82,1 k · `task/` 128,7 k). `plan/` **dentro del presupuesto** con la fórmula
+por Streams (82,1 k ≤ 93 k), que valida la recalibración.
+
+### Lo que enseña
+
+1. **El fan-out por FASE de `task-generator` funciona**: 35 → 26 min (−26 %) generando *más* trabajo (64 tasks frente a 56).
+2. **El cuello de botella es el desequilibrio de carriles**, y ya son tres medidas independientes: specs 8 m 23 s vs 3 m 15 s,
+   auditor 7 m 59 s vs 5 m 31 s, tasks 21 m 51 s vs 11 m 48 s. La etapa dura lo que el carril más lento: con los tres
+   carriles de `tasks` equilibrados serían ~15 min en vez de 26. **Repartir por tamaño estimado (chars del ámbito, nº de
+   AC, nº de módulos) en vez de por número de elementos es la mejora pendiente con más recorrido.**
+3. **Dos etapas se degradaron solas a secuencial** (`test-planner` y el implementer), la razón siempre la misma: la
+   petición de paralelismo estaba en el contrato de la skill pero no en la invocación. Corregido en 4.1.1 (el orquestador,
+   `sdd-lead` y el smoke pasan `--fanout`/`--parallel` cuando se supera el umbral).
+4. Comparar totales entre pasadas sigue siendo engañoso: v4 produjo 386,9 k chars de artefactos y 159 tests frente a los
+   79 de v3. Mirar `total_tasks`, `total_findings`, `tests_passed` y los `*_chars` junto al reloj.
