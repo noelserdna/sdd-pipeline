@@ -108,8 +108,16 @@ Report the total as `metrics.test_chars` (`wc -c test/*.md`) in Persist Summary 
 1. Gates → index `spec/` (Reading Strategy).
 2. Mode 1 `TEST-PLAN.md` in the main thread; write §3 Design Decisions first — it is the convention contract the matrix subagents must not repeat.
 3. Mode 2 matrices: fan-out to subagents (see Mode 2). They run in the background.
-4. Mode 3 `PERF-SCENARIOS.md` and Mode 5 `E2E-SCENARIOS.md` in the main thread while the agents run (Mode 5 owns the field-inventory cross-validation, which may STOP).
-5. Consolidate: agent summaries → TEST-PLAN §4 gaps / §10 metrics; Persist Summary; Handoff.
+4. **Mode 5 `E2E-SCENARIOS.md` is delegated too when it is the critical path** — more than 1 workflow, or more than 20
+   expected scenarios: one subagent writes the Critical and Full tiers from the WF step lists and the §3 conventions
+   (same launch rules as the matrices), while the main thread keeps the Smoke tier and the **field-inventory
+   cross-validation**, which may STOP and therefore never leaves the main thread. Below that threshold, or with
+   `--sequential`, Mode 5 stays in the main thread.
+   Measured 2026-08-27 (`docs/medidas.md`): with the matrices fanned out to 3 agents (2-4.5 min each) the stage still
+   took 11 min, because the critical path was the main thread writing TEST-PLAN + PERF + 40 E2E scenarios. Parallelising
+   what is *not* on the critical path buys nothing.
+5. Mode 3 `PERF-SCENARIOS.md` in the main thread while the agents run.
+6. Consolidate: agent summaries → TEST-PLAN §4 gaps / §10 metrics; Persist Summary; Handoff.
 
 ---
 
@@ -292,7 +300,7 @@ threshold, or when the `Agent` tool is not in your tool list, and say why in `su
    Rules: one row per case; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
    Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
    ```
-4. Main thread: continue with Mode 3 and Mode 5 while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
+4. Main thread: continue with Mode 3 (and with Mode 5's Smoke tier and field-inventory cross-validation when Mode 5 is delegated) while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
 
 Subagents never write `pipeline-state.json`, never send handoff messages, never touch `spec/`. With ≤ 3 UCs, or when `Agent` is unavailable, the main thread writes the matrices with the same rules.
 
