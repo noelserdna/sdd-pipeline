@@ -196,7 +196,7 @@ if [ -s "$ACT_FILE" ] && command -v jq >/dev/null 2>&1; then
     | (($started - $stopped_agents) | length) as $active
     | (if $sk != null and $stopped == 0 then
          (($now | secs) - ($sk.ts | secs)) as $d
-         | " · " + ($sk.skill|tostring) + " " + (if $d >= 3600 then "\($d/3600|floor)h\(($d%3600)/60|floor)m" else "\($d/60|floor)m" end)
+         | " · " + ($sk.skill|tostring|sub("^[a-z0-9-]+:";"")) + " " + (if $d >= 3600 then "\($d/3600|floor)h\(($d%3600)/60|floor)m" else "\($d/60|floor)m" end)
        else "" end)
       + (if $active > 0 then " · \($active) agente" + (if $active > 1 then "s" else "" end) else "" end)
   ' 2>/dev/null) || ACTIVITY=""
