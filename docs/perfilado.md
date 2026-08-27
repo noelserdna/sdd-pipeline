@@ -31,3 +31,18 @@ Caso: re-auditoría de `spec/` del todo-app (7 UC, 4 contratos, 7 ADR, dominio, 
 | Medir siempre: `scripts/sdd-profile.sh` en `tests/e2e` para cada release y guardar aquí la tabla | proceso | evita regresiones de coste |
 
 Orden sugerido: 1 (mayor ganancia, solo texto de skills) → 3 → 2 → 4.
+
+## Antes / después (mismo proyecto, mismo prompt: re-auditoría de `spec/` en modo solo auditoría)
+
+| | 4.0.0 (secuencial) | 4.0.1 (plantilla compacta + fan-out + índice) |
+|---|---|---|
+| Tiempo de pared | **21,4 min** | **9,9 min** (−54 %) |
+| Modo | 1 hilo, 57 turnos, 56 `cat` | 4 auditores sonnet en paralelo (DOM, UC, CON, NFR; 6-7 min cada uno) + consolidación en el principal (6 turnos) |
+| Informe `AUDIT-BASELINE.md` | ~95 000 chars | **24 019 chars** (−75 %) |
+| Tokens de salida | 112 k | ~97 k en total, repartidos entre los 4 auditores (JSON de hallazgos) y el principal (informe) |
+| Tiempo de API acumulado | 21 min | 57 min (4 hilos en paralelo + principal) |
+| Coste | ~16,8 $ | ~18 $ |
+
+Lectura: la pared se reduce a la mitad y el informe a la cuarta parte; el coste no baja porque cada auditor lee su ámbito completo (755 k chars leídos en total frente a 423 k) y los cuatro producen hallazgos estructurados. Para bajar también el coste, el siguiente paso es acotar la lectura de cada auditor a las secciones de su índice (hoy leen su ámbito entero) y bajar el modelo del principal en la consolidación cuando no haya P0/P1.
+
+Verificado también en la consola: con `refreshInterval: 5` la status line muestra `[sdd-spec] SDD [7/7] · spec-auditor 2m · 4 agentes` y el panel de agentes lista cada auditor con descripción, tiempo y tokens (`subagentStatusLine` del plugin).
