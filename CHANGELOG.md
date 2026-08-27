@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-08-27
+
 ### Added
 - Visibilidad en la consola: hook `sdd-activity-log` (`.sdd/activity.jsonl`: sesiones, skills, agentes y subagentes, paradas), status line con `refreshInterval: 5` que muestra rol, etapas, skill en curso, minutos y subagentes activos, `subagentStatusLine` con tipo · descripción · tiempo · tokens por subagente (instalados por `/sdd-setup`), y panel de terminal `scripts/sdd-watch.sh`.
 - `scripts/sdd-profile.sh` y `docs/perfilado.md`: perfilado de una skill (duración, turnos, tokens, herramientas, volumen leído/escrito).
