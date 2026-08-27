@@ -125,29 +125,11 @@ Check for:
 
 ### 3.1 Decision Framework
 
-For every issue found, present to the user using this structure:
-
-```
-ISSUE: [Clear description of the problem]
-CONTEXT: [Why this matters for specification]
-IMPACT: [What happens if not resolved]
-
-OPTIONS:
-A) [Option A description] (Recommended) - [Pros] / [Cons]
-B) [Option B description] - [Pros] / [Cons]
-C) [Option C description] - [Pros] / [Cons]
-
-RECOMMENDATION: Option [X] because [rationale]
-```
+For every issue found, present it to the user with the Decision Request Template in `gap-analysis-checklist.md` (≤ 12 lines, one line per option) through `AskUserQuestion`.
 
 ### 3.2 Decision Log
 
-Record every decision in a structured log:
-
-```
-| # | Date | Issue | Options | Decision | Rationale | Impact on Specs |
-|---|------|-------|---------|----------|-----------|-----------------|
-```
+The decision log **is** `spec/CLARIFICATIONS.md` (Template 16): one D-NNN row per format/structure decision, one RN-NNN row per business rule (source REQ, question, rule adopted, rejected options in one clause each, tier). No other log, no per-decision prose; the readiness report and every spec document cite the RN id.
 
 ### 3.3 Decision Categories
 
@@ -161,6 +143,10 @@ Record every decision in a structured log:
 ---
 
 ## Phase 4: Specification Writing
+
+### 4.0 Generation Order and Budget
+
+Follow SKILL.md § Generation Order (plan ids → shared domain homes → one pass per requirement writing UC + BDD together → cross-cutting files → grep-based gate) and § Output Budget (≤ 120k chars for ≤ 15 requirements). Write each file once; never re-read a written file except through `grep` in the gate.
 
 ### 4.1 Choose Specification Technique
 
@@ -206,8 +192,12 @@ Based on SWEBOK v4, select the most appropriate technique(s):
 4. **Include all paths**: normal, alternative, exception
 5. **Define preconditions and postconditions** for every behavior
 6. **Specify error handling explicitly**: what happens when things fail
-7. **Cross-reference related specifications** with IDs
-8. **Include acceptance criteria** for every specification: at minimum one Given/When/Then
+7. **Cross-reference related specifications** with IDs — and only with IDs: never copy a requirement statement, a rule text or a value into a second document (`document-templates.md` § 0, W1–W2)
+8. **Include acceptance criteria** for every specification: at minimum one happy-path and one error scenario, written once in `tests/BDD-UC-NNN.md` (AC-NNN-NN ids defined there) and cited from the UC
+9. **Empty means `None.`** — one line, no justification; optional sections are omitted (W4)
+10. **Tables and schema blocks, not prose** — no section that restates a table; no "Notes", "Implementation notes" or "Rationale" paragraphs (W3, W6)
+11. **Boilerplate once per file** — auth/rate limit/version, standard errors, actors (W7)
+12. **Write each file once** — plan ids, invariants and exception rows before writing (W9)
 
 ### 4.3 Specification ID Scheme
 
@@ -228,22 +218,20 @@ SPEC-USR-I-001: First interface spec for user module
 
 Each specification must include:
 
-| Attribute | Required | Description |
-|-----------|----------|-------------|
-| SPEC-ID | Yes | Unique identifier |
-| Title | Yes | Short descriptive name |
-| Traces to | Yes | Requirement ID(s) this specification satisfies |
-| Priority | Yes | Inherited from requirement, may be adjusted |
-| Description | Yes | Full specification text |
-| Preconditions | Yes | What must be true before this behavior occurs |
-| Postconditions | Yes | What must be true after this behavior occurs |
-| Normal flow | Yes | Expected behavior path |
-| Alternative flows | If applicable | Other valid paths |
-| Exception flows | Yes | Error and failure handling |
-| Acceptance criteria | Yes | BDD scenarios or measurable criteria |
-| Dependencies | If applicable | Other SPEC-IDs this depends on |
-| Assumptions | If applicable | Assumptions made during specification |
-| Open questions | If applicable | Unresolved questions for stakeholder review |
+| Attribute | Required | Where / shape |
+|-----------|----------|---------------|
+| ID + Title | Yes | Heading (`UC-NNN — Name`) |
+| Refs | Yes | One header row: REQ (+ WF, API, INV, RN, ADR, BDD ids). This is the traceability section |
+| Priority | Yes | Header row, inherited from the requirement |
+| Description | Yes | ≤ 2 sentences; never the requirement statement |
+| Input / Output | Yes | One TypeScript/YAML block with constraints as VO/INV ids |
+| Preconditions | Yes | Short list, ids for the rules |
+| Postconditions | Yes | Success / failure, one bullet each |
+| Main flow | Yes | Numbered `Actor: action` / `System: result`, ≤ 10 steps |
+| Extensions | If applicable | One line each, AC id at the end |
+| Exceptions & errors | Yes | One table: step, condition, code, HTTP/exit, effect, AC id |
+| Acceptance criteria | Yes | In `tests/BDD-UC-NNN.md` only; the UC cites AC ids |
+| Open questions | If applicable | `NC-NNN` lines; section omitted when none |
 
 ---
 
@@ -261,33 +249,13 @@ Before presenting specifications to the user:
 - [ ] Terminology is consistent throughout
 - [ ] A developer could implement from this spec alone
 - [ ] No ambiguous terms remain
-- [ ] All decisions are documented in the decisions log
+- [ ] All decisions are documented in `spec/CLARIFICATIONS.md` (RN rows)
 - [ ] The traceability matrix is complete
+- [ ] `wc -c` over `spec/**/*.md` is within SKILL.md § Output Budget
 
 ### 5.2 Coverage Report
 
-```
-# Specification Coverage Report
-
-## Traceability Summary
-- Requirements total: [N]
-- Requirements with specifications: [N] ([%])
-- Requirements without specifications: [N] ([%])
-- Specifications total: [N]
-- Specifications without requirements (orphans): [N]
-
-## Coverage by Category
-| Category | Requirements | Specifications | Coverage |
-|----------|-------------|----------------|----------|
-| Functional | [N] | [N] | [%] |
-| Nonfunctional | [N] | [N] | [%] |
-| Interface | [N] | [N] | [%] |
-| Data | [N] | [N] | [%] |
-| Security | [N] | [N] | [%] |
-
-## Gaps
-[List any uncovered requirements and reason]
-```
+There is no separate coverage report: coverage is the last line of `spec/TRACEABILITY-MATRIX.md` (`Coverage: N/N requirements specified. Orphans: none.`) and the gate result is one console table (`check | result | fixed`).
 
 ---
 
@@ -297,29 +265,31 @@ Before presenting specifications to the user:
 
 ### 6.1 Required Deliverables
 
-1. **spec/README.md** — Navigation guide and traceability overview
-2. **spec/domain/01-GLOSSARY.md** — Ubiquitous language (terms, definitions, "NO usar" synonyms)
-3. **spec/domain/02-ENTITIES.md** — Domain entities with attributes and relationships
-4. **spec/domain/03-VALUE-OBJECTS.md** — Value objects, enums, typed values, ErrorResponse catalog
-5. **spec/domain/04-STATES.md** — State machines for all stateful entities
-6. **spec/domain/05-INVARIANTS.md** — Business rules as formal invariants (INV-XXX-NNN)
-7. **spec/use-cases/UC-NNN-{slug}.md** — One file per use case
-8. **spec/workflows/WF-NNN-{slug}.md** — Multi-step processes spanning use cases
-9. **spec/contracts/API-{module}.md** — REST/GraphQL API contracts per module
-10. **spec/contracts/PERMISSIONS-MATRIX.md** — Role-based access control matrix
-11. **spec/tests/BDD-UC-NNN.md** — BDD scenarios per use case
-12. **spec/nfr/PERFORMANCE.md** — Performance targets (p99, throughput)
-13. **spec/nfr/LIMITS.md** — Rate limits, quotas, thresholds
-14. **spec/nfr/SECURITY.md** — Security requirements and controls
-15. **spec/CLARIFICATIONS.md** — Business rules (RN-NNN) from user decisions
-16. **spec/VALUE-REGISTRY.md** — Canonical shared values (timeouts, limits, enums) with cross-references
-17. **spec/DERIVED-SPECS.md** — Tier 1/2 spec artifacts not directly traced to REQs (generated by Error Flow Forcing, Invariant Extraction, and audit fixes)
+Templates and ceilings: `document-templates.md`, SKILL.md § Output Budget.
 
-### 6.2 Optional Deliverables
+1. **spec/README.md** — Navigation table only (Template 18)
+2. **spec/domain/01-GLOSSARY.md** — Terms, ≤ 20-word definitions, "Do not use" synonyms (Template 17)
+3. **spec/domain/02-ENTITIES.md** — Entities as schema blocks + one relationships line (Template 17)
+4. **spec/domain/03-VALUE-OBJECTS.md** — Value objects, enums, and the **error catalog** (the only home of code → message → class → HTTP/exit) (Template 17)
+5. **spec/domain/04-STATES.md** — State machines as tables (Template 9)
+6. **spec/domain/05-INVARIANTS.md** — One table row per invariant (Template 10)
+7. **spec/use-cases/UC-NNN-{slug}.md** — One file per use case (Template 2)
+8. **spec/workflows/WF-NNN-{slug}.md** — Multi-step processes spanning use cases (Template 11)
+9. **spec/contracts/API-{module}.md** — One contract per module, one Errors table (Template 12)
+10. **spec/contracts/PERMISSIONS-MATRIX.md** — Role × operation grid; one row when there is a single role (Template 20)
+11. **spec/tests/BDD-UC-NNN.md** — Scenarios per use case; defines the AC-NNN-NN ids (Template 13)
+12. **spec/nfr/PERFORMANCE.md**, **LIMITS.md**, **SECURITY.md** — One table each; N/A categories are one row (Template 7)
+13. **spec/CLARIFICATIONS.md** — D/RN decision tables; the only decisions log (Template 16)
+14. **spec/CLARIFICATIONS-PENDING.md** — Open marker index, always present even if empty (SKILL.md)
+15. **spec/VALUE-REGISTRY.md** — One table of canonical values (Template 14)
+16. **spec/DERIVED-SPECS.md** — Tier 1/2 rows grouped by pattern (Template 15)
+17. **spec/TRACEABILITY-MATRIX.md** — Forward table + coverage line (Template 5)
 
-- **spec/contracts/EVENTS-{module}.md** — Domain events and async contracts
-- **spec/adr/ADR-NNN-{slug}.md** — Architecture Decision Records
-- **spec/nfr/OBSERVABILITY.md** — Logging, metrics, alerting specs
-- **spec/runbooks/RB-NNN-{slug}.md** — Operational runbooks
-- **spec/tests/PROPERTY-TESTS.md** — Property-based test specifications
-- **spec/CLARIFICATIONS-PENDING.md** — Open clarification markers index
+### 6.2 Conditional Deliverables (create only when the condition holds)
+
+- **spec/contracts/EVENTS-{module}.md** — when the system emits domain/async events; otherwise a one-line absence declaration (Template 20)
+- **spec/adr/ADR-NNN-{slug}.md** — one per decision actually taken during specification (Template 6)
+- **spec/nfr/OBSERVABILITY.md**, **MAINTAINABILITY.md** — when a REQ-NF covers them
+- **spec/runbooks/RB-NNN-{slug}.md** — only when a REQ/NFR requires an operational procedure or an ADR names a manual recovery (Template 19)
+- **spec/tests/PROPERTY-TESTS.md** — when pure functions / invariants make property tests meaningful
+- **spec/RESEARCH-QUESTIONS.md** — when open technical questions exist for `sdd-plan-architect`

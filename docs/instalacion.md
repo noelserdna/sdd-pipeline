@@ -84,3 +84,24 @@ cd tu-proyecto && claude --plugin-dir /ruta/a/sdd-pipeline
 ## 6. Actualizar
 
 Claude Code busca actualizaciones del marketplace una vez por sesión. Manual: `/plugin marketplace update noelserdna` y `/plugin update sdd-pipeline@noelserdna`; después `/reload-plugins` o nueva sesión. Las versiones y cambios están en [CHANGELOG.md](../CHANGELOG.md).
+
+## 7. Rendimiento: dónde se va el tiempo y cómo acortarlo
+
+Cada etapa del pipeline es una sesión del modelo que lee specs y genera documentos; el tiempo es casi todo **generación de tokens de salida** (unos 5 k tokens ≈ 1 min) y, en menor medida, contexto leído. Ver `docs/perfilado.md` y la herramienta `scripts/sdd-profile.sh` para medir cualquier skill:
+
+```bash
+scripts/sdd-profile.sh --plugin-dir /ruta/al/plugin "/sdd-spec-auditor — audit spec/ without asking questions"
+scripts/sdd-profile.sh --analyze .sdd/profile-*.jsonl
+```
+
+Palancas ya integradas en las skills (4.0.1+): plantillas de informe compactas (detalle solo P0-P2), lectura por índice en vez de `cat` de todo `spec/`, y fan-out en subagentes por dimensión/UC para auditoría y matrices de test.
+
+Palancas del entorno:
+
+| Variable / flag | Efecto |
+|---|---|
+| `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` (o `haiku`) | Los subagentes que lanzan las skills (auditores por dimensión, matrices por UC, tasks `[P]` del implementer, TECH/PATTERN del plan) corren con un modelo más rápido; la consolidación, las specs y los gates siguen con el modelo principal |
+| `claude --model sonnet` | Toda la sesión con un modelo más rápido: útil para `task-generator`, `test-planner` o FASEs mecánicas; no recomendado para `specifications-engineer` ni `spec-auditor` |
+| `tests/e2e/20-smoke.sh --until <stage>` | Validar cambios de skills sin recorrer el pipeline completo |
+
+Orden de magnitud con el todo-app de ejemplo (10 requisitos): specs 35 min, auditoría 21, tests 30, plan 27, tasks 24, FASE-0 27, FASE-1 por Streams ~60 (`docs/medidas.md`).

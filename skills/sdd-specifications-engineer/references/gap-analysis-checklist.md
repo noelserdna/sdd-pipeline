@@ -229,38 +229,15 @@ For EXISTING specification documents, verify:
 
 ## Decision Request Template
 
-For each issue, present to the user:
+One block per issue, ≤ 12 lines, one line per option (no Description / Pros / Cons / Impact sub-bullets):
 
 ```
-## Issue [#]: [Short title]
-
-**Severity**: [BLOCKER | CRITICAL | MAJOR | MINOR]
-**Requirement**: [REQ-ID] - [Summary]
-**Problem**: [Clear description of the issue]
-
-### Why this matters
-[Explain the impact on specifications and downstream development]
-
-### Options
-
-**A) [Option name]** (Recommended)
-- Description: [What this option means]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
-- Impact: [How this affects the specification]
-
-**B) [Option name]**
-- Description: [What this option means]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
-- Impact: [How this affects the specification]
-
-**C) [Option name]**
-- Description: [What this option means]
-- Pros: [Benefits]
-- Cons: [Drawbacks]
-- Impact: [How this affects the specification]
-
-### My recommendation
-[Detailed explanation of why option X is recommended]
+Issue #N — [title] · [BLOCKER | CRITICAL | MAJOR | MINOR] · REQ-ID
+Problem: [one sentence]. Impact if unresolved: [one clause].
+A) [option] (recommended) — [pro] / [con]
+B) [option] — [pro] / [con]
+C) [option] — [pro] / [con]
+Recommendation: A — [one clause].
 ```
+
+Present the block through `AskUserQuestion`; record the answer once, as an RN row in `spec/CLARIFICATIONS.md` (Template 16). Do not restate the options or the rationale anywhere else.

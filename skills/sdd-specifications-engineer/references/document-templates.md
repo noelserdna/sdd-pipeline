@@ -1,853 +1,577 @@
 # Specification Document Templates
 
-## Template 1: SRS Document (IEEE 830-inspired)
+> Each template is the **maximum** shape of a document, not a form to fill in. Omit optional sections that would be empty; write `None.` (one line, no justification) for a mandatory section that is legitimately empty; cite IDs instead of restating facts. Per-artifact budgets: SKILL.md § Output Budget.
 
-```markdown
-# Software Requirements Specification (SRS)
+## 0. Writing rules (apply to every template)
 
-## Document Information
+| # | Rule |
+|---|---|
+| W1 | **One home per fact.** Requirement text → `requirements/REQUIREMENTS.md`. Terms → `domain/01-GLOSSARY.md`. Shared values → `VALUE-REGISTRY.md`. Error code → message → class → HTTP/exit → error catalog in `domain/03-VALUE-OBJECTS.md`. Rules → `domain/05-INVARIANTS.md` (INV) and `CLARIFICATIONS.md` (RN). Given/When/Then → `tests/BDD-UC-NNN.md` (AC-NNN-NN ids are *defined* there). Decisions → `adr/`. Every other document cites the ID. |
+| W2 | **ID + at most one clause.** `REQ-F-001 (create task)` is the maximum context. Never copy a requirement statement or its acceptance criteria into a UC, contract, ADR, BDD or matrix. |
+| W3 | **Table or list, never prose repeating it.** A TypeScript/YAML schema block replaces an attribute table. A transitions table replaces a state diagram unless the machine has more than 5 states. |
+| W4 | **Empty = `None.`** Mandatory section: `None.`; optional section: omit the heading. Never explain why something does not apply — the justification, if one exists, is an ADR/RN id in `Refs`. |
+| W5 | **`Refs` once.** One `Refs` row in the header of each document holds all traceability ids (REQ, UC, WF, API, INV, RN, ADR, BDD, PROP). No trailing "Traceability" section; no separate "Business rules" / "Invariants" / "Related" lists. Ids are also cited inline exactly where they apply. |
+| W6 | **No narrative sections.** No "Description" longer than 2 sentences, no "Implementation notes", "UI/UX notes", "Notes", "Rationale", "Evolution", "Prevention", "Interface notes". Rationale is an ADR; a rule is an RN/INV. |
+| W7 | **Boilerplate once per file, not per item.** Auth, rate limit, version: once per contract. Actors: one header row per UC (no per-actor responsibility table). Standard errors: one table per contract with an "Operations" column, not one table per endpoint. Exceptions shared by every UC (global error handler, storage failure): specified once in the workflow or contract, cited by id in the UC. |
+| W8 | **Error rows cite the code.** UC/contract/BDD rows carry `E_CODE` + HTTP/exit + condition; message text, class and description live only in the error catalog. Quote a literal message only where a REQ acceptance criterion quotes it. |
+| W9 | **Write each file once.** Plan ids, invariants and exception rows before writing; never patch an already-written file to add a cross-reference. |
+
+---
+
+## Template 1: SRS Document (monolithic — only when the user explicitly chooses it over the modular `spec/` layout)
+
+````markdown
+# SRS — [Project]
+
 | Field | Value |
-|-------|-------|
-| Project | [Project Name] |
-| Version | [X.Y] |
-| Date | [YYYY-MM-DD] |
-| Status | [Draft / Under Review / Approved] |
-| Author | [Name] |
+|---|---|
+| Version / Date / Status | X.Y / YYYY-MM-DD / Draft |
+| Refs | requirements/REQUIREMENTS.md vX |
 
-## Revision History
-| Version | Date | Author | Description |
-|---------|------|--------|-------------|
-| 0.1 | [Date] | [Author] | Initial draft |
+## 1. Scope
+[≤ 5 lines: product, in/out of scope]
 
----
+## 2. Context
+| Aspect | Value |
+|---|---|
+| Users | [class → privileges] |
+| Environment | [OS, runtime, integrations] |
+| Constraints | REQ-C-NNN, … |
+| Assumptions | [one line each] |
 
-## 1. Introduction
+## 3. Functional specifications
+### SPEC-[MOD]-F-001 — [Title]
+| Field | Value |
+|---|---|
+| Refs | REQ-NNN; INV-…; BDD-… |
+| Pre / Post | [pre] / [post] |
+| Flow | 1. … 2. … 3. … |
+| Exceptions | E1 [condition] → `E_CODE` (HTTP) |
 
-### 1.1 Purpose
-[Describe the purpose of this SRS and the intended audience]
+## 4. Nonfunctional specifications
+| SPEC-ID | Metric | Target | Measurement | Refs |
+|---|---|---|---|---|
 
-### 1.2 Scope
-[Describe the software product, its purpose, and what is in/out of scope]
-
-### 1.3 Definitions, Acronyms, and Abbreviations
-| Term | Definition |
-|------|-----------|
-| [Term] | [Definition] |
-
-### 1.4 References
-| Reference | Description |
-|-----------|-------------|
-| [Ref] | [Description] |
-
-### 1.5 Overview
-[Describe the structure of the rest of this document]
+## 5. Interfaces and data
+[API: → contracts/. Data: → domain/. One line each; no copies.]
+````
 
 ---
 
-## 2. Overall Description
+## Template 2: Use Case Specification (`use-cases/UC-NNN-{slug}.md`, ≤ 3,500 chars)
 
-### 2.1 Product Perspective
-[Context: standalone, part of larger system, replacement for existing system]
+````markdown
+# UC-NNN — [Name]
 
-### 2.2 Product Functions (Summary)
-[High-level summary of major functions]
+| Field | Value |
+|---|---|
+| Version | 1.0 / YYYY-MM-DD |
+| Refs | REQ-F-NNN (primary), REQ-F-NNN; WF-NNN steps 1–5; API-NNN-NN, API-NNN-NN; INV-XXX-NNN, INV-XXX-NNN; RN-NNN; ADR-NNN; BDD-UC-NNN |
+| Actors | Primary: [actor]. Secondary: [component / external system], [component] |
+| Trigger | [event, one line] |
+| Priority / Status | Must / Approved |
 
-### 2.3 User Classes and Characteristics
-| User Class | Description | Frequency | Technical Skill | Privileges |
-|-----------|-------------|-----------|-----------------|------------|
-| [Class] | [Desc] | [Freq] | [Skill] | [Privs] |
+[≤ 2 sentences: what the primary actor obtains. Do not restate the REQ.]
 
-### 2.4 Operating Environment
-[Hardware, OS, browsers, dependencies, integrations]
+## Input / Output
 
-### 2.5 Design and Implementation Constraints
-[Technology mandates, regulatory, standards, language, platform]
-
-### 2.6 Assumptions and Dependencies
-| # | Assumption/Dependency | Type | Impact if Invalid |
-|---|----------------------|------|-------------------|
-| 1 | [Description] | [Assumption/Dependency] | [Impact] |
-
----
-
-## 3. Specific Requirements
-
-### 3.1 Functional Requirements
-
-#### 3.1.1 [Module Name]
-
-##### SPEC-[MOD]-F-001: [Title]
-- **Traces to**: REQ-001, REQ-002
-- **Priority**: [Must/Should/Nice]
-- **Description**: [Detailed specification text]
-- **Preconditions**: [What must be true before]
-- **Trigger**: [What initiates this behavior]
-- **Normal Flow**:
-  1. [Step 1]
-  2. [Step 2]
-  3. [Step 3]
-- **Alternative Flows**:
-  - AF1: [Alternative path description]
-- **Exception Flows**:
-  - EF1: [Error scenario and handling]
-- **Postconditions**: [What must be true after]
-- **Acceptance Criteria**:
-  - Given [context], When [action], Then [expected result]
-  - Given [context], When [error condition], Then [error handling]
-
-### 3.2 Nonfunctional Requirements
-
-#### 3.2.1 Performance
-| SPEC-ID | Metric | Target | Measurement Method |
-|---------|--------|--------|-------------------|
-| SPEC-PERF-001 | [Metric] | [Target value] | [How to measure] |
-
-#### 3.2.2 Security
-| SPEC-ID | Control | Description | Standard |
-|---------|---------|-------------|----------|
-| SPEC-SEC-001 | [Control] | [Description] | [Standard ref] |
-
-#### 3.2.3 Availability
-| SPEC-ID | Metric | Target |
-|---------|--------|--------|
-| SPEC-AVL-001 | [Metric] | [Target] |
-
-#### 3.2.4 Scalability
-| SPEC-ID | Dimension | Current | Target | Growth Rate |
-|---------|-----------|---------|--------|-------------|
-| SPEC-SCL-001 | [Dimension] | [Current] | [Target] | [Rate] |
-
-### 3.3 Interface Requirements
-
-#### 3.3.1 User Interfaces
-[UI requirements, wireframe references, UX specifications]
-
-#### 3.3.2 API Interfaces
-| SPEC-ID | Endpoint | Method | Auth | Request | Response |
-|---------|----------|--------|------|---------|----------|
-| SPEC-API-001 | [Path] | [Method] | [Auth] | [Schema] | [Schema] |
-
-#### 3.3.3 External System Interfaces
-| SPEC-ID | System | Protocol | Direction | Data | Frequency |
-|---------|--------|----------|-----------|------|-----------|
-| SPEC-EXT-001 | [System] | [Protocol] | [In/Out/Both] | [Data] | [Freq] |
-
-### 3.4 Data Requirements
-
-#### 3.4.1 Data Model
-[Entities, relationships, cardinality]
-
-#### 3.4.2 Data Dictionary
-| Entity | Field | Type | Required | Constraints | Description |
-|--------|-------|------|----------|-------------|-------------|
-| [Entity] | [Field] | [Type] | [Y/N] | [Constraints] | [Desc] |
-
-#### 3.4.3 Data Lifecycle
-| Entity | Create | Read | Update | Delete | Archive | Retention |
-|--------|--------|------|--------|--------|---------|-----------|
-| [Entity] | [Rules] | [Rules] | [Rules] | [Rules] | [Rules] | [Period] |
-
----
-
-## 4. Appendices
-
-### 4.1 Traceability Matrix
-[Reference to traceability-matrix.md]
-
-### 4.2 Decisions Log
-[Reference to decisions-log.md]
-
-### 4.3 Glossary
-[Extended glossary if needed]
+```typescript
+interface XxxInput  { field: Type /* VO-NNN, INV-XXX-NNN */; optional?: Type }
+interface XxxOutput { field: Type }
 ```
-
----
-
-## Template 2: Use Case Specification
-
-```markdown
-# Use Case: [UC-ID] [Use Case Name]
-
-## Overview
-| Field | Value |
-|-------|-------|
-| ID | UC-[MODULE]-[NUMBER] |
-| Traces to | REQ-[IDs] |
-| Primary Actor | [Actor name] |
-| Priority | [Must/Should/Nice] |
-| Status | [Draft/Approved] |
-
-## Description
-[Brief description of what this use case accomplishes]
-
-## Triggering Event
-[What causes this use case to start]
-
-## Parameters
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| [Param] | [Type] | [Y/N] | [Desc] |
 
 ## Preconditions
-1. [Precondition 1]
-2. [Precondition 2]
+1. [state that must hold] (INV-XXX-NNN)
 
-## Postconditions (Guarantees)
-### On Success
-1. [Postcondition 1]
-2. [Postcondition 2]
+## Postconditions
+- Success: [observable state change] (INV-XXX-NNN); [output produced].
+- Failure: [what is guaranteed untouched] (INV-XXX-NNN); error per the Exceptions table.
 
-### On Failure
-1. [Failure postcondition 1]
+## Main flow
+1. [Actor]: [action].
+2. System: [validation / state change / response] (RN-NNN, INV-XXX-NNN).
+3. …
 
-## Normal Course (Main Success Scenario)
-| Step | Actor | System |
-|------|-------|--------|
-| 1 | [Actor action] | |
-| 2 | | [System response] |
-| 3 | [Actor action] | |
-| 4 | | [System response] |
+## Extensions
+- 2a. [condition] → [what differs]; resume at 3. (AC-NNN-NN)
+- 4a. [condition] → [what differs]. (AC-NNN-NN)
 
-## Alternative Courses
-### AC1: [Alternative name]
-**Condition**: [When this alternative applies]
-| Step | Actor | System |
-|------|-------|--------|
-| 3a | [Actor action] | |
-| 3b | | [System response] |
+## Exceptions & errors
 
-### AC2: [Alternative name]
-**Condition**: [When this alternative applies]
-| Step | Actor | System |
-|------|-------|--------|
-| 2a | | [System response] |
+| # | Step | Condition | Error code | HTTP / exit | Effect | AC |
+|---|---|---|---|---|---|---|
+| E1 | 2 | [invalid or missing input] | `E_CODE` | 400 | [state unchanged (INV-…)]; [recovery] | AC-NNN-NN |
+| E2 | 3 | [authorization denied] | `E_CODE` | 403 | … | AC-NNN-NN |
+| E3 | 4 | [dependency failure / timeout] | `E_CODE` | 503 | [retry / abort] | AC-NNN-NN |
+| E4 | 4 | [concurrent modification] | `E_CODE` | 409 | [resolution] | AC-NNN-NN |
+| E5 | 5 | [precondition no longer holds] | `E_CODE` | 409 | … | AC-NNN-NN |
 
-## Exception Courses
-### EC1: [Exception name]
-**Condition**: [When this exception occurs]
-| Step | Actor | System |
-|------|-------|--------|
-| *a | | [System error handling] |
-| *b | | [System notification/recovery] |
+## Open questions
+- NC-NNN: … *(omit the section when there are none)*
+````
 
-## Business Rules
-1. [BR-001]: [Business rule description]
-2. [BR-002]: [Business rule description]
-
-## Acceptance Criteria
-- Given [precondition], When [trigger/action], Then [expected outcome]
-- Given [precondition], When [alternative condition], Then [alternative outcome]
-- Given [precondition], When [error condition], Then [error handling outcome]
-
-## UI/UX Notes
-[Any relevant UI/UX considerations, wireframe references]
-
-## Open Questions
-- [ ] [Question 1]
-- [ ] [Question 2]
-```
+Rules: main flow ≤ 10 steps, each `Actor: action` or `System: result`. Extensions and exceptions are one line/row each; the `AC` column points to the scenario in `BDD-UC-NNN` that verifies it — no Given/When/Then in the UC. Exception rows are the output of the Error Flow Forcing Function (SKILL.md Step 6a): questions that yield no exception produce **no text**. The `Refs` header row is the traceability section; the `Exceptions & errors` table is both the exception flows and the error list.
 
 ---
 
-## Template 3: User Story + BDD Specification
+## Template 3: User Story + BDD (only when the user chooses stories over use cases)
 
-```markdown
-# [STORY-ID]: [Story Title]
-
-## User Story
-**As a** [role/persona]
-**I want** [capability/action]
-**So that** [benefit/value]
-
-## Details
-| Field | Value |
-|-------|-------|
-| Traces to | REQ-[IDs] |
-| Priority | [Must/Should/Nice] |
-| Story Points | [Estimate] |
-| Sprint | [Sprint number/TBD] |
-
-## Acceptance Criteria
-
-### Scenario 1: [Happy path name]
-```gherkin
-Given [initial context]
-  And [additional context]
-When [action/event]
-Then [expected outcome]
-  And [additional outcome]
-```
-
-### Scenario 2: [Alternative path name]
-```gherkin
-Given [initial context]
-When [alternative action]
-Then [alternative outcome]
-```
-
-### Scenario 3: [Error path name]
-```gherkin
-Given [initial context]
-When [error-triggering action]
-Then [error handling outcome]
-  And [user feedback]
-```
-
-### Scenario 4: [Edge case name]
-```gherkin
-Given [edge case context]
-When [action]
-Then [edge case outcome]
-```
-
-## Business Rules
-- [BR-001]: [Rule description]
-
-## Technical Notes
-- [Any relevant technical constraints or considerations]
-
-## Dependencies
-- [STORY-ID]: [Dependency description]
-
-## Definition of Done
-- [ ] All acceptance criteria pass
-- [ ] Code reviewed
-- [ ] Unit tests written
-- [ ] Integration tests pass
-- [ ] Documentation updated
-```
-
----
-
-## Template 4: Actor-Action Specification
-
-```markdown
-# Actor-Action Specifications: [Module Name]
-
-## Overview
-| Field | Value |
-|-------|-------|
-| Module | [Module name] |
-| Traces to | REQ-[IDs] |
-| Version | [X.Y] |
-
-## Specifications
-
-### SPEC-[MOD]-F-[NNN]: [Title]
-
-**Trigger**: [Event that initiates this action]
-**Actor**: [Who/what performs the action]
-**Action**: [What the actor does]
-**Condition**: [Under what circumstances]
-
-> [Triggering event], [Actor] shall [Action] [Condition/qualification].
-
-**Acceptance Test**: Given [context], When [trigger], Then [observable outcome].
-
-**Error Handling**: If [error condition], [Actor] shall [error action].
-
----
-```
-
----
-
-## Template 5: Traceability Matrix
-
-```markdown
-# Requirements-to-Specifications Traceability Matrix
-
-## Forward Tracing (Requirements -> Specifications)
-
-| Requirement ID | Requirement Summary | Specification ID(s) | Status | Notes |
-|----------------|--------------------|--------------------|--------|-------|
-| REQ-001 | [Summary] | SPEC-XXX-F-001 | Specified | |
-| REQ-002 | [Summary] | SPEC-XXX-F-002, SPEC-XXX-F-003 | Specified | Split into 2 specs |
-| REQ-003 | [Summary] | - | NOT SPECIFIED | [Reason] |
-
-## Reverse Tracing (Specifications -> Requirements)
-
-| Specification ID | Specification Summary | Requirement ID(s) | Notes |
-|-----------------|---------------------|--------------------|-------|
-| SPEC-XXX-F-001 | [Summary] | REQ-001 | |
-| SPEC-XXX-F-002 | [Summary] | REQ-002 | |
-| SPEC-ORPHAN-001 | [Summary] | NONE | ORPHAN - needs requirement |
-
-## Coverage Summary
-
-| Category | Total Requirements | Specified | Not Specified | Coverage |
-|----------|-------------------|-----------|---------------|----------|
-| Functional | [N] | [N] | [N] | [%] |
-| Nonfunctional | [N] | [N] | [N] | [%] |
-| Interface | [N] | [N] | [N] | [%] |
-| Data | [N] | [N] | [N] | [%] |
-| Security | [N] | [N] | [N] | [%] |
-| **TOTAL** | **[N]** | **[N]** | **[N]** | **[%]** |
-```
-
----
-
-## Template 6: Decisions Log
-
-```markdown
-# Specification Decisions Log
-
-## Purpose
-This document records all decisions made during the specification process, including the options considered, the decision made, the rationale, and the impact on specifications.
-
-## Decisions
-
-### Decision [#001]: [Short title]
-- **Date**: [YYYY-MM-DD]
-- **Context**: [Why this decision was needed]
-- **Issue**: [The problem or ambiguity found]
-- **Related Requirements**: REQ-[IDs]
-- **Options Considered**:
-  1. [Option A]: [Description, pros, cons]
-  2. [Option B]: [Description, pros, cons]
-  3. [Option C]: [Description, pros, cons]
-- **Decision**: [Which option was chosen]
-- **Rationale**: [Why this option was chosen]
-- **Decided by**: [Who made the decision]
-- **Impact on Specifications**: [Which specs are affected and how]
-- **Impact on Requirements**: [If any requirements need modification]
-
----
-```
-
----
-
-## Template 7: Nonfunctional Specification
-
-```markdown
-# Nonfunctional Specifications: [Category]
-
-## [Category Name] (e.g., Performance, Security, Availability)
-
-### SPEC-[CAT]-[NNN]: [Title]
+````markdown
+# STORY-NNN — [Title]
 
 | Field | Value |
-|-------|-------|
-| Traces to | REQ-[ID] |
-| Priority | [Must/Should/Nice] |
-| Category | [Subcategory] |
+|---|---|
+| Story | As a [role] I want [capability] so that [benefit] |
+| Refs | REQ-NNN; INV-…; RN-…; BDD-STORY-NNN |
+| Priority | Must |
+| Depends on | STORY-NNN *(omit if none)* |
 
-**Metric**: [What is being measured]
-**Target**: [Specific measurable target]
-**Fail Point**: [Minimum acceptable level - below this is failure]
-**Perfection Point**: [Beyond this, no additional benefit]
-**Current Baseline**: [Current measurement if available]
-
-**Measurement Method**: [How to measure compliance]
-**Test Scenarios**:
-1. [Scenario 1]: [Description and expected outcome]
-2. [Scenario 2]: [Under load/stress conditions]
-
-**Monitoring**: [How to monitor this in production]
-**Alerting**: [When to alert and who to notify]
-
----
-```
+Scenarios: `tests/BDD-STORY-NNN.md` (Template 13). Rules: RN-NNN, INV-XXX-NNN (cited, not restated).
+````
 
 ---
 
-## Template 8: Requirements Modification Proposal
+## Template 4: Actor-Action Specification (contractual / regulatory)
 
-```markdown
-# Requirements Modification Proposal
+````markdown
+# Actor-Action Specifications — [Module]
 
-## Document Information
-| Field | Value |
-|-------|-------|
-| Date | [YYYY-MM-DD] |
-| Author | Specifications Engineer (AI-assisted) |
-| Triggered by | Specification readiness analysis |
-| Severity | [Critical / Major / Minor] |
+| Refs | REQ-[ids] |
+|---|---|
 
-## Executive Summary
-[2-3 sentences explaining why this proposal exists and what it recommends]
-
-## Current State Assessment
-
-### Quality Metrics
-| Metric | Value | Threshold | Status |
-|--------|-------|-----------|--------|
-| Requirements with critical issues | [N] ([%]) | <10% | [PASS/FAIL] |
-| Missing requirements identified | [N] | <5 | [PASS/FAIL] |
-| Conflicting requirements | [N] | 0 | [PASS/FAIL] |
-| Underspecified requirements | [N] ([%]) | <20% | [PASS/FAIL] |
-
-### Issues Summary
-- **BLOCKER**: [N] issues
-- **CRITICAL**: [N] issues
-- **MAJOR**: [N] issues
-- **MINOR**: [N] issues
-
-## Proposed Modifications
-
-### 1. Requirements to Modify
-
-#### MOD-001: [Modify REQ-XXX]
-- **Current**: "[Current requirement text]"
-- **Issue**: [What's wrong]
-- **Proposed**: "[Modified requirement text]"
-- **Rationale**: [Why this change is needed]
-
-### 2. Requirements to Add
-
-#### ADD-001: [New requirement title]
-- **Proposed**: "[New requirement text]"
-- **Category**: [Functional/Nonfunctional/etc.]
-- **Priority**: [Must/Should/Nice]
-- **Rationale**: [Why this is needed - what gap does it fill]
-- **Source**: [Specification readiness analysis / stakeholder feedback]
-
-### 3. Requirements to Remove or Merge
-
-#### REM-001: [Remove/Merge REQ-XXX]
-- **Current**: "[Current requirement text]"
-- **Action**: [Remove / Merge into REQ-YYY]
-- **Rationale**: [Why: duplicate, out of scope, infeasible, etc.]
-
-## Impact Analysis
-
-### Scope Impact
-[How do these changes affect project scope?]
-
-### Schedule Impact
-[Estimated impact on timeline]
-
-### Cost Impact
-[Estimated impact on budget/resources]
-
-### Risk Impact
-[What risks are introduced or mitigated by these changes]
-
-## Recommended Next Steps
-
-1. [ ] Review this proposal with stakeholders
-2. [ ] Approve/reject each proposed modification
-3. [ ] Use the **requirements-engineer** skill to re-elicit for any new/modified requirements
-4. [ ] Update the requirements documents
-5. [ ] Re-run specification readiness analysis
-6. [ ] Proceed with specification creation
-
-## Approval
-
-| Stakeholder | Role | Decision | Date | Comments |
-|------------|------|----------|------|----------|
-| [Name] | [Role] | [Approved/Rejected/Modified] | [Date] | [Comments] |
-```
+| SPEC-ID | Trigger | Actor | Shall | Condition | Error | Refs |
+|---|---|---|---|---|---|---|
+| SPEC-[MOD]-F-001 | [event] | [actor] | [action] | [qualifier] | If [cond] → `E_CODE` | REQ-NNN, AC-NNN-NN |
+````
 
 ---
 
-## Template 9: State Machine Specification
+## Template 5: Traceability Matrix (`TRACEABILITY-MATRIX.md`, ≤ 3,000 chars)
 
-```markdown
-# State Machines: [Entity/Module Name]
+````markdown
+# Traceability Matrix
 
-## SM-NNN: [Entity] State Machine
+> REQ → spec artifacts. Reverse direction is derivable (every artifact carries `Refs`); artifacts without a REQ are listed in `DERIVED-SPECS.md`.
 
-### States
+| REQ | Summary (≤ 6 words) | UC / WF | API | INV | ADR | BDD / PROP | NFR | RN |
+|---|---|---|---|---|---|---|---|---|
+| REQ-F-001 | create task | UC-001; WF-001 | API-002-02 | INV-TSK-001..006 | ADR-003 | BDD-UC-001; PROP-001 | — | RN-001..005 |
 
-| State | Description | Is Initial | Is Final |
-|-------|-------------|------------|----------|
-| [state_name] | [Description] | Yes/No | Yes/No |
+Coverage: N/N requirements specified (100 %). Orphans: none.
+````
 
-### Transitions
-
-| From | To | Trigger | Guard Condition | Action | Events Emitted | Timeout |
-|------|-----|---------|-----------------|--------|----------------|---------|
-| [from_state] | [to_state] | [event/action] | [condition or "—"] | [side effect] | [event name or "—"] | [duration or "—"] |
-
-### Derived State Rules (for composite entities)
-
-| Rule | Priority | Condition | Derived State |
-|------|----------|-----------|---------------|
-| R1 | 1 (highest) | [condition] | [derived_state] |
-
-### State Diagram (Mermaid)
-
-```mermaid
-stateDiagram-v2
-    [*] --> initial_state
-    initial_state --> next_state: trigger [guard]
-```
-
-### Related Invariants
-- INV-XXX-NNN: [invariant description]
-```
+No reverse table, no per-acceptance-criterion table: each BDD scenario title carries the `[REQ-X ACn]` tag it verifies.
 
 ---
 
-## Template 10: Invariant Specification
+## Template 6: Architecture Decision Record (`adr/ADR-NNN-{slug}.md`, Nygard short, ≤ 1,500 chars)
 
-```markdown
-# Business Invariants: [Domain Area]
-
-## INV-{AREA}-{NNN}: [Invariant Name]
+````markdown
+# ADR-NNN — [Decision stated as a sentence]
 
 | Field | Value |
-|-------|-------|
-| **ID** | INV-{AREA}-{NNN} |
-| **Rule** | [Declarative rule in natural language] |
-| **Enforcement** | [Where: UC, API, DB, or all] |
-| **Related UCs** | UC-NNN, UC-NNN |
-| **Violation Error** | [ERROR_CODE — HTTP status] |
+|---|---|
+| Status | Accepted · YYYY-MM-DD *(Proposed / Deprecated / Superseded by ADR-NNN)* |
+| Refs | REQ-…; UC-…; INV-…; RN-… |
 
-**Validation (SQL CHECK):**
-```sql
-CHECK ([field] [operator] [value])
-```
+## Context
+[≤ 5 lines: the forces. Cite ids; do not restate them.]
 
-**Validation (Zod/TypeScript):**
+## Decision
+[1–3 sentences, or a numbered list of ≤ 4 items.]
+
+## Alternatives
+| Option | Why not |
+|---|---|
+| [B] | [one clause] |
+| [C] | [one clause] |
+
+## Consequences
+- + [positive]
+- − [negative or accepted risk; mitigation id if any]
+````
+
+One ADR per decision actually taken during specification (format, storage, error model, ordering rules…). Decisions that are business rules are RNs in `CLARIFICATIONS.md`, not ADRs. There is no separate decisions log: `CLARIFICATIONS.md` (Template 16) is the log.
+
+---
+
+## Template 7: Nonfunctional Specification (`nfr/*.md`, ≤ 2,500 chars each)
+
+````markdown
+# NFR — [Performance | Limits | Security | Observability | Maintainability]
+
+> Refs: REQ-NF-…; values by name from VALUE-REGISTRY.md.
+
+| ID | Metric / Control | Target | Fail point | Measurement / Enforcement | Refs |
+|---|---|---|---|---|---|
+| SPEC-PERF-001 | p95 latency of [operation] under [load] | < `PERF_P95_LATENCY` | ≥ 200 ms | [how, where] | REQ-NF-001, WF-NNN |
+| SPEC-LIM-001 | `TITLE_MAX_LENGTH` | 1000 chars | — | API validation → `E_TITLE_TOO_LONG` | RN-003 |
+| SEC-001 | Authentication | Not applicable (ADR-NNN) | — | — | ADR-NNN |
+| SEC-002 | Input validation | all arguments validated before I/O | — | API-NNN-NN | INV-… |
+````
+
+One table per file. A category that does not apply (auth, encryption, audit…) is **one row** whose Target is `Not applicable (ADR-NNN)` — no paragraph. `LIMITS.md` cites values by registry name; `VALUE-REGISTRY.md` owns the number.
+
+---
+
+## Template 8: Requirements Modification Proposal (Mode 3)
+
+````markdown
+# Requirements Modification Proposal — YYYY-MM-DD
+
+Severity: [Critical | Major | Minor]. Trigger: readiness analysis ([N] critical issues / [N] requirements).
+
+| # | Action | REQ | Issue | Proposed text | Rationale |
+|---|---|---|---|---|---|
+| MOD-001 | Modify | REQ-NNN | [issue] | "[new statement]" | [one clause] |
+| ADD-001 | Add | REQ-NEW-001 | [gap] | "[statement]" | [one clause] |
+| REM-001 | Remove / merge into REQ-NNN | REQ-NNN | [reason] | — | — |
+
+Impact: scope [±], schedule [±], risk [±] (one line each).
+Next: review → apply via `sdd-requirements-engineer` → re-run readiness analysis.
+````
+
+---
+
+## Template 9: State Machine (`domain/04-STATES.md`, ≤ 3,500 chars)
+
+````markdown
+# 04 — State Machines
+
+## SM-NNN: [Entity]
+
+| State | Initial | Final | Description |
+|---|---|---|---|
+| [state] | Yes/No | Yes/No | [≤ 8 words] |
+
+| From | To | Trigger | Guard | Action / Events | Timeout |
+|---|---|---|---|---|---|
+| [from] | [to] | [event] | [condition or —] | [side effect; event name or —] | [duration or —] |
+
+Refs: INV-XXX-NNN, UC-NNN.
+````
+
+A Mermaid diagram only when the machine has more than 5 states. Derived-state rules (composite entities) as a third table with `Rule | Priority | Condition | Derived state`.
+
+---
+
+## Template 10: Invariants (`domain/05-INVARIANTS.md`, ≤ 6,000 chars)
+
+````markdown
+# 05 — Invariants
+
+> Areas: [TSK, STO, …]. Enforcement points: API | REPO | DB | CLI.
+
+| ID | Rule | Enforced at | UCs | Violation error | Validation |
+|---|---|---|---|---|---|
+| INV-TSK-001 | `id` unique within a store | API, REPO | UC-001, UC-006 | `E_STORE_INVALID_STRUCTURE` | `new Set(ids).size === ids.length` |
+| INV-TSK-003 | `title` trimmed, 1..`TITLE_MAX_LENGTH`, no `\n`/`\r` | CLI, API, REPO | UC-001 | `E_TITLE_*` | see below |
+
+### INV-TSK-003 validation
 ```typescript
-z.number().min(X).max(Y)
+const validTitle = (v: unknown): v is string => typeof v === 'string' && v === v.trim() && v.length >= 1 && v.length <= 1000 && !/[\r\n]/.test(v);
 ```
+```sql
+CHECK (length(title) BETWEEN 1 AND 1000)
+```
+````
 
-### Notes
-- [Any contextual notes about when/why this invariant exists]
-```
+One row per invariant; a code block below the table only when the validation does not fit one cell. No summary table plus detail blocks, no "Notes"; the derivation tier is recorded in `DERIVED-SPECS.md`, not here.
 
 ---
 
-## Template 11: Workflow Specification
+## Template 11: Workflow (`workflows/WF-NNN-{slug}.md`, ≤ 4,000 chars)
 
-```markdown
-# Workflow: WF-NNN — [Workflow Name]
+````markdown
+# WF-NNN — [Name]
 
-## Overview
 | Field | Value |
-|-------|-------|
-| **Trigger** | [What starts this workflow] |
-| **Total Timeout** | [Maximum duration] |
-| **Actors** | [Who/what participates] |
-| **Refs** | REQ-F-NNN, UC-NNN |
+|---|---|
+| Trigger | [event] |
+| Total timeout | `WF_TOTAL_BUDGET` |
+| Actors | [who / what] |
+| Refs | REQ-…; UC-…; INV-… |
 
 ## Steps
 
-| # | Name | Type | Timeout | Retry Policy | Input | Output | Error Handling | Compensation |
-|---|------|------|---------|-------------|-------|--------|----------------|--------------|
-| 1 | [step_name] | sync/async/manual | [duration] | [retries x backoff] | [schema ref] | [schema ref] | [what happens on failure] | [rollback action] |
+| # | Name | Type | Timeout | Retry | Input → Output | On failure | Compensation |
+|---|---|---|---|---|---|---|---|
+| 1 | [step] | sync/async/manual | [duration] | [n × backoff or —] | [schema ref] → [schema ref] | [abort / skip / retry] | [rollback or —] |
 
-## Error Scenarios
+## Error scenarios
 
-| Error | At Step | Action | Result State |
-|-------|---------|--------|-------------|
-| [error_type] | [step #] | [retry/abort/skip/compensate] | [final state] |
+| Error | Step | Action | Result state |
+|---|---|---|---|
+| `E_CODE` | 2 | abort | [state] |
 
-## Events Emitted
-
-| Event | At Step | Payload | Consumers |
-|-------|---------|---------|-----------|
-| [event_name] | [step #] | [schema] | [who listens] |
+## Events emitted
+None. *(or a table: Event | Step | Payload | Consumers)*
 
 ## Metrics
-
 | Metric | Target |
-|--------|--------|
-| Duration p50 | [value] |
-| Duration p99 | [value] |
+|---|---|
+| Duration p95 | [value] |
 | Success rate | [value] |
-```
+````
 
 ---
 
-## Template 12: API Contract Specification
+## Template 12: API Contract (`contracts/API-{module}.md`, ≤ 6,000 chars per module)
 
-```markdown
-# API Contract: API-{module}
-
-## API-{NNN}-{NN}: [Endpoint Name]
+````markdown
+# API-{module}
 
 | Field | Value |
-|-------|-------|
-| **Method** | GET/POST/PUT/PATCH/DELETE |
-| **Path** | `/api/v1/resource/{id}` |
-| **Auth** | JWT / HMAC / Public |
-| **Rate Limit** | [N requests/window per actor type] |
-| **Version** | v1 |
-| **Refs** | UC-NNN, REQ-F-NNN |
+|---|---|
+| Base / Version | `/api/v1` · v1 |
+| Auth | JWT bearer *(or: Not applicable — in-process calls, ADR-NNN)* |
+| Rate limit | `RATE_LIMIT_USER` per user *(or: Not applicable)* |
+| Refs | REQ-…; UC-…; ADR-… |
+| Errors | catalog in `domain/03-VALUE-OBJECTS.md` § ErrorCode |
 
-### Request
+## Operations
 
-**Path Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| [param] | [type] | Yes/No | [description] |
+| ID | Method | Path | Auth | Refs |
+|---|---|---|---|---|
+| API-NNN-01 | POST | `/tasks` | user | UC-001 |
+| API-NNN-02 | GET | `/tasks/{id}` | user | UC-002 |
 
-**Query Parameters:**
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| [param] | [type] | Yes/No | [default] | [description] |
+## API-NNN-01 — [name]
 
-**Request Body:**
-```json
-{
-  "field": "type — description"
-}
+```typescript
+// request
+{ title: string /* VO-002 */ }
+// response 201
+{ id: number; title: string; status: TaskStatus; createdAt: string }
+```
+Behaviour: see UC-001 main flow. Pre/post: INV-TSK-001..006.
+
+## API-NNN-02 — [name]
+Path params: `id: number` (VO-001). Query: `status?: TaskStatus` (default: all).
+```typescript
+// response 200
+{ items: Task[] }
 ```
 
-### Success Response (200/201)
+## Errors
 
-```json
-{
-  "field": "type — description"
-}
-```
+| HTTP | Code | Operations | Condition |
+|---|---|---|---|
+| 400 | `VALIDATION_ERROR` | 01, 02 | [invalid field] |
+| 401 | `UNAUTHORIZED` | all | missing / invalid token |
+| 403 | `FORBIDDEN` | 01 | [missing permission] |
+| 404 | `NOT_FOUND` | 02 | no resource with `id` |
+| 409 | `CONFLICT` | 01 | concurrent modification |
+| 429 | `RATE_LIMIT_EXCEEDED` | all | limit exceeded |
+````
 
-### Error Responses
-
-| HTTP | Error Code | Condition | Response Body |
-|------|-----------|-----------|---------------|
-| 400 | VALIDATION_ERROR | Invalid input fields | `{ "error": "VALIDATION_ERROR", "details": [...] }` |
-| 401 | UNAUTHORIZED | Missing or invalid token | `{ "error": "UNAUTHORIZED" }` |
-| 403 | FORBIDDEN | Insufficient permissions | `{ "error": "FORBIDDEN", "required": "permission" }` |
-| 404 | NOT_FOUND | Resource does not exist | `{ "error": "NOT_FOUND" }` |
-| 409 | CONFLICT | Concurrent modification | `{ "error": "CONFLICT", "detail": "..." }` |
-| 429 | RATE_LIMIT_EXCEEDED | Too many requests | `{ "error": "RATE_LIMIT_EXCEEDED", "retryAfter": N }` |
-
-> **Rule:** Every endpoint MUST document at minimum: 400 (if accepts input), 401 (if authenticated), 403 (if role-restricted), 404 (if accesses a resource by ID), 429 (if rate-limited). Remove rows that genuinely do not apply.
-```
+Rule: 400 if the operation accepts input, 401 if authenticated, 403 if role-restricted, 404 if it addresses a resource by id, 409 on concurrent modification, 429 if rate-limited. Omit rows that do not apply — no justification. Per-operation sections hold only the schema and one behaviour line; a function-level (non-HTTP) contract uses `Signature` instead of `Method/Path` and `exit code` instead of `HTTP`.
 
 ---
 
-## Template 13: BDD Test Specification
+## Template 13: BDD Scenarios (`tests/BDD-UC-NNN.md`, ≤ 2,500 chars)
 
-```markdown
-# BDD Scenarios: UC-NNN — [Use Case Name]
+````markdown
+# BDD-UC-NNN — [Use case name]
 
-> **Refs:** UC-NNN, INV-XXX-NNN
+> Refs: UC-NNN; REQ-F-NNN; INV-XXX-NNN. Convention: [one line, only if needed — how the system is invoked, what "unchanged" means]
 
-## Feature: [Feature description]
+Feature: [name] — As a [actor] I want [capability] so that [benefit]
 
-As a [actor]
-I want [capability]
-So that [benefit]
+Background:
+  Given [common setup]
 
-### Background
-Given [common precondition setup]
+Scenario: AC-NNN-01 — [happy path] [REQ-F-NNN AC1]
+  Given [precondition]
+  When [action]
+  Then [outcome]
+  And [side effect / state]
 
-### Scenario: Happy path — [description]
-Given [specific precondition]
-When [action]
-Then [expected outcome]
-And [side effects: events, state changes, audit logs]
+Scenario: AC-NNN-02 — [extension 2a]
+  When [action]
+  Then [outcome]
 
-### Scenario: Alternative path — [description]
-Given [alternative precondition]
-When [action]
-Then [alternative outcome]
+Scenario: AC-NNN-03 — [exception E1] [REQ-F-NNN AC3]
+  When [action]
+  Then error `E_CODE` with status 400
+  And [state unchanged]
 
-### Scenario: Error — [error type]
-Given [precondition]
-When [action that triggers error]
-Then the system responds with error "[ERROR_CODE]"
-And [HTTP status]
-And [side effects or lack thereof]
+Scenario: AC-NNN-04 — [edge case / invariant INV-XXX-NNN]
+  Given [boundary setup]
+  When [action]
+  Then [outcome]
+````
 
-### Scenario: Edge case — [description]
-Given [edge case setup]
-When [action]
-Then [edge case outcome]
-
-### Scenario: Invariant enforcement — INV-XXX-NNN
-Given [setup that would violate invariant]
-When [action]
-Then the system rejects with error "[VIOLATION_ERROR_CODE]"
-And [state remains unchanged]
-```
+Rules: exactly one scenario per main flow, per extension, per exception row and per edge case; AC ids are defined **here** and cited by the UC. ≤ 6 lines per scenario; the `[REQ-X ACn]` tag marks which requirement acceptance criterion it satisfies. Assert error code + status, not message text (W8). No separate "invariant enforcement" scenario when an exception row already covers that invariant.
 
 ---
 
-## Template 14: Value Registry
+## Template 14: Value Registry (`VALUE-REGISTRY.md`, ≤ 3,000 chars)
 
-```markdown
+````markdown
 # Value Registry
 
-> Canonical source for all shared values. Every value that appears in 2+ spec documents MUST be registered here. When writing or modifying any spec document, check this registry first.
+> Canonical source for every value used in 2+ documents. Other documents cite the **name**.
 
-## Timeouts
+| Name | Value | Unit | Category | Source | Used in (ids) |
+|---|---|---|---|---|---|
+| `TITLE_MAX_LENGTH` | 1000 | UTF-16 units | limit | RN-003 | INV-TSK-003, UC-001, API-002 |
+| `PERF_P95_LATENCY` | 200 | ms | performance | REQ-NF-001 | SPEC-PERF-001, WF-001 |
+| `TASK_STATUS` | pending, completed | enum | enum | VO-003 | UC-002, UC-005 |
+| `RATE_LIMIT_USER` | 100 | req/min | rate limit | RN-NNN | API-001 |
+````
 
-| Value Name | Canonical Value | Unit | Source | Documents Using |
-|---|---|---|---|---|
-| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
-
-## Limits
-
-| Value Name | Canonical Value | Unit | Source | Documents Using |
-|---|---|---|---|---|
-| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
-
-## Rate Limits
-
-| Actor Type | Limit | Window | Source | Documents Using |
-|---|---|---|---|---|
-| [actor] | [N] | [seconds/minutes] | [REQ/RN reference] | [list of spec files] |
-
-## Enums
-
-| Enum Name | Values | Source | Documents Using |
-|---|---|---|---|
-| [enum_name] | [val1, val2, val3] | [entity/VO reference] | [list of spec files] |
-
-## Thresholds
-
-| Value Name | Canonical Value | Unit | Source | Documents Using |
-|---|---|---|---|---|
-| [name] | [value] | [unit] | [REQ/RN reference] | [list of spec files] |
-```
+One table (category as a column), ids not file paths in "Used in".
 
 ---
 
-## Template 15: Derived Specifications Registry
+## Template 15: Derived Specifications (`DERIVED-SPECS.md`, ≤ 4,000 chars)
 
-```markdown
+````markdown
 # Derived Specifications
 
-> This file tracks all specification artifacts that were generated by the
-> spec-engineer (Error Flow Forcing, Invariant Extraction) or by the
-> spec-auditor (Fix Mode corrections) and do NOT directly trace to a
-> formal requirement in `requirements/REQUIREMENTS.md`.
->
-> **Purpose:** Maintain traceability integrity while allowing specs to
-> contain necessary technical detail beyond what requirements explicitly state.
->
-> **Tier System:**
-> - **Tier 1:** User-visible behavior — MUST have a REQ (create via `sdd-req-change`) or explicit acceptance
-> - **Tier 2:** Technical detail derived from an existing REQ — documented here, no REQ needed
-> - **Tier 3:** Cosmetic/structural — not tracked here
-
-## Pipeline Gate
+> Artifacts that do not trace literally to a REQ. Tier 1 = new user-visible behaviour (needs a REQ via `sdd-req-change` or explicit acceptance). Tier 2 = technical detail derived from an existing REQ. Tier 3 = cosmetic (not tracked).
 
 | Metric | Value | Threshold | Status |
-|--------|-------|-----------|--------|
-| Tier 1 items pending REQ | {N} | ≤ 3 | {PASS/FAIL} |
-| Tier 1 items accepted without REQ | {N} | — | Advisory |
-| Tier 2 items registered | {N} | — | Info |
+|---|---|---|---|
+| Tier 1 pending REQ | N | ≤ 3 | PASS / FAIL |
+| Tier 1 accepted without REQ | N | — | Advisory |
+| Tier 2 registered | N | — | Info |
 
-> **Gate rule:** If Tier 1 pending > 3, pipeline is BLOCKED until REQs are created or items are explicitly accepted.
+## Spec-engineer derived
 
-## Spec-Engineer Derived (Phase: Specification Writing)
-
-| Spec Artifact | Type | Derived From | Tier | Justification | Status |
+| Artifact | Type | Derived from | Tier | Justification (≤ 8 words) | Status |
 |---|---|---|---|---|---|
-| [INV-XXX-NNN] | Invariant | REQ-F-NNN | 2 | Formalization of "[constraint text]" | Registered |
-| [EX3 in UC-NNN] | Exception Flow | REQ-F-NNN | 2 | Error handling for [step description] | Registered |
-| [UC-NNN] | Use Case | — | 1 | [New functionality description] | **[PENDING REQ]** |
-| [BDD scenario] | Test | REQ-F-NNN | 2 | Edge case coverage for [UC description] | Registered |
+| INV-TSK-001..006 | Invariant | REQ-F-001 | 2 | formalises "unique incremental id" | Registered |
+| `E_STORE_*` rows in UC-001..005 | Exception flow | REQ-F-006 | 2 | storage failure propagated | Registered |
+| RN-003 / `E_TITLE_TOO_LONG` | Rule + exception | — | 1 | new visible limit | **[PENDING REQ]** / ACCEPTED (RN-003) |
 
-## Audit-Derived (Phase: Audit Fix)
+## Audit derived
+None. *(filled by `sdd-spec-auditor` Fix mode: Artifact | Finding | Derived from | Tier | Justification | Status)*
 
-| Spec Artifact | Finding ID | Derived From | Tier | Justification | Status |
+## Resolution log
+None. *(Date | Artifact | From → To | Action)*
+````
+
+Group rows by pattern (one row per error family across UCs, one row per invariant range), never one row per UC per code.
+
+---
+
+## Template 16: Clarifications (`CLARIFICATIONS.md`, ≤ 6,000 chars for ≤ 25 rules)
+
+````markdown
+# Clarifications (business rules)
+
+> Decided by: [user | user delegated to the recommended option] · YYYY-MM-DD. Each RN is binding for all of `spec/` and downstream skills.
+
+## Format and structure decisions
+
+| # | Question | Decision | Rejected |
+|---|---|---|---|
+| D-001 | Specification format | modular UC + BDD + contracts + invariants | monolithic SRS; stories only |
+
+## Business rules
+
+| RN | Source | Question | Rule adopted | Rejected (≤ 1 clause each) | Tier |
 |---|---|---|---|---|---|
-| [INV-XXX-NNN] | [INV-001] | REQ-F-NNN | 2 | [Audit finding resolution] | Registered |
-| [New API endpoint] | [INC-005] | — | 1 | [New functionality] | **[PENDING REQ]** |
-| [ADR-NNN] | [ADR-001] | — | 2 | Technical decision | Registered |
+| RN-001 | REQ-F-001 | `"   "` and surrounding spaces in title? | `trim()`; empty after trim → `E_TITLE_EMPTY`; store trimmed | reject literal `""` only; store untrimmed | 2 |
+| RN-003 | — | maximum title length? | 1000 (`TITLE_MAX_LENGTH`) → `E_TITLE_TOO_LONG` | no limit; silent truncation | 1 (accepted) |
+````
 
-## Resolution Log
+No "Affects" column and no per-rule prose: documents that apply a rule cite its RN id, so `grep RN-003 spec/` is the impact list. This file is the only decisions log.
 
-| Date | Spec Artifact | Previous Status | New Status | Action Taken |
-|---|---|---|---|---|
-| [YYYY-MM-DD] | [artifact] | [PENDING REQ] | Registered | Created REQ-F-NNN via req-change |
-| [YYYY-MM-DD] | [artifact] | [PENDING REQ] | [ACCEPTED WITHOUT REQ] | User accepted: "[justification]" |
+---
+
+## Template 17: Domain documents (`domain/01..03`)
+
+````markdown
+# 01 — Glossary
+| Term | Definition (≤ 20 words) | Do not use |
+|---|---|---|
+| Task | Unit of work with id, title, status, timestamps (ENT-001) | todo, item, entry |
+
+# 02 — Entities
+```typescript
+/** ENT-001 — Task. Lifecycle: SM-001. Invariants: INV-TSK-001..007. */
+interface Task { id: number /* VO-001 */; title: string /* VO-002 */; status: TaskStatus; createdAt: string; completedAt: string | null }
+/** ENT-002 — Store. Owns Task[] (1..n). Invariants: INV-STO-001..004. */
 ```
+Relationships: ENT-002 contains ENT-001 (1 → 0..n).
+
+# 03 — Value Objects
+```typescript
+type TaskId = number;        // VO-001: safe integer ≥ 1 (INV-TSK-002)
+type Title  = string;        // VO-002: trimmed, 1..TITLE_MAX_LENGTH, no line breaks (INV-TSK-003)
+type TaskStatus = 'pending' | 'completed';  // VO-003
+```
+
+## Error catalog (VO-NNN)
+| Code | Class | HTTP / exit | Message (literal) | Raised by | Refs |
+|---|---|---|---|---|---|
+| `E_TITLE_EMPTY` | ValidationError | 400 / 2 | `title must not be empty` | API-002-06 | REQ-F-001, RN-001 |
+````
+
+A schema block replaces attribute tables (W3); the error catalog is the only place where messages, classes and HTTP/exit mappings are written.
+
+---
+
+## Template 18: README (`spec/README.md`, ≤ 2,500 chars)
+
+````markdown
+# Specifications — [project]
+
+> From `requirements/REQUIREMENTS.md` vX (YYYY-MM-DD). Decisions: `CLARIFICATIONS.md`. Language: [prose language]; ids, code and literals in English.
+
+[≤ 3 lines: what the system is.]
+
+| Path | Content | Start here if… |
+|---|---|---|
+| `domain/` | glossary, entities, value objects + error catalog, states, invariants | …you write or review anything |
+| `use-cases/UC-001..NNN` | one per command / feature | …you implement a feature |
+| `contracts/` | API-{module}, EVENTS, PERMISSIONS-MATRIX | …you implement an interface |
+| `tests/` | BDD-UC-NNN, PROPERTY-TESTS | …you write tests |
+| … | … | … |
+
+Notes for `sdd-spec-auditor` *(only if needed, ≤ 5 bullets: known false positives, N/A categories with their ADR)*.
+````
+
+No coverage table (in `TRACEABILITY-MATRIX.md`), no metrics (in `pipeline-state.json`).
+
+---
+
+## Template 19: Runbook (`runbooks/RB-NNN-{slug}.md`, conditional, ≤ 3,000 chars)
+
+Create only when a REQ/NFR requires an operational procedure or an ADR names a manual recovery step. Otherwise `runbooks/` does not exist.
+
+````markdown
+# RB-NNN — [Procedure]
+
+| Field | Value |
+|---|---|
+| Trigger | [alert / exit code / symptom] |
+| Refs | REQ-…; UC-…; INV-…; ADR-… |
+
+| Symptom | Cause | Steps |
+|---|---|---|
+| `[message or code]` | [cause] | 1. [command] 2. [check] 3. [fix] |
+
+Verify: `[command]` → [expected].
+````
+
+---
+
+## Template 20: Absence declaration (`contracts/EVENTS-{module}.md`, `contracts/PERMISSIONS-MATRIX.md` when they do not apply)
+
+````markdown
+# EVENTS-{module}
+None. Synchronous single-process system; no asynchronous contracts (ADR-NNN).
+````
+
+````markdown
+# Permissions Matrix
+| Role | Operations | Row-level rule |
+|---|---|---|
+| [single role] | all (API-NNN-01..04) | none — single local user (ADR-NNN) |
+````
+
+≤ 3 lines / one table row. No "Justification", "Evolution" or HTTP-equivalence sections.

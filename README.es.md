@@ -197,6 +197,7 @@ La CI ejecuta lint (shellcheck), validación, tests de hooks y la matriz de buil
 - [docs/multisesion.md](docs/multisesion.md) — protocolo multi-sesión
 - [docs/guia-paso-a-paso.md](docs/guia-paso-a-paso.md) — guía paso a paso
 - [docs/coste-contexto.md](docs/coste-contexto.md) — coste de contexto por versión
+- [docs/perfilado.md](docs/perfilado.md) — dónde se va el tiempo de una etapa y cómo acortarlo (`scripts/sdd-profile.sh`)
 - [references/sdd-constitution.md](references/sdd-constitution.md) — los 11 artículos que siguen todas las skills
 - [CHANGELOG.md](CHANGELOG.md)
 

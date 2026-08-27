@@ -751,6 +751,7 @@ Para tasks marcadas con `[P]` (paralelizables), se pueden lanzar agentes paralel
 4. Cada agente marca su checkbox en Phase 7 (incluido en su commit atomico)
 5. Si un agente falla, los demas continuan — el fallo se reporta al final
 6. Los commits se crean secuencialmente (git no soporta commits paralelos)
+7. **Modelo de los subagentes**: lanza cada Task-agent con `model: sonnet` (rápido: implementan una task acotada con sus tests) salvo que `CLAUDE_CODE_SUBAGENT_MODEL` esté definido, en cuyo caso no pases `model` y deja que el entorno decida. La revisión final (Phase 7 checklist), el commit y la verificación de FASE (Phase 9) las hace siempre el agente principal con su modelo
 
 ### Composition with Streams (`--stream`)
 

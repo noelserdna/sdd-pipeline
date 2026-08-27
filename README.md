@@ -197,6 +197,7 @@ CI runs lint (shellcheck), validation, hook tests and the server build/test matr
 - [docs/multisesion.md](docs/multisesion.md) — multi-session protocol
 - [docs/guia-paso-a-paso.md](docs/guia-paso-a-paso.md) — step-by-step guide (Spanish)
 - [docs/coste-contexto.md](docs/coste-contexto.md) — context cost per release
+- [docs/perfilado.md](docs/perfilado.md) — where the time goes in a stage and how to cut it (`scripts/sdd-profile.sh`)
 - [references/sdd-constitution.md](references/sdd-constitution.md) — the 11 articles every skill follows
 - [CHANGELOG.md](CHANGELOG.md)
 

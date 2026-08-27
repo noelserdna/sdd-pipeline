@@ -1,6 +1,6 @@
 # README Template for fases/
 
-Template for generating the `fases/README.md` file. This is the entry point for understanding the phase structure.
+Template for generating the `fases/README.md` file. This is the entry point for understanding the phase structure. Budget ≤ 4 000 chars: coverage tables carry ids only; the two notes below are one line each.
 
 ---
 
@@ -16,18 +16,7 @@ Template for generating the `fases/README.md` file. This is the entry point for 
 
 ## Principio Fundamental
 
-\```
-Specs (spec/) = Fuente única de verdad
-     ↓
-Fases (plan/fases/) = Índices de navegación
-     ↓
-Código (src/) = Derivado/Regenerable desde specs
-\```
-
-**Si algo cambia:**
-1. Actualiza la spec original en `spec/`
-2. Los índices de fase siguen siendo válidos (solo referencian)
-3. Regenera el código desde las specs
+`spec/` = fuente única de verdad → `plan/fases/` = índices de navegación → `src/` = derivado. Si algo cambia se cambia la spec; los índices solo referencian.
 
 ---
 
@@ -117,26 +106,7 @@ Los siguientes archivos en `spec/temp_files/` son documentos de trabajo y NO est
 
 ## Cómo Usar Estos Índices
 
-### Para implementar una fase:
-
-1. Abre el documento de la fase (ej: `FASE-1-EXTRACCION.md`)
-2. Lee las specs listadas en el orden sugerido
-3. Implementa siguiendo las invariantes listadas
-4. Verifica con los comandos de verificación
-5. Pasa a la siguiente fase
-
-### Para agregar una feature:
-
-1. Actualiza la spec correspondiente en `spec/`
-2. Identifica qué fase(s) afecta
-3. El índice de fase sigue siendo válido
-4. Regenera/actualiza el código
-
-### Para dar contexto a un agente IA:
-
-1. Pasa el documento de fase como contexto
-2. El agente sabrá qué specs leer
-3. Las specs tienen todo el detalle necesario
+Implementar: abre `FASE-N-*.md`, lee las specs listadas, implementa con sus invariantes, verifica. Cambiar: actualiza la spec en `spec/`; el índice sigue siendo válido. Contexto para un agente: pásale el documento de fase.
 
 ---
 

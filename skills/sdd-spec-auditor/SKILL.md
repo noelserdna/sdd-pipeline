@@ -77,12 +77,11 @@ Términos o frases que admiten múltiples interpretaciones.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### AMB-001: Tiempo de respuesta "razonable"
-
-**Ubicación:** nfr/PERFORMANCE.md:45
-**Problema:** El término "tiempo de respuesta razonable" no tiene valor cuantificable.
-**Pregunta:** ¿Cuál es el p99 latency aceptable en milisegundos?
-**Documentos relacionados:** contracts/API-extraction.md (no define timeout)
+### AMB-001: "Reasonable" response time is not quantified — P2 · CAT-01 · new
+- **Where:** `nfr/PERFORMANCE.md:45`
+- **What:** "tiempo de respuesta razonable" has no numeric value.
+- **Why:** Unverifiable NFR; `contracts/API-extraction.md:30` defines no timeout either.
+- **Fix:** Which p99 latency (ms) is acceptable? Replace the phrase with the value and its measurement window.
 ```
 
 ---
@@ -98,12 +97,11 @@ Comportamientos que se dan por entendidos pero no están documentados.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### IMP-001: Validación de email implícita
-
-**Ubicación:** use-cases/UC-015-create-user.md:23
-**Problema:** El flujo menciona "ingresar email" pero no especifica validación de formato ni unicidad.
-**Pregunta:** ¿Debe validarse formato RFC 5322? ¿Unicidad por organización o global?
-**Documentos relacionados:** domain/02-ENTITIES.md (User entity no define constraint)
+### IMP-001: Email validation assumed but never specified — P1 · CAT-02 · new
+- **Where:** `use-cases/UC-015-create-user.md:23`
+- **What:** Step "ingresar email" states no format or uniqueness validation.
+- **Why:** Implementers will pick a rule; `domain/02-ENTITIES.md:58` (User) has no constraint either.
+- **Fix:** RFC 5322 format? Uniqueness per organization or global? Add the rule to UC-015 and an INV in 05-INVARIANTS.md.
 ```
 
 ---
@@ -120,14 +118,11 @@ Casos no cubiertos que podrían causar comportamiento indefinido.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### SIL-001: Sin manejo de timeout en extracción
-
-**Ubicación:** workflows/WF-001-extraction.md:89
-**Problema:** No se especifica qué ocurre si el LLM no responde en el tiempo esperado.
-**Pregunta:** ¿Retry automático? ¿Fallback? ¿Estado final de la Extraction?
-**Documentos relacionados:**
-- domain/04-STATES.md (no hay estado "timeout")
-- nfr/LIMITS.md (define timeout pero no acción)
+### SIL-001: LLM timeout in extraction has no defined outcome — P0 · CAT-03 · new
+- **Where:** `workflows/WF-001-extraction.md:89` · `nfr/LIMITS.md:34`
+- **What:** Step 4 has no branch for the LLM not answering within the timeout.
+- **Why:** Undefined production behaviour; LIMITS.md defines the timeout but no action, `domain/04-STATES.md` has no timeout state.
+- **Fix:** Automatic retry? Fallback? Final Extraction state? Add the exception flow to WF-001 and the transition to 04-STATES.md.
 ```
 
 ---
@@ -143,14 +138,11 @@ Mismo término usado con diferentes significados, o términos diferentes para el
 
 **Ejemplo de hallazgo:**
 ```markdown
-### SEM-001: "Job" vs "Extraction" inconsistente
-
-**Ubicación:**
-- workflows/WF-001.md:12 usa "job"
-- domain/01-GLOSSARY.md define "Extraction"
-**Problema:** Violación del lenguaje ubicuo. "Job" no está definido en glosario.
-**Pregunta:** ¿Reemplazar todas las ocurrencias de "job" por "Extraction"?
-**Documentos relacionados:** domain/01-GLOSSARY.md (término canónico: Extraction)
+### SEM-001: "job" used for the glossary term "Extraction" — P3 · CAT-04 · new
+- **Where:** `workflows/WF-001.md:12` (3 occurrences) vs `domain/01-GLOSSARY.md:40`
+- **What:** "job" is not a glossary term; the canonical term is "Extraction".
+- **Why:** Ubiquitous-language violation (CHECK-SH01).
+- **Fix:** Replace "job" by "Extraction" in WF-001 (or add "job" to the "NO usar" column).
 ```
 
 ---
@@ -166,14 +158,11 @@ Especificaciones que se contradicen entre sí.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### CON-001: Timeout contradictorio
-
-**Ubicación:**
-- nfr/LIMITS.md:34 → "timeout: 180s"
-- workflows/WF-001.md:67 → "timeout: 360s"
-**Problema:** Dos documentos definen valores diferentes para el mismo timeout.
-**Pregunta:** ¿Cuál es el valor autoritativo? ¿Actualizar ambos documentos?
-**Documentos relacionados:** CLARIFICATIONS.md (verificar si hay RN que aclare)
+### CON-001: Extraction timeout 180 s vs 360 s — P1 · CAT-05 · new
+- **Where:** `workflows/WF-001.md:67` ("timeout: 360s") vs `nfr/LIMITS.md:34` ("timeout: 180s")
+- **What:** Two values for the same timeout; WF-001 is the divergent document (Minority Rule).
+- **Why:** Implementers cannot choose; no RN in `CLARIFICATIONS.md` settles it.
+- **Fix:** Which value is authoritative? Align WF-001 (or LIMITS.md) and record the decision as an RN.
 ```
 
 ---
@@ -190,12 +179,11 @@ Documentos que faltan o secciones vacías/placeholder.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### INC-001: Caso de uso sin flujo de excepción
-
-**Ubicación:** use-cases/UC-023-delete-cv.md:45
-**Problema:** Sección "Exception Flows" está vacía. No se especifica qué ocurre si el CV tiene MatchResults activos.
-**Pregunta:** ¿Prohibir eliminación? ¿Cascade delete? ¿Soft delete?
-**Documentos relacionados:** domain/05-INVARIANTS.md (buscar INV sobre integridad referencial)
+### INC-001: UC-023 has an empty "Exception Flows" section — P1 · CAT-06 · new
+- **Where:** `use-cases/UC-023-delete-cv.md:45`
+- **What:** The section exists but is empty; deleting a CV with active MatchResults is unspecified.
+- **Why:** `domain/05-INVARIANTS.md` has no referential-integrity INV for CV → MatchResult.
+- **Fix:** Forbid deletion? Cascade? Soft delete? Fill the section and add the INV.
 ```
 
 ---
@@ -211,12 +199,11 @@ Reglas de negocio críticas sin invariante formal, o invariantes sin validación
 
 **Ejemplo de hallazgo:**
 ```markdown
-### INV-001: Restricción sin invariante formal
-
-**Ubicación:** use-cases/UC-007.md:34
-**Problema:** Dice "el score debe estar entre 0 y 100" pero no hay INV-XXX-NNN correspondiente.
-**Pregunta:** ¿Crear INV-CVA-XXX con constraint CHECK y validación Zod?
-**Documentos relacionados:** domain/05-INVARIANTS.md (no existe invariante de rango de score)
+### INV-001: Score range stated in prose without an invariant — P2 · CAT-07 · new
+- **Where:** `use-cases/UC-007.md:34`
+- **What:** "el score debe estar entre 0 y 100" has no INV-XXX-NNN.
+- **Why:** `domain/05-INVARIANTS.md` has no score-range invariant; nothing validates it.
+- **Fix:** Create INV-CVA-NNN (range 0–100, CHECK constraint + Zod validation) and reference it from UC-007.
 ```
 
 ---
@@ -233,12 +220,11 @@ Diseños que dificultarán cambios futuros predecibles.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### EVO-001: Enum de estados sin extensibilidad
-
-**Ubicación:** domain/04-STATES.md:23
-**Problema:** ExtractionStatus es enum cerrado. Agregar nuevo estado requiere migración.
-**Pregunta:** ¿Considerar campo status como string con validación? ¿Documentar proceso de migración?
-**Documentos relacionados:** adr/ (no hay ADR sobre estrategia de evolución de estados)
+### EVO-001: ExtractionStatus is a closed enum — P2 · CAT-08 · new
+- **Where:** `domain/04-STATES.md:23`
+- **What:** Adding a state requires a migration; no evolution strategy is documented.
+- **Why:** `adr/` has no ADR on state evolution (CAT-08 is capped at P2).
+- **Fix:** Document the migration process, or an ADR choosing string + validation over a closed enum.
 ```
 
 ---
@@ -254,12 +240,11 @@ Decisiones arquitectónicas tomadas sin documentación formal.
 
 **Ejemplo de hallazgo:**
 ```markdown
-### ADR-001: Elección de R2 sin ADR
-
-**Ubicación:** workflows/WF-001.md:56
-**Problema:** Se menciona "guardar en R2" pero no hay ADR que justifique elección de R2 vs S3 vs GCS.
-**Pregunta:** ¿Crear ADR-XXX documentando decisión y alternativas consideradas?
-**Documentos relacionados:** adr/ (no existe ADR sobre storage)
+### ADR-001: Storage choice (R2) has no ADR — P2 · CAT-09 · new
+- **Where:** `workflows/WF-001.md:56`
+- **What:** "guardar en R2" with no ADR justifying R2 vs S3 vs GCS.
+- **Why:** Data-store choice is a material decision; `adr/` has no storage ADR.
+- **Fix:** Create ADR-NNN with context, decision and alternatives considered.
 ```
 
 ---
@@ -315,69 +300,47 @@ CHECK-SH05: Format consistency — all documents of the same type follow the sam
 
 ### 3C Verdict
 
-Report the 3C gate result at the top of every audit report:
-
-```markdown
-## 3C Spec Verification
-
-| Dimension    | Pass | Fail | Verdict |
-|--------------|------|------|---------|
-| Completeness | {N}/{T} | {F} | PASS / FAIL |
-| Correctness  | {N}/{T} | {F} | PASS / FAIL |
-| Coherence    | {N}/{T} | {F} | PASS / FAIL |
-
-**Gate:** {PASS — ready for planning | FAIL — resolve before proceeding}
-```
+Report the 3C result as the first three rows of the `Gate detail` table of the report (`references/report-template.md` §3): one row per dimension, `PASS n/n` or `FAIL: {failing check ids → finding ids}`. Do not restate the passing checks.
 
 > Any FAIL in Completeness or Correctness blocks pipeline progression to `sdd-plan-architect`.
 > Coherence failures are warnings that should be resolved but do not block.
+> In fan-out mode each check has one owner (`references/fanout-protocol.md` §4); the main thread merges the auditors' `checks` with its own.
 
 ---
 
 ## Audit Process
 
+### Execution Strategy (read first)
+
+The full protocol is `references/fanout-protocol.md`. The rules that govern every audit:
+
+1. **Index before files.** Phase 1 builds `$IDX` with one `grep -rn` over `spec/` (headings and id lines, cut at 110 chars). Everything else is opened by section (`sed -n 'a,bp'`, ≤ 60 lines per call) using the index line numbers. **Never `cat` a spec file in the main thread**; a file ≤ 8 k chars may be read whole only by the thread that owns it.
+2. **Budget.** The main thread holds at most ~30 k tokens of spec content (index summaries, baseline ids, grep outputs, `sed -n` spot checks of P0/P1 evidence). Each dimension auditor holds its own scope plus ≤ 200 lines of neighbour lookups per finding.
+3. **Fan-out by default.** When `spec/` has more than 8 files or more than 40 k chars, Phases 2–5 run in **four parallel dimension auditors** (Domain `DOM-`, Use cases + workflows `UC-`, Contracts + BDD `CON-`, NFR + ADR + runbooks `NFR-`) launched with the `Agent` tool — also under `claude -p`, where the tool is available. Each reads only its directories and returns compact JSON findings; the main thread consolidates, deduplicates, reviews P0/P1 evidence, computes the Gate and writes the report. Auditors run on `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`); consolidation and the Gate always use the main model. Smaller specs, `--sequential`, or a tool list without `Agent` → sequential mode in one thread with the same index discipline.
+4. **Compact output.** The report is `audits/AUDIT-BASELINE.md` written per `references/report-template.md` (budget ≤ 25 k chars for ≤ 15 requirements). Findings are collected in the JSON shape of the protocol before anything is written.
+
 ### Phase 0: Baseline Loading
 
-Before starting the audit, check for an existing audit baseline to avoid re-reporting known findings.
+Before starting the audit, check for an existing `audits/AUDIT-BASELINE.md` (the previous compact report; its `Baseline` and `History` sections are the tracking tables — format in `references/report-template.md` §3).
 
-1. **Search for baseline file:** Look for `AUDIT-BASELINE.md` in the audits directory (`audits/AUDIT-BASELINE.md`)
-2. **If baseline exists:**
-   - Load all findings with status `accepted`, `wont_fix`, or `deferred`
-   - These findings are **excluded** from the audit report (they are NOT re-reported)
-   - Track them in a separate "Excluded by Baseline" counter
-   - For `deferred` findings: check the `Re-evaluar en` date — if past due, re-evaluate and potentially re-report
-3. **If no baseline exists:**
-   - Proceed normally (first audit or baseline not yet created)
-   - Note in the report: "No baseline found — all findings are new"
-4. **Load previous audit report** (if any) to classify findings as `new`, `persistent`, or `regression`
-
-**Baseline file format expected:**
-
-```markdown
-# Audit Baseline
-> Last updated: YYYY-MM-DD (AUDIT-vX.Y)
-
-## Accepted Findings
-| ID | Descripción corta | Razón de aceptación | Audit origen |
-|----|-------------------|---------------------|--------------|
-
-## Deferred Findings
-| ID | Descripción corta | Razón de defer | Audit origen | Re-evaluar en |
-|----|-------------------|----------------|--------------|---------------|
-
-## Resolved Findings (últimas 2 versiones)
-| ID | Descripción corta | Resuelto en | Audit origen |
-|----|-------------------|-------------|--------------|
-```
+1. **Read only ids and short descriptions**, never the whole file: `grep -E '^### [A-Z]+-[0-9]+|^\| [A-Z]+-[0-9]+' audits/AUDIT-BASELINE.md` (≤ 3 k tokens).
+2. **If it exists:**
+   - Rows of `Accepted`, `Won't fix` and `Deferred` are **excluded** from this audit (not re-reported); count them for the header. A `Deferred` row past its `Re-evaluate on` date is re-evaluated and may be re-reported.
+   - Findings of the previous body not in those tables are **open**: if detected again they are `persistent` (Persistence Escalation Rule); a finding in a document modified by a previous fix is a `regression` (Phase 6).
+   - Carry the `Baseline` and `History` sections forward into the new report; the body is rewritten.
+   - In fan-out mode, pass the excluded rows (`ID — short description`) to each auditor as "known findings".
+3. **If it does not exist:** first audit — `Delta vs none (first audit)` in the header; all findings are `new`.
 
 ---
 
-### Phase 1: Inventory
+### Phase 1: Inventory and Index
 
-1. List all specification documents
-2. Identify document types (domain, UC, WF, ADR, NFR, contracts)
-3. Note document versions and last update dates
-4. Identify missing documents (gaps in numbering, referenced but non-existent)
+1. Measure and decide the mode (`fanout-protocol.md` §1): `FILES` and `CHARS` of `spec/**/*.md`.
+2. Build the index (`fanout-protocol.md` §2) and read only its summaries: headings per file (structure, gaps in numbering, SH05) and the id set (referenced ids that do not exist → SH03).
+3. Record for the Coverage table: every document path found; document versions and dates come from the index lines, not from opening the files.
+4. **Fan-out mode:** launch the four auditors now (`fanout-protocol.md` §5–§6, one message with four `Agent` calls or `run_in_background`), then continue with the main-thread checks of §4 while they run. **Sequential mode:** proceed with Phases 2–5 by dimension order (`fanout-protocol.md` §8).
+
+> Phases 2–5 below are the checks; in fan-out mode each one is executed by the auditor that owns the scope (`fanout-protocol.md` §4) and the main thread runs only cross-references, REQ coverage, markers, SC03 and SH05. In sequential mode the main thread runs all of them, section by section.
 
 ### Phase 2: Glossary Compliance
 
@@ -419,10 +382,10 @@ If `spec/VALUE-REGISTRY.md` exists, use it as the authoritative source for share
 ### Phase 5: Defect Detection
 
 Apply each CAT-XX category systematically:
-1. Read document
-2. Apply category checklist
-3. Record findings with location + problem + question
-4. Cross-reference with related documents
+1. Open the sections the index lists for the document (`sed -n`); whole file only if ≤ 8 k chars
+2. Apply the category checklist for that document type (`references/audit-checklists.md`, only that section) and the grep patterns of `references/detection-patterns.md`
+3. Record findings in the compact shape `{id, sev, cat, doc, line, also, claim, why, fix}` (`fanout-protocol.md` §6) — location + what is wrong + why + the spec-level fix or the question
+4. Cross-reference with related documents through `grep -n` / `sed -n` on the cited lines, never by reading the neighbour whole
 
 ### Phase 6: Regression Verification
 
@@ -462,7 +425,7 @@ If a previous audit exists, perform regression analysis after defect detection:
 
 ### Phase 7: Finding Consolidation
 
-After detecting all findings (Phase 5) and classifying them (Phase 6), consolidate findings to reduce noise and improve actionability.
+After detecting all findings (Phase 5) and classifying them (Phase 6), consolidate findings to reduce noise and improve actionability. In fan-out mode this phase starts by merging the four auditors' JSON results (`fanout-protocol.md` §7: deduplication, baseline filter, final ids by category, severity review of every P0/P1 against the cited lines); the rules below apply in both modes.
 
 #### 7.1 Pattern Batching
 
@@ -551,6 +514,8 @@ New findings discovered during verification:
 - If **High**: Report but add to audit baseline for next full audit
 - If **Medium/Low**: Log as advisory note, do NOT count against the gate
 
+Verification output is the ≤ 6-line `Verification (cycle 3)` block appended to the report (`references/report-template.md` §3): one line per fixed finding with its evidence `doc:line`, plus regressions, cross-reference count and new findings. It runs sequentially in the main thread (no fan-out).
+
 #### Triage Phase
 
 After Discovery (Cycle 1) and before Fix (Cycle 2), present ALL findings to the user for triage:
@@ -569,98 +534,28 @@ Only findings with `FIX` disposition proceed to Mode Fix. Others go directly to 
 
 ## Audit Report Format
 
-```markdown
-# Audit Report: {Repository Name}
+The report is **`audits/AUDIT-BASELINE.md`**, one file, written with the compact template of `references/report-template.md` (mandatory; read it before writing). Its sections, in order:
 
-> **Fecha:** YYYY-MM-DD
-> **Auditor:** {Name}
-> **Versión specs auditada:** X.Y.Z
-> **Documentos analizados:** {N}
+| Section | Content | Cap |
+|---|---|---|
+| Header | Audit id, date, specs version, docs audited, mode (`fanout`/`sequential`), cycles; **Gate** with a one-clause reason; counters P0/P1/P2/P3, batched, cross-validated, excluded by baseline; delta vs the previous audit (new/persistent/regression/resolved); top 3 categories | ≤ 1 200 chars |
+| Gate detail | One table: 3C rows (failing check ids → finding ids only) + the six Quality Metrics | 9 rows |
+| Findings P0–P2 | One block per finding: `ID: title — P{n} · CAT · status`, **Where** (`doc:line`), **What**, **Why**, **Fix** (≤ 3 lines: spec-level correction or the question that unblocks it) | ≤ 900 chars each |
+| Findings P3 | One table row per finding: ID, Cat, Where, What (≤ 12 words), Fix (≤ 12 words) | ≤ 220 chars each |
+| Coverage | One row per audited document: P0/P1/P2/P3 counts + ids. No prose, no "no issues found in…", no spec content | 1 row/doc (> 40 docs: clean docs collapsed into one row) |
+| Not audited | Only when non-empty | 1 line/doc |
+| Baseline | Accepted / Won't fix / Deferred / Resolved tables (carried forward, updated by Mode Fix) | 1 row/finding |
+| History | One row per audit run (counts, Gate, mode, report chars) | 1 row/run |
 
----
+Budget: **≤ 25 k chars for ≤ 15 requirements**, +1 k per extra requirement, hard cap 60 k (`report-template.md` §1). No empty sections, no per-category tables with zero rows, no restated spec content (quotes ≤ 12 words), no priority lists repeating the ids, no second copy of the report. Severities are written P0–P3 (P0 = Critical … P3 = Low).
 
-## Resumen Ejecutivo
-
-| Categoría | Hallazgos | Críticos | Altos | Medios | Bajos |
-|-----------|-----------|----------|-------|--------|-------|
-| Ambigüedades | {N} | {N} | {N} | {N} | {N} |
-| Reglas implícitas | {N} | {N} | {N} | {N} | {N} |
-| Silencios peligrosos | {N} | {N} | {N} | {N} | {N} |
-| Ambigüedades semánticas | {N} | {N} | {N} | {N} | {N} |
-| Contradicciones | {N} | {N} | {N} | {N} | {N} |
-| Specs incompletas | {N} | {N} | {N} | {N} | {N} |
-| Invariantes débiles | {N} | {N} | {N} | {N} | {N} |
-| Riesgos evolución | {N} | {N} | {N} | {N} | {N} |
-| Decisiones sin ADR | {N} | {N} | {N} | {N} | {N} |
-| **TOTAL** | **{N}** | **{N}** | **{N}** | **{N}** | **{N}** |
-
----
-
-## Baseline Delta
-
-> Compared against: {previous audit ID or "N/A (first audit)"}
-
-| Métrica | Cantidad |
-|---------|----------|
-| Hallazgos nuevos (new) | {N} |
-| Hallazgos persistentes (persistent) | {N} |
-| Hallazgos de regresión (regression) | {N} |
-| Hallazgos resueltos desde último audit | {N} |
-| Hallazgos excluidos por baseline | {N} |
-
----
-
-## Hallazgos por Categoría
-
-### CAT-01: Ambigüedades
-
-#### AMB-001: {Título}
-
-| Campo | Valor |
-|-------|-------|
-| **Severidad** | Crítico / Alto / Medio / Bajo |
-| **Estado** | new / persistent / regression |
-| **Ubicación** | {documento}:{línea o sección} |
-| **Problema** | {Descripción del defecto} |
-| **Pregunta** | {Pregunta para resolver} |
-| **Docs relacionados** | {Lista de documentos} |
-
----
-
-## Hallazgos Excluidos por Baseline
-
-> {N} hallazgos excluidos: {N} accepted, {N} wont_fix, {N} deferred
-
-*(Los detalles de hallazgos excluidos están en `AUDIT-BASELINE.md`)*
-
----
-
-## Documentos No Analizados
-
-{Lista de documentos excluidos y razón}
-
----
-
-## Recomendaciones de Priorización
-
-1. **Críticos (resolver antes de implementar):**
-   - {ID}: {Título}
-
-2. **Altos (resolver en sprint actual):**
-   - {ID}: {Título}
-
-3. **Medios (backlog priorizado):**
-   - {ID}: {Título}
-
-4. **Bajos (mejora continua):**
-   - {ID}: {Título}
-```
+> Omitted detail is not lost: every finding carries `doc:line`, so the document is reopened from the id; Mode Fix works on the findings' Where/What/Fix, not on the report's prose; auditors' JSON is the working set during consolidation. Record `wc -c` of the report as `metrics.report_chars`.
 
 ---
 
 ## Quality Metrics (SWEBOK v4 Ch10 — Software Quality)
 
-The auditor MUST compute these metrics and include the Quality Scorecard in every audit report, immediately after the Baseline Delta table.
+The auditor MUST compute these metrics and render them as the last six rows of the `Gate detail` table of the report (`references/report-template.md` §3) — no separate scorecard section.
 
 | Metric | Definition | Target | Formula |
 |--------|-----------|--------|---------|
@@ -671,36 +566,22 @@ The auditor MUST compute these metrics and include the Quality Scorecard in ever
 | **Audit Pass Rate** | % of spec documents passing all checks (zero Critical/High findings) | > 90% at baseline | `clean_docs / total_documents × 100` |
 | **Cross-Reference Validity** | % of inter-document references that resolve correctly | 100% | `valid_refs / total_refs × 100` |
 
-### Quality Scorecard Template
+### Quality Scorecard Rendering
 
-Include this scorecard in the audit report after the Baseline Delta section:
-
-```markdown
-## Quality Scorecard
-
-| Metric | Value | Target | Status |
-|--------|-------|--------|--------|
-| Spec Defect Density | {N} critical/doc | < 2 | {PASS/FAIL} |
-| Traceability Coverage | {N}% | 100% | {PASS/FAIL} |
-| Orphan Rate | {N}% | 0% | {PASS/FAIL} |
-| Clarification Density | {N}/doc | 0 | {PASS/FAIL} |
-| Audit Pass Rate | {N}% | > 90% | {PASS/FAIL} |
-| Cross-Reference Validity | {N}% | 100% | {PASS/FAIL} |
-| **Overall Quality Gate** | | See Convergence Protocol | **{PASS/CONDITIONAL/FAIL}** |
-
-> **Gate rule:** See "Quality Gate Thresholds" in the Convergence Protocol section. PASS = proceed. CONDITIONAL PASS = proceed with advisory. FAIL = must resolve Critical/High findings first.
-```
+Each metric is one row `| {Metric} | {value} ({target}) {PASS/FAIL} |` of the `Gate detail` table; the overall Gate goes in the header line (`**Gate:** PASS | CONDITIONAL PASS | FAIL — {reason}`), decided by the Quality Gate Thresholds of the Convergence Protocol. PASS = proceed. CONDITIONAL PASS = proceed with advisory. FAIL = must resolve P0/P1 findings first.
 
 ---
 
 ## Severity Classification
 
-| Severidad | Criterio | Pregunta clave |
-|-----------|----------|----------------|
-| **Crítico** | Bloquea implementación o causa comportamiento indefinido en producción | ¿Bloquea implementación? |
-| **Alto** | Riesgo de bugs significativos o violación de requisitos | ¿Causa bugs o viola requisitos? |
-| **Medio** | Inconsistencia que dificulta mantenimiento o comprensión | ¿Dificulta comprensión? |
-| **Bajo** | Mejora de claridad o estilo sin impacto funcional | ¿Solo mejora estilo? |
+| Severidad | Label | Criterio | Pregunta clave |
+|-----------|-------|----------|----------------|
+| **Crítico** | **P0** | Bloquea implementación o causa comportamiento indefinido en producción | ¿Bloquea implementación? |
+| **Alto** | **P1** | Riesgo de bugs significativos o violación de requisitos | ¿Causa bugs o viola requisitos? |
+| **Medio** | **P2** | Inconsistencia que dificulta mantenimiento o comprensión | ¿Dificulta comprensión? |
+| **Bajo** | **P3** | Mejora de claridad o estilo sin impacto funcional | ¿Solo mejora estilo? |
+
+Reports, JSON findings and `pipeline-state.json` use the P0–P3 labels (`critical`/`high`/`medium`/`low` keys in metrics are unchanged).
 
 ### Signal Filters
 
@@ -797,21 +678,17 @@ After an audit has been performed AND audit questions have been answered, use Mo
 
 #### Fix Phase 0: Locate Audit Report
 
-1. Search for the most recent audit report in `audits/`
-2. Read the COMPLETE audit file. Extract EVERY finding with: ID, severity, problem, location, question, answer
-3. Count findings and confirm with user
+1. Open `audits/AUDIT-BASELINE.md` (the compact report; a `--focused` fix reads `audits/AUDIT-FOCUSED-*.md`). It is ≤ 25 k chars: read it whole.
+2. Extract EVERY finding with: ID, severity (P0–P3), category, **Where** (`doc:line`), **What**, **Why**, **Fix** (the proposed correction or the open question), and the answer received (from the user, the questions file, or `[NO ANSWER]`). The report's prose is not the working set: the cited lines are — open them with `sed -n` when applying a correction.
+3. Count findings by severity and disposition and confirm with the user (or apply the delegated scope, e.g. "P0/P1 without asking").
 
 #### Fix Phase 1: Create Corrections Plan
 
-Create `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md` with ALL findings and proposed solutions.
+Create `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md` per `references/report-template.md` §4 (budget ≤ 12 k chars for ≤ 15 requirements):
 
-For EACH finding (no exceptions):
-- Finding ID, severity, category, location, problem
-- Audit question and answer received (or `[NO ANSWER]`)
-- Minimum 2 solutions (recommended + alternative) with before/after text
-- Dependencies on other findings
-
-Include summary table at top with severity breakdown.
+- Summary table: totals per severity and disposition (FIX / ACCEPT / DEFER / WONT_FIX).
+- One block per **P0–P2 finding with FIX disposition**, referenced by id (do not copy What/Why from the report): decision (answer or chosen option), change (≤ 3 lines, `doc:line`), before → after limited to the changed sentence or value (≤ 4 lines; omitted for new sections/ADRs), dependents to update (Propagation Checklist), rejected alternative (one line), dependencies, upstream Tier.
+- **Every other finding** (P3, and P0–P2 with ACCEPT/DEFER/WONT_FIX or `[NO ANSWER]`) is one row of the `Dispositions` table: id, severity, disposition, reason or re-evaluation date.
 
 #### Fix Phase 1.5: User Workflow Decision
 
@@ -853,8 +730,8 @@ Documents: {comma-separated list}
 
 #### Fix Phase 3: Verification Summary and Baseline Update
 
-1. Update `audits/AUDIT-BASELINE.md` with resolved/skipped/deferred findings
-2. Produce Correction Summary with: resolved count, skipped count, pending count, new artifacts created, breaking changes
+1. In `audits/AUDIT-BASELINE.md`: append ` — RESOLVED ({artifact})` to the heading of each fixed P0–P2 finding; add one row per fixed finding to `Baseline › Resolved`, per accepted/deferred/won't-fix disposition to the matching table; update the `History` row (Gate after fix).
+2. Append the ≤ 8-line `Fix cycle` block (`references/report-template.md` §3): fixed/skipped/open counts with ids, new artifacts, documents modified (count), breaking changes, commits or the reason they were not made. No per-document tables.
 3. Suggest tagging: `git tag AUDIT-vX.X-resolved`
 
 #### Fix Phase 4: Upstream Impact Analysis
@@ -960,9 +837,9 @@ Present to the user:
 1. NEVER generate code — only specification text, invariants, ADRs
 2. NEVER invent behavior — every change traces to finding + answer
 3. NEVER resolve conflicts silently — create ADR
-4. ALWAYS show before/after for every spec change
+4. ALWAYS show before/after for every spec change — limited to the changed sentence or value (≤ 4 lines), never the surrounding section
 5. ALWAYS make atomic commits per correction
-6. NEVER skip a finding — every one MUST appear in corrections plan
+6. NEVER skip a finding — every one MUST appear in the corrections plan: P0–P2 with FIX as a block, all others as one row of the Dispositions table
 7. NEVER modify requirements directly — upstream impacts are detected and delegated to req-change
 8. ALWAYS classify corrections by Tier (1/2/3) and register Tier 1-2 in `spec/DERIVED-SPECS.md`
 
@@ -1016,14 +893,15 @@ sdd-specifications-engineer (create) → sdd-spec-auditor (audit) → sdd-spec-a
 
 | Mode | Input | Output |
 |------|-------|--------|
-| Mode Audit | Specifications + Baseline | Audit report with findings |
-| Mode Fix | Audit report + Answers | Corrected specs + Corrections plan + Baseline update + Upstream impact analysis |
-| Mode Focused | Change Report + Specifications subset | Focused audit report on changed documents |
+| Mode Audit | Specifications + previous `audits/AUDIT-BASELINE.md` | `audits/AUDIT-BASELINE.md` (compact report + Baseline/History tables) |
+| Mode Fix | `audits/AUDIT-BASELINE.md` + Answers | Corrected specs + `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md` + Baseline update + Upstream impact analysis |
+| Mode Focused | Change Report + Specifications subset | `audits/AUDIT-FOCUSED-{id}.md` on changed documents |
 
 ### Invocation
 
 ```bash
-/sdd-spec-auditor                                                    # Full audit (default)
+/sdd-spec-auditor                                                    # Full audit (default; fan-out by dimension when spec/ > 8 files or > 40 k chars)
+/sdd-spec-auditor --sequential                                       # Force one thread (debugging, or when the Agent tool is unavailable)
 /sdd-spec-auditor --fix                                              # Apply corrections from answered audit
 /sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{id}.md   # Focused audit on changed documents only (triggered by sdd-req-change cascade)
 ```
@@ -1034,7 +912,7 @@ When `--focused` is provided together with `--scope` pointing to a Change Report
 
 1. **Scope restriction:** Only audit the documents listed in the Change Report's "Documents Modified" section. All other spec documents are treated as unchanged context (read but not audited).
 2. **Skip full cross-document audit:** Do NOT perform a full Phase 1-6 sweep. Instead, focus exclusively on verifying alignment and consistency of the changed documents against each other and against their immediate neighbors in the traceability chain.
-3. **Output:** Generate a focused audit report at `audits/AUDIT-FOCUSED-{change-report-id}.md` (e.g., `audits/AUDIT-FOCUSED-CR-007.md`). This report uses the same finding format (CAT-01..CAT-09) and severity classification but includes only findings related to the modified documents.
+3. **Output:** Generate a focused audit report at `audits/AUDIT-FOCUSED-{change-report-id}.md` (e.g., `audits/AUDIT-FOCUSED-CR-007.md`). It uses the compact template (`references/report-template.md` §3, without the Baseline and History sections), the same categories (CAT-01..CAT-09) and severity classification, and includes only findings related to the modified documents. Execution is sequential unless the change set itself exceeds the fan-out threshold.
 4. **3C Verification:** Run the 3C Protocol checks (Completeness, Correctness, Coherence) scoped to the changed documents only. The verdict applies to the change set, not to the entire specification.
 5. **Cascade origin:** This mode is typically invoked automatically by `sdd-req-change` Phase 9 (Pipeline Cascade) after requirements changes have been propagated to spec documents. It provides a lightweight validation gate without requiring a full re-audit.
 
@@ -1056,42 +934,37 @@ sdd-task-implementer → src/, tests/
 
 ---
 
-## Multi-Agent Deduplication Protocol
+## Multi-Agent Protocol (fan-out by dimension)
 
-When using multiple parallel agents for auditing (e.g., Domain agent, UCs agent, Contracts agent, NFRs agent):
+Fan-out is the default execution mode above the threshold (Execution Strategy). Full protocol — mode decision, index commands, budgets, scopes, launch parameters, auditor prompt, JSON shape and consolidation — in `references/fanout-protocol.md`.
 
 ### Agent ID Prefixes
 
 <!-- Standard SDD agent prefix convention: prefixes map to spec/ subdirectories.
-     DOM- → domain/, UC- → use-cases/, WF- → workflows/, CON- → contracts/,
-     NFR- → nfr/, ADR- → adr/, TEST- → tests/, RUN- → runbooks/.
+     DOM- → domain/, UC- → use-cases/ + workflows/, CON- → contracts/ + tests/,
+     NFR- → nfr/ + adr/ + runbooks/.
      All SDD skills sharing multi-agent protocols MUST use these same prefixes. -->
 
-Each agent MUST use a unique prefix for finding IDs to avoid collisions:
+Each auditor uses its prefix for **provisional** ids in its JSON; the consolidator assigns the final category ids and keeps the provisional one as `Source`:
 
-| Agent | Prefix | Scope | Spec Directory |
-|-------|--------|-------|----------------|
-| Domain Agent | `DOM-` | Glossary, Entities, Value Objects, States, Invariants | `spec/domain/` |
-| Use Cases/Workflows Agent | `UC-`, `WF-` | UC-001 to UC-041, WF-001 to WF-004 | `spec/use-cases/`, `spec/workflows/` |
-| Contracts Agent | `CON-` | API contracts, Events, PERMISSIONS-MATRIX | `spec/contracts/` |
-| NFRs/ADRs/Tests Agent | `NFR-`, `ADR-`, `TEST-`, `RUN-` | NFRs, ADRs, BDD tests, Runbooks | `spec/nfr/`, `spec/adr/`, `spec/tests/`, `spec/runbooks/` |
+| Auditor | Prefix | Reads ONLY | Owns corpus-wide (grep) |
+|---------|--------|------------|-------------------------|
+| Domain | `DOM-` | `spec/domain/`, `spec/CLARIFICATIONS.md` | Terminology violations; rules without invariant |
+| Use cases / Workflows | `UC-` | `spec/use-cases/`, `spec/workflows/` | Unformalized constraints in UC text; state transitions vs `04-STATES.md` |
+| Contracts / BDD | `CON-` | `spec/contracts/`, `spec/tests/` | Missing BDD per UC; missing API error codes; permissions |
+| NFR / ADR / Runbooks | `NFR-` | `spec/nfr/`, `spec/adr/`, `spec/runbooks/`, `spec/VALUE-REGISTRY.md` | Shared-value inconsistencies; ADR status/materiality |
+| Main thread | — | index, `README.md`, `TRACEABILITY-MATRIX.md`, `DERIVED-SPECS.md`, `CLARIFICATIONS-PENDING.md`, REQ ids | Cross-references, REQ coverage, markers, SC03, SH05, baseline, regression |
 
-### Consolidation Process
+Auditors: `subagent_type: general-purpose`, `model: sonnet` (omit when `CLAUDE_CODE_SUBAGENT_MODEL` is set), read-only, return JSON only (≤ 6 k chars, ≤ 25 findings, P0 first), never write files, never Persist Summary or Handoff.
 
-After all agents complete, the consolidator MUST:
+### Consolidation (main thread, main model)
 
-1. **Merge all findings** into a single report
-2. **Cross-reference by:** document affected + type of defect + field/value involved
-3. **Deduplication rules:**
-   - If 2+ agents report the **same defect** (same document + same field/value + same problem type) → keep the most complete finding, mark as `cross-validated`
-   - **Threshold for duplicate:** identical location (file + section) AND identical problem description = duplicate
-   - Cross-validated findings get a confidence boost (mention both agent sources)
-4. **Renumber** final findings sequentially within each category (AMB-001, CON-001, etc.)
-5. **Preserve** the original agent prefix in a `Source` field for traceability
-
-### Cross-Validation Bonus
-
-Findings independently detected by 2+ agents are marked `[CROSS-VALIDATED]` — these have the highest confidence and should be prioritized for resolution.
+1. Merge the four JSON results; `docs_read` union → Coverage table.
+2. Deduplicate: same document + same line (±5) or section + same defect type → keep the most complete finding, union the locations, mark `[CROSS-VALIDATED]` (highest confidence; both `Source` prefixes kept). A contradiction reported from both sides is one finding located in the divergent document (Minority Rule).
+3. Apply the baseline filter (Phase 0) and the Phase 7 batching/cascade rules across dimensions.
+4. Assign final ids per category (`AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR-`) in severity order; the final `CON-` means CAT-05, not the Contracts auditor.
+5. Review every P0/P1 against its cited lines (`sed -n`, ≤ 60 lines) before it enters the report; downgrade or drop without evidence.
+6. Compute 3C, metrics and Gate; write the report; Persist Summary with `metrics.mode = "fanout"`.
 
 ---
 
@@ -1141,9 +1014,10 @@ Every finding MUST include:
 
 1. **NUNCA proponer implementación** - Solo identificar el problema y formular pregunta
 2. **NUNCA asumir comportamiento** - Si no está especificado, es un hallazgo
-3. **SIEMPRE indicar ubicación exacta** - Documento y línea/sección
+3. **SIEMPRE indicar ubicación exacta** - Documento y línea (`doc:line`); es lo que permite volver al documento desde el informe compacto
 4. **SIEMPRE cruzar documentos** - Un hallazgo puede involucrar múltiples docs
-5. **SIEMPRE formular pregunta** - El hallazgo debe terminar con pregunta de resolución
+5. **SIEMPRE cerrar con resolución** - El hallazgo termina con `Fix` (≤ 3 líneas): la corrección a nivel de especificación o la pregunta que hay que responder antes de poder escribirla
+6. **NUNCA restituir las specs en el informe** - Citas ≤ 12 palabras; el informe es un índice de hallazgos con presupuesto (`references/report-template.md`)
 
 ---
 
@@ -1156,8 +1030,8 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
 3. Set `stages["spec-auditor"].lastRun` = current ISO-8601
 4. Set `stages["spec-auditor"].summary`:
    - `artifacts`: list of files created/modified with labels (e.g., `{"file": "audits/AUDIT-BASELINE.md", "label": "Audit Baseline"}`)
-   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "batched_findings": N, "gate_result": "PASS"|"CONDITIONAL"|"FAIL", "audit_cycle": N, "topFindingCategories": ["CAT-06", "CAT-03", "CAT-07"] }` (top 3 categories by frequency)
-   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: CONDITIONAL — 1 High documented")
+   - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "batched_findings": N, "gate_result": "PASS"|"CONDITIONAL"|"FAIL", "audit_cycle": N, "topFindingCategories": ["CAT-06", "CAT-03", "CAT-07"], "report_chars": N, "mode": "fanout"|"sequential" }` (top 3 categories by frequency; `report_chars` = `wc -c audits/AUDIT-BASELINE.md`; `mode` = execution mode actually used, `fanout` even when one auditor had to be re-run sequentially — say so in `highlights`)
+   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: CONDITIONAL — 1 High documented", "fanout: 4 auditors (sonnet), NFR re-run sequentially", "report 18.4 k chars")
    - `nextStep`: `"Run /sdd-test-planner"` (if gate PASS/CONDITIONAL) or `"Run /sdd-spec-auditor --fix"` (if gate FAIL)
    - `templateImprovements`: list of 1-3 recommendations for the spec-engineer based on most frequent finding categories (e.g., "UC template should require explicit error codes per step", "Add invariant extraction for constraint language in UCs"). These are consumed by the spec-engineer on the NEXT project run to apply extra scrutiny.
    - `generatedAt`: current ISO-8601

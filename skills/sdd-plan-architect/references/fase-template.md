@@ -1,6 +1,8 @@
 # FASE File Template
 
-Canonical template for all FASE files. Every FASE file MUST follow this structure.
+Canonical template for all FASE files. Every FASE file MUST follow this structure. FASE files are navigation indices: they point to specs by id and section and never copy spec content. Budget: ≤ 8 000 chars per FASE (a FASE with three parallel blocks and a state machine may reach 10 000).
+
+Section headers stay in Spanish — `sdd-task-generator` parses them (Criterios de Éxito, Specs a Leer, Invariantes Aplicables, Contratos Resultantes, Alcance, Dependencias, Módulos y Conjuntos de Escritura). Descriptive text follows the project language.
 
 ---
 
@@ -11,7 +13,7 @@ Canonical template for all FASE files. Every FASE file MUST follow this structur
 
 > **Estado:** Implementable
 > **Dependencias:** {Fase X, Fase Y | Ninguna (fase inicial)}
-> **Valor Observable:** {One-line description of what this phase delivers}
+> **Valor Observable:** {One line: what a user or a test can observe when the phase is done}
 
 ---
 ```
@@ -20,220 +22,206 @@ Canonical template for all FASE files. Every FASE file MUST follow this structur
 
 ### 1. Objetivo (REQUIRED)
 
-One paragraph describing what the phase enables and for which actor.
+One paragraph (≤ 600 chars): which actor gets what, and how the FASE is split into blocks when it has parallel work.
 
 ```markdown
 ## Objetivo
 
-Permitir que un **{Actor}** {action description}.
+Permitir que un **{Actor}** {action}. Bloques: **A** ({module}) ∥ **B** ({module}) → **Integración** ({what it merges and verifies}).
 ```
 
 ### 2. Criterios de Éxito (REQUIRED)
 
-Checklist of observable verification criteria.
+Checklist. One line per criterion (≤ 140 chars), observable, ending with the ids it verifies. Group by block when the FASE has parallel blocks. The behaviour lives in the spec: write "`saveStore` atomic: tmp + rename, compensation (ADR-004, INV-STO-002)", not the algorithm.
 
 ```markdown
 ## Criterios de Éxito
 
-- [ ] {Criterion 1}
-- [ ] {Criterion 2}
-...
-```
+### Bloque A — {module}
+- [ ] {criterion} ({ids})
 
-Optional sub-sections for complex phases:
-```markdown
-### Criterios de Éxito - {Subsection Title}
-- [ ] {Sub-criterion}
+### Bloque B — {module}
+- [ ] {criterion} ({ids})
+
+### Integración
+- [ ] {criterion} ({ids})
 ```
 
 ### 3. Specs a Leer (REQUIRED)
 
-Organized by type. Each type in a separate sub-section with table format.
+Pointers only: path · section or ids · purpose (≤ 100 chars per row; prefix the block letter when the FASE has blocks). Never paraphrase the spec — a row that needs more than one line is copying content.
 
 ```markdown
 ## Specs a Leer
 
 ### Casos de Uso
 
-| Documento | Qué extraer |
-|-----------|-------------|
-| `use-cases/UC-NNN-{name}.md` | {What to extract} |
+| Documento | Sección / ids | Para |
+|-----------|---------------|------|
+| `use-cases/UC-NNN-{name}.md` | flujo principal, EC1–EC4, AC-NNN-01..14 | A: paso 5 · B: pasos 2–3 · C: E2E |
 
 ### Workflows
 
-| Documento | Qué extraer |
-|-----------|-------------|
-| `workflows/WF-NNN-{name}.md` | {What to extract} |
+| Documento | Sección / ids | Para |
+|-----------|---------------|------|
+| `workflows/WF-NNN-{name}.md` | pasos 1–5 | B: orquestación |
 
 ### ADRs
 
-| Documento | Qué extraer |
-|-----------|-------------|
-| `adr/ADR-NNN-{name}.md` | {What to extract} |
+| Documento | Sección | Para |
+|-----------|---------|------|
+| `adr/ADR-NNN-{name}.md` | §Decision | A: {one clause} |
 
 ### Dominio
 
-| Documento | Sección | Qué extraer |
-|-----------|---------|-------------|
-| `domain/02-ENTITIES.md` | Sección N: {Entity} | {What to extract} |
-| `domain/03-VALUE-OBJECTS.md` | {VO name} | {What to extract} |
-| `domain/04-STATES.md` | {StateMachine} | {What to extract} |
-| `domain/05-INVARIANTS.md` | INV-{PREFIX}-* | Invariantes |
+| Documento | Sección | Para |
+|-----------|---------|------|
+| `domain/02-ENTITIES.md` | ENT-001, ENT-002 | A: tipos |
+| `domain/03-VALUE-OBJECTS.md` | VO-004, VO-009 | A / B |
+| `domain/04-STATES.md` | SM-001 | A: transiciones |
+| `domain/05-INVARIANTS.md` | INV-{PREFIX}-* | ver Invariantes Aplicables |
 
 ### Contratos
 
-| Documento | Sección | Qué extraer |
-|-----------|---------|-------------|
-| `contracts/API-{name}.md` | Completo | {What to extract} |
-| `contracts/EVENTS-domain.md` | {EventPrefix}* | Eventos relacionados |
+| Documento | Sección / ids | Para |
+|-----------|---------------|------|
+| `contracts/API-{name}.md` | API-NNN-01..05 | A: firmas |
+| `contracts/EVENTS-domain.md` | {EventPrefix}* | eventos |
 
 ### Tests
 
-| Documento | Qué extraer |
-|-----------|-------------|
-| `tests/BDD-{name}.md` | {What to extract} |
+| Documento | ids | Para |
+|-----------|-----|------|
+| `tests/BDD-{name}.md` | AC-NNN-01..NN | C: E2E |
+| `tests/PROPERTY-TESTS.md` | PROP-001, PROP-003 | A: unit |
 ```
 
-Optional types (include if applicable):
-- `### NFR (Requisitos No Funcionales)` - with `| Documento | Qué extraer |` table
-- `### Runbooks` - with `| Documento | Qué extraer |` table
-- `### Clarificaciones` - with `| Documento | Reglas | Qué extraer |` table
-- `### Documentos Raíz` - with `| Documento | Qué extraer |` table
+Optional types (only if the FASE references them): `### NFR`, `### Runbooks`, `### Clarificaciones` (RN ids per block), `### Documentos Raíz`, `### Plan de tests (test/)` (TEST-PLAN §3 / §7 / §9 ids, matrix and E2E ids).
 
 ### 4. Invariantes Aplicables (REQUIRED)
+
+Ids and where each one is enforced. The description is in `05-INVARIANTS.md`; do not copy it.
 
 ```markdown
 ## Invariantes Aplicables
 
-| ID | Descripción |
-|----|-------------|
-| INV-{PREFIX}-{NNN} | {Short description} |
+> Acumulativas: esta fase hereda las de FASE-0..FASE-(N-1).
+
+| ID | Dónde se aplica (bloque · función) |
+|----|------------------------------------|
+| INV-{PREFIX}-{NNN} | A · `addTask` / `loadStore` |
 ```
 
-Note: Invariantes are cumulative. FASE-N inherits ALL invariantes from FASE-0 to FASE-(N-1).
+### 5. Módulos y Conjuntos de Escritura (REQUIRED)
 
-### 5. Contenido Específico (OPTIONAL, phase-dependent)
+Consumed by `sdd-task-generator` (Phase 3b Stream Assignment) to derive the work Streams of the FASE. One row per block; the write-sets of blocks meant to run in parallel MUST be pairwise disjoint. Paths are globs or exact paths; shared files (barrels, config, CI) belong to `base` or `Integración`, never to two blocks.
 
-Extracted content that provides essential context. This is the ONLY section where content from specs is reproduced (minimally). Examples:
-
-- **FASE-0:** Encryption key ceremony, super admin bootstrap procedure
-- **FASE-2:** 24 dimensions list
-- **FASE-5:** Matching formula, weight redistribution
-- **FASE-7:** Magic link authentication flow
-- **FASE-8:** State machine diagram, SelectionEvent types, KPIs table
-
-Format varies by content type:
 ```markdown
-## {Content Title}
+## Módulos y Conjuntos de Escritura
 
-{Minimal extracted content: formulas, lists, diagrams, type tables}
+| Bloque | Módulo / directorio | Escribe (write-set) | No escribe | Depende de |
+|--------|---------------------|---------------------|------------|------------|
+| base | — | `package.json`, `src/api/index.ts` | — | FASE-0 |
+| A | `src/api/` | `src/api/tasks.ts`, `src/api/repository.ts`, `tests/unit/api/**` | `src/cli/**`, config | base |
+| B | `src/cli/` | `src/cli/**`, `tests/unit/cli/**` | `src/api/**` | base |
+| Integración | — | `tests/e2e/**`, `tests/perf/**`, `.github/workflows/ci.yml` | código de producción | A, B |
 ```
 
-### 6. Contratos Resultantes (REQUIRED)
+A FASE with a single block still writes the table (one work row) so the generator marks it `Streams: serial`.
+
+### 6. Contenido Específico (OPTIONAL)
+
+The only section where spec content is reproduced, and only content that exists nowhere else in a usable form: a formula, a state diagram, a type table, a mapping table (e.g. WF step → function → block). ≤ 30 lines. Never restate contract signatures (Contratos Resultantes) or ADR text.
+
+```markdown
+## Contenido Específico
+
+### {Content title}
+
+{formula | diagram | table}
+```
+
+### 7. Contratos Resultantes (REQUIRED)
+
+One line per endpoint/function delivered by the FASE; domain events with their trigger.
 
 ```markdown
 ## Contratos Resultantes
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/v1/{path}` | {METHOD} | {Description} |
+| Contrato | Firma / Ruta | Descripción (≤ 80 chars) |
+|----------|--------------|--------------------------|
+| API-NNN-01 | `POST /api/v1/{path}` · `addTask(store, title, now)` | {description} |
 
 ### Eventos de Dominio
 
 | Evento | Trigger |
 |--------|---------|
-| `{EventName}` | {When it fires} |
+| `{EventName}` | {when it fires} |
 ```
 
-For complex phases, sub-section by area:
-```markdown
-### {Area Name}
+### 7B. Entregables de UI (REQUIRED if delivery channel includes web/mobile)
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-```
-
-### 6B. Entregables de UI (REQUIRED if delivery channel includes web/mobile)
-
-> **Rule:** If the System Vision Gate identifies a web, mobile, or desktop delivery channel, EVERY FASE that implements user-facing UCs MUST include this section listing the pages/components to build. Omit ONLY for API-only projects or purely infrastructure FASEs (e.g., FASE-0 with no user-facing routes).
+> **Rule:** If the System Vision Gate identifies a web, mobile, or desktop delivery channel, EVERY FASE that implements user-facing UCs MUST include this section listing the pages/components to build. Omit ONLY for API-only / CLI projects or purely infrastructure FASEs.
 
 ```markdown
 ## Entregables de UI
 
 ### Páginas / Rutas
 
-| Ruta | Componente | UC | Descripción |
-|------|------------|----|-------------|
-| `/{path}` | `+page.svelte` | UC-{NNN} | {What the page does} |
+| Ruta | Componente | UC | Wireframe | Descripción |
+|------|------------|----|-----------|-------------|
+| `/{path}` | `+page.svelte` | UC-{NNN} | WIREFRAMES §{id} | {≤ 80 chars} |
 
 ### Componentes Compartidos
 
 | Componente | Usado en | Descripción |
 |------------|----------|-------------|
-| `{ComponentName}` | {pages list} | {What it renders} |
+| `{ComponentName}` | {pages} | {≤ 80 chars} |
 ```
 
-**Notes:**
-- Routes/pages are framework-specific: SvelteKit uses `+page.svelte`, Next.js uses `page.tsx`, etc.
-- Each page MUST map to at least one UC (no orphan pages)
-- If `ux/WIREFRAMES.md` exists, reference wireframe IDs for each page
-- Forms must reference validation schemas from `spec/domain/03-VALUE-OBJECTS.md`
+Routes/pages are framework-specific (`+page.svelte`, `page.tsx`, …). Each page maps to at least one UC (no orphan pages). Forms reference validation schemas from `spec/domain/03-VALUE-OBJECTS.md` by VO id.
 
-### 7. Verificación (REQUIRED)
+### 8. Verificación (REQUIRED)
+
+≤ 10 commands with the expected result as a trailing comment; one group per block when applicable. The full journey lives in `test/E2E-SCENARIOS.md` — do not repeat it here.
 
 ```markdown
 ## Verificación
 
 \```bash
-# API verification
-curl -X {METHOD} /api/v1/{path}
-# Esperar: {Expected result}
+npm run test:unit -- tests/unit/api      # A: PROP-001..011 green; src/api ≥ 90 %
+curl -X POST /api/v1/{path}              # 201 + {schema}
 \```
 
 \```markdown
-# UI verification (if delivery channel includes web/mobile)
-- [ ] Navigate to /{path} → page renders without errors
-- [ ] {User action} → {expected visual result}
-- [ ] Form validation shows errors for invalid input
+# UI (if delivery channel includes web/mobile)
+- [ ] /{path} renders · {action} → {visible result}
 \```
 ```
 
-### 8. Alcance (REQUIRED)
+### 9. Alcance (REQUIRED)
 
 ```markdown
 ## Alcance
 
 | Incluye | Excluye |
 |---------|---------|
-| UC-NNN: {name} | {What is NOT in this phase + where} |
+| UC-NNN: {name} | {what is NOT in this phase} → {where it is handled} |
 ```
 
-Alternative format for FASE-0 style:
-```markdown
-## Out of Scope (FASE-{N})
+### 10. Notas (OPTIONAL)
 
-| Elemento | Razón | Dónde se maneja |
-|----------|-------|-----------------|
-```
-
-### 9. Notas (OPTIONAL)
-
-Additional context, clarifications, ceremonies, operational notes.
-
-```markdown
-## Notas
-
-- {Note 1}
-- {Note 2}
-```
+≤ 5 bullets: execution order of blocks, platform skips, Derived expectations. Nothing that belongs in a spec.
 
 ---
 
 ## Rules
 
-1. **No content duplication**: Only reference specs by path + section. The "Contenido Específico" section is the sole exception, and it should be minimal (formulas, lists, diagrams).
-2. **Consistent table format**: Always use `| Header | Header |` table syntax.
-3. **Path format**: Always use backtick-quoted relative paths from spec root (e.g., `use-cases/UC-001-upload-pdf.md`).
-4. **Invariant references**: Use full ID format `INV-{PREFIX}-{NNN}`.
-5. **Section separators**: Use `---` between major sections.
-6. **Ubiquitous language**: Use ONLY terms from `domain/01-GLOSSARY.md`.
+1. **No content duplication**: reference specs by path + section/ids. Contenido Específico is the sole exception (≤ 30 lines).
+2. **One line per criterion / row**: a criterion or a "Para" cell longer than 140 chars is copying the spec — replace it with the ids.
+3. **Consistent table format**: always `| Header | Header |`.
+4. **Path format**: backtick-quoted relative paths from spec root (e.g. `use-cases/UC-001-upload-pdf.md`).
+5. **Invariant references**: full id format `INV-{PREFIX}-{NNN}`.
+6. **Section separators**: `---` between major sections.
+7. **Ubiquitous language**: only terms from `domain/01-GLOSSARY.md`.
+8. **Write-sets are the Stream contract**: keep Módulos y Conjuntos de Escritura consistent with PLAN-FASE §4 file paths and §7.4 Coverage Map.

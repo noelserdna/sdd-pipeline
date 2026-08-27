@@ -68,6 +68,51 @@ Lateral: sdd-ux-designer → enriches E2E scenarios (optional)
 
 ---
 
+## Reading Strategy (index first)
+
+Generation time is dominated by output tokens; reading the whole corpus only adds cache and turns (see `docs/perfilado.md`). Never `cat` the whole `spec/` tree. Build an index, then open only the sections a mode needs.
+
+1. **Index** — one command (~2-4 k chars for a 10-requirement project):
+   ```bash
+   grep -rn -E '^#{1,4} |^\| *(UC|WF|INV|API|AC|PROP|RN|REQ|SPEC|SEC|SLO)-[A-Z0-9-]+ *\|' spec/ requirements/ 2>/dev/null | cut -c1-160
+   ```
+   Every heading and every id-bearing table row with `file:line`. Add `plan/fases/FASE-*.md` (per-FASE targets) and `audits/SECURITY-AUDIT-BASELINE.md` (finding ids) when they exist.
+2. **Open by section** with `sed -n 'A,Bp' file` from the line numbers of the index:
+
+   | Need | Open only |
+   |------|-----------|
+   | Levels, gaps (Mode 1) | UC acceptance-criteria / exception-flow blocks; BDD scenario titles; `spec/nfr/*` target rows; INV table (id + one line) |
+   | Matrix for UC-NNN (Mode 2) | the UC's inputs/parameters table, main and exception flow steps, its BDD file, the contract section of its endpoint/function (`grep -n 'UC-NNN' spec/contracts/`), its state machine in `04-STATES.md` |
+   | PERF (Mode 3) | rows with a number and a unit in `PERFORMANCE.md` / `LIMITS.md` (`grep -n -E '[0-9]+ *(ms|s|req|MB|%)'`) |
+   | E2E (Mode 5) | WF step lists, UC input-parameter tables, contract request-body tables, `ux/WIREFRAMES.md` interactive elements |
+
+   Never open `01-GLOSSARY.md`, ADR bodies, runbooks or `CLARIFICATIONS.md` in full: grep the id you cite (`grep -n -A3 'RN-007' spec/CLARIFICATIONS.md`).
+3. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `sdd-dashboard`), use them for id lookups instead of grep.
+
+## Output Budget
+
+Indicative for a ~10-requirement project (7 UC, 1-2 WF); scale with UC/WF count, never with prose.
+
+| File | Budget (chars) | What stays out |
+|------|----------------|----------------|
+| `TEST-PLAN.md` | ≤ 12 000 | prose that restates a table; per-test assertions (they live in matrices / E2E); N/A sections longer than one row |
+| `TEST-MATRIX-UC-NNN.md` | ≤ 5 000 (≤ 8 000 with a state machine) | UC description, restated contract, exhaustive mechanical enumerations, a trailing Traceability section (the `Refs` column is the traceability) |
+| `PERF-SCENARIOS.md` | ≤ 4 000 | scenario types no NFR quantifies; harness prose |
+| `E2E-SCENARIOS.md` | ≤ 15 000 (+3 000 per extra user-facing WF) | Full-tier scenarios as step tables; boundary rows already in a matrix |
+| **Total `test/`** | **≤ 65 000** | |
+
+Report the total as `metrics.test_chars` (`wc -c test/*.md`) in Persist Summary and add a highlight when a file exceeds its budget by more than 25 %.
+
+## Full Run Order
+
+1. Gates → index `spec/` (Reading Strategy).
+2. Mode 1 `TEST-PLAN.md` in the main thread; write §3 Design Decisions first — it is the convention contract the matrix subagents must not repeat.
+3. Mode 2 matrices: fan-out to subagents (see Mode 2). They run in the background.
+4. Mode 3 `PERF-SCENARIOS.md` and Mode 5 `E2E-SCENARIOS.md` in the main thread while the agents run (Mode 5 owns the field-inventory cross-validation, which may STOP).
+5. Consolidate: agent summaries → TEST-PLAN §4 gaps / §10 metrics; Persist Summary; Handoff.
+
+---
+
 ## Modes of Operation
 
 ### Mode 1: Generate Test Strategy
@@ -81,18 +126,17 @@ Use when the user wants a comprehensive test plan for the project.
 
 **Process:**
 
-1. **Read all specification documents:**
-   - `spec/use-cases/UC-*.md` → extract main flows, exception flows, actors
-   - `spec/tests/BDD-*.md` → extract existing BDD scenarios
-   - `spec/nfr/PERFORMANCE.md` → extract performance targets
-   - `spec/nfr/SECURITY.md` → extract security requirements
-   - `spec/nfr/LIMITS.md` → extract rate limits and thresholds
-   - `spec/domain/05-INVARIANTS.md` → extract all invariants
-   - `spec/contracts/API-*.md` → extract endpoint contracts
-   - `spec/contracts/EVENTS-*.md` → extract event schemas
-   - `audits/SECURITY-AUDIT-BASELINE.md` → extract security findings (if exists)
+1. **Index, then open sections** (Reading Strategy). From the index, without opening whole files:
+   - UC ids, titles, actors, exception-flow headings (`grep -n -E '^#|Exception|Excepci' spec/use-cases/UC-*.md`)
+   - BDD scenario titles per UC (`grep -n -E '^ *(Scenario|Escenario)' spec/tests/BDD-*.md`) → main/exception flow coverage
+   - INV ids + one line (`grep -n -E '^\| *INV-' spec/domain/05-INVARIANTS.md`); PROP ids in `spec/tests/PROPERTY-TESTS.md`
+   - Quantified NFR rows (`grep -n -E '[0-9]+ *(ms|s|req|MB|%|users)' spec/nfr/*.md`); security control ids (`SEC-*`)
+   - Contract endpoint/function ids (`grep -n -E '^\| *API-|^### ' spec/contracts/API-*.md`); event names in `EVENTS-*.md`
+   - `audits/SECURITY-AUDIT-BASELINE.md` finding ids (if exists)
 
-2. **Classify test types needed per spec element:**
+   Open a section only when the id line is not enough (e.g. an exception flow whose BDD coverage is unclear).
+
+2. **Classify test types needed per spec element** (keep only the rows present in this project when writing the plan):
 
    | Spec Element | Test Types | Level |
    |-------------|------------|-------|
@@ -108,99 +152,112 @@ Use when the user wants a comprehensive test plan for the project.
    | Cross-UC flows | Saga/choreography tests | E2E |
 
 3. **Identify gaps in existing BDD specs:**
-   - UCs without BDD file → flag as `MISSING-BDD`
-   - UCs with BDD but missing exception flows → flag as `INCOMPLETE-BDD`
-   - Invariants without property tests → flag as `MISSING-PROPERTY-TEST`
-   - NFRs without measurable test scenarios → flag as `MISSING-NFR-TEST`
-   - WFs without E2E scenarios → flag as `MISSING-E2E` (addressed by Mode 5)
+   - UCs without BDD file → `MISSING-BDD`
+   - UCs with BDD but missing exception flows → `INCOMPLETE-BDD`
+   - Invariants without property tests → `MISSING-PROPERTY-TEST`
+   - Quantified NFRs without a scenario → `MISSING-NFR-TEST`
+   - User-facing WFs without E2E scenarios → `MISSING-E2E` (addressed by Mode 5)
 
 4. **Define coverage targets per FASE:**
    - Ask user for overall coverage target (recommend 80% minimum)
-   - Map test types to FASEs using `plan/fases/FASE-*.md` (if exists)
-   - If plan doesn't exist yet, group by bounded context
+   - Map test types to FASEs using `plan/fases/FASE-*.md` (if exists); otherwise group by bounded context and mark the table as a proposal
 
-5. **Generate `test/TEST-PLAN.md`:**
+5. **Write `test/TEST-PLAN.md`** with the template below. Tables, not prose; every row carries ids; budget ≤ 12 000 chars. Write §3 before launching matrix subagents.
 
 ```markdown
-# Test Plan
+# Test Plan — {project}
 
-> **Project:** {project name}
-> **Version:** {X.Y}
-> **Generated from:** spec/ (audit-clean)
-> **SWEBOK alignment:** Ch04 — Software Testing
+> Spec v{X.Y} (audit-clean) · SWEBOK v4 Ch04 · Project type: {WEB-APP | API-ONLY | CLI | LIBRARY}
+> Companion files: TEST-MATRIX-UC-*.md ({N}), PERF-SCENARIOS.md, E2E-SCENARIOS.md
 
-## Test Strategy Summary
+## 1. Strategy Summary
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| BDD scenario coverage (UCs) | 100% of main + exception flows | {N}% |
-| Invariant test coverage | 100% of INV-* | {N}% |
-| Contract test coverage | 100% of API endpoints | {N}% |
-| NFR test coverage | 100% of measurable NFRs | {N}% |
-| Security test coverage | 100% of OWASP Top 10 applicable | {N}% |
-| E2E workflow coverage | 100% of user-facing WF-* | {N}% |
+| Dimension | Target | Current | Source |
+|-----------|--------|---------|--------|
+| UC main + exception flows with BDD | 100% | {N}% | spec/tests/ |
+| Invariants with property tests | 100% of INV-* | {N}% | domain/05-INVARIANTS.md |
+| Contract endpoints/functions with contract tests | 100% | {N}% | spec/contracts/ |
+| Quantified NFRs with a scenario | 100% | {N}% | spec/nfr/ |
+| Applicable security controls | 100% | {N}% | nfr/SECURITY.md, audits/ |
+| User-facing WF-* with E2E | 100% | {N}% | spec/workflows/ |
 
-## Test Levels
+## 2. Test Levels
 
-### Unit Tests
-- **Scope:** Entity invariants, value object validation, pure business logic
-- **Technique:** Property-based testing for invariants, example-based for logic
-- **Framework:** {recommend based on tech stack or ask user}
-- **Coverage target:** {N}% line coverage on domain layer
+| Level | Scope (spec elements) | Technique | Framework / runner | Coverage target | Runs on |
+|-------|----------------------|-----------|--------------------|-----------------|---------|
+| Unit | INV-*, VO-*, pure logic | property-based + examples | {framework} | {N}% line, domain layer | every commit |
+| Integration | UC flows, contracts, events, persistence | BDD (Given/When/Then), contract tests | {framework}; fixtures from entity schemas | 100% main flows, {N}% exception flows | every commit |
+| E2E | user-facing WF-* (E2E-SCENARIOS.md) | tiered scenarios Smoke / Critical / Full | {Playwright | APIRequestContext | subprocess}; isolated contexts; axe-core when WEB-APP | 100% user-facing WF | PR / main / nightly |
+| Performance | quantified NFRs (PERF-SCENARIOS.md) | latency sampling, load | {tool} | every quantified target | FASE completion |
+| Security | nfr/SECURITY.md controls + audit findings | OWASP ASVS v4 checklist, error guessing | {tool} | applicable controls | release candidate |
 
-### Integration Tests
-- **Scope:** UC flows via API endpoints, event handling, database operations
-- **Technique:** BDD scenarios (Given/When/Then), contract testing
-- **Data:** Test fixtures derived from spec entity schemas
-- **Coverage target:** 100% of UC main flows, {N}% of exception flows
+A level that does not apply keeps its row with a one-line reason (e.g. "E2E — LIBRARY project, exempt").
 
-### End-to-End Tests
-- **Scope:** Multi-UC workflows, cross-service user journeys
-- **Technique:** Scenario-based testing following WF-* specs (see `test/E2E-SCENARIOS.md` if Mode 5 was run)
-- **Framework:** Playwright recommended (browser), APIRequestContext (API-only), subprocess (CLI)
-- **Environment:** Staging environment with test data, isolated browser contexts
-- **Data strategy:** {transaction-rollback | snapshot-restore | unique-per-test}
-- **Accessibility:** axe-core scan at each navigation step (WCAG 2.1 AA)
-- **Coverage target:** 100% of user-facing WF-* workflows
-- **Tiered execution:**
-  - Smoke (P0 happy paths): every PR, < 2 min
-  - Critical (P0+P1): every merge to main, < 10 min
-  - Full E2E suite: nightly / release, < 30 min
+## 3. Design Decisions
 
-### Performance Tests
-- **Scope:** Response time (p99), throughput, concurrent users
-- **Technique:** Load testing, stress testing, soak testing
-- **Targets:** From spec/nfr/PERFORMANCE.md
-- **Schedule:** Run on every FASE completion
+One row per decision the implementer needs (clock injection, I/O fault injection, isolation and determinism, platform skips, fixtures, error-precedence rules). No prose; ≤ 160 chars per decision.
 
-### Security Tests
-- **Scope:** Authentication bypass, authorization escalation, injection, data exposure
-- **Technique:** OWASP ASVS v4 checklist + automated scanning
-- **Targets:** From spec/nfr/SECURITY.md + security audit findings
+| ID | Decision | Applies to | Refs |
+|----|----------|------------|------|
+| D-T-001 | {decision} | {levels / test ids} | {SPEC/INV/ADR/RN ids} |
 
-## Test Gaps Identified
+## 4. Gaps
 
-| Gap ID | Type | Spec Element | Missing Test | Priority |
-|--------|------|-------------|--------------|----------|
-| GAP-001 | MISSING-BDD | UC-{NNN} | No BDD file exists | High |
+| Gap ID | Type | Spec element | Missing (≤ 100 chars) | Priority |
+|--------|------|--------------|------------------------|----------|
+| GAP-001 | MISSING-BDD | UC-{NNN} | No BDD file | High |
 | GAP-002 | INCOMPLETE-BDD | UC-{NNN} | Exception flow {N} not covered | Medium |
-| GAP-003 | MISSING-PROPERTY-TEST | INV-{PREFIX}-{NNN} | No property test defined | Medium |
-| GAP-004 | MISSING-NFR-TEST | PERFORMANCE p99 target | No load test scenario | High |
-| GAP-005 | MISSING-E2E | WF-{NNN} | No E2E scenario for user-facing workflow | High |
+| GAP-003 | MISSING-PROPERTY-TEST | INV-{PREFIX}-{NNN} | No property test | Medium |
+| GAP-004 | MISSING-NFR-TEST | SPEC-PERF-{NNN} | No scenario for the p99 target | High |
+| GAP-005 | MISSING-E2E | WF-{NNN} | No E2E for user-facing workflow | High |
 
-## Per-FASE Test Targets
+## 5. Per-FASE Targets
 
-| FASE | Unit Tests | Integration Tests | E2E Tests | Perf Tests |
-|------|-----------|-------------------|-----------|------------|
-| FASE-0 | INV-SYS-* | Auth flows | Health check | Baseline |
-| FASE-1 | INV-{PREFIX}-* | UC-{NNN} flows | WF-{NNN} | Load targets |
-| ... | ... | ... | ... | ... |
+| FASE | Unit | Integration | E2E | Perf |
+|------|------|-------------|-----|------|
+| FASE-{N} | {INV/PROP ids} | {UC ids} | {tier or E2E ids} | {PERF ids} |
 
-## Regression Strategy
+## 6. Traceability REQ → tests
 
-- **On every commit:** Unit tests + affected integration tests
-- **On FASE completion:** Full integration + E2E suite
-- **On release candidate:** Full suite + performance + security
+| REQ | UC / WF | Matrix rows | E2E | Perf / Sec |
+|-----|---------|-------------|-----|------------|
+| REQ-{ID} | UC-{NNN} | TEST-MATRIX-UC-{NNN} T01..T09 | E2E-WF-{NNN}-01, V01 | PERF-001 |
+
+## 7. Cross-cutting Test IDs
+
+Only tests that belong to no single UC matrix or E2E scenario (integration harness, security, maintainability/meta). One line each; the detailed assertion lives in the matrix or scenario that uses it.
+
+| ID | Object | Verifies (≤ 120 chars) | Refs |
+|----|--------|-------------------------|------|
+| INT-T-001 | {function/module} | {assertion} | {ids} |
+| SEC-T-001 | {control} | {assertion} | SEC-{NNN}, CWE-{NNN} |
+| MNT-T-001 | {meta check} | {assertion} | SPEC-MNT-{NNN} |
+
+## 8. Regression Policy
+
+| Trigger | Runs |
+|---------|------|
+| every commit | unit + affected integration |
+| FASE completion | full integration + E2E Critical |
+| release candidate | full suite + performance + security |
+
+## 9. Inputs for sdd-plan-architect
+
+Design requirements the plan must honour (injection points, module boundaries, test locations). One row each.
+
+| ID | Requirement (≤ 140 chars) | Needed by | Refs |
+|----|----------------------------|-----------|------|
+| R-1 | {requirement} | {test ids} | {ids} |
+
+## 10. Metrics
+
+| Metric | Value |
+|--------|-------|
+| Matrices / cases | {N} / {N} |
+| E2E scenarios Smoke / Critical / Full | {N} / {N} / {N} |
+| PERF scenarios | {N} |
+| Gaps | {N} |
+| Chars: this file / test/ total | {N} / {N} |
 ```
 
 ---
@@ -211,61 +268,81 @@ Use when the user wants detailed input/output matrices for use cases.
 
 **Scope:** If the user does not specify a UC, generate matrices for ALL use cases in `spec/use-cases/`. One file per UC: `test/TEST-MATRIX-UC-NNN.md`.
 
-**Process:**
+**Fan-out (default when there are more than 3 UCs):** matrices are mechanical and independent, so generate them in parallel subagents with a fast model; the main thread keeps TEST-PLAN, PERF and E2E.
 
-1. **Read target UC spec(s)** — single UC if specified, or ALL UCs in `spec/use-cases/`
-2. **Extract inputs:** All parameters, preconditions, actor roles
-3. **Apply test design techniques** (SWEBOK v4 Ch04 §3):
+1. Group UCs 2-3 per agent, by shared entity or contract, so each agent reads a contract once.
+2. Launch all groups in ONE message with the `Agent` tool. Pass `model: sonnet` unless the environment variable `CLAUDE_CODE_SUBAGENT_MODEL` is set — then omit `model` and let the environment decide. Do not use `subagent_type: "fork"`: a fresh agent with a small context is the point.
+3. Agent prompt (fill the braces; paste the step-4 template verbatim):
 
-   **a. Equivalence Partitioning:**
-   - For each input, identify valid and invalid partitions
-   - Select one representative value per partition
+   ```
+   You generate test matrices for the SDD pipeline (sdd-test-planner Mode 2). Write in {project language}.
+   Read ONLY (grep -n for ids first, then sed -n the sections):
+   - spec/use-cases/{UC files}: inputs/parameters, main and exception flows, acceptance criteria
+   - spec/tests/{BDD files}: scenario titles and AC ids
+   - spec/contracts/{contract file}: only the sections of these UCs (grep -n 'UC-{NNN}\|{function}')
+   - spec/domain/04-STATES.md: only the SM-* driven by these UCs; spec/domain/05-INVARIANTS.md: ids + one line
+   - test/TEST-PLAN.md §3 (conventions; never repeat them in the matrix)
+   For each UC write test/TEST-MATRIX-UC-{NNN}.md following this template exactly:
+   {template}
+   Rules: one row per case; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
+   Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
+   ```
+4. Main thread: continue with Mode 3 and Mode 5 while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
 
-   **b. Boundary Value Analysis:**
-   - For each numeric/range input, identify boundary values
-   - Include: min-1, min, min+1, max-1, max, max+1
+Subagents never write `pipeline-state.json`, never send handoff messages, never touch `spec/`. With ≤ 3 UCs, or when `Agent` is unavailable, the main thread writes the matrices with the same rules.
 
-   **c. Decision Table:**
-   - For UCs with multiple conditions, build condition/action table
-   - Each row = one test case
+**Process (per UC, in the main thread or in a subagent):**
 
-   **d. State Transition:**
-   - For entities with state machines (`spec/domain/04-STATES.md`)
-   - Generate tests for each valid transition AND each invalid transition
+1. **Read the UC by section** — inputs, preconditions, main/exception flows, AC ids; then its BDD file, the contract section of its endpoint/function, and its state machine (if any)
+2. **Extract inputs:** every parameter, precondition, actor role, and the persisted state the UC depends on
+3. **Apply test design techniques** (SWEBOK v4 Ch04 §3) **and group the results:**
 
-4. **Generate `test/TEST-MATRIX-UC-{NNN}.md`:**
+   **a. Equivalence Partitioning:** one entry per class with one representative value — never every value of the class.
+
+   **b. Boundary Value Analysis:** state the rule (`len ∈ [1,1000]`) and the points that matter (`0, 1, 1000, 1001`). When the expansion is mechanical (all BVA points of a range, every enum value, every error code of one family) write `expand: BVA(min,max)` / `expand: enum(TaskStatus)` and leave the expansion to the implementer.
+
+   **c. Decision Table:** for UCs with several conditions, encode the condition vector in the row's Precondition cell (`C1=no · C2=—`): one row per distinct outcome, not one row per combination with the same outcome.
+
+   **d. State Transition:** for entities with state machines (`spec/domain/04-STATES.md`), one row per valid transition and one per invalid-transition class.
+
+4. **Write `test/TEST-MATRIX-UC-{NNN}.md`** — dense tables, no prose, no restated UC text, no trailing traceability section:
 
 ```markdown
 # Test Matrix: UC-{NNN} — {title}
 
+> Refs: UC-{NNN}, {API id}, BDD-UC-{NNN} (AC-{NNN}-01..{NN}), {INV/PROP/RN ids}{, SM-NNN}
+> Techniques: EP, BVA, decision table{, state transition} · Default level: {unit | integration | E2E} · Conventions: TEST-PLAN.md §3
+
 ## Inputs
 
-| Input | Type | Valid Partitions | Invalid Partitions | Boundaries |
-|-------|------|------------------|--------------------|------------|
-| {param} | {type} | {valid ranges} | {invalid values} | {boundary values} |
+| Input | Type | Valid classes | Invalid classes | Boundaries |
+|-------|------|---------------|-----------------|------------|
+| {param} | {type} | {class: representative} · {class: representative} | {class: representative} · … | {rule} → BVA({points}) or `expand: BVA(min,max)` |
+| {state / fixture} | {kind} | {class} · … | {class} · … | {sizes} |
 
-## Decision Table
+## Cases
 
-| # | Cond1 | Cond2 | Cond3 | Expected Action | Expected Status |
-|---|-------|-------|-------|-----------------|-----------------|
-| T1 | true | true | true | {action} | {status} |
-| T2 | true | true | false | {action} | {status} |
-| ... | | | | | |
+`Type`: happy · error · boundary · state · derived (no AC of its own — cite the rule in Refs).
 
-## State Transition Tests (if applicable)
+| ID | Precondition / Input | Expected (status · output · state) | Type | Refs |
+|----|----------------------|-------------------------------------|------|------|
+| T01 | {C1=no} `{input}` · {store state} | {exit/status} · {stdout/body or —} · {store effect or unchanged} | error | AC-{NNN}-03, RN-{NNN} |
+| T02 | `{input}` · {store state} | {status} · {output} · {effect} | happy | AC-{NNN}-01 |
+| T03 | {rule} `expand: BVA(1,1000)` | {status} per point | boundary | AC-{NNN}-09 |
 
-| Current State | Event | Expected Next State | Postconditions |
-|---------------|-------|---------------------|----------------|
-| {state} | {event} | {next_state} | {postconditions} |
-| {state} | {invalid_event} | {same_state} | Error: {message} |
+## State Transitions (only if the UC drives a state machine)
 
-## Traceability
+| SM | From | Event / guard | To | Postcondition (≤ 80 chars) | Cases |
+|----|------|---------------|----|-----------------------------|-------|
+| SM-{NNN} | {state} | {event} | {state} | {postcondition} | T02, T05 |
 
-| Test Case | Covers | Spec Ref |
-|-----------|--------|----------|
-| T1 | Main flow step 3 | UC-{NNN} §main.3 |
-| T2 | Exception flow 1 | UC-{NNN} §exception.1 |
+## Findings for sdd-spec-auditor (only if any)
+
+| ID | Observation (≤ 120 chars) | Suggested action |
+|----|----------------------------|------------------|
 ```
+
+Budget per matrix: ≤ 5 000 chars, ≤ 8 000 with a State Transitions section. A cell longer than 160 chars means classes are being enumerated instead of grouped.
 
 ---
 
@@ -275,58 +352,42 @@ Use when the user needs performance test scenarios derived from NFR specs.
 
 **Process:**
 
-1. **Read NFR documents:**
-   - `spec/nfr/PERFORMANCE.md` → response time targets, throughput
-   - `spec/nfr/LIMITS.md` → rate limits, quotas, thresholds
-   - `spec/contracts/API-*.md` → endpoint patterns and expected load
+1. **Collect quantified targets only** — rows with a number and a unit:
+   `grep -n -E '[0-9]+ *(ms|s|min|req|rps|MB|KB|%|users|records)' spec/nfr/PERFORMANCE.md spec/nfr/LIMITS.md spec/VALUE-REGISTRY.md`. Open the surrounding lines only for the measurement method (samples, dataset, environment). An NFR statement without a number produces no scenario: one line in "Not planned", or a `MISSING-NFR-TEST` gap in TEST-PLAN §4 when a target should exist.
 
-2. **Generate scenarios per NFR target:**
+2. **One scenario per quantified target.** The type follows the target, not a catalogue: latency/throughput → load; rate limit/quota → stress at the threshold; memory over time → soak; burst → spike. Do not add Smoke/Load/Stress/Soak/Spike scenarios that no NFR quantifies.
 
-   | Scenario Type | Purpose | Duration |
-   |---------------|---------|----------|
-   | **Smoke** | Verify baseline functionality under minimal load | 1 min |
-   | **Load** | Verify p99 targets under expected concurrent users | 10 min |
-   | **Stress** | Find breaking point beyond expected load | 15 min |
-   | **Soak** | Detect memory leaks under sustained load | 1 hour |
-   | **Spike** | Verify recovery from sudden traffic bursts | 5 min |
-
-3. **Generate `test/PERF-SCENARIOS.md`:**
+3. **Write `test/PERF-SCENARIOS.md`** (budget ≤ 4 000 chars):
 
 ```markdown
-# Performance Test Scenarios
+# Performance Test Scenarios — {project}
 
-> Derived from: spec/nfr/PERFORMANCE.md, spec/nfr/LIMITS.md
+> Derived from: spec/nfr/PERFORMANCE.md, spec/nfr/LIMITS.md — quantified targets only
 
-## Targets (from specs)
+## Targets
 
-| Metric | Target | Source |
-|--------|--------|--------|
-| API response time (p99) | < {N}ms | PERFORMANCE.md |
-| Throughput | {N} req/s | PERFORMANCE.md |
-| Concurrent users | {N} | PERFORMANCE.md |
-| Rate limit (per user) | {N} req/min | LIMITS.md |
+| ID | Metric | Target | Measurement (from spec) | Source |
+|----|--------|--------|--------------------------|--------|
+| PERF-001 | {p99 latency of X} | < {N} ms | {samples · dataset · environment} | SPEC-PERF-{NNN}, REQ-{ID} |
 
 ## Scenarios
 
-### PERF-001: API Load Test
-- **Type:** Load
-- **Target endpoint:** {most critical endpoint from contracts}
-- **Concurrent users:** {from NFR}
-- **Duration:** 10 minutes
-- **Success criteria:** p99 < {target}ms, 0% error rate
-- **Ramp-up:** Linear over 2 minutes
+| ID | Type | Target / dataset | Method (≤ 140 chars) | Pass criterion | Blocking | Refs |
+|----|------|------------------|-----------------------|----------------|----------|------|
+| PERF-001 | load | {endpoint or command} · {N records} | {ramp, duration, samples} | p99 < {N} ms · 0% errors | yes | {ids} |
+| PERF-002 | stress | {rate-limit threshold} | single client exceeding {N} req/min | 429 after limit · Retry-After present | yes | {ids} |
 
-### PERF-002: Rate Limit Enforcement
-- **Type:** Stress
-- **Target:** Rate limit threshold
-- **Method:** Single user exceeding {N} req/min
-- **Success criteria:** 429 returned after limit, Retry-After header present
+## Harness
 
-### PERF-003: Database Query Performance
-- **Type:** Load
-- **Target:** Queries with complex joins or full-text search
-- **Dataset:** {N} records (10x expected production size)
-- **Success criteria:** p99 < {target}ms
+≤ 10 lines: runner, isolation (serial, warm-up discarded), dataset factory, output file.
+
+## Not planned
+
+| Item | Reason (≤ 80 chars) | Ref |
+|------|----------------------|-----|
+| {NFR statement or scenario type} | {why no scenario} | {id} |
+
+(max 5 rows)
 ```
 
 ---
@@ -382,12 +443,13 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
    If `project_type = LIBRARY`, output a note in TEST-PLAN.md explaining E2E exemption and stop.
 
-2. **Read workflow and spec artifacts:**
-   - `spec/workflows/WF-*.md` → extract user journeys, steps, actors, cross-UC flows
-   - `spec/use-cases/UC-*.md` → extract main flows, exception flows, **ALL input parameters with types and required/optional**
-   - `spec/tests/BDD-*.md` → extract existing acceptance criteria (reuse, don't duplicate)
-   - `spec/contracts/API-*.md` → extract endpoints involved in each workflow, **including ALL request body fields with required/optional and validation rules**
-   - `requirements/REQUIREMENTS.md` → build transitive REQ→UC→WF mapping for traceability
+2. **Index workflow and spec artifacts, open sections only** (Reading Strategy):
+   - `spec/workflows/WF-*.md` → step lists, actors, UCs involved (`grep -n -E '^#|^\| *[0-9]+ *\||UC-[0-9]+'`)
+   - `spec/use-cases/UC-*.md` → the input-parameter table of each UC in the WF (**ALL parameters with type and required/optional**) and the exception-flow headings — not the narrative
+   - `spec/tests/BDD-*.md` → scenario titles + AC ids (reuse, don't duplicate)
+   - `spec/contracts/API-*.md` → request-body field tables of the endpoints in the WF (**ALL fields with required/optional and validation rules**)
+   - `requirements/REQUIREMENTS.md` → REQ ids + the UC each one cites, for the transitive REQ→UC→WF mapping
+   - `test/TEST-MATRIX-UC-*.md` (if already generated) → boundary row ids to reference, never to restate
 
 3. **Read UX artifacts (if `project_type = WEB-APP` and `ux/` exists):**
    - `ux/WIREFRAMES.md` → extract component inventory, interactive elements per screen
@@ -482,6 +544,12 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
    - axe-core scan at each major navigation step
    - Keyboard-only form completion (tab through all fields, submit with Enter)
 
+   **h. Detail by tier (output budget):**
+   - Smoke (P0) and Critical (P1) scenarios are written in full (steps table or variation table).
+   - Full-tier (P2) scenarios are a one-line list: id · given · action · expected · refs; the implementer expands them.
+   - BOUNDARY variations reference the matrix row (`TEST-MATRIX-UC-001 T14`) instead of restating input and expectation; keep only boundaries that change the journey (another screen, message or state) — the rest stay in the matrix.
+   - Steps tables: one step per field, but the Assertion cell is one clause (≤ 100 chars). Exact payloads and fixtures go to a shared `Fixtures` list at the top of §Scenarios, referenced by name.
+
 7. **Post-generation completeness check (MANDATORY):**
 
    After generating all scenarios, build and output this verification matrix:
@@ -513,7 +581,7 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
    - `EXEMPT-NFR`: Non-functional REQ, covered by performance/security tests
    - `GAP`: User-facing REQ with no transitive E2E coverage → flag for review
 
-9. **Generate `test/E2E-SCENARIOS.md`:**
+9. **Generate `test/E2E-SCENARIOS.md`** (budget ≤ 15 000 chars for one user-facing WF, +3 000 per additional WF; Smoke/Critical detailed, Full as a list):
 
 ```markdown
 # E2E Acceptance Scenarios
@@ -571,6 +639,8 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 ---
 
 ## Scenarios
+
+> Fixtures (named once, referenced by name in the steps): `{name}` = {≤ 80 chars} · `{name}` = {≤ 80 chars}
 
 ### E2E-WF-{NNN}-01: {Workflow title} — Happy Path (P0)
 
@@ -652,6 +722,14 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 | Variant ID | Scenario | Steps | Assertion | Spec Ref |
 |------------|----------|-------|-----------|----------|
 | E2E-WF-{NNN}-A11Y-01 | Keyboard-only completion | Tab through all {N} fields, fill each, Enter to submit | All fields reachable, submit succeeds | ACCESSIBILITY-SPEC |
+
+### E2E-WF-{NNN} — Full tier (P2) — list only
+
+> Nightly / release scenarios (soak, concurrency, kill-during-write, large datasets). One line each; no steps table — the implementer expands them.
+
+| Variant ID | Given | Action | Expected | Spec Ref |
+|------------|-------|--------|----------|----------|
+| E2E-WF-{NNN}-F01 | {precondition ≤ 80 chars} | {action ≤ 60 chars} | {outcome ≤ 80 chars} | {ids} |
 
 ---
 
@@ -773,8 +851,8 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["test-planner"].lastRun` = current ISO-8601
 4. Set `stages["test-planner"].summary`:
    - `artifacts`: list of files created in `test/` with labels (e.g., `{"file": "test/TEST-PLAN.md", "label": "Test Strategy"}`)
-   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "invariants_mapped": N, "test_gaps": N }`
-   - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing")
+   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "matrix_cases": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "invariants_mapped": N, "test_gaps": N, "test_chars": N }` — `test_chars` is the total of `wc -c test/*.md` (Output Budget)
+   - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing", "TEST-MATRIX-UC-006 at 9 800 chars, over budget")
    - `nextStep`: `"Run /sdd-plan-architect"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`

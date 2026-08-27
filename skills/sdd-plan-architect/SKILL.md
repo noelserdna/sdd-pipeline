@@ -137,6 +137,46 @@ Herramientas laterales (opcionales):
 
 ---
 
+## Reading Strategy (index first)
+
+The plan needs ids, titles, dependencies, decisions and invariants — not the full text of every spec. Generation time is dominated by output; reading the corpus in full only adds cache and turns (`docs/perfilado.md`). Never `cat` the whole `spec/` tree.
+
+1. **Index** — one command in Phase 0:
+   ```bash
+   grep -rn -E '^#{1,3} |^\*\*(Status|Estado|Decision|Decisión|Depends|Dependencias|Actor|Actores)|^\| *(UC|WF|INV|ADR|API|RN|REQ|SPEC|SEC)-[A-Z0-9-]+ *\|' spec/ requirements/ design/ ux/ audits/ test/ plan/ 2>/dev/null | cut -c1-160
+   ```
+   Every heading, every id-bearing table row and the status/decision/dependency lines, with `file:line`: enough for the manifest, the Vision Gate, the clarify scan and FASE assignment.
+2. **Open by section** (`sed -n 'A,Bp' file`) only what a phase needs:
+
+   | Phase | Open only |
+   |-------|-----------|
+   | 0 / 1B | ADR `## Decision` blocks; INV table (id + one line); UC header block (actor, primary entity, `Refs`/`Depends`); contract endpoint/function tables; `01-SYSTEM-CONTEXT.md`; `CLAUDE.md` Active Technologies |
+   | 2.0 / 2 | the evidence line per category (`grep -n -i -E 'frontend|framework|database|auth|deploy' spec/adr/*.md design/*.md CLAUDE.md`) — not the files |
+   | 4 | entity field tables (`02-ENTITIES.md`, `03-VALUE-OBJECTS.md`), contract sections, NFR target rows, `design/TECHNICAL-DESIGN.md` decision tables |
+   | 5B | per FASE: the sections its FASE file lists, the contracts of that FASE, `test/TEST-PLAN.md` §3 / §7 / §9 rows for that FASE |
+
+3. Never open in full: `01-GLOSSARY.md`, runbooks, BDD files (scenario titles only), `CLARIFICATIONS.md` (grep the RN ids you cite), `test/E2E-SCENARIOS.md` and `test/TEST-MATRIX-*.md` (ids only).
+4. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `sdd-dashboard`), use them for id lookups instead of grep.
+
+## Output Budget
+
+Indicative for a ~10-requirement project (7 UC, 2-3 FASEs); scale with FASE/UC count, never with prose.
+
+| File | Budget (chars) | What stays out |
+|------|----------------|----------------|
+| `ARCHITECTURE.md` | ≤ 10 000 | ADR content (cite `ADR-NNN`), restated contracts, a "Source Documents" inventory, views that only say "N/A" |
+| `PLAN.md` | ≤ 12 000 | technology rows that repeat an ADR's rationale (aspect · decision · ADR id is enough), quickstart longer than 15 lines |
+| `CLARIFY-LOG.md` | ≤ 6 000 with no question asked; + ≤ 1 200 per real question | option tables for questions nobody was asked; decisions an ADR already contains |
+| `RESEARCH.md` | 5-row table when Phase 3 is skipped; ≤ 1 500 per real item | interface sketches (PLAN-FASE §4 owns them), empirical logs (one line with the result) |
+| `fases/FASE-N-*.md` | ≤ 8 000 | copied spec content, criteria longer than one line, walkthroughs longer than 10 commands |
+| `fases/README.md` | ≤ 4 000 | "how to use" / "principle" boilerplate |
+| `fase-plans/PLAN-FASE-N.md` | ≤ 9 000 | pseudo-code bodies, test assertions already in `test/`, restated FASE criteria |
+| **Total `plan/`** | **≤ 70 000** (2-3 FASEs) | |
+
+Report the total as `metrics.plan_chars` (`find plan -name '*.md' -print0 | xargs -0 wc -c`) in Persist Summary and add a highlight when a file exceeds its budget by more than 25 %.
+
+---
+
 ## Invocation Modes
 
 ### Global Mode (default)
@@ -195,6 +235,14 @@ Selective FASE regeneration triggered by upstream pipeline changes. When `--rege
 
 Read-only coverage check of existing FASE files. Reports orphan specs, obsolete references, DAG validity.
 
+### Research Mode
+
+```
+/sdd-plan-architect --research
+```
+
+Forces Phase 3 (Technical Research) even when every NEEDS_RESEARCH item could be settled from ADR / spec evidence. Without it, Phase 3 runs only for genuinely open items and `RESEARCH.md` is otherwise a 5-row table (see Phase 3).
+
 ### Research Only Mode
 
 ```
@@ -209,58 +257,37 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 ### Phase 0: Inventory & Baseline
 
-**Purpose:** Understand the complete spec landscape and load existing plan artifacts.
+**Purpose:** Build the spec manifest (ids, titles, dependencies, decisions, invariants) and load existing plan artifacts — from an index, not by reading every file.
 
 **Steps:**
 
-1. **Glob spec files** — Build manifest of all specification documents:
-   ```
-   Glob: spec/**/*.md
-   Glob: plan/**/*.md (if exists)
-   ```
+1. **Index** — the one command of the Reading Strategy over `spec/`, `requirements/`, `design/`, `ux/`, `audits/`, `test/`, `plan/`. Keep its output as the working index for every later phase.
 
-2. **Read context documents:**
-   - `spec/00-OVERVIEW.md` — System overview, current version
-   - `spec/01-SYSTEM-CONTEXT.md` — Bounded contexts, actors, boundaries
-   - `spec/CLARIFICATIONS.md` — Business rules (RN-xxx)
-   - `CLAUDE.md` (all levels) — Active Technologies, constraints
-   - `spec/domain/01-GLOSSARY.md` — Ubiquitous language
+2. **Context lines** (open by section from the index):
+   - `spec/00-OVERVIEW.md` / `01-SYSTEM-CONTEXT.md` → system statement, actors, bounded contexts (heading + first table)
+   - `spec/CLARIFICATIONS.md` → RN ids + titles only (`grep -n -E '^#+ *RN-|^\| *RN-'`); open an RN only when you cite it
+   - `CLAUDE.md` (all levels) → "Active Technologies" / constraints section only
+   - `spec/domain/01-GLOSSARY.md` → term list, never the definitions
 
-3. **Read existing ADRs:**
-   ```
-   Glob: spec/adr/ADR-*.md
-   ```
-   Extract: decision + status + technology references from each
+3. **ADRs** — per file: title, `Status`, the `## Decision` block (≤ 15 lines). Not Context / Alternatives / Consequences.
 
-4. **Read FASE files:**
-   ```
-   Glob: plan/fases/FASE-*.md
-   ```
-   Extract: FASE number, title, dependencies, specs referenced
+4. **Invariants and contracts** — `05-INVARIANTS.md` rows (id + one line); contract endpoint/function ids with their section line; event names.
 
-5. **Load technical design** (if exists):
-   - Read `design/TECHNICAL-DESIGN.md` — Extract technology decisions, architecture style, quality attributes
-   - Read `design/QUALITY-ATTRIBUTES.md` — Extract quality trade-offs
-   - Read `design/ADR-DRAFT-*.md` — Extract draft architecture decisions
-   - These inputs from `sdd-tech-designer` pre-resolve many clarify categories
+5. **Use cases** — per UC: title, primary actor, primary entity, `Refs` / `Depends` ids, exception-flow headings. The narrative flow is opened only in Phase 5B, for the FASE that owns the UC.
 
-5b. **Load UX design** (if exists):
-   - Read `ux/UI-DESIGN-SYSTEM.md` — Extract brand identity, design tokens, component library, responsive strategy
-   - Read `ux/WIREFRAMES.md` — Extract screen layouts and component inventory
-   - Read `ux/ACCESSIBILITY-SPEC.md` — Extract WCAG compliance targets and ARIA patterns
-   - Read `ux/INTERACTION-MODEL.md` — Extract transitions, loading states, error handling patterns
-   - These inputs from `sdd-ux-designer` pre-resolve CL-UI category and inform frontend implementation planning
+6. **FASE files** (if `plan/fases/` exists) → number, title, `Dependencias`, ids referenced (`grep -o -E '(UC|ADR|INV|WF|API)-[A-Z0-9-]+' | sort -u`).
 
-6. **Load security findings** (if exists):
-   - Read `audits/SECURITY-AUDIT-BASELINE.md` — Extract security findings and recommendations
-   - Incorporate into CL-SEC and CL-NFR categories during Phase 2
+7. **Technical design** (if `design/` exists) → decision tables of `TECHNICAL-DESIGN.md`, trade-off table of `QUALITY-ATTRIBUTES.md`, `ADR-DRAFT-*` titles + Decision lines. They pre-resolve most clarify categories.
 
-7. **Load baseline** (if plan/ has artifacts):
-   - Read existing PLAN.md, ARCHITECTURE.md, CLARIFY-LOG.md, RESEARCH.md
-   - Read existing PLAN-FASE-*.md files
-   - Mark as baseline for incremental update
+7b. **UX design** (if `ux/` exists) → page list and component inventory of `WIREFRAMES.md`, token names of `UI-DESIGN-SYSTEM.md`, keyboard/ARIA tables of `ACCESSIBILITY-SPEC.md`, state names of `INTERACTION-MODEL.md`. Pre-resolves CL-UI.
 
-8. **Build manifest:**
+8. **Security findings** (if `audits/SECURITY-AUDIT-BASELINE.md` exists) → finding id + severity + title rows → CL-SEC / CL-NFR in Phase 2.
+
+8b. **Test plan** (if `test/TEST-PLAN.md` exists) → §3 Design Decisions, §5 Per-FASE Targets, §9 Inputs for sdd-plan-architect (R-* rows). They constrain the plan (injection points, module boundaries, test locations).
+
+9. **Baseline** (if `plan/` has artifacts) → headings + Document History of PLAN.md, ARCHITECTURE.md, CLARIFY-LOG.md, RESEARCH.md, PLAN-FASE-*.md; open a section only when updating it.
+
+10. **Build manifest:**
    ```
    {
      file_path: {
@@ -272,7 +299,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
    }
    ```
 
-**Output:** Internal manifest (not written to disk)
+**Output:** Internal manifest (not written to disk). For a 10-requirement project the context read in Phase 0 should stay under ~40 k chars.
 
 ---
 
@@ -332,24 +359,26 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 1. **Inventory** — Scan all `.md` files under `spec/` (excluding `temp_files/`, `CHANGELOG.md`). For each file, extract IDs (UC-NNN, ADR-NNN, INV-XXX-NNN, WF-NNN, RN-NNN) and classify by type.
 
-2. **Classification** — Apply phase assignment algorithm (see `references/phase-assignment-rules.md`) to assign each spec to one or more phases. Priority order: INV prefix → UC number → ADR content → BDD test → Contract module → Workflow → Domain section → NFR/Runbook → Keyword fallback → **Delivery Channel / UI pages** (Rule 8). If any spec has zero phases assigned, ask the user. **CRITICAL:** If the System Vision Gate identifies a web/mobile delivery channel, every FASE with user-facing UCs MUST include UI deliverables (pages, routes, components) — see Rule 8 and `references/fase-template.md` §6B.
+2. **Classification** — Apply phase assignment algorithm (see `references/phase-assignment-rules.md`) to assign each spec to one or more phases. Priority order: INV prefix → UC number → ADR content → BDD test → Contract module → Workflow → Domain section → NFR/Runbook → Keyword fallback → **Delivery Channel / UI pages** (Rule 8). If any spec has zero phases assigned, ask the user. **CRITICAL:** If the System Vision Gate identifies a web/mobile delivery channel, every FASE with user-facing UCs MUST include UI deliverables (pages, routes, components) — see Rule 8 and `references/fase-template.md` §7B.
 
 3. **Dependency Analysis** — Define dependency graph, verify DAG property via topological sort. If cycle detected: STOP and report.
 
-4. **Generate FASE Files** — For each phase, generate using canonical template (see `references/fase-template.md`):
-   - Header: title, estado, dependencias, valor observable
-   - Objetivo: one paragraph describing what the phase enables
-   - Criterios de Éxito: checklist from assigned specs
-   - Specs a Leer: organized by type (UCs, Workflows, ADRs, Domain, Contracts, Tests, NFR, Runbooks)
-   - Invariantes Aplicables: relevant invariants with cumulative inheritance note
-   - Contenido Específico (optional): minimal extracted formulas, diagrams, type tables (max 30 lines)
-   - Contratos Resultantes: endpoints and domain events
-   - Verificación: curl commands for key endpoints
+4. **Generate FASE Files** — For each phase, generate using the canonical template (`references/fase-template.md`) within its budget (≤ 8 000 chars). FASE files are pointers: ids and sections, never copied spec text.
+   - Header: title, estado, dependencias, valor observable (one line)
+   - Objetivo: one paragraph; names the parallel blocks (A ∥ B → Integración) when the FASE has them
+   - Criterios de Éxito: checklist, one line per criterion (≤ 140 chars) ending with the ids it verifies, grouped by block
+   - Specs a Leer: tables of path · section/ids · purpose (≤ 100 chars per row), by type (UCs, Workflows, ADRs, Domain, Contracts, Tests, NFR, Runbooks)
+   - Invariantes Aplicables: id + where it is enforced (block · function); cumulative inheritance note
+   - Módulos y Conjuntos de Escritura (REQUIRED): one row per block with its write-set — `sdd-task-generator` derives the work Streams (A/B…) from it; write-sets of parallel blocks must be disjoint
+   - Contenido Específico (optional): formulas, diagrams, type/mapping tables that exist nowhere else (max 30 lines)
+   - Contratos Resultantes: endpoint/function ids with a one-line signature; domain events
+   - Entregables de UI (when the delivery channel is web/mobile): pages/routes → UC
+   - Verificación: ≤ 10 commands with the expected result as a comment
    - Alcance: Incluye/Excluye table
 
 5. **Generate README.md** — Coverage matrices and dependency graph for `plan/fases/README.md` using `references/readme-template.md`.
 
-6. **Verification** — Confirm: every spec referenced in at least one FASE, no obsolete references, valid DAG, consistent template format.
+6. **Verification** — Confirm: every spec referenced in at least one FASE, no obsolete references, valid DAG, consistent template format, every FASE has a Módulos y Conjuntos de Escritura table whose parallel write-sets are pairwise disjoint, every FASE within budget (≤ 8 000 chars).
 
 **File naming:** `FASE-{N}-{SLUG}.md` (e.g., `FASE-0-BOOTSTRAP.md`, `FASE-1-EXTRACCION.md`)
 
@@ -375,7 +404,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 **Steps:**
 
-1. **Analyze complete specs** — Read all spec documents to build a holistic system picture.
+1. **Analyze the manifest** — Use the Phase 0 index/manifest to build the holistic picture; open a spec section only for a dimension the index leaves ambiguous.
 
 2. **Generate System Vision Statement** (3-5 lines):
    - What type of system is this? (web app, API, data pipeline, etc.)
@@ -471,7 +500,9 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 
 **Output:** `plan/CLARIFY-LOG.md`
 
-**Skip behavior:** If `--skip-clarify` flag or existing CLARIFY-LOG.md with sufficient entries, show summary and proceed.
+**Log format (budget):** only a question actually presented to the user gets a Q-block (question, options, answer, rationale, impact). Decisions the skill takes on its own — under `--skip-clarify`, or because ADR/spec/design evidence settles them — go to the "Decisions Without a Question" table: one row of id · category · decision (≤ 140 chars) · evidence · needs ADR. Never write an options table for a question nobody was asked; never restate a decision an ADR already contains (cite it). Template in `references/plan-templates.md` §CLARIFY-LOG.
+
+**Skip behavior:** If `--skip-clarify` flag or existing CLARIFY-LOG.md with sufficient entries, show summary and proceed; decisions taken silently are logged as table rows, not as questions.
 
 ---
 
@@ -537,46 +568,42 @@ For each category:
 
 **Purpose:** Research unresolved items flagged as NEEDS_RESEARCH in Phase 2.
 
-> Only runs if Phase 2 produced NEEDS_RESEARCH items.
+**When it runs:**
+- `--research` or `--research-only` was passed, or
+- Phase 2 produced NEEDS_RESEARCH items whose answer is **not** already determined by an ADR, the recommended option of `spec/RESEARCH-QUESTIONS.md`, `design/`, or `test/TEST-PLAN.md` §9.
+
+Otherwise skip the phase and write `plan/RESEARCH.md` as the "skipped" table of `references/plan-templates.md` (≤ 5 rows: item · category · decided by · decision · ref) — nothing else.
 
 **Multi-Agent Protocol:**
 
-Launch 2 parallel research agents:
+Launch the 2 research agents in one message with the `Agent` tool. Pass `model: sonnet` unless the environment variable `CLAUDE_CODE_SUBAGENT_MODEL` is set — then omit `model` and let the environment decide. Each agent receives only its research items, the platform/scale constraints and the existing decisions it must respect (ids + one line) — never the spec corpus.
 
 | Agent | Scope | Searches |
 |-------|-------|----------|
 | **TECH-agent** | Technology stack, frameworks, libraries, infrastructure | Web search for docs, benchmarks, compatibility |
 | **PATTERN-agent** | Architecture patterns, integration patterns, data patterns | Web search for patterns, case studies, best practices |
 
-**Per-item research template:**
+**Per-item research template** (≤ 1 500 chars per item; alternatives ≤ 4 rows with pros/cons ≤ 80 chars each; no interface sketches — PLAN-FASE §4 owns them; an empirical check is one line with the result):
 
 ```markdown
 ### RES-{NNN}: {Title}
 
-**Category:** {CL-xxx}
-**Question:** {Original clarify question}
+**Category:** {CL-xxx} · **Question:** {Original clarify question}
 
-#### Alternatives Evaluated
-
-| Alternative | Pros | Cons | Fit Score (1-5) |
-|------------|------|------|-----------------|
+| Alternative | Pros | Cons | Fit (1-5) |
+|------------|------|------|-----------|
 | {option 1} | {pros} | {cons} | {score} |
 
-#### Decision
-**Selected:** {chosen}
-**Rationale:** {why}
-**Trade-offs:** {what we accept}
+**Selected:** {chosen} · **Rationale:** {one sentence} · **Trade-offs:** {one sentence} · **Refs:** {ids, URLs}
 ```
 
 **ADR Flagging:**
 
 For each decision that warrants formal documentation:
-- Draft ADR skeleton (Context, Decision, Consequences)
+- Draft ADR skeleton (Context, Decision, Consequences — ≤ 3 lines each)
 - Flag for user to formalize in spec/adr/
 
 **Output:** `plan/RESEARCH.md`
-
-**Skip behavior:** If no NEEDS_RESEARCH items, skip Phase 3 entirely.
 
 ---
 
@@ -599,7 +626,7 @@ For each decision that warrants formal documentation:
 
 **Process:**
 
-1. Read all relevant specs (listed above)
+1. Open the sections listed above (Reading Strategy: entity field tables, contract sections, NFR target rows, design decision tables) — not the files
 2. For each view:
    a. Extract elements from specs
    b. Apply decisions from CLARIFY-LOG.md, RESEARCH.md, and `design/TECHNICAL-DESIGN.md` (if exists)
@@ -607,11 +634,17 @@ For each decision that warrants formal documentation:
    d. Cross-reference with ADRs and `design/QUALITY-ATTRIBUTES.md` (if exists)
 
 3. Generate physical data model:
-   a. Read all entities from domain/02-ENTITIES.md
-   b. Read value objects from domain/03-VALUE-OBJECTS.md
+   a. Read the entity field tables of domain/02-ENTITIES.md (not the narrative)
+   b. Read the value-object tables of domain/03-VALUE-OBJECTS.md
    c. Map to physical schema using selected database technology
    d. Define indexes from query patterns in use-cases
-   e. Define migration strategy
+   e. Define migration strategy (≤ 5 lines)
+
+**Compaction rules (budget ≤ 10 000 chars):**
+- A decision is written once: cite `ADR-NNN` / `D-PA-NNN` / `RES-NNN`; never paraphrase an ADR's context, alternatives or consequences. §1 of the template is a decisions table with refs, not a summary of the ADRs.
+- Each view = one ASCII diagram + one table whose rows carry ids (component · module · responsibility ≤ 80 chars · interface ids · FASE/block). No narrative under the diagram.
+- Generate a view only when the specs give it content: no external systems → one line instead of an Integration Map; no auth → one line instead of an Authentication Flow; the error-handling view exists only if an ADR defines the mapping, and then it cites the ADR.
+- No "Source Documents" inventory: one header line `Inputs: spec v{X} · design/ {yes|no} · ux/ {yes|no} · audits/ {yes|no}`.
 
 **Output:** `plan/ARCHITECTURE.md`
 
@@ -662,6 +695,8 @@ Generate using template from `references/plan-templates.md`:
    - NFR → Strategy
    - INV → Enforcement mechanism
 
+Budget ≤ 12 000 chars: technical-context rows are `aspect · decision · ADR id` (no rationale); cross-FASE concerns ≤ 5 lines each; quickstart ≤ 15 lines; traceability tables carry ids only.
+
 **Output:** `plan/PLAN.md`
 
 **5B: Per-FASE Plans (PLAN-FASE-{N}.md)**
@@ -672,17 +707,17 @@ For each FASE file found in Phase 0:
    - Title, objective, dependencies
    - Specs referenced (UCs, ADRs, INVs, contracts)
 
-2. Read each referenced spec to extract:
-   - Implementation-relevant details
-   - Interfaces to implement
-   - Data changes needed
-   - Test scenarios
+2. Open the referenced sections (not files) to extract:
+   - Interfaces to implement (contract signatures / endpoint tables)
+   - Data changes needed (entity field tables)
+   - Rules the contract does not state (ordering, error precedence, injection points) — grep the RN/ADR ids
+   - Test ids for this FASE from `test/TEST-PLAN.md` §5/§7 and the matrix / E2E ids
 
 3. Generate per-FASE plan using template:
    - FASE-specific technical decisions
    - Component implementation details (interface sketches from contracts)
    - API implementation notes (endpoints, middleware, validation)
-   - **UI deliverables** (pages/routes, components, forms) — REQUIRED for FASEs with user-facing UCs when delivery channel is web/mobile/desktop. Each page must map to its UC(s). Reference wireframes from `ux/WIREFRAMES.md` if available. See `references/fase-template.md` §6B.
+   - **UI deliverables** (pages/routes, components, forms) — REQUIRED for FASEs with user-facing UCs when delivery channel is web/mobile/desktop. Each page must map to its UC(s). Reference wireframes from `ux/WIREFRAMES.md` if available. See `references/fase-template.md` §7B.
    - Data changes (new tables, migrations)
    - Test strategy (unit, integration, BDD mapping)
    - **Test Coverage Map** (Source File → Test File):
@@ -692,6 +727,13 @@ For each FASE file found in Phase 0:
      - Priority: HIGH (domain logic, state machines, services), MEDIUM (mappers, validators, pages), LOW (config, constants)
    - Dependencies on shared components from other FASEs
    - Acceptance criteria (from UCs + INVs)
+
+   **Compaction rules (budget ≤ 9 000 chars per FASE):**
+   - Component sections: contract-derived signatures (≤ 15 lines each) plus ≤ 5 notes on what the contract does not say. No function bodies, no pseudo-code in comments — that is code generation.
+   - Test strategy §7.1-7.3: ids only (PROP / UNIT / INT / E2E / PERF ids from `test/`, grouped by level and block); assertions stay in `test/`. §7.4 Coverage Map is mandatory and keeps its format (consumed by `sdd-task-generator` V-13/V-14 and `sdd-task-implementer` CHECK-COV).
+   - Do not restate the FASE file's Criterios de Éxito or Specs a Leer; §2 lists spec ids with one implementation note each (≤ 100 chars).
+   - Data changes only when the FASE changes a schema; otherwise one line.
+   - File paths in §4 must match the FASE's Módulos y Conjuntos de Escritura table.
 
 **Output:** `plan/fase-plans/PLAN-FASE-{N}.md` (one per FASE)
 
@@ -753,7 +795,7 @@ plan/
 │   └── ... (one per implementation phase)
 ├── PLAN.md                        ← Master implementation plan
 ├── CLARIFY-LOG.md                 ← Interactive clarification session log
-├── RESEARCH.md                    ← Technology research findings (if needed)
+├── RESEARCH.md                    ← Technology research findings (5-row table when Phase 3 is skipped)
 ├── ARCHITECTURE.md                ← Architecture views (C4 + deploy + data)
 └── fase-plans/
     ├── PLAN-FASE-0.md             ← Per-FASE implementation details
@@ -784,10 +826,13 @@ plan/
 ### Agent Launch
 
 ```
-Launch 2 agents in parallel:
+Launch 2 agents in parallel (one message, Agent tool):
 ├── TECH-agent  → Technology research (stack, frameworks, libraries)
 └── PATTERN-agent → Architecture patterns (integration, data, deployment)
+model: sonnet — unless CLAUDE_CODE_SUBAGENT_MODEL is set (then omit `model`)
 ```
+
+Agents never write `pipeline-state.json`, never send handoff messages, never touch `spec/`. They receive the items below, not the spec corpus.
 
 ### Agent Instructions Template
 
@@ -803,9 +848,9 @@ and produce structured evaluations.
 
 ## Output Format
 
-For each item, produce:
-- Alternatives table (3-5 options with pros/cons/fit score)
-- Recommended selection with rationale
+For each item, produce (≤ 1 500 chars per item, no code sketches):
+- Alternatives table (≤ 4 options, pros/cons ≤ 80 chars each, fit score)
+- Recommended selection with a one-sentence rationale and trade-off
 - References (documentation URLs, benchmarks)
 
 ## Constraints
@@ -854,6 +899,7 @@ If the plan reveals a spec gap that should be fixed:
 
 ```
 ❌ Full implementation code
+❌ Pseudo-code bodies (comments that walk through an algorithm) — signatures only
 ❌ Runnable scripts
 ❌ Package.json / config files
 
@@ -925,11 +971,11 @@ Skipping clarification phase."
 Log in CLARIFY-LOG.md: coverage table with all Resolved
 ```
 
-### No NEEDS_RESEARCH Items
+### No NEEDS_RESEARCH Items (or all settled by evidence)
 
 ```
-Phase 3 is skipped entirely → Proceed to Phase 4
-Message: "No research needed. All decisions resolved in clarify phase."
+Phase 3 is skipped → write plan/RESEARCH.md as the 5-row "skipped" table → Proceed to Phase 4
+Message: "No research needed. All decisions resolved in clarify phase / by ADR evidence."
 ```
 
 ### Per-FASE Mode Without Global Plan
@@ -979,7 +1025,7 @@ Phase 0 (Inventory) → Phase 1 (Gates) → Phase 1B (FASEs, if needed) → Phas
 
 Phases 1B, 3, and 4 are conditional:
 - Phase 1B only if FASE files don't exist or `--regenerate-fases`
-- Phase 3 only if NEEDS_RESEARCH items exist
+- Phase 3 only for genuinely open NEEDS_RESEARCH items or with `--research` (otherwise RESEARCH.md is a 5-row table)
 - Phase 4 can be deferred if architecture is simple
 
 ### Full Run
@@ -992,17 +1038,17 @@ Phase 0 → Phase 1 → Phase 1B → Phase 2.0 → Phase 2 → Phase 2.9 → Pha
 
 | Phase | Estimated Duration |
 |-------|-------------------|
-| Phase 0: Inventory | 1-2 min (reading specs + design/ if exists) |
+| Phase 0: Inventory | 1-2 min (index + sections; design/ if exists) |
 | Phase 1: Gates | < 30s (existence checks) |
 | Phase 2.0: Vision Gate | 1-2 min (holistic system analysis) |
 | Phase 2: Clarify | 2-15 min (interactive, no hard limit) |
 | Phase 2.9: Coverage Gate | < 30s (dimension validation) |
-| Phase 3: Research | 3-5 min (parallel agents, web search) |
+| Phase 3: Research | 0 (skipped) or 3-5 min (parallel sonnet agents, web search) |
 | Phase 4: Architecture | 3-5 min (generating views) |
-| Phase 5: Plan Generation | 5-10 min (writing all artifacts) |
+| Phase 5: Plan Generation | 4-8 min (writing all artifacts within budget) |
 | Phase 6: Validation | 1-2 min (cross-checks) |
 
-**Total (full run):** 16-40 min depending on spec size and gap count
+**Total (full run):** 12-30 min depending on spec size and gap count; output size is the driver (see Output Budget)
 
 ---
 
@@ -1029,8 +1075,8 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["plan-architect"].lastRun` = current ISO-8601
 4. Set `stages["plan-architect"].summary`:
    - `artifacts`: list of files created in `plan/` with labels (e.g., `{"file": "plan/fases/FASE-1.md", "label": "FASE 1: Core Setup"}`)
-   - `metrics`: `{ "total_fases": N, "components": N, "adrs_created": N }`
-   - `highlights`: top 3-5 notable observations (e.g., "7 FASEs planned", "3 new ADRs for architecture decisions")
+   - `metrics`: `{ "total_fases": N, "components": N, "adrs_created": N, "clarify_questions": N, "research_items": N, "plan_chars": N }` — `plan_chars` is the total of `find plan -name '*.md' -print0 | xargs -0 wc -c` (Output Budget)
+   - `highlights`: top 3-5 notable observations (e.g., "7 FASEs planned", "3 new ADRs for architecture decisions", "FASE-1 at 11 000 chars, over budget")
    - `nextStep`: `"Run /sdd-task-generator"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
