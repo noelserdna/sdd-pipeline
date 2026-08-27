@@ -52,7 +52,7 @@ Qué hace (y qué no):
 - Crea `pipeline-state.json` (7 etapas en `pending`, `sddVersion`, `hooksVersion: 3`). Nunca lo sobrescribe.
 - Instala el hook git `commit-msg` en el `.git` común (compartido por los worktrees): exige `Refs:`/`Task:` en commits `feat|fix|perf|test|refactor`.
 - Añade a `.gitignore` el bloque `# sdd-begin … # sdd-end`: `pipeline-state.json`, `.sdd/`, `.claude/worktrees/`, `.claude/settings.local.json`, `dashboard/traceability-graph.json`. Recomienda versionar `.claude/settings.json`.
-- Opcional: status line (`.claude/sdd-status-line.sh` + `statusLine` en `.claude/settings.json`), quality gates H7/H8, y `--multisession` (roles en `.claude/sdd-sessions.json` + `.claude/sdd/sdd-up.sh`).
+- Opcional: status line (`.claude/sdd-status-line.sh` + `statusLine` en `.claude/settings.json`, con `refreshInterval: 5` para que se repinte cada 5 s también mientras la sesión espera a subagentes; muestra rol, etapas, skill en curso, minutos y agentes activos), quality gates H7/H8, y `--multisession` (roles en `.claude/sdd-sessions.json` + `.claude/sdd/sdd-up.sh`).
 - **No** copia hooks ni agentes al proyecto: corren desde el plugin (`${CLAUDE_PLUGIN_ROOT}`).
 
 Si detecta una instalación antigua (hooks en `.claude/hooks/sdd-*`, `sdd-upstream-guard` en `settings.json`, plugin `sdd@…` o `sdd-pipeline@sdd-pipeline-local`), propone ejecutar `scripts/migrate-hooks-v3.sh` — ver [migracion.md](migracion.md).

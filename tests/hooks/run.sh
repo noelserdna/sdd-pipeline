@@ -404,4 +404,10 @@ else
 fi
 git -C "$act" worktree remove --force "$awt" >/dev/null 2>&1 || true
 
+
+# 16. subagentStatusLine del plugin: una fila JSON por subagente con tipo, descripción, tiempo y tokens
+sub_out=$(printf '{"columns":80,"tasks":[{"id":"t1","name":"general-purpose","status":"running","description":"Audit spec/domain (DOM)","startTime":%d,"tokenCount":31450,"contextWindowSize":200000}]}' "$(( $(date +%s) * 1000 - 65000 ))" | bash "$ROOT/scripts/sdd-subagent-status.sh")
+if printf '%s' "$sub_out" | jq -e 'select(.id=="t1") | .content | test("general-purpose · Audit spec/domain \\(DOM\\) · 1m[0-9]+s · 31k tok \\(15%\\)")' >/dev/null 2>&1; then pass "subagent-status: fila con tipo, descripción, tiempo y tokens"; else bad "subagent-status: $sub_out"; fi
+[ -z "$(printf '' | bash "$ROOT/scripts/sdd-subagent-status.sh")" ] && pass "subagent-status: sin entrada no imprime" || bad "subagent-status: imprime sin entrada"
+
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }

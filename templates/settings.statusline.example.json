@@ -1,6 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bash .claude/sdd-status-line.sh"
+    "command": "bash .claude/sdd-status-line.sh",
+    "refreshInterval": 5
   }
 }
