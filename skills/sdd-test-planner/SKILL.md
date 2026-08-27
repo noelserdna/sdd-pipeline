@@ -268,7 +268,12 @@ Use when the user wants detailed input/output matrices for use cases.
 
 **Scope:** If the user does not specify a UC, generate matrices for ALL use cases in `spec/use-cases/`. One file per UC: `test/TEST-MATRIX-UC-NNN.md`.
 
-**Fan-out (default when there are more than 3 UCs):** matrices are mechanical and independent, so generate them in parallel subagents with a fast model; the main thread keeps TEST-PLAN, PERF and E2E.
+**Fan-out (default when there are more than 3 UCs) — part of this skill's contract, not an optional expansion of scope:**
+matrices are mechanical and independent, so generate them in parallel subagents with a fast model; the main thread keeps
+TEST-PLAN, PERF and E2E. Invoking `/sdd-test-planner` on a spec with more than 3 UCs *is* the explicit request for those
+subagents: they are read-only over `spec/`, bounded (one per 2-3 UCs, no nesting) and each writes only its own
+`TEST-MATRIX-UC-*.md`. Do not downgrade to a single thread out of caution; downgrade only with `--sequential`, below the
+threshold, or when the `Agent` tool is not in your tool list, and say why in `summary.highlights`. `--fanout` forces it.
 
 1. Group UCs 2-3 per agent, by shared entity or contract, so each agent reads a contract once.
 2. Launch all groups in ONE message with the `Agent` tool. Pass `model: sonnet` unless the environment variable `CLAUDE_CODE_SUBAGENT_MODEL` is set — then omit `model` and let the environment decide. Do not use `subagent_type: "fork"`: a fresh agent with a small context is the point.

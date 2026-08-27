@@ -51,20 +51,30 @@ if active specs; then
 fi
 stop_if_done audit
 if active audit; then
-  run audit "/sdd-spec-auditor — audit spec/ and apply Mode Fix for P0/P1 without asking; write audits/AUDIT-BASELINE.md."
+  run audit "/sdd-spec-auditor --fanout — audit spec/ and apply Mode Fix for P0/P1 without asking; write audits/AUDIT-BASELINE.md. Launching the four dimension auditors is requested explicitly: they are part of this skill's contract."
   [ -f audits/AUDIT-BASELINE.md ] && ok "AUDIT-BASELINE.md" || bad "AUDIT-BASELINE.md"
   grep -qiE 'gate.*(PASS|CONDITIONAL)' audits/AUDIT-BASELINE.md && ok "gate PASS/CONDITIONAL" || echo "WARN gate no PASS (revisar)"
+  amode=$(jq -r '.stages["spec-auditor"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
+  nsub=$(grep -c '"event":"subagent-start"' .sdd/activity.jsonl 2>/dev/null || echo 0)
+  if [ "$amode" = fanout ] || [ "${nsub:-0}" -gt 0 ]; then ok "auditoría en fan-out (mode=$amode, $nsub subagentes)"; else echo "WARN auditoría secuencial (mode=$amode): el fan-out no se activó; ver docs/medidas.md"; fi
 fi
 stop_if_done test
 if active test; then
   run test "/sdd-test-planner — generate test/ from spec/ without asking questions."
   [ -f test/TEST-PLAN.md ] && ok "TEST-PLAN.md" || bad "TEST-PLAN.md"
+  nsub2=$(grep -c '"event":"subagent-start"' .sdd/activity.jsonl 2>/dev/null || echo 0)
+  [ "${nsub2:-0}" -gt "${nsub:-0}" ] && ok "matrices en subagentes ($((nsub2 - ${nsub:-0})) lanzados)" || echo "WARN matrices sin fan-out"
 fi
 stop_if_done plan
 if active plan; then
   run plan "/sdd-plan-architect --skip-clarify — generate plan/ with FASE-0 (foundation) and FASE-1 split so that src/api and src/cli can be implemented independently."
   [ -f plan/ARCHITECTURE.md ] && ok "ARCHITECTURE.md" || bad "ARCHITECTURE.md"
   ls plan/fases/FASE-*.md >/dev/null 2>&1 && ok "plan/fases" || bad "plan/fases"
+  pc=$(jq -r '.stages["plan-architect"].summary.metrics.plan_chars // 0' pipeline-state.json 2>/dev/null)
+  pb=$(jq -r '.stages["plan-architect"].summary.metrics.plan_budget_chars // 0' pipeline-state.json 2>/dev/null)
+  if [ "${pb:-0}" -gt 0 ] && [ "${pc:-0}" -gt 0 ]; then
+    [ "$pc" -le "$pb" ] && ok "plan/ dentro del presupuesto ($pc ≤ $pb)" || echo "WARN plan/ sobre presupuesto ($pc > $pb)"
+  fi
 fi
 stop_if_done tasks
 if active tasks; then

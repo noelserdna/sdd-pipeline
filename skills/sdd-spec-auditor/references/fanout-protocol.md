@@ -4,6 +4,19 @@
 > 112 k output tokens, 21 min for a 10-requirement project. Target: wall-clock ≈ the slowest dimension + consolidation,
 > main-thread spec context ≤ ~30 k tokens, report ≤ 25 k chars.
 
+## 0. Fan-out is part of this skill's contract
+
+Launching the four dimension auditors is **the requested behaviour of `/sdd-spec-auditor`** above the threshold, not an
+optional expansion of scope: invoking this skill on a spec of that size *is* the explicit request for them. They are
+read-only workers (no writes, no commits, no nesting), bounded to four, scoped to one directory group each, and they cost
+less wall-clock than the single-thread audit they replace. **Do not downgrade to sequential out of caution.** Downgrade
+only for one of the reasons in §1 (below the threshold, `--sequential`, no `Agent` tool, Cycle 3), and always record the
+reason in `summary.highlights` and in `metrics.mode`.
+
+Measured on 2026-08-27 (`docs/medidas.md`): a run that downgraded to sequential "because the session guidance forbids
+spawning subagents without an explicit request" took 11 min; the same audit with fan-out took 9.9 min with a larger
+report — and the gap widens with the size of `spec/`.
+
 ## 1. Choose the mode (Phase 1, before opening any file)
 
 ```bash
@@ -15,6 +28,7 @@ CHARS=$(find spec -name '*.md' -print0 | xargs -0 cat | wc -c | tr -d ' ')
 |---|---|
 | `FILES > 8` **or** `CHARS > 40000` | **fanout** (default; also in `claude -p` — the `Agent` tool is available there) |
 | otherwise | **sequential** (one thread, still index + sections, never whole-corpus `cat`) |
+| `--fanout` flag | **fanout**, whatever the size (forces the mode; useful for benchmarking) |
 | `--sequential` flag, or the `Agent` tool is not in the tool list | sequential; add the reason to `summary.highlights` |
 | `--focused --scope=…` | sequential over the change set; fanout only if the change set exceeds the threshold |
 
@@ -32,7 +46,9 @@ grep -oE '\b(REQ|UC|WF|API|INV|ADR|AC|BDD|SEC|SLO|PROP|RN|RB|NC)-[A-Z0-9-]+' "$I
 The main thread reads the two summaries above, not the whole index (≈ 55 k chars for 45 docs). Slices come on demand:
 `grep '^spec/domain/' "$IDX"`. Sections are opened with `sed -n 'a,bp' file` (≤ 60 lines per call), located by the
 index line numbers. **Never `cat` a spec file in the main thread, in any mode.** A file ≤ 8 k chars may be read whole
-by the thread that owns it (sequential mode or the auditor of its dimension).
+by the thread that owns it (sequential mode or the auditor of its dimension); **above 8 k chars the owner also works by
+sections** (`grep '^spec/<dir>/' "$IDX"` for its own map, then `sed -n`), so no thread ever holds a whole large document.
+This is what keeps the token cost of fan-out close to the sequential run instead of multiplying it.
 
 ## 3. Budgets (spec content held in context)
 

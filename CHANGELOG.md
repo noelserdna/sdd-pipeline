@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **El fan-out no se activaba en la práctica**: la instrucción de la skill se leía como una preferencia frente a la política del entorno sobre lanzar subagentes. `sdd-spec-auditor` y `sdd-test-planner` declaran ahora que los auditores/generadores paralelos son **parte del contrato de la skill** (lectura sola, acotados, sin anidar), con la evidencia medida, y añaden el flag `--fanout` (y `--sequential` para forzar un hilo). El motivo de cualquier degradación queda en `metrics.mode` y en `summary.highlights`.
+- Presupuesto total de `plan/` escalado por FASE (`34 k + 17 k por FASE`) en vez del techo plano de 70 k: con 3 FASEs la ejecución real dio 88 k cumpliendo todos los presupuestos por fichero. Se reporta `metrics.plan_budget_chars`.
+- Fan-out con coste acotado: por encima de 8 k chars, cada auditor también trabaja por secciones con el índice en vez de leer el documento entero.
+
+### Added
+- `tests/e2e/20-smoke.sh` comprueba (como aviso, no fallo) que la auditoría corrió en fan-out y que las matrices se generaron en subagentes, y que `plan/` respeta su presupuesto; la etapa de auditoría se invoca con `--fanout`.
+- `docs/medidas.md`: comparación 4.0.0 → 4.0.2 en el mismo proyecto (2 h 46 → 1 h 39, −40 %; salida por etapa −51/−67 %).
+
+
 ## [4.0.2] - 2026-08-27
 
 ### Changed

@@ -171,9 +171,12 @@ Indicative for a ~10-requirement project (7 UC, 2-3 FASEs); scale with FASE/UC c
 | `fases/FASE-N-*.md` | ≤ 8 000 | copied spec content, criteria longer than one line, walkthroughs longer than 10 commands |
 | `fases/README.md` | ≤ 4 000 | "how to use" / "principle" boilerplate |
 | `fase-plans/PLAN-FASE-N.md` | ≤ 9 000 | pseudo-code bodies, test assertions already in `test/`, restated FASE criteria |
-| **Total `plan/`** | **≤ 70 000** (2-3 FASEs) | |
+| **Total `plan/`** | **≤ 34 000 + 17 000 per FASE** (68 k for 2 FASEs, 85 k for 3, 102 k for 4) | |
 
-Report the total as `metrics.plan_chars` (`find plan -name '*.md' -print0 | xargs -0 wc -c`) in Persist Summary and add a highlight when a file exceeds its budget by more than 25 %.
+Report the total as `metrics.plan_chars` (`find plan -name '*.md' -print0 | xargs -0 wc -c`) and the ceiling as
+`metrics.plan_budget_chars` in Persist Summary; add a highlight when the total or any single file exceeds its budget by
+more than 25 % (measured 2026-08-27: 88 150 chars for 3 FASEs against the old flat 70 k ceiling — the per-file budgets
+were met, the total was simply not scaled).
 
 ---
 
