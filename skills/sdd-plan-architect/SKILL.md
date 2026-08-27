@@ -168,14 +168,14 @@ Indicative for a ~10-requirement project (7 UC, 2-3 FASEs); scale with FASE/UC c
 | `PLAN.md` | ≤ 12 000 | technology rows that repeat an ADR's rationale (aspect · decision · ADR id is enough), quickstart longer than 15 lines |
 | `CLARIFY-LOG.md` | ≤ 6 000 with no question asked; + ≤ 1 200 per real question | option tables for questions nobody was asked; decisions an ADR already contains |
 | `RESEARCH.md` | 5-row table when Phase 3 is skipped; ≤ 1 500 per real item | interface sketches (PLAN-FASE §4 owns them), empirical logs (one line with the result) |
-| `fases/FASE-N-*.md` | ≤ 8 000 | copied spec content, criteria longer than one line, walkthroughs longer than 10 commands |
+| `fases/FASE-N-*.md` | ≤ 8 000, +2 000 per work Stream beyond the first (a FASE with A ∥ B carries two module blocks) | copied spec content, criteria longer than one line, walkthroughs longer than 10 commands |
 | `fases/README.md` | ≤ 4 000 | "how to use" / "principle" boilerplate |
-| `fase-plans/PLAN-FASE-N.md` | ≤ 9 000 | pseudo-code bodies, test assertions already in `test/`, restated FASE criteria |
-| **Total `plan/`** | **≤ 34 000 + 17 000 per FASE** (68 k for 2 FASEs, 85 k for 3, 102 k for 4) | |
+| `fase-plans/PLAN-FASE-N.md` | ≤ 9 000, +4 000 per work Stream beyond the first | pseudo-code bodies, test assertions already in `test/`, restated FASE criteria |
+| **Total `plan/`** | **≤ 34 000 + 17 000 per FASE + 4 000 per work Stream beyond the first in any FASE** (68 k for 2 FASEs, 89 k for 3 when one FASE has two Streams) | |
 
 Report the total as `metrics.plan_chars` (`find plan -name '*.md' -print0 | xargs -0 wc -c`) and the ceiling as
 `metrics.plan_budget_chars` in Persist Summary; add a highlight when the total or any single file exceeds its budget by
-more than 25 % (measured 2026-08-27: 88 150 chars for 3 FASEs against the old flat 70 k ceiling — the per-file budgets
+more than 15 % (measured 2026-08-27: 88 150 chars for 3 FASEs against the old flat 70 k ceiling — the per-file budgets
 were met, the total was simply not scaled).
 
 ---

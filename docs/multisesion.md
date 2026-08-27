@@ -69,6 +69,8 @@ bash "$SDD_PLUGIN_ROOT/scripts/sdd-watch.sh" --brief --root /ruta/al/proyecto
 
 Dentro de la propia consola de Claude Code: la status line (`/sdd-setup`, paso 3) muestra `[rol] SDD [n/7] <etapa> · <skill> <min> · <k> agentes` y se repinta cada 5 s; el panel de agentes (`←`) muestra cada subagente como `▶ <tipo> · <descripción> · <tiempo> · <tokens>k (<%>)`. Fuera de la consola, el panel `sdd-watch.sh` descrito a continuación.
 
+Ese contador `N agentes` — en la status line, en la sección **Agentes** de `scripts/sdd-watch.sh` y en la línea `--brief` — es también **la forma de comprobar que el fan-out de una etapa se activó**: `spec-auditor`, `test-planner`, `task-generator` (un agente por FASE) y las tasks `[P]` de `task-implementer` aparecen ahí en vivo mientras corren. Si el contador se queda en `0 agentes` durante toda la etapa, corrió en secuencial: el motivo estará en `summary.highlights` y en `metrics.mode` de `pipeline-state.json` (umbrales y flags por etapa en [`perfilado.md` § Paralelismo por etapa](perfilado.md#paralelismo-por-etapa)).
+
 Con varias estaciones abiertas no se ve desde fuera qué skill corre en cada una, cuántos subagentes hay lanzados ni desde cuándo. Para eso el hook `hooks/sdd-activity-log.sh` deja una línea JSON por evento en `$SDD_STATE_ROOT/.sdd/activity.jsonl` (siempre en el checkout principal, también desde un worktree) y `scripts/sdd-watch.sh` la pinta en un panel que se repinta solo.
 
 ```

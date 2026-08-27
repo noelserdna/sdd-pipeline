@@ -15,7 +15,7 @@ Professional specifications engineering skill that transforms software requireme
 2. **Analyze** them for quality, gaps, and ambiguities
 3. **Ask the user** for decisions on every gap, ambiguity, or issue found
 4. **If requirements are deficient**, generate a modification proposal before proceeding
-5. **Create** the specification documents and folder structure
+5. **Create** the specification documents and folder structure — id ledger and shared domain first, then the per-requirement pass in parallel lanes above the threshold (§ **Execution Strategy**)
 6. **Validate** the resulting specifications
 
 ---
@@ -77,7 +77,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
 1. Read [references/specification-workflow.md](references/specification-workflow.md) for the full specification process
 2. Read [references/document-templates.md](references/document-templates.md) for available templates
-3. Read [references/template-checklist-alignment.md](references/template-checklist-alignment.md) for the template↔auditor alignment matrix
+3. Read [references/template-checklist-alignment.md](references/template-checklist-alignment.md) for the template↔auditor alignment matrix, and [references/fanout-protocol.md](references/fanout-protocol.md) for the id ledger, the lane split and the consolidation contract
 4. **Check previous audit feedback:** If `pipeline-state.json` exists and has a previous `spec-auditor` summary with `topFindingCategories` or `templateImprovements`, read them and apply extra scrutiny to those areas during spec writing. This feedback loop prevents repeating the same defect patterns across projects.
 5. **Ask the user** which specification format(s) to use:
    - **SRS (IEEE 830-style)**: Formal specification document
@@ -91,8 +91,9 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    - Naming conventions
    - Output directory
 7. Create the folder structure with one command: `mkdir -p spec/{domain,use-cases,workflows,contracts,adr,tests,nfr}` (`runbooks/` only when a requirement asks for an operational procedure — see § Output Economy).
-8. Write the specifications following § **Generation Order** (shared homes first, then one pass per requirement, no re-reading) and § **Output Economy** (cite ids, never copy requirement text). For each requirement:
-   - Map it to its UC / WF / contract operation ids from the id plan
+8. **Decide the execution mode** before writing anything: count the functional requirements and apply § **Execution Strategy** / `references/fanout-protocol.md` §1. More than 4 → fan-out lanes for phase C; otherwise one thread. Record the choice (and the reason, when it is a downgrade) for Persist Summary.
+9. Write the specifications following § **Generation Order** (id ledger → shared homes → one pass per requirement → cross-cutting → gate, no re-reading) and § **Output Economy** (cite ids, never copy requirement text). For each requirement — in the main thread in sequential mode, in its lane in fan-out mode:
+   - Map it to its UC / WF / contract operation ids from the **id ledger** (`.sdd/spec-id-plan.md`); never invent an id that is not in it
    - Apply the **Error Flow Forcing Function** (step 6a) and **Invariant Extraction** (step 6b) *while drafting*, before the file is written
    - Write the UC and its `tests/BDD-UC-NNN.md` back to back (the BDD file defines the AC-NNN-NN ids the UC cites)
    - Traceability = the UC's `Refs` row + one row in `TRACEABILITY-MATRIX.md`
@@ -112,7 +113,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    A "no" or "not applicable" answer produces **no text**: no N/A cells, no comments, no forcing-function matrix in the document. The goal is a non-empty exceptions table, not a record of the questions.
 
    Each exception row also yields, in the same pass (never as a later patch to a written file):
-   - Its error code in the error catalog (`domain/03-VALUE-OBJECTS.md`, the only place with message/class/HTTP) and one row in the contract's single Errors table
+   - Its error code in the error catalog (`domain/03-VALUE-OBJECTS.md`, the only place with message/class/HTTP) and one row in the contract's single Errors table — in fan-out mode the lane does not write either file: it returns the code in `errs` (marking `new: true` when the catalog does not already have it) and the main thread appends the catalog row and writes the contract in phase D
    - One scenario in `tests/BDD-UC-NNN.md`, whose AC id the exception row cites
    - Exceptions shared by every UC (global error handler, storage failure) are described once — in the workflow or the contract — and cited by id from the UC
 
@@ -125,6 +126,8 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    | **Tier 3** | Structural/cosmetic (e.g., reordering error codes in a table) | No registration needed |
 
    > Most error flows are **Tier 2** — they are technical details derived from existing requirements. Only flag as Tier 1 if the error handling introduces user-visible behavior that no REQ anticipated.
+   >
+   > **The STOP belongs to the main thread.** A lane never stops and never asks: it leaves the behaviour unspecified, returns the item in `tier1` and marks the spot with an `NC` marker from its block. The main thread raises every Tier 1 item once, in phase D, before `DERIVED-SPECS.md` is written.
 
    #### Step 6b: Invariant Extraction
 
@@ -132,10 +135,10 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
    1. Search for: "must", "shall not", "always", "never", "at most", "at least", "between X and Y", "unique", "only if", "requires", "cannot exceed", "minimum", "maximum"
    2. For each constraint found:
-      - Check if a formal invariant already exists in `domain/05-INVARIANTS.md` (written in Generation Order phase B; append a row if the invariant is new)
-      - If not: create an INV-{AREA}-{NNN} row with declarative rule and validation (Template 10 — one row, no prose)
+      - Check if a formal invariant already exists in `domain/05-INVARIANTS.md` (written in Generation Order phase B)
+      - If not: mint an `INV-{AREA}-{NNN}` id from the block the id ledger reserved for this thread (main thread `…-0NN`, lane *L* `…-{L}NN`) with declarative rule and validation (Template 10 — one row, no prose). In sequential mode append the row to `05-INVARIANTS.md`; **in fan-out mode the lane returns it in `inv_new` and never edits `spec/domain/`** — the main thread appends the rows in phase D
       - Cite the INV-ID inline in the UC step or postcondition (e.g., "(INV-SRV-003)") — the rule text itself is never repeated in the UC
-   3. Present extracted invariants to the user for confirmation before finalizing
+   3. Present extracted invariants to the user for confirmation before finalizing (in fan-out mode, once in phase D over the consolidated `inv_new` list — a lane never asks)
 
    **Tier Classification:** For each invariant extracted, classify:
 
@@ -147,7 +150,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
    #### Step 6c: Register Derived Specifications
 
-   Keep a running list of derived items while writing; after the last UC, write `spec/DERIVED-SPECS.md` **once** (Template 15):
+   Keep a running list of derived items while writing; after the last UC, write `spec/DERIVED-SPECS.md` **once** (Template 15). In fan-out mode a lane never writes this file: it returns its rows in `derived` / `inv_new` / `tier1` and the main thread writes the file in phase D from the union.
 
    1. For every Tier 2 artifact created (exception courses, invariants, BDD scenarios, API error codes), add a row — grouped by pattern (one row per error family across UCs, one row per invariant range), never one row per UC per code
    2. For every Tier 1 artifact, add a row marked as **`[PENDING REQ]`**
@@ -162,13 +165,18 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    > for deeper investigation. This enables early identification of research
    > needs during specification, avoiding costly rework downstream.
 
-9. Create `spec/TRACEABILITY-MATRIX.md` (Template 5) from the id plan: forward table only (REQ → UC/WF, API, INV, ADR, BDD/PROP, NFR, RN), a ≤ 6-word summary instead of the requirement description, one coverage line. No reverse table (every artifact carries `Refs`), no per-acceptance-criterion table (BDD scenario titles carry the `[REQ-X ACn]` tag). Written from memory, without re-reading the generated files.
+10. Create `spec/TRACEABILITY-MATRIX.md` (Template 5) from the id ledger (and, in fan-out mode, the lanes' `ids_used` / `ids_ref`): forward table only (REQ → UC/WF, API, INV, ADR, BDD/PROP, NFR, RN), a ≤ 6-word summary instead of the requirement description, one coverage line. No reverse table (every artifact carries `Refs`), no per-acceptance-criterion table (BDD scenario titles carry the `[REQ-X ACn]` tag). Written from memory, without re-reading the generated files.
 
-10. At each decision point during specification writing, ask the user:
+11. At each decision point during specification writing, ask the user:
    - When multiple design approaches exist
    - When specification granularity is unclear
    - When acceptance criteria could vary
    - When interface boundaries are ambiguous
+
+   **Only the main thread asks.** In fan-out mode these questions must be raised in Mode 1 / phase A, before the lanes
+   start: a lane cannot use `AskUserQuestion`. A lane that meets an undecided ambiguity emits an `NC-{L}NN` marker from
+   its reserved block and returns it in `gaps`; the main thread resolves it in phase D (asking the user if the session
+   is interactive, appending the RN row and removing the marker) or leaves it in `CLARIFICATIONS-PENDING.md`.
 
 ### Mode 3: Propose Requirements Modifications
 
@@ -309,12 +317,12 @@ When `REQUIREMENTS.md` exists but only covers part of the system (e.g., new feat
 ## Key Principles (Always Apply)
 
 ### Ask Before Assuming
-NEVER make assumptions silently. Every decision point must be presented to the user with options. Use `AskUserQuestion` for every ambiguity, gap, or choice.
+NEVER make assumptions silently. Every decision point must be presented to the user with options. Use `AskUserQuestion` for every ambiguity, gap, or choice. **Asking is the main thread's job**: in fan-out mode the decisions are collected in Mode 1 / phase A, before the lanes start, and anything a lane discovers comes back as an `NC` marker in `gaps` for the main thread to raise in phase D. A lane that cannot ask must never decide instead.
 
 ### Glossary-First Writing
 The glossary (`domain/01-GLOSSARY.md`) is a controlled vocabulary. Once created, it governs ALL spec writing:
 - **Before using any domain term** in any spec document, verify it exists in the glossary
-- **If a new term is needed**, add it to the glossary FIRST, then use it in spec documents
+- **If a new term is needed**, add it to the glossary FIRST, then use it in spec documents. A lane cannot: it returns the term in `gaps` as `{"term": "...", "def": "..."}` and the main thread appends the glossary row in phase D. The glossary written in phase B must therefore cover **all** requirements, not just the first ones
 - **Never use synonyms** listed in the glossary's "Do not use" ("NO usar") column
 - **After completing all spec documents**, run a final glossary compliance pass with `grep -rniw` over `spec/`: for each "Do not use" synonym, verify zero occurrences (no re-reading of files)
 
@@ -342,7 +350,7 @@ Stage time is almost entirely output tokens (~5k tokens ≈ 1 min): every duplic
 3. **Tables, not prose.** Never a table plus prose repeating it; a schema block instead of an attribute table; one `Refs` row per document instead of a trailing traceability section plus "business rules" and "invariants" lists; a UC has one `Exceptions & errors` table, not exception subsections plus an errors table plus a forcing-function matrix.
 4. **Boilerplate once per file.** Auth / rate limit / version once per contract, one Errors table per contract with an "Operations" column, no per-actor responsibility table in UCs; exceptions shared by every UC (global handler, storage failure) are described once and cited.
 5. **Runbooks, events and permissions only when the requirements ask for them.** Otherwise `runbooks/` does not exist and `EVENTS-*.md` / `PERMISSIONS-MATRIX.md` are a one-line absence declaration (Template 20).
-6. **Write each file once.** Plan ids, invariants and exception rows first (§ Generation Order); never re-open a written file to add a cross-reference, and never re-read written files except through `grep` in the Self-Validation Gate.
+6. **Write each file once.** Plan ids, invariants and exception rows first (§ Generation Order); never re-open a written file to add a cross-reference, and never re-read written files except through `grep` in the Self-Validation Gate. The only sanctioned exceptions are the four phase-D appends (new INV rows, new error-catalog rows, missing glossary terms, resolved RN rows) and targeted `Edit`s that fix a gate failure — both located with `grep -n`, never by re-reading the file.
 
 ## Output Budget
 
@@ -365,17 +373,48 @@ Indicative ceilings in characters (`wc -c`). Exceeding one by more than 20 % mea
 
 **Total: ≤ 120,000 chars for ≤ 15 requirements.** Above 15, add 5,000 chars per additional functional requirement (one UC, its BDD file and its share of contract rows). Measure at the end with `find spec -name '*.md' -print0 | xargs -0 wc -c | tail -1` and report it as `metrics.spec_chars` (Persist Summary).
 
+## Execution Strategy (read first)
+
+The full protocol is [references/fanout-protocol.md](references/fanout-protocol.md). The rules that govern every run:
+
+1. **Fan-out by default — it is part of this skill's contract, not an optional expansion of scope.** Invoking
+   `/sdd-specifications-engineer` on **more than 4 functional requirements** *is* the explicit request for the
+   requirement lanes: phase C is the bulk of the stage, it is per-requirement, and every id the lanes use was reserved
+   in phase A. Never downgrade to sequential out of caution; downgrade only for the reasons in
+   `references/fanout-protocol.md` §1 (≤ 4 functional REQs, `--sequential`, Modes 3/4/5, or the `Agent` tool not in the
+   tool list) and record the reason in `metrics.mode` and `summary.highlights`. **Flags:** `--fanout` forces the lanes
+   regardless of size; `--sequential` forces one thread.
+2. **Lanes.** One **R lane** per group of 2–3 functional requirements (grouped by shared entity/module, not by number)
+   writing only its `use-cases/UC-0NN-*.md` + `tests/BDD-UC-0NN.md`, plus at most one **X lane** writing `nfr/*`,
+   `adr/ADR-0NN-*.md` and `tests/PROPERTY-TESTS.md`. At most **4 agents at a time**, never nested; more lanes run in
+   waves of 4. `subagent_type: general-purpose` (never `fork`), `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is
+   set (then omit `model`). Lanes read `requirements/` and the already-written shared documents; they write **only**
+   their own files, never `spec/contracts/`, `spec/domain/`, `spec/workflows/`, `pipeline-state.json`, and they never
+   ask the user, never run Persist Summary or Handoff, never launch subagents.
+3. **The id ledger is what makes it safe.** Phase A allocates UC ids per requirement (`REQ-F-001 → UC-001..UC-002`, and
+   `AC-NNN-NN` follows the UC number), every `API-{module}-NN` operation id to exactly one lane, the WF step skeletons
+   and the ADR ids. Ids a lane *mints* carry its lane digit — `INV-{AREA}-{L}NN`, `NC-{L}NN`; phase A owns `…-0NN` —
+   so collisions are impossible by construction and the three-digit grep shape is preserved. Lanes never mint `RN-NNN`
+   (business rules need a user decision): an unresolved ambiguity becomes an `NC` marker returned in `gaps`.
+4. **Cite by id, never copy.** A lane references other lanes' artifacts only through ids from the ledger; it never opens
+   another lane's file. This is what keeps cross-references intact, and the Self-Validation Gate verifies them.
+5. **The main thread never re-reads what the lanes wrote.** Consolidation, the traceability matrix and the gate run on
+   the returned JSON plus `grep` / `wc` (budget ≤ ~30 k tokens of spec content).
+6. **Compact output.** Same § Output Budget for every thread; each lane returns its per-file `wc -c` so the main thread
+   never measures by reading.
+
 ## Generation Order
 
-Shared context first, one pass per requirement, no re-reading of written files.
+Shared context first, one pass per requirement, no re-reading of written files. Phases A + B are the shared contract,
+phase C is the per-requirement work (fanned out above the threshold — § Execution Strategy), phases D + E consolidate.
 
-| Phase | Write (once) | Source |
-|---|---|---|
-| A. Plan (in memory, nothing written) | Id plan: REQ → UC ids, WF ids, contract modules and `API-NNN-NN` operation ids, INV areas, ADR ids, RN counter | `requirements/REQUIREMENTS.md` read once + user decisions (Mode 1) |
-| B. Shared homes | `domain/01..05` (glossary, entities, value objects + error catalog, states, invariants for all requirements — Step 6b), `VALUE-REGISTRY.md` | Plan A |
-| C. Per module, per requirement | For each UC: Step 6a in memory → write `UC-NNN` then `BDD-UC-NNN`. After the module's last UC: its `API-{module}` in one write. Keep running lists: RN decisions, derived items, research questions, ADR candidates | Plan A + B already in context — do not re-open written files |
-| D. Cross-cutting | `WF-NNN`, `adr/` (only decisions actually taken), `nfr/*`, `CLARIFICATIONS.md`, `DERIVED-SPECS.md`, `RESEARCH-QUESTIONS.md`, `TRACEABILITY-MATRIX.md`, `README.md`, `CLARIFICATIONS-PENDING.md`, and `EVENTS-*` / `PERMISSIONS-MATRIX` (one line when N/A) | Running lists from C |
-| E. Gate | Self-Validation Gate with `grep` / `wc`; fix only what fails; short console table | `spec/` via grep, never `cat` |
+| Phase | Thread | Write (once) | Source |
+|---|---|---|---|
+| A. Plan | main, always sequential | **Id ledger** → `.sdd/spec-id-plan.md` (outside `spec/`): REQ → UC ids + titles, `AC` ranges, WF ids **with their numbered step skeleton**, contract modules and every `API-NNN-NN` operation id with its owner, INV areas, ADR ids, RN counter, and — in fanout mode — the lane table with each lane's reserved `INV-{AREA}-{L}NN` / `NC-{L}NN` blocks and write-set | `requirements/REQUIREMENTS.md` read once + user decisions (Mode 1) |
+| B. Shared homes | main, always sequential | `domain/01..05` (glossary, entities, value objects + error catalog, states, invariants for all requirements — Step 6b), `VALUE-REGISTRY.md`, `CLARIFICATIONS.md` (the RN rows decided in Mode 1 — lanes must be able to cite them) | Ledger A |
+| C. Per module, per requirement | **fan-out lanes** (or main, sequential) | For each UC: Step 6a in memory → write `UC-NNN` then `BDD-UC-NNN`. Lane X writes `nfr/*` and `adr/`. Contract operations, new invariants, derived items, gaps and Tier 1 items are **returned as JSON**, not written. Sequential mode keeps the running lists in context instead | Ledger A + B on disk — do not re-open written files |
+| D. Cross-cutting | main | `contracts/API-{module}` (from the lanes' `ops`/`errs`), `WF-NNN` (skeleton + `wf` digests), `adr/`+`nfr/*` if there was no lane X, `DERIVED-SPECS.md`, `RESEARCH-QUESTIONS.md`, `TRACEABILITY-MATRIX.md`, `README.md`, `CLARIFICATIONS-PENDING.md`, `EVENTS-*` / `PERMISSIONS-MATRIX` (one line when N/A). Sanctioned appends (rows only, one Edit each): new INV rows to `domain/05-INVARIANTS.md`, new error codes to the catalog in `domain/03-VALUE-OBJECTS.md`, missing terms to `domain/01-GLOSSARY.md`, resolved gaps as RN rows to `CLARIFICATIONS.md` | Returned JSON (fanout) or running lists from C (sequential) |
+| E. Gate | main | Self-Validation Gate with `grep` / `wc`; fix only what fails; short console table | `spec/` via grep, never `cat` |
 
 ## Needs Clarification Markers
 
@@ -387,10 +426,10 @@ When writing specifications, if a requirement is ambiguous and the user is unava
 <!-- [NEEDS CLARIFICATION] NC-NNN: {concise question about the ambiguity} -->
 ```
 
-- **NC-NNN** uses a global sequential counter across all spec documents (NC-001, NC-002, ...).
+- **NC-NNN** is three digits. The main thread uses the `NC-0NN` block (`NC-001`, `NC-002`, …); in fan-out mode each lane *L* uses only its reserved `NC-{L}NN` block (lane 2 → `NC-201`, `NC-202`, …), so two lanes can never mint the same marker.
 - Place the marker **immediately after** the ambiguous spec text it refers to.
 - Markers are HTML comments so they do not affect rendered output but survive across sessions.
-- A marker is never a substitute for asking the user — always prefer `AskUserQuestion` first.
+- A marker is never a substitute for asking the user — always prefer `AskUserQuestion` first. A **lane cannot ask**: it emits the marker and returns it in `gaps`, and the main thread asks in phase D.
 
 ### When to Insert
 
@@ -454,6 +493,16 @@ sdd-task-implementer → src/, tests/
 
 The gate runs on `grep` / `wc` output, **not** on re-reading the generated files (they are already in context from writing them).
 
+### Step 0: Fan-out Consolidation Checks (fan-out mode only)
+
+Run before Step 1, on the lanes' JSON and `ls` / `grep` — never by opening a file a lane wrote
+(`references/fanout-protocol.md` §7):
+
+- **Write set:** every file the ledger promised exists and is non-empty; `wc -c` within § Output Budget. A missing file means a lane failed → relaunch it once, then write it in the main thread and say so in `highlights`.
+- **No id collisions:** no id appears in two lanes' `ids_used`, and the definition-site `uniq -d` checks of `references/fanout-protocol.md` §7.2 (UC/WF/ADR file names, INV/RN/API rows **in their home document only**, AC scenario titles, NC markers) all print nothing. A duplicate is a ledger bug: fix the ledger and rewrite the losing file.
+- **No dangling references:** the union of `ids_ref` minus (`ids_used` ∪ phase A/B ids ∪ the ids phase D is about to create) must be empty.
+- **Every id a lane used is inside its reserved block** (`INV-{AREA}-{L}NN`, `NC-{L}NN`, its UC / AC / API ranges); an out-of-block id means the lane improvised — verify it before it reaches the matrix.
+
 ### Step 1: Structural Validation (Mode 4 Auto-Check)
 
 - Extract every cited id once: `grep -rhoE '(UC|WF|ADR|RN|NC)-[0-9]{3}|INV-[A-Z]+-[0-9]{3}|API-[0-9]{3}-[0-9]{2}|AC-[0-9]{3}-[0-9]{2}' spec | sort -u` — every id must have a definition (file name, heading or table row); every REQ id in `requirements/REQUIREMENTS.md` must appear in `TRACEABILITY-MATRIX.md` with at least one artifact
@@ -481,6 +530,7 @@ If the pre-flight scan finds issues:
 - **Fix them immediately** before completing Mode 2 (these are self-inflicted defects, not user decisions)
 - Do NOT ask the user — these are mechanical completeness fixes
 - After fixing, re-run only the checks that failed
+- In fan-out mode a fix inside a lane's file is a targeted `Edit` located with `grep -n` — never a re-read of the file, and never a relaunch of the lane
 
 ### Step 4: Completion Gate
 
@@ -503,8 +553,8 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["specifications-engineer"].lastRun` = current ISO-8601
 4. Set `stages["specifications-engineer"].summary`:
    - `artifacts`: list of files created in `spec/` with labels (e.g., `{"file": "spec/use-cases/UC-001.md", "label": "Extract PDF"}`)
-   - `metrics`: `{ "use_cases": N, "workflows": N, "api_contracts": N, "bdd_scenarios": N, "invariants": N, "adrs": N, "spec_chars": N, "spec_budget_chars": N }` — `spec_chars` from the final `wc -c` over `spec/**/*.md`, `spec_budget_chars` from § Output Budget
-   - `highlights`: top 3-5 notable observations (e.g., "41 use cases across 8 domains", "55 invariants defined", "spec/ 98k chars, within the 120k budget")
+   - `metrics`: `{ "use_cases": N, "workflows": N, "api_contracts": N, "bdd_scenarios": N, "invariants": N, "adrs": N, "spec_chars": N, "spec_budget_chars": N, "mode": "fanout" | "sequential", "spec_agents": N }` — `spec_chars` from the final `wc -c` over `spec/**/*.md` (or the sum of the lanes' reported `chars` plus the main thread's own files), `spec_budget_chars` from § Output Budget, `mode` and `spec_agents` from § Execution Strategy (`spec_agents` = lanes actually launched, 0 in sequential mode)
+   - `highlights`: top 3-5 notable observations (e.g., "41 use cases across 8 domains", "55 invariants defined", "spec/ 98k chars, within the 120k budget"). **When `mode` is `sequential` above the threshold, the first highlight is the reason for the downgrade** (`--sequential`, no `Agent` tool, Mode 3/4/5, a lane that failed twice)
    - `nextStep`: `"Run /sdd-spec-auditor"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
