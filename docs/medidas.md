@@ -31,3 +31,24 @@ Bench (`scripts/sdd-bench.sh --fase 1`): `| 1 | worktrees | 2 | 1h 03m | 27 | 27
 Resultado final del todo-app: 50 tasks, 57 commits, 0 `Task:` duplicados, 659 tests verdes ×3 (Node 18/20/22), `src/api/**` 100 % sentencias, PERF-001 p95 < 200 ms, CLI conforme a los 10 requisitos.
 
 **Hallazgo**: el primer `--integrate` hizo PAUSE en TASK-F1-018 porque el rol `sdd-lead` de la plantilla no poseía `tests/*`, `.github/*` ni `vitest.config.ts` (la guardia H2 denegó las escrituras de verificación). Corregido en `templates/sdd-sessions.example.json` (commit 75e3ad2); la reanudación fue idempotente (saltó Streams fusionados y tasks `[x]`).
+
+## Comparación 4.0.0 → 4.0.2 (mismo proyecto `examples/todo-app`, mismo script, sin intervención humana)
+
+| Etapa | 4.0.0 (2026-08-24) | 4.0.2 (2026-08-27) | Salida generada |
+|---|---|---|---|
+| setup | 2 min | **1 min** | — |
+| specs | 35 min | **22 min** (−37 %) | `spec/` 266.085 → **87.674** chars (−67 %) |
+| auditoría | 21 min | **11 min** (−48 %) | `AUDIT-BASELINE.md` 16.851 → **10.082** chars |
+| tests | 30 min | **10 min** (−67 %) | `test/` 163.706 → **60.951** chars (−63 %) |
+| plan | 27 min | **17 min** (−37 %) | `plan/` 181.662 → **88.150** chars (−51 %); `RESEARCH.md` 16.591 → 1.623 |
+| tasks | 24 min | **14 min** (−42 %) | `task/` 125.442 → **95.841** chars |
+| FASE-0 | 27 min (23 tasks) | **24 min** (17 tasks) | 17 commits con trailers, 101 tests verdes, tag `fase-0-verified` |
+| **Total hasta FASE-0** | **~2 h 46 min** | **~1 h 39 min (−40 %)** | |
+
+Cobertura equivalente: 6 UC, 1 WF, 4 contratos, 5 ADR, 17 invariantes, 47 BDD, 6 matrices con 91 casos, 34 escenarios E2E, 3 FASEs (58 tasks) con `Streams: base(0) → A(10) ∥ B(9) → integración(1) → verificación(10)` en FASE-1.
+
+**Toda la ganancia vino de escribir menos y leer por índice: el fan-out no se activó ni una vez** (0 eventos `subagent-start` en `.sdd/activity.jsonl`). La skill lo explicó en su informe: *"he ejecutado en modo secuencial en lugar de fan-out porque la guía de esta sesión prohíbe lanzar subagentes sin petición explícita"*. En el perfilado aislado, donde sí se lanzaron los 4 auditores, la auditoría bajó a 9,9 min con un informe mayor: queda margen pendiente de resolver esa fricción (ver "Pendiente" abajo).
+
+### Pendiente
+- Hacer que el fan-out de `sdd-spec-auditor` y `sdd-test-planner` se active de forma fiable: la instrucción de la skill compite con la política del entorno sobre lanzar subagentes. Opciones: flag explícito `--fanout`, que el prompt de invocación lo pida, o documentar `CLAUDE_CODE_SUBAGENT_MODEL` + petición explícita en el smoke.
+- Acotar la lectura de cada auditor por dimensión a las secciones de su índice (hoy leen su ámbito entero): en el perfilado el coste subió de 16,8 $ a 18 $ pese a la mitad de tiempo.
