@@ -87,7 +87,18 @@ for (const [name, cfg] of Object.entries(mcp.mcpServers ?? {})) {
 }
 
 // 6. Resumen
-console.log(`plugin ${plugin.name}@${plugin.version}: ${skillCount} skills, ${agentCount} agentes, ${hookCount} hooks, ${Object.keys(mcp.mcpServers ?? {}).length} MCP`);
+const hookScripts = new Set();
+for (const groups of Object.values(hooks.hooks ?? {})) for (const g of groups) for (const h of g.hooks ?? []) {
+  const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/); if (m) hookScripts.add(m[1]);
+}
+console.log(`plugin ${plugin.name}@${plugin.version}: ${skillCount} skills, ${agentCount} agentes, ${hookScripts.size} hooks (${hookCount} registros de evento), ${Object.keys(mcp.mcpServers ?? {}).length} MCP`);
+// coherencia: lo que el manifiesto dice de sí mismo
+const claim = (plugin.description || "").match(/(\d+)\s+skills/);
+if (claim && Number(claim[1]) !== skillCount) errors.push(`plugin.json description dice ${claim[1]} skills pero hay ${skillCount}`);
+const claimA = (plugin.description || "").match(/(\d+)\s+agents?/);
+if (claimA && Number(claimA[1]) !== agentCount) errors.push(`plugin.json description dice ${claimA[1]} agentes pero hay ${agentCount}`);
+const claimH = (plugin.description || "").match(/(\d+)\s+hooks?/);
+if (claimH && Number(claimH[1]) !== hookScripts.size) errors.push(`plugin.json description dice ${claimH[1]} hooks pero hay ${hookScripts.size} scripts de hook`);
 for (const w of warnings) console.log(`WARN  ${w}`);
 for (const e of errors) console.log(`ERROR ${e}`);
 if (errors.length) { console.log(`${errors.length} errores`); process.exit(1); }

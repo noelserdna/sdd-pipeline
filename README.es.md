@@ -11,7 +11,7 @@ De los requisitos al código en producción: un pipeline estructurado, auditable
 
 - **24 skills** — el pipeline de 7 etapas, skills laterales, onboarding brownfield, utilidades y el lead multi-sesión
 - **5 agentes** — orquestador interactivo, auditor end-to-end, guardián de contexto, garante de la constitución, auditor cruzado
-- **5 hooks** — estado del pipeline al arrancar, guardia de inmutabilidad upstream, actualización de estado y trace-map, contexto de trazabilidad
+- **6 hooks** (12 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, actualización de estado y trace-map, contexto de trazabilidad y el registro de actividad que alimenta la status line y `sdd-watch`
 - **Servidor MCP** — 6 tools, 7 recursos y 2 prompts sobre `dashboard/traceability-graph.json`
 - **Implementación multi-sesión** — sesiones con rol (`SDD_ROLE`), Streams paralelos en worktrees de git, handoffs al lead
 

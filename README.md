@@ -11,7 +11,7 @@ From requirements to production code: a structured, auditable, traceable pipelin
 
 - **24 skills** — the 7-stage pipeline, lateral skills, brownfield onboarding, utilities and the multi-session lead
 - **5 agents** — interactive orchestrator, end-to-end auditor, context keeper, constitution enforcer, cross-auditor
-- **5 hooks** — pipeline status at session start, upstream immutability guard, state and trace-map updates, traceability context
+- **6 hooks** (12 event registrations) — pipeline status at session start, upstream immutability guard, state and trace-map updates, traceability context, and the activity log that feeds the status line and `sdd-watch`
 - **MCP server** — 6 tools, 7 resources and 2 prompts over `dashboard/traceability-graph.json`
 - **Multi-session implementation** — role-scoped sessions (`SDD_ROLE`), parallel streams in git worktrees, lead handoffs
 
