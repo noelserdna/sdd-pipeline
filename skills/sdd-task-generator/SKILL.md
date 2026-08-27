@@ -202,7 +202,7 @@ Tasks that block other tasks use `blocks:` and `blocked-by:` annotations:
 /sdd-task-generator
 ```
 
-Generates tasks for ALL FASEs that have plan artifacts.
+Generates tasks for ALL FASEs that have plan artifacts. With 2 or more FASEs this runs in **fan-out mode**: one agent per FASE writes its `task/TASK-FASE-{N}.md`, the main thread writes `TASK-INDEX.md` + `TASK-ORDER.md` and runs the global validations (Execution Strategy, `references/fanout-protocol.md`).
 
 ### Mode 2: Per-FASE Generation
 
@@ -255,6 +255,15 @@ Generates only new or changed tasks for a single FASE, preserving already-comple
 - An existing `task/TASK-FASE-{N}.md` must already exist; otherwise falls back to standard Mode 2 generation.
 - A change report from `sdd-req-change` should be present in `audits/` for proper `CASCADE-{id}` annotation. If absent, tasks are annotated with `Source: CASCADE-MANUAL`.
 
+### Execution Flags (any mode)
+
+| Flag | Effect |
+|------|--------|
+| `--fanout` | Forces one agent per FASE regardless of the FASE count (useful for benchmarking) |
+| `--sequential` | Forces a single thread; the reason is recorded in `metrics.mode` and `summary.highlights` |
+
+Default (no flag): fan-out with **2 or more FASEs**; sequential with one FASE, with `--fase N` (a single FASE is one unit of work) and with `--incremental`. `--regen` does not change the mode. Same vocabulary as `sdd-spec-auditor` and `sdd-test-planner`; the implementer's equivalent pair is `--parallel` / `--sequential` (`docs/perfilado.md` § Paralelismo por etapa).
+
 ---
 
 ## Output Artifacts
@@ -275,9 +284,21 @@ task/
 
 ## Execution Phases
 
+### Execution Strategy (read first)
+
+The full protocol is `references/fanout-protocol.md`. The rules that govern every generation:
+
+1. **Index before files.** Phase 0 builds `$PIDX` with one `grep -rn` over `plan/` (headings and table rows, cut at 110 chars). Everything else is opened by section (`sed -n 'a,bp'`, ≤ 60 lines per call) using the index line numbers. **Never `cat` a plan file in the main thread**; a file ≤ 8 k chars may be read whole only by the thread that owns it (sequential mode, or the agent of that FASE).
+2. **Budget.** The main thread holds at most ~25 k tokens of plan content (index summaries, the cross-cutting contract, the returned JSONs). Each FASE agent holds its own `FASE-{N}-*.md` + `PLAN-FASE-{N}.md` plus ≤ 200 lines of neighbour lookups.
+3. **Fan-out by default — it is part of the skill's contract, not an optional expansion of scope.** Invoking `/sdd-task-generator` on a plan with **2 or more FASEs** *is* the explicit request for the FASE agents: writing `TASK-FASE-{N}.md` is mechanical and the files are independent (no FASE file references another), so each agent is bounded to one FASE, writes exactly one file that no other agent writes, does not nest and does not commit. Never downgrade to sequential out of caution; downgrade only for the reasons in `references/fanout-protocol.md` §1 (a single FASE, `--fase N`, `--incremental`, `--sequential`, or no `Agent` tool), and record the reason in `metrics.mode` and `summary.highlights`. Agents run on `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`); consolidation and the global validations always use the main model. **Flags:** `--fanout` forces the FASE agents regardless of the count; `--sequential` forces one thread.
+4. **What stays in the main thread.** The cross-cutting contract is fixed *before* the fan-out (id format `TASK-F{N}-{SEQ}`, commit conventions, path conventions, glossary, templates, and each FASE's `## Módulos y Conjuntos de Escritura` table). Afterwards the main thread writes `TASK-INDEX.md` and `TASK-ORDER.md` — both global — and runs the **global validations V-04, V-09, V-11, V-15, V-16, V-17, V-18 over the returned JSON**, never by re-reading the generated task files. The FASE agents self-check only the FASE-local validations (V-01..V-03, V-05..V-08, V-10, V-12..V-14) and report them in `checks`.
+5. **Compact output.** Each agent returns a JSON of ≤ 8 000 chars (`references/fanout-protocol.md` §6) — task ids, write-sets, `blocked-by`, Streams, counts, checks, gaps — and never the body of its file. `TASK-INDEX.md` and `TASK-ORDER.md` are built from those JSONs.
+
 ### Phase 0: Inventory & Validation
 
-**Goal:** Verify prerequisites and gather all inputs.
+**Goal:** Verify prerequisites, decide the execution mode and gather all inputs.
+
+Read them **by index**, never whole (Execution Strategy §1): build `$PIDX` with the single `grep -rn` over `plan/` of `references/fanout-protocol.md` §2, read only its two summaries (sections per file, FASE order and status), and open sections with `sed -n` when a check needs them.
 
 ```
 INPUTS TO READ:
@@ -301,6 +322,10 @@ INPUTS TO READ:
 | G-05 | FASE files are newer than `spec/` (mtime heuristic; only check when `pipeline-state.json` is absent) | WARN: consider running `sdd-plan-architect --audit-fases` |
 
 > G-04 replaces the previous WARN: generating tasks from a stale plan would publish write-sets and Streams that no longer match the specs, and the implementer would branch worktrees from them. `spec-auditor` stale is covered transitively (the `sdd-req-change` cascade marks `plan-architect` stale whenever it marks `spec-auditor` stale).
+
+**Mode decision (after the gates, before opening any plan section):** count the FASE files and pick fanout or sequential per `references/fanout-protocol.md` §1. In fan-out mode, fix the cross-cutting contract now (`fanout-protocol.md` §4: id format, commit conventions, path conventions from `CLAUDE.md`, glossary terms, the `references/` templates, and each FASE's `## Módulos y Conjuntos de Escritura` table) and launch the FASE agents at the start of Phase 1 — Phases 1–7 then run inside them, one FASE each, while the main thread prepares the FASE dependency graph, the Waves, the MVP strategy and the delivery checkpoints for `TASK-ORDER.md`.
+
+> Phases 1–7 below are the generation steps; in fan-out mode each one is executed by the agent that owns the FASE (`fanout-protocol.md` §4) and the main thread runs only the cross-FASE work and Phase 8's global validations. In sequential mode the main thread runs all of them, FASE by FASE, collecting the same JSON shape of `fanout-protocol.md` §6 before writing the global files.
 
 ### Phase 1: FASE Analysis
 
@@ -551,9 +576,13 @@ Every task includes a review checklist following this pattern:
 
 Generate documents using templates from `references/`:
 
-1. **Per-FASE task file** (`TASK-FASE-{N}.md`): All tasks for one FASE, including the `## Stream Ownership` table from Phase 3b
-2. **Global index** (`TASK-INDEX.md`): Summary of all tasks across FASEs
-3. **Implementation order** (`TASK-ORDER.md`): Dependency graph, critical path, parallel opportunities, one `Streams:` line per FASE and the Stream of every task in Cross-FASE Dependencies
+| Artifact | Written by | Content |
+|----------|-----------|---------|
+| **Per-FASE task file** (`TASK-FASE-{N}.md`) | the FASE agent (fan-out) or the main thread (sequential) | All tasks for one FASE, including the `## Stream Ownership` table from Phase 3b and the Rollback Checkpoints |
+| **Global index** (`TASK-INDEX.md`) | **always the main thread** | Summary of all tasks across FASEs, flat task list, traceability matrix — built from the returned JSON (`fanout-protocol.md` §6), never by re-reading the task files |
+| **Implementation order** (`TASK-ORDER.md`) | **always the main thread** | FASE dependency graph, Waves, critical path, one `Streams:` line per FASE, Cross-FASE Dependencies with the Stream of every task, MVP strategy, delivery checkpoints |
+
+A FASE agent writes **only** its own `TASK-FASE-{N}.md`: it never writes the two global files, never `pipeline-state.json`, never `spec/` or `plan/`, and never sends a handoff.
 
 ### Phase 8: Validation
 
@@ -582,7 +611,14 @@ Generate documents using templates from `references/`:
 | V-17 | Verification-phase tasks and rollback checkpoints appear only in Stream `verificación` / the main checkout; no checkpoint is assigned to a worktree Stream | ERROR |
 | V-18 | Every `blocked-by` of a Stream task points to the same Stream, to `base`, or to a task of an earlier FASE | WARN |
 
-V-15..V-18 are computed from the `## Stream Ownership` table of each `TASK-FASE-{N}.md`. `--audit` recomputes the table (Phase 3b) from the current task write-sets, compares it with the published one, and reports both the drift and any V-15..V-18 finding.
+**Who runs which check.** The FASE-local checks are self-checked by the thread that generated the FASE (a FASE agent in fan-out mode) and reported in its `checks` field; the **global checks stay in the main thread and are computed from the returned JSON**, because they span FASEs or would otherwise let an agent grade its own homework:
+
+| Owner | Checks | Computed from |
+|-------|--------|---------------|
+| FASE agent (or main thread in sequential mode) | V-01, V-02, V-03, V-05, V-06, V-07, V-08, V-10, V-12, V-13, V-14 | its own tasks vs its FASE file and `PLAN-FASE-{N}.md` §7.4 |
+| **Main thread, always** | **V-04** (cycles, including edges that cross a FASE boundary), **V-09** (id format + uniqueness across FASEs), **V-11** (critical path), **V-15** (work-Stream write-sets pairwise disjoint), **V-16** (every task in exactly one Stream), **V-17** (checkpoints and verification tasks only in the main checkout), **V-18** (`blocked-by` scope, including cross-FASE) | the union of `tasks[]`, `bb`, `streams[]` and `checkpoints[]` of every FASE JSON |
+
+V-15..V-18 are computed from the Stream data of each FASE (the `## Stream Ownership` table, returned as `streams[]` in the JSON). `--audit` recomputes the table (Phase 3b) from the current task write-sets — one agent per FASE above the threshold, same JSON — compares it with the published one in the main thread, and reports both the drift and any V-15..V-18 finding without writing anything.
 
 ---
 
@@ -823,17 +859,36 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 
 ## Multi-Agent Strategy
 
-When generating tasks for multiple FASEs, use parallel agents grouped by FASE:
+Fan-out by FASE is the default execution mode with 2 or more FASEs (Execution Strategy). Full protocol — mode decision, index commands, budgets, the split of work, launch parameters, the agent prompt, the JSON shape and consolidation — in `references/fanout-protocol.md`.
 
 ```
-Agent-F0: Reads FASE-0 + PLAN-FASE-0 → writes TASK-FASE-0.md
-Agent-F1: Reads FASE-1 + PLAN-FASE-1 → writes TASK-FASE-1.md
-...
-(No cross-file conflicts since each agent writes to a different file)
-
-After all agents complete:
-Main thread: Generates TASK-INDEX.md + TASK-ORDER.md from all TASK-FASE-{N}.md files
+Main thread (before):  gates G-01..G-05 · plan index · cross-cutting contract
+                       (TASK-F{N}-{SEQ} numbering, commit conventions, path conventions,
+                        glossary, templates, each FASE's "Módulos y Conjuntos de Escritura")
+                              │
+        ┌─────────────────────┼─────────────────────┐        (max 4 concurrent)
+   Agent-F0              Agent-F1              Agent-F2
+   FASE-0 + PLAN-FASE-0  FASE-1 + PLAN-FASE-1  FASE-2 + PLAN-FASE-2
+   → task/TASK-FASE-0.md → task/TASK-FASE-1.md → task/TASK-FASE-2.md
+   → JSON (tasks, write-sets, blocked-by, Streams, counts, checks, gaps)
+        └─────────────────────┼─────────────────────┘
+                              │
+Main thread (after):   V-04 · V-09 · V-11 · V-15..V-18 over the JSONs
+                       TASK-INDEX.md (flat list + traceability matrix)
+                       TASK-ORDER.md (Waves, Streams: lines, Cross-FASE Dependencies, MVP)
+                       Persist Summary (metrics.mode, metrics.task_agents)
 ```
+
+| | FASE agent | Main thread |
+|---|---|---|
+| Unit | one FASE | the whole plan |
+| Reads | `plan/fases/FASE-{N}-*.md`, `plan/fase-plans/PLAN-FASE-{N}.md`, the ARCHITECTURE and `spec/` sections it cites | the plan index, the FASE `Dependencias` lines, the returned JSONs |
+| Writes | only `task/TASK-FASE-{N}.md` | `task/TASK-INDEX.md`, `task/TASK-ORDER.md`, `pipeline-state.json` |
+| Validations | the FASE-local ones (V-01..V-03, V-05..V-08, V-10, V-12..V-14), reported in `checks` | the global ones (V-04, V-09, V-11, V-15..V-18) |
+| Model | `sonnet` (omit when `CLAUDE_CODE_SUBAGENT_MODEL` is set) | the session's own model |
+| Never | writes another FASE's file, the global files, `spec/`, `plan/` or `pipeline-state.json`; nests agents; commits; sends a handoff | re-generates a FASE that has an agent, or re-reads a task file it can read from the JSON |
+
+No cross-file conflicts: each agent owns a different `TASK-FASE-{N}.md`. With more than 4 FASEs, launch in batches of 4 in FASE order. An agent that fails twice is replaced by sequential generation of that FASE, recorded in `summary.highlights`.
 
 ---
 
@@ -964,6 +1019,9 @@ git branch -D feat/fase-0
 | "Shared file between Streams" (V-15) | Two work Streams write the same file | Move the shared file's task to `integración`, or merge the two Streams |
 | "Task in no/two Streams" (V-16) | Stream table out of date | Re-run Phase 3b (`--regen` or `--fase N`) |
 | "Checkpoint in worktree Stream" (V-17) | Verification/checkpoint assigned to A/B/C | Move it to `verificación` |
+| "FASE agent returned invalid JSON" | Truncated or prose-wrapped answer | Re-launch that agent once with the same prompt; on a second failure generate the FASE in the main thread and note it in `summary.highlights` (`fanout-protocol.md` §5) |
+| "TASK-FASE-N.md missing after fan-out" | The agent wrote nothing or wrote elsewhere | Same recovery as above; never accept a JSON whose `file` does not exist (`fanout-protocol.md` §7.2) |
+| "Two FASEs use the same task id" (V-09) | An agent ignored the numbering contract | Re-run that FASE with the cross-cutting contract restated verbatim in the prompt |
 
 ---
 
@@ -976,8 +1034,11 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["task-generator"].lastRun` = current ISO-8601
 4. Set `stages["task-generator"].summary`:
    - `artifacts`: list of files created in `task/` with labels (e.g., `{"file": "task/TASK-FASE-1.md", "label": "FASE 1 Tasks"}`)
-   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N, "streamsPerFase": { "1": 2, "2": 1 } }` (`streamsPerFase` = number of work Streams A, B, C… per FASE; `1` = serial)
-   - `highlights`: top 3-5 notable observations (e.g., "42 tasks across 7 FASEs", "65% parallelizable", "8 coupled-revert tasks") plus one line per FASE with more than one work Stream, e.g. "FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)"
+   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N, "streamsPerFase": { "1": 2, "2": 1 }, "mode": "fanout"|"sequential", "task_agents": N }`
+     - `streamsPerFase` = number of work Streams A, B, C… per FASE; `1` = serial
+     - `mode` = execution mode actually used (`fanout` even when one FASE had to be regenerated sequentially after two agent failures — say so in `highlights`)
+     - `task_agents` = number of FASE agents actually launched (`0` in sequential mode); this is the number the status line and `scripts/sdd-watch.sh` show live as `N agentes` while the skill runs (`docs/multisesion.md`)
+   - `highlights`: top 3-5 notable observations (e.g., "42 tasks across 7 FASEs", "65% parallelizable", "8 coupled-revert tasks") plus one line per FASE with more than one work Stream, e.g. "FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)". **When the mode was degraded to sequential, the first highlight is the reason** (e.g., "sequential: single FASE", "sequential: --sequential flag", "sequential: Agent tool not available", "FASE-2 regenerated sequentially: agent failed twice")
    - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`

@@ -736,7 +736,17 @@ Tags are placed in the **main checkout only**. `fase-{N}-foundation` is the bran
 
 ## Multi-Agent Strategy
 
-Para tasks marcadas con `[P]` (paralelizables), se pueden lanzar agentes paralelos.
+Para tasks marcadas con `[P]` (paralelizables), **se lanzan agentes paralelos por defecto**: es parte del contrato de
+esta skill, no una expansión de alcance. Invocar `/sdd-task-implementer` sobre una FASE con tasks `[P]` *es* la petición
+explícita de esos agentes: cada uno implementa una task acotada con sus tests, escribe solo los ficheros de su task
+(garantizado disjunto por `sdd-task-generator`), no commitea y no anida. No degrades a un solo hilo por prudencia;
+hazlo solo con `--sequential`, cuando no haya tasks `[P]` en el lote, o cuando el tool `Agent` no esté en tu lista, y
+deja el motivo en `summary.highlights` y en `metrics.mode` (`parallel` | `sequential`). `--parallel` fuerza el modo.
+
+Lotes: agrupa las tasks `[P]` cuyo grafo de dependencias esté satisfecho (máx. 4 agentes simultáneos) y ejecútalas en
+una sola respuesta con varias llamadas a `Agent`; el agente principal recoge los resultados, ejecuta la Phase 7 de cada
+una y hace los commits en orden. Medido el 2026-08-27 (`docs/medidas.md`): FASE-0 con 17 tasks (11 marcadas `[P]`)
+tardó 24 min en un solo hilo — ninguna de las tres ejecuciones llegó a lanzar un agente.
 
 | Agent | Scope | Reads | Writes |
 |-------|-------|-------|--------|
@@ -1212,7 +1222,7 @@ After completing a FASE or a batch of tasks, update `pipeline-state.json`. **Not
 3. Set `stages["task-implementer"].lastRun` = current ISO-8601
 4. Set `stages["task-implementer"].summary`:
    - `artifacts`: list of key files created/modified in `src/` and `tests/` with labels (e.g., `{"file": "src/extraction/pdf-parser.ts", "label": "PDF Parser"}`)
-   - `metrics`: `{ "tasks_completed": N, "tasks_remaining": N, "commits": N, "tests_passed": N, "tests_failed": N }` — `--integrate` adds `"streamsIntegrated": N, "mergeConflicts": N`
+   - `metrics`: `{ "tasks_completed": N, "tasks_remaining": N, "commits": N, "tests_passed": N, "tests_failed": N, "mode": "parallel"|"sequential", "task_agents": N, "pauses": N }` — `mode` records whether the `[P]` tasks were given to parallel agents (Multi-Agent Strategy) and `task_agents` how many were launched in total (0 in sequential mode); when `mode` is `sequential` and the batch had `[P]` tasks, the first `summary.highlights` entry states why. `--integrate` adds `"streamsIntegrated": N, "mergeConflicts": N`
    - `highlights`: top 3-5 notable observations (e.g., "FASE-0 complete: 8/8 tasks", "All 24 tests passing"); `--integrate` adds one line per merged branch (`Merged feat/fase-1-a (3 tasks) → 9f3c2a1`) and one per conflict (`Conflict in task/TASK-FASE-1.md resolved (both [x] kept)`)
    - `nextStep`: `"Run /sdd-task-implementer --fase=N"` (next FASE) or `"Pipeline complete"` (if last FASE)
    - `generatedAt`: current ISO-8601

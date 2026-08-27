@@ -144,9 +144,11 @@ The decision log **is** `spec/CLARIFICATIONS.md` (Template 16): one D-NNN row pe
 
 ## Phase 4: Specification Writing
 
-### 4.0 Generation Order and Budget
+### 4.0 Generation Order, Execution Mode and Budget
 
-Follow SKILL.md § Generation Order (plan ids → shared domain homes → one pass per requirement writing UC + BDD together → cross-cutting files → grep-based gate) and § Output Budget (≤ 120k chars for ≤ 15 requirements). Write each file once; never re-read a written file except through `grep` in the gate.
+Follow SKILL.md § Generation Order (id ledger → shared domain homes → one pass per requirement writing UC + BDD together → cross-cutting files → grep-based gate) and § Output Budget (≤ 120k chars for ≤ 15 requirements). Write each file once; never re-read a written file except through `grep` in the gate.
+
+Decide the execution mode before writing anything (SKILL.md § Execution Strategy, `fanout-protocol.md`): with **more than 4 functional requirements** the per-requirement pass runs in parallel lanes of 2-3 requirements each, plus one cross-cutting lane for `nfr/` and `adr/`, every id having been reserved in the ledger beforehand; at or below the threshold, or with `--sequential`, one thread does the same work in the same order. Phase 3 (Decision Collection) always runs **before** the fan-out — a lane cannot ask the user, and unresolved ambiguities come back as `NC` markers.
 
 ### 4.1 Choose Specification Technique
 

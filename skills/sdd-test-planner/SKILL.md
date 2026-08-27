@@ -856,7 +856,7 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["test-planner"].lastRun` = current ISO-8601
 4. Set `stages["test-planner"].summary`:
    - `artifacts`: list of files created in `test/` with labels (e.g., `{"file": "test/TEST-PLAN.md", "label": "Test Strategy"}`)
-   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "matrix_cases": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "invariants_mapped": N, "test_gaps": N, "test_chars": N }` — `test_chars` is the total of `wc -c test/*.md` (Output Budget)
+   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "matrix_cases": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "invariants_mapped": N, "test_gaps": N, "test_chars": N, "mode": "fanout"|"sequential", "matrix_agents": N }` — `test_chars` is the total of `wc -c test/*.md` (Output Budget); `mode` records whether the matrices were generated in parallel subagents and `matrix_agents` how many were launched (0 in sequential mode). When `mode` is `sequential` above the threshold, the first `summary.highlights` entry states why
    - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing", "TEST-MATRIX-UC-006 at 9 800 chars, over budget")
    - `nextStep`: `"Run /sdd-plan-architect"`
    - `generatedAt`: current ISO-8601
