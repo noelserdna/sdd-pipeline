@@ -410,4 +410,16 @@ sub_out=$(printf '{"columns":80,"tasks":[{"id":"t1","name":"general-purpose","st
 if printf '%s' "$sub_out" | jq -e 'select(.id=="t1") | .content | test("general-purpose · Audit spec/domain \\(DOM\\) · 1m[0-9]+s · 31k tok \\(15%\\)")' >/dev/null 2>&1; then pass "subagent-status: fila con tipo, descripción, tiempo y tokens"; else bad "subagent-status: $sub_out"; fi
 [ -z "$(printf '' | bash "$ROOT/scripts/sdd-subagent-status.sh")" ] && pass "subagent-status: sin entrada no imprime" || bad "subagent-status: imprime sin entrada"
 
+
+# 17. activity-log marca la etapa running al arrancar su skill (las skills escriben con Bash, H3 solo ve Write)
+act2="$(mktemp -d)"; ( cd "$act2" && git init -q . )
+printf '{"sddVersion":"t","hooksVersion":3,"currentStage":"requirements-engineer","stages":{"requirements-engineer":{"status":"done"}}}' > "$act2/pipeline-state.json"
+mkdir -p "$act2/.sdd"
+printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-spec-auditor","args":"audit"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
+if [ "$(jq -r '.stages["spec-auditor"].status' "$act2/pipeline-state.json")" = running ] && [ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ]; then pass "activity-log: marca la etapa running al arrancar la skill"; else bad "activity-log: etapa no marcada ($(jq -c .stages "$act2/pipeline-state.json"))"; fi
+[ "$(jq -r '.stages["requirements-engineer"].status' "$act2/pipeline-state.json")" = done ] && pass "activity-log: no toca otras etapas" || bad "activity-log: pisó otra etapa"
+printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-pipeline-status"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
+[ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ] && pass "activity-log: una skill de solo lectura no cambia la etapa" || bad "activity-log: pipeline-status cambió la etapa"
+rm -rf "$act2"
+
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }

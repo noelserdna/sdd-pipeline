@@ -23,6 +23,7 @@ set -euo pipefail
 
 ROOT=""
 ONCE=false
+BRIEF=false
 INTERVAL=5
 
 usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do
     --root)       shift; ROOT="${1:-}" ;;
     --root=*)     ROOT="${1#*=}" ;;
     --once)       ONCE=true ;;
+    --brief)      ONCE=true; BRIEF=true ;;
     --interval)   shift; INTERVAL="${1:-}" ;;
     --interval=*) INTERVAL="${1#*=}" ;;
     -h|--help)    usage; exit 0 ;;
@@ -311,6 +313,7 @@ question_rows() {
 render() {
   local data now_epoch tag a b c d e f g h
   local st_present=absent cur="-" done_n=0 total=7 stages="" handoffs="" running=""
+  local now_skill="" now_args="" now_since=""
   local act_present=none act_n=0 nows="" agents="" agents_n=0 agents_hour=0 recent="" bench="" bench_present=none
   data=$(reduce)
   now_epoch=$(date -u +%s)
@@ -327,7 +330,9 @@ render() {
         handoffs="$handoffs$(printf '  %-26s → %-22s %-22s %s' "$a" "$b" "$d" "$(fmt_ts "$c")")"$'\n' ;;
       ACT) act_present="$a"; act_n="${b:-0}" ;;
       NOW)
-        nows="$nows$(printf '  skill  %s/%s%s%s  sesión %s [%s]  desde %s%s' "$C_B$C_CYN" "$c" "$([ "$d" != - ] && printf ' %s' "$d")" "$C_R" "$a" "$b" "$(fmt_dur "$e")" "$([ "$f" != - ] && printf '  (en subagente %s)' "$f")")"$'\n' ;;
+        now_skill="${c##*:}"; now_since="$e"
+        now_args="$d"; [ "${#now_args}" -gt 44 ] && now_args="${now_args:0:44}…"
+        nows="$nows$(printf '  skill  %s/%s%s%s  sesión %s [%s]  desde %s%s' "$C_B$C_CYN" "$now_skill" "$([ "$d" != - ] && printf ' %s' "$now_args")" "$C_R" "$a" "$b" "$(fmt_dur "$e")" "$([ "$f" != - ] && printf '  (en subagente %s)' "$f")")"$'\n' ;;
       AGENT)
         agents_n=$((agents_n + 1))
         agents="$agents$(printf '  %-18s %-14s %-40s %s [%s]  %s' "$a" "$b" "$([ "$c" != - ] && printf '%s' "${c:0:40}" || printf -- '-')" "$d" "$e" "$(fmt_dur "$f")")"$'\n' ;;
@@ -340,6 +345,42 @@ render() {
         bench="$bench$(printf '  %s %-10s F%s/%-2s %-14s %-12s %s' "$a" "$b" "$c" "$d" "$e" "$f" "$g")"$'\n' ;;
     esac
   done <<< "$data"
+
+  local stage_src="pipeline-state"
+  if [ -z "$running" ] && [ -n "$now_skill" ]; then
+    case "$now_skill" in
+      sdd-requirements-engineer)   running=requirements-engineer ;;
+      sdd-specifications-engineer) running=specifications-engineer ;;
+      sdd-spec-auditor)            running=spec-auditor ;;
+      sdd-test-planner)            running=test-planner ;;
+      sdd-plan-architect)          running=plan-architect ;;
+      sdd-task-generator)          running=task-generator ;;
+      sdd-task-implementer)        running=task-implementer ;;
+      sdd-security-auditor)        running=security-auditor ;;
+      sdd-tech-designer)           running=tech-designer ;;
+      sdd-ux-designer)             running=ux-designer ;;
+      sdd-gap-detector)            running=gap-detector ;;
+      sdd-req-change)              running=req-change ;;
+    esac
+    [ -n "$running" ] && stage_src="skill en curso"
+  fi
+
+  # --brief: una línea, pensada para `!bash …/sdd-watch.sh --brief --root <proyecto>` desde otra terminal
+  if [ "$BRIEF" = true ]; then
+    local b_open=0 b_q b_n
+    b_q=$(question_rows) || b_q=""
+    if [ -n "$b_q" ]; then
+      while IFS=$'\t' read -r _ b_n; do
+        case "$b_n" in ''|*[!0-9]*) ;; *) b_open=$((b_open + b_n)) ;; esac
+      done <<< "$b_q"
+    fi
+    printf '%s  %s/%s done' "$(basename "$ROOT")" "$done_n" "$total"
+    if [ -n "$running" ]; then printf ' · %s%s' "$running" "$([ -n "$now_since" ] && [ "$now_since" != - ] && printf ' %s' "$(fmt_dur "$now_since")")"; fi
+    printf ' · %s agente%s' "$agents_n" "$([ "$agents_n" = 1 ] || printf 's')"
+    [ "$b_open" -gt 0 ] && printf ' · %s pregunta(s) abiertas' "$b_open"
+    printf '\n'
+    return 0
+  fi
 
   printf '%sSDD watch%s  %s  %s%s%s\n' "$C_B" "$C_R" "$ROOT" "$C_D" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_R"
   if [ "$ONCE" = false ]; then printf '%s(cada %ss · Ctrl+C para salir)%s\n' "$C_D" "$INTERVAL" "$C_R"; fi
@@ -356,7 +397,7 @@ render() {
 
   # Ahora
   printf '%sAhora%s\n' "$C_B" "$C_R"
-  if [ -n "$running" ]; then printf '  etapa  %s%s%s (running)\n' "$C_YEL" "$running" "$C_R"; else printf '  etapa  %sninguna etapa running%s\n' "$C_D" "$C_R"; fi
+  if [ -n "$running" ]; then printf '  etapa  %s%s%s (%s)\n' "$C_YEL" "$running" "$C_R" "$stage_src"; else printf '  etapa  %sninguna etapa running%s\n' "$C_D" "$C_R"; fi
   if [ -n "$nows" ]; then printf '%s' "$nows"; else printf '  skill  %sninguna skill en curso%s\n' "$C_D" "$C_R"; fi
   local trows
   trows=$(task_rows) || trows=""
@@ -384,7 +425,7 @@ render() {
   if [ -n "$srows" ]; then
     while IFS=$'\t' read -r a b c d; do
       [ -n "$a" ] || continue
-      case "$b" in busy|waiting) e="$C_YEL" ;; idle) e="$C_GRN" ;; *) e="$C_D" ;; esac
+      case "$b" in busy|waiting) e="$C_YEL" ;; idle) e="$C_GRN" ;; ''|null|'?') b=headless; e="$C_D" ;; *) e="$C_D" ;; esac
       printf '  %-24s %s%-8s%s %-12s pid %s\n' "$a" "$e" "$b" "$C_R" "$c" "$d"
     done <<< "$srows"
   else
