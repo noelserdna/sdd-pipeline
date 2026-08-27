@@ -126,9 +126,9 @@ jq -s '.[0] * .[1]' .claude/settings.json "$SDD_PLUGIN_ROOT/templates/settings.s
   > .claude/settings.json.tmp && mv .claude/settings.json.tmp .claude/settings.json
 ```
 
-Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(".claude/settings.json","utf8"));s.statusLine={type:"command",command:"bash .claude/sdd-status-line.sh"};fs.writeFileSync(".claude/settings.json",JSON.stringify(s,null,2)+"\n")'`.
+Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(".claude/settings.json","utf8"));s.statusLine={type:"command",command:"bash .claude/sdd-status-line.sh",refreshInterval:5};fs.writeFileSync(".claude/settings.json",JSON.stringify(s,null,2)+"\n")'`.
 
-If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `SDD [4/7] audit !1stale > test` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode). It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
+If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `[<role>] SDD [4/7] audit !1stale > test · spec-auditor 8m · 4 agentes` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode; then the running skill with elapsed minutes and the number of active subagents, read from `.sdd/activity.jsonl`). `refreshInterval: 5` re-runs it every 5 s even while the session is idle waiting for subagents. It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
 
 ### Step 4: Versioning policy
 
