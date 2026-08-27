@@ -145,6 +145,10 @@ check "sdd-up --dry-run: no lanza tmux" sh -c "! grep -q 'new-session' '$FAKE_LO
 out="$(FAKE_TMUX_VER=3.1c bash "$SCRIPTS/sdd-up.sh" --dry-run sdd-lead 2>&1)"
 if contains "$out" "'env SDD_ROLE=sdd-lead SDD_STATE_ROOT='\\''$P'\\'' claude -n my-project-lead'"; then pass "sdd-up --dry-run: tmux < 3.2 usa env"; else bad "sdd-up --dry-run: tmux < 3.2 ($out)"; fi
 out="$(bash "$SCRIPTS/sdd-up.sh" --dry-run impl-f1a 2>&1)"
+# worktree por defecto dentro del proyecto (.claude/worktrees/<rol>): hereda la confianza de carpeta
+tmpj="$(mktemp)"; jq '.roles["impl-f1b"] = (.roles["impl-f1a"] | .name="my-project-impl-f1b" | .stream="B" | .worktree=".claude/worktrees/impl-f1b")' .claude/sdd-sessions.json > "$tmpj" && mv "$tmpj" .claude/sdd-sessions.json
+out2="$(bash "$SCRIPTS/sdd-up.sh" --dry-run impl-f1b 2>&1)"
+if contains "$out2" "worktree add $P/.claude/worktrees/impl-f1b -b feat/fase-1-b"; then pass "sdd-up: worktree por defecto en .claude/worktrees/<rol>"; else bad "sdd-up: worktree interno ($out2)"; fi
 if contains "$out" "git -C $P worktree add $tmp/my-project-f1a -b feat/fase-1-a HEAD" && contains "$out" "fase-1-foundation not found"; then pass "sdd-up --dry-run: worktree desde HEAD si no hay tag"; else bad "sdd-up --dry-run: worktree ($out)"; fi
 check "sdd-up --dry-run: no crea el worktree" test ! -e "$tmp/my-project-f1a"
 if bash "$SCRIPTS/sdd-up.sh" --dry-run nope >/dev/null 2>&1; then bad "sdd-up: rol desconocido debería fallar"; else pass "sdd-up: rol desconocido → exit 1"; fi

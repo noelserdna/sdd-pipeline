@@ -11,7 +11,8 @@
 #   1. refuses to start if a live Claude session already uses the role's session name
 #      (registry $CLAUDE_CONFIG_DIR/sessions/<pid>.json — undocumented, ignored when absent)
 #      or a tmux session with that name exists;
-#   2. creates the role's worktree when configured and missing:
+#   2. creates the role's worktree when configured and missing (default: .claude/worktrees/<role>, inside the project,
+#      so Claude Code does not ask to trust a new folder):
 #      git worktree add <wt> -b feat/fase-<N>-<stream> fase-<N>-foundation  (HEAD if the tag is missing);
 #   3. tmux new-session -d -s <name> -c <dir> -e SDD_ROLE=<role> -e SDD_STATE_ROOT=<root> "claude [$SDD_CLAUDE_ARGS] -n <name>"
 #      (SDD_CLAUDE_ARGS: flags extra para claude, p. ej. "--plugin-dir /ruta/al/plugin" para probar una versión local)
@@ -184,6 +185,9 @@ for role in ${ROLES[@]+"${ROLES[@]}"}; do
   # 2. Working directory (worktree roles)
   if [ -n "$WT" ]; then
     case "$WT" in /*) DIR="$WT" ;; *) DIR="$ROOT/$WT" ;; esac
+    # Default layout: .claude/worktrees/<role> inside the project → inherits the folder trust of the main checkout
+    # (no "trust this folder" dialog) and is ignored by the .gitignore policy. "../x" siblings are still allowed.
+    case "$DIR" in "$ROOT"/.claude/worktrees/*) [ "$DRY_RUN" = true ] || mkdir -p "$(dirname "$DIR")" ;; esac
     # Normalise "../x" lexically while the target does not exist yet (its parent must).
     if [ ! -d "$DIR" ] && [ -d "$(dirname "$DIR")" ]; then
       DIR="$(cd "$(dirname "$DIR")" && pwd)/$(basename "$DIR")"

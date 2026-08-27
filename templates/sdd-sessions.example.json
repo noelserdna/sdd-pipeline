@@ -80,7 +80,7 @@
       ],
       "fase": 1,
       "stream": "A",
-      "worktree": "../example-f1a"
+      "worktree": ".claude/worktrees/impl-f1a"
     },
     "sdd-qa": {
       "name": "example-qa",
