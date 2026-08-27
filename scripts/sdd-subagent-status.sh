@@ -24,9 +24,11 @@ printf '%s' "$input" | jq -r -c --argjson now "$now" '
   | ((.description // .label // "") | tostring) as $desc
   | (if (.status // "") == "running" or (.status // "") == "" then "▶" else "■" end) as $icon
   | ((.type // "") | tostring) as $type | ((.name // "") | tostring) as $name
-  | (if $type != "" and $type != "local_agent" then $type elif $name != "" and $name != "local_agent" then $name else "agent" end) as $kind
-  | (if $name != "" and $name != "local_agent" and $name != $kind then $kind + " [" + $name + "]" else $kind end) as $who
-  | ([ $icon + " " + $who, $desc, $dur, (if $tok > 0 then "\(($tok/1000)|floor)k tok\($pct)" else "" end) ]
+  | ((.model // "") | tostring | (if test("sonnet") then "sonnet" elif test("haiku") then "haiku" elif test("opus") then "opus" elif test("fable") then "fable" else "" end)) as $model
+  | (if $type != "" and $type != "local_agent" then $type elif $name != "" and $name != "local_agent" then $name elif $model != "" then $model else "agent" end) as $kind
+  | (if $model != "" and $kind != $model then $kind + " (" + $model + ")" else $kind end) as $who
+  | (((.label // "") | tostring) | if . != "" and . != $desc then "→ " + . else "" end) as $now
+  | ([ $icon + " " + $who, $desc, $dur, (if $tok > 0 then "\(($tok/1000)|floor)k tok\($pct)" else "" end), $now ]
      | map(select(. != "")) | join(" · ")) as $row
   | {id: .id, content: ($row | if length > $cols then .[0:($cols-1)] + "…" else . end)}
 ' 2>/dev/null || true
