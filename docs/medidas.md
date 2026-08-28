@@ -125,3 +125,18 @@ por Streams (82,1 k ≤ 93 k), que valida la recalibración.
    `sdd-lead` y el smoke pasan `--fanout`/`--parallel` cuando se supera el umbral).
 4. Comparar totales entre pasadas sigue siendo engañoso: v4 produjo 386,9 k chars de artefactos y 159 tests frente a los
    79 de v3. Mirar `total_tasks`, `total_findings`, `tests_passed` y los `*_chars` junto al reloj.
+
+## Comparación de las cuatro pasadas (mismo proyecto, `examples/todo-app`)
+
+| | v1 4.0.0 | v2 4.0.2 | v3 4.0.3 | v4 4.1.0 |
+|---|---|---|---|---|
+| Total hasta FASE-0 | 2 h 46 | 1 h 39 | 1 h 59 | 1 h 49 |
+| Subagentes | 0 | 0 | 7 | 10 |
+| Artefactos (chars) | ~737 k | 341 k | 365 k | 387 k |
+| Tests verdes al cerrar FASE-0 | 105 | ? | 79 | **159** |
+| Hallazgos de auditoría | — | 8 | 12 | 22 |
+| Tasks generadas | 50 | 41 | 56 | 64 |
+
+El reloj se ha estabilizado en torno a 1 h 50 mientras el trabajo entregado subía (más tests, más hallazgos, más tasks
+y un tercio menos de texto redundante). El margen que queda no está en escribir menos, sino en **equilibrar los carriles**:
+las tres etapas paralelizadas terminan cuando acaba su carril más lento, y hoy el reparto es por número de elementos.
