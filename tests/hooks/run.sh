@@ -370,8 +370,15 @@ printf '{not json' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 JSON roto →
 printf '' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 stdin vacío → exit 0" || bad "H10 stdin vacío falla"
 # sdd-watch.sh --once
 wout=$(bash "$WATCH" --once --root "$act" 2>&1) && pass "sdd-watch --once exit 0" || bad "sdd-watch --once falla: $wout"
-contains "$wout" "/sdd-spec-auditor --fix" && pass "sdd-watch muestra la skill en curso (skill-start sin stop)" || bad "sdd-watch sin skill en curso: $wout"
-contains "$wout" "sdd-task-implementer" && ! contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: skill cerrada por stop no aparece en Ahora (sí en Actividad)" || bad "sdd-watch: skill cerrada por stop: $wout"
+contains "$wout" "/sdd-spec-auditor --fix" && pass "sdd-watch muestra la skill en curso (skill-start sin cierre)" || bad "sdd-watch sin skill en curso: $wout"
+# `stop` NO cierra la skill (Stop se dispara en cada turno): la de b2b2b2b2 sigue en curso pese a su stop
+contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: un stop no cierra la skill (sigue en Ahora)" || bad "sdd-watch: el stop cerró la skill: $wout"
+# sí la cierra el skill-end que emite el Stop de una sesión headless (`claude -p`)
+h10 "SDD_HEADLESS=1" "$(ev "$act" b2b2b2b2-0002 Stop '')"
+wout=$(bash "$WATCH" --once --root "$act" 2>&1) || true
+contains "$wout" "sdd-task-implementer" && ! contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: skill cerrada por skill-end no aparece en Ahora (sí en Actividad)" || bad "sdd-watch: skill cerrada por skill-end: $wout"
+check "H10 skill-end: skill, seconds y reason" \
+  jq -e -s '[ .[] | select(.event == "skill-end") ] | length == 1 and (.[0] | .skill == "sdd-task-implementer" and (.seconds | type) == "number" and .reason == "headless-stop" and .session == "b2b2b2b2")' "$alog"
 contains "$wout" "2 activo(s)" && pass "sdd-watch: 2 subagentes activos (agent-1 y agent-3; agent-2 parado)" || bad "sdd-watch agentes: $wout"
 asec=$(printf '%s\n' "$wout" | awk '/^Agentes/{f=1; next} /^Sesiones/{f=0} f')   # solo la sección Agentes
 contains "$asec" "agent-1" && contains "$asec" "Buscar usos de X" && contains "$asec" "agent-3" && ! contains "$asec" "agent-2" && pass "sdd-watch: agentes activos con descripción del agent-start previo; agent-2 (parado) fuera" || bad "sdd-watch agente activo: $asec"
@@ -423,5 +430,153 @@ if [ "$(jq -r '.stages["spec-auditor"].status' "$act2/pipeline-state.json")" = r
 printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-pipeline-status"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
 [ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ] && pass "activity-log: una skill de solo lectura no cambia la etapa" || bad "activity-log: pipeline-status cambió la etapa"
 rm -rf "$act2"
+
+
+# ---------------------------------------------------------------- 18. skill-end, índice global (<config>/sdd) y barra global
+G_LINE="$ROOT/scripts/sdd-status-line-global.sh"
+RUNS_HOOK="$HOOKS/sdd-runs-line.sh"
+INSTALL_G="$ROOT/scripts/install-global-statusline.sh"
+for f in "$G_LINE" "$RUNS_HOOK" "$INSTALL_G"; do check "bash -n $(basename "$f")" bash -n "$f"; done
+
+gcfg="$tmp/cfg-global"; mkdir -p "$gcfg/sessions"
+runs="$gcfg/sdd/active-runs.json"
+grepo="$tmp/grepo"; git init -q "$grepo" && git -C "$grepo" commit -q --allow-empty -m init
+cp "$FIX/pipeline-state.impl-running.json" "$grepo/pipeline-state.json"   # 6/7 done (el skill-start de task-generator la vuelve a marcar running → 5/7)
+galog="$grepo/.sdd/activity.jsonl"
+# g10 ENV json → hook de actividad con el directorio de configuración aislado ($gcfg, no el ~/.claude real)
+g10() {
+  local envs="$1" json="$2"
+  # shellcheck disable=SC2086
+  printf '%s' "$json" | env CLAUDE_CONFIG_DIR="$gcfg" $envs bash "$ACT_HOOK" 2>/dev/null
+}
+# gstatus CWD → lo que pintaría la barra global en una sesión abierta en CWD
+gstatus() {
+  printf '{"cwd":"%s","workspace":{"current_dir":"%s"}}' "$1" "$1" | env CLAUDE_CONFIG_DIR="$gcfg" bash "$G_LINE" 2>/dev/null || true
+}
+runs_line() {
+  printf '{"session_id":"z","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"hola"}' "${1:-$nogit}" \
+    | env CLAUDE_CONFIG_DIR="$gcfg" bash "$RUNS_HOOK" 2>/dev/null || true
+}
+count_ev() { jq -s --arg e "$1" '[ .[] | select(.event == $e) ] | length' "$galog" 2>/dev/null || echo -1; }
+
+# sin runs: silencio absoluto en la barra y en UserPromptSubmit
+out=$(gstatus "$nogit")
+[ -z "$out" ] && pass "barra global sin runs ni pipeline local: no imprime nada" || bad "barra global imprime sin runs: '$out'"
+out=$(runs_line)
+[ -z "$out" ] && pass "UserPromptSubmit sin índice: no imprime nada" || bad "UserPromptSubmit imprime sin runs: '$out'"
+
+# skill-start + 2 subagentes → entrada en el índice, con clave = root
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-task-generator","args":"--fanout"}')"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 SubagentStart ',"agent_id":"g1","agent_type":"general-purpose"')"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 SubagentStart ',"agent_id":"g2","agent_type":"general-purpose"')"
+check "índice global: se crea <config>/sdd/active-runs.json" test -f "$runs"
+check "índice: clave root, project, skill sdd-* normalizada, state running, 2 agentes, sesión" \
+  jq -e --arg r "$grepo" '.runs[$r] | .root == $r and .project == "grepo" and .skill == "sdd-task-generator"
+     and .state == "running" and .agents == 2 and ((.sessions | index("b7b7b7b7")) != null)' "$runs"
+check "índice: nada de proyectos sin SDD" jq -e --arg r "$plain" '(.runs | has($r)) | not' "$runs"
+
+# la barra global ve el run aunque la sesión esté en OTRO directorio sin pipeline (el problema que resuelve)
+out=$(gstatus "$nogit")
+if contains "$out" "SDD ▸ grepo" && contains "$out" "5/7 done" && contains "$out" "task-generator" && contains "$out" "2 agentes"; then
+  pass "barra global: run remoto desde un cwd sin pipeline ($out)"
+else bad "barra global con run: '$out'"; fi
+out=$(runs_line)
+contains "$out" '"systemMessage"' && contains "$out" "SDD ▸ grepo 5/7 · task-generator" && contains "$out" "último evento" \
+  && pass "UserPromptSubmit: una línea de systemMessage por run" || bad "UserPromptSubmit con run: '$out'"
+
+# Stop de una sesión interactiva: NO cierra (Stop se dispara en cada turno)
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
+[ "$(count_ev skill-end)" = 0 ] && pass "skill-end: un Stop interactivo (sin entrada headless) no cierra" || bad "skill-end: el Stop interactivo cerró la skill"
+check "índice: la skill sigue en curso tras el Stop" jq -e --arg r "$grepo" '.runs[$r] | .skill == "sdd-task-generator" and .state == "running"' "$runs"
+
+# Stop de una sesión headless (`claude -p`): el registro <config>/sessions la marca con entrypoint sdk-cli
+printf '{"pid":424242,"sessionId":"b7b7b7b7-0007","cwd":"%s","kind":"interactive","entrypoint":"sdk-cli"}\n' "$grepo" > "$gcfg/sessions/424242.json"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
+[ "$(count_ev skill-end)" = 1 ] && pass "skill-end: el Stop headless (entrypoint sdk-cli) cierra la skill" || bad "skill-end: el Stop headless no cerró ($(count_ev skill-end))"
+check "skill-end: skill, seconds numérico y reason=headless-stop" \
+  jq -e -s '[ .[] | select(.event == "skill-end") ] | last | .skill == "sdd-pipeline:sdd-task-generator" and (.seconds | type) == "number" and .reason == "headless-stop"' "$galog"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
+[ "$(count_ev skill-end)" = 1 ] && pass "skill-end: una sola vez, no uno por turno" || bad "skill-end repetido por turno ($(count_ev skill-end))"
+check "índice: skill a null y state idle tras el cierre (la entrada sigue)" \
+  jq -e --arg r "$grepo" '.runs[$r] | .skill == null and .started_at == null and .state == "idle" and .agents == 2' "$runs"
+out=$(gstatus "$nogit")
+contains "$out" "5/7 done" && ! contains "$out" "task-generator" && pass "barra global: sin skill en curso solo etapas y agentes ($out)" || bad "barra global tras el cierre: '$out'"
+
+# sin latido (>90s): skill en curso cuyo último evento es viejo
+jq --arg r "$grepo" '(now - 130 | todateiso8601) as $old
+  | .runs[$r] |= (.skill = "sdd-task-generator" | .started_at = $old | .last_seen = $old | .state = "running")' \
+  "$runs" > "$runs.t" && mv "$runs.t" "$runs"
+out=$(gstatus "$nogit")
+contains "$out" "sin latido (>90s)" && contains "$out" "2m 10s" && pass "barra global: · sin latido (>90s) ($out)" || bad "barra global sin latido: '$out'"
+# terminado
+jq --arg r "$grepo" '.runs[$r] |= (.skill = null | .started_at = null | .state = "done" | .last_seen = (now | todateiso8601))' \
+  "$runs" > "$runs.t" && mv "$runs.t" "$runs"
+out=$(gstatus "$nogit")
+contains "$out" "· terminado" && pass "barra global: · terminado ($out)" || bad "barra global terminado: '$out'"
+
+# watch-target manda sobre el índice
+mkdir -p "$tmp/otro-proj"; cp "$FIX/pipeline-state.pending.json" "$tmp/otro-proj/pipeline-state.json"
+printf '%s\n' "$tmp/otro-proj" > "$gcfg/sdd/watch-target"
+out=$(gstatus "$nogit")
+contains "$out" "SDD ▸ otro-proj" && pass "barra global: respeta <config>/sdd/watch-target ($out)" || bad "barra global watch-target: '$out'"
+rm -f "$gcfg/sdd/watch-target"
+# cwd con pipeline: gana el local sobre el índice
+out=$(gstatus "$tmp/otro-proj")
+contains "$out" "SDD ▸ otro-proj" && pass "barra global: el pipeline del cwd tiene prioridad sobre el índice remoto" || bad "barra global local: '$out'"
+
+# varias sesiones sobre el mismo root: la entrada solo desaparece con la última
+g10 "" "$(ev "$grepo" c8c8c8c8-0008 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-task-implementer"}')"
+g10 "" "$(ev "$grepo" d9d9d9d9-0009 SubagentStart ',"agent_id":"g3","agent_type":"Explore"')"
+g10 "" "$(ev "$grepo" c8c8c8c8-0008 SessionEnd ',"reason":"exit"')"
+check "índice: con otra sesión viva del mismo root la entrada se conserva" \
+  jq -e --arg r "$grepo" '.runs[$r] | .skill == null and ((.sessions | index("c8c8c8c8")) == null) and ((.sessions | index("d9d9d9d9")) != null)' "$runs"
+g10 "" "$(ev "$grepo" b7b7b7b7-0007 SessionEnd ',"reason":"exit"')"
+g10 "" "$(ev "$grepo" d9d9d9d9-0009 SessionEnd ',"reason":"clear"')"
+check "índice: la entrada se borra cuando no queda ninguna sesión viva del root" \
+  jq -e --arg r "$grepo" '(.runs | has($r)) | not' "$runs"
+out=$(gstatus "$nogit")
+[ -z "$out" ] && pass "barra global: silencio otra vez cuando el índice se vacía" || bad "barra global tras borrar el run: '$out'"
+check "skill-end: SessionEnd cierra siempre (la skill de c8c8c8c8)" \
+  jq -e -s '[ .[] | select(.event == "skill-end" and .reason == "session-end") ] | length >= 1' "$galog"
+
+# /sdd-watch: sdd-watch.sh --brief sin ruta recorre el índice; con una ruta suelta, ese proyecto
+g10 "" "$(ev "$grepo" e1e1e1e1-0001 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-task-generator"}')"
+wout=$(env CLAUDE_CONFIG_DIR="$gcfg" bash "$WATCH" --brief 2>/dev/null) || true
+contains "$wout" "grepo  5/7 done" && pass "sdd-watch --brief sin argumentos: una línea por run del índice" || bad "sdd-watch --brief global: '$wout'"
+wout=$(env CLAUDE_CONFIG_DIR="$gcfg" bash "$WATCH" --brief "$grepo" 2>/dev/null) || true
+contains "$wout" "grepo  5/7 done" && pass "sdd-watch --brief <ruta>: acepta la ruta suelta que pasa /sdd-watch" || bad "sdd-watch --brief ruta: '$wout'"
+
+# sin jq (PATH mínimo con node): índice y barra global por node
+ln -s "$(command -v tail)" "$bin/tail" 2>/dev/null || true
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  g10 "PATH=$bin" "$(ev "$grepo" f2f2f2f2-0002 SubagentStart ',"agent_id":"g9","agent_type":"Explore"')"
+  check "sin jq: el índice se actualiza con node" \
+    jq -e --arg r "$grepo" '.runs[$r] | .agents >= 1 and ((.sessions | index("f2f2f2f2")) != null)' "$runs"
+  out=$(printf '{"cwd":"%s"}' "$nogit" | env CLAUDE_CONFIG_DIR="$gcfg" PATH="$bin" bash "$G_LINE" 2>/dev/null || true)
+  contains "$out" "SDD ▸ grepo" && pass "sin jq: barra global por node ($out)" || bad "sin jq: barra global: '$out'"
+  out=$(printf '{"hook_event_name":"UserPromptSubmit"}' | env CLAUDE_CONFIG_DIR="$gcfg" PATH="$bin" bash "$RUNS_HOOK" 2>/dev/null || true)
+  contains "$out" "SDD ▸ grepo" && pass "sin jq: UserPromptSubmit por node" || bad "sin jq: UserPromptSubmit: '$out'"
+else
+  echo "skip sin jq (índice global): node no operativo con PATH mínimo"
+fi
+
+# install-global-statusline.sh: instala en el settings del usuario, avisa de una statusLine ajena y revierte
+icfg="$tmp/cfg-install"; mkdir -p "$icfg"
+env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" >/dev/null 2>&1 < /dev/null || true
+check "install-global-statusline: copia la barra a <config>/sdd/status-line.sh (ruta estable)" test -x "$icfg/sdd/status-line.sh"
+check "install-global-statusline: escribe statusLine con refreshInterval 5" \
+  jq -e '.statusLine.type == "command" and (.statusLine.command | endswith("sdd/status-line.sh")) and .statusLine.refreshInterval == 5' "$icfg/settings.json"
+printf '{"statusLine":{"type":"command","command":"bash otra.sh"},"env":{"A":"1"}}' > "$icfg/settings.json"
+env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" >/dev/null 2>&1 < /dev/null || true
+check "install-global-statusline: no pisa una statusLine ajena sin --force" \
+  jq -e '.statusLine.command == "bash otra.sh"' "$icfg/settings.json"
+env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" --force >/dev/null 2>&1 < /dev/null || true
+check "install-global-statusline: --force reemplaza y conserva el resto del settings" \
+  jq -e '(.statusLine.command | endswith("sdd/status-line.sh")) and .env.A == "1"' "$icfg/settings.json"
+check "install-global-statusline: deja copia de seguridad" sh -c "ls '$icfg'/settings.json.bak-* >/dev/null 2>&1"
+env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" --uninstall >/dev/null 2>&1 < /dev/null || true
+check "install-global-statusline: --uninstall quita statusLine y el script" \
+  sh -c "jq -e '(.statusLine // null) == null and .env.A == \"1\"' '$icfg/settings.json' >/dev/null && [ ! -f '$icfg/sdd/status-line.sh' ]"
 
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }

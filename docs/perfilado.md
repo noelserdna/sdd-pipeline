@@ -78,7 +78,7 @@ Reglas comunes a las cinco:
 - **Degradación:** solo por estar bajo el umbral, por el flag de desactivar, o porque el tool `Agent` no está en la lista. El motivo va siempre en `summary.highlights` (y en `metrics.mode` donde existe).
 - **Reintento:** un subagente que falla o devuelve JSON inválido se relanza una vez; si vuelve a fallar, el principal hace ese trozo en secuencial y lo deja escrito.
 - **Eje distinto:** `--stream X` de `sdd-task-implementer` **no** es fan-out: son sesiones y worktrees separados sobre write-sets disjuntos ([`multisesion.md`](multisesion.md)). Los dos ejes se componen — dentro de un worktree de Stream, sus tasks `[P]` siguen yendo a subagentes.
-- **Comprobar que se activó:** la status line y `scripts/sdd-watch.sh` muestran los subagentes vivos como `N agentes`; en el log, un evento `subagent-start` por cada uno en `.sdd/activity.jsonl`.
+- **Comprobar que se activó:** la status line y `scripts/sdd-watch.sh` muestran los subagentes vivos como `N agentes`; en el log, un evento `subagent-start` por cada uno en `.sdd/activity.jsonl`. Si la etapa corre en otro proceso (`claude -p`) o en otro proyecto, el contador se ve igual con `/sdd-watch` o con la barra global de usuario ([`multisesion.md` §Ver qué está pasando](multisesion.md#ver-qué-está-pasando)).
 
 ## Lección de la tercera medición (2026-08-27): paralelizar lo que está en el camino crítico
 

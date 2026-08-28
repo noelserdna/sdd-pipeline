@@ -225,6 +225,35 @@ sdd_unlock() {
   return 0
 }
 
+# ---------------------------------------------------------------- índice global de ejecuciones
+# <config>/sdd/active-runs.json: una entrada por checkout principal (clave `root`) que escribe
+# hooks/sdd-activity-log.sh. Lo leen hooks/sdd-runs-line.sh y scripts/sdd-watch.sh --brief.
+# scripts/sdd-status-line-global.sh NO usa estos helpers a propósito: se copia fuera del plugin.
+sdd_runs_file() { printf '%s\n' "${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/sdd/active-runs.json"; }
+
+# sdd_stage_counts FILE → "hechas<TAB>totales" de pipeline-state.json (vacío si no se puede leer).
+# El total son las etapas REALES del fichero (las laterales las añaden los hooks), no 7 fijo.
+sdd_stage_counts() {
+  local f="$1"
+  [ -f "$f" ] || return 0
+  if sdd_has_jq; then
+    jq -r '(.stages // {}) | (if type == "object" then . else {} end) as $s
+           | [ ([ $s[] | select(type == "object" and .status == "done") ] | length), ($s | length) ] | @tsv' "$f" 2>/dev/null || true
+    return 0
+  fi
+  sdd_has_node || return 0
+  SDD_SC_FILE="$f" node -e '
+    const fs = require("fs");
+    try {
+      const st = JSON.parse(fs.readFileSync(process.env.SDD_SC_FILE, "utf8"));
+      const s = (st && typeof st.stages === "object" && st.stages) || {};
+      const keys = Object.keys(s);
+      const done = keys.filter((k) => s[k] && typeof s[k] === "object" && s[k].status === "done").length;
+      process.stdout.write(done + "\t" + keys.length + "\n");
+    } catch (e) {}' 2>/dev/null || true
+  return 0
+}
+
 # ---------------------------------------------------------------- roles (sdd-sessions.json)
 sdd_registry_file() { printf '%s\n' "${STATE_ROOT:-${PROJECT_DIR:-$PWD}}/.claude/sdd-sessions.json"; }
 

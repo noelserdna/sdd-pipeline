@@ -11,7 +11,7 @@ De los requisitos al código en producción: un pipeline estructurado, auditable
 
 - **24 skills** — el pipeline de 7 etapas, skills laterales, onboarding brownfield, utilidades y el lead multi-sesión
 - **5 agentes** — orquestador interactivo, auditor end-to-end, guardián de contexto, garante de la constitución, auditor cruzado
-- **6 hooks** (12 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, actualización de estado y trace-map, contexto de trazabilidad y el registro de actividad que alimenta la status line y `sdd-watch`
+- **7 hooks** (13 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, actualización de estado y trace-map, contexto de trazabilidad, el registro de actividad que alimenta la status line y `sdd-watch`, y un recordatorio de una línea con los runs vivos en cada prompt
 - **Servidor MCP** — 6 tools, 7 recursos y 2 prompts sobre `dashboard/traceability-graph.json`
 - **Implementación multi-sesión** — sesiones con rol (`SDD_ROLE`), Streams paralelos en worktrees de git, handoffs al lead
 
@@ -130,9 +130,12 @@ Declarados en [`hooks/hooks.json`](hooks/hooks.json) y ejecutados desde el direc
 | `sdd-augment-hook.js` | PreToolUse Read/Edit/Write | Añade contexto de trazabilidad del fichero que se toca |
 | `sdd-pipeline-state-updater.sh` | PostToolUse Write | Marca como `running` la etapa dueña de la ruta escrita (con lock, consciente de worktrees) |
 | `sdd-trace-map-updater.sh` | PostToolUse Write/Edit | Acumula mapeos fichero → task/refs en `.sdd/trace-map.json` |
-| `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Añade una línea JSON por evento a `.sdd/activity.jsonl` (skill, subagentes, sesión, rol, etapa, task) para el panel en vivo `scripts/sdd-watch.sh` |
+| `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Añade una línea JSON por evento a `.sdd/activity.jsonl` (skill, subagentes, sesión, rol, etapa, task) para el panel en vivo `scripts/sdd-watch.sh`, cierra la skill en curso con `skill-end` y mantiene el índice global de ejecuciones `~/.claude/sdd/active-runs.json` |
+| `sdd-runs-line.sh` | UserPromptSubmit | Una línea de `systemMessage` por run vivo de ese índice (silencio si no hay ninguno) |
 
 `sdd-setup` instala además un hook git `commit-msg` que exige trailers `Refs:` / `Task:` en commits `feat`, `fix`, `perf`, `test` y `refactor` (bypass: `[skip-sdd]` o `SDD_SKIP_VERIFY=1`), y puede añadir una status line opcional y quality gates opt-in (`Stop`, `TaskCompleted`).
+
+Para ver un pipeline que corre en **otros procesos y otros proyectos** (`claude -p`): `/sdd-watch` imprime una línea por run vivo y `bash scripts/install-global-statusline.sh` instala una status line de usuario (`SDD ▸ todo-app  5/7 done · task-generator 12m 30s · 3 agentes`) que lee ese mismo índice global — ver [`docs/multisesion.md`](docs/multisesion.md#ver-qué-está-pasando).
 
 ## Servidor MCP
 
@@ -182,6 +185,7 @@ examples/todo-app proyecto de juguete para E2E       tests/       hooks, setup, 
 node scripts/validate-plugin.mjs        # manifiestos, skills, agentes, hooks, mcp
 bash tests/hooks/run.sh                 # comportamiento de los hooks (roles, worktrees, lock, activity log)
 scripts/sdd-watch.sh --root ../mi-app   # panel en vivo: etapas, skill en curso, subagentes, sesiones, handoffs, preguntas (--once para una foto)
+scripts/sdd-watch.sh --brief            # una línea por run vivo del índice global (lo que ejecuta /sdd-watch)
 bash tests/e2e/run-all.sh               # B1 validación estática + B2 instalación real en un CLAUDE_CONFIG_DIR aislado
 cd server && npm ci && npm run check && npm run build && npm test
 claude --plugin-dir . -p "/sdd-pipeline-status"   # probar el plugin sin instalarlo

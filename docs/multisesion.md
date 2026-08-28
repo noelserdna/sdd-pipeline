@@ -66,6 +66,62 @@ bash "$SDD_PLUGIN_ROOT/scripts/sdd-watch.sh" --brief --root /ruta/al/proyecto
 # todo-app  4/7 done · specifications-engineer 15m 58s · 2 agentes
 ```
 
+### Cuando el pipeline corre en otro proyecto (y en otro proceso)
+
+Es lo habitual al medir o automatizar: el pipeline corre en procesos `claude -p` sobre otro checkout y
+tú estás en una sesión interactiva en un tercer directorio. La barra del proyecto y `sdd-watch.sh`
+resuelven el estado desde el `cwd` de quien los ejecuta, así que ahí no verían nada. Para eso el hook
+de actividad mantiene un **índice global de ejecuciones**, `~/.claude/sdd/active-runs.json`: una
+entrada por **checkout principal** (clave `root`; nunca por nombre de sesión, que en `claude -p` es
+distinto y efímero) con `{root, project, stage, skill, started_at, last_seen, agents, state, sessions}`.
+Se crea con el primer evento SDD, se actualiza en cada evento, se borra cuando termina la última
+sesión de ese root, y nunca registra proyectos sin `pipeline-state.json` ni `.sdd/`.
+
+Tres formas de mirarlo, de menos a más permanente:
+
+```bash
+/sdd-watch                     # una línea por run vivo, desde cualquier sesión
+/sdd-watch /ruta/al/proyecto   # solo ese checkout
+bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh"   # barra fija (abajo)
+```
+
+Además, al enviar cualquier prompt, el hook `UserPromptSubmit` (`hooks/sdd-runs-line.sh`) recuerda en
+un `systemMessage` —que ve el humano y **no** gasta contexto— una línea por run vivo, y calla del todo
+si no hay ninguno:
+
+```
+SDD ▸ todo-app 5/7 · task-generator 12m · 3 agentes · último evento 40s
+```
+
+**Barra de estado global (de usuario).** Un plugin no puede escribir `statusLine` en el settings del
+usuario, así que se instala una vez y a mano:
+
+```bash
+bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh"              # copia + statusLine
+bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh" --uninstall  # lo revierte
+```
+
+Copia `scripts/sdd-status-line-global.sh` a `~/.claude/sdd/status-line.sh` (**ruta estable**: la
+carpeta del plugin cambia en cada actualización, y el settings del usuario no puede apuntar a una
+versión) y añade `statusLine {type: command, command: "bash ~/.claude/sdd/status-line.sh",
+refreshInterval: 5}` a `~/.claude/settings.json`, con copia de seguridad previa y preguntando si ya
+hay otra `statusLine` (`--force` la reemplaza, `--print-only` imprime el bloque para combinarlo a
+mano, `--dry-run` no toca nada). Es **de usuario, no de proyecto**: sale en todas las sesiones de la
+máquina y no imprime nada donde no hay SDD. Convive con la barra por proyecto del paso 3 de
+`/sdd-setup`, que solo mira el proyecto de la sesión.
+
+```
+SDD ▸ todo-app  5/7 done · task-generator 12m 30s · 3 agentes
+SDD ▸ todo-app  5/7 done · task-generator 21m 04s · 3 agentes · sin latido (>90s)
+SDD ▸ todo-app  7/7 done · terminado
+```
+
+A qué run mira, en orden: `~/.claude/sdd/watch-target` (un fichero con UNA ruta, para fijar el
+proyecto que quieres vigilar), el pipeline del `cwd` de la sesión si lo hay, y si no la entrada más
+reciente del índice. `sin latido` avisa de que hay una skill abierta pero el run lleva más de 90 s sin
+eventos (proceso muerto, o un tramo largo sin subagentes); `terminado` es que todas las etapas están
+`done`. El denominador son las etapas reales de `pipeline-state.json`, tarda menos de 0,2 s y solo
+pinta skills del pipeline (`sdd-*`).
 
 Dentro de la propia consola de Claude Code: la status line (`/sdd-setup`, paso 3) muestra `[rol] SDD [n/7] <etapa> · <skill> <min> · <k> agentes` y se repinta cada 5 s; el panel de agentes (`←`) muestra cada subagente como `▶ <tipo> · <descripción> · <tiempo> · <tokens>k (<%>)`. Fuera de la consola, el panel `sdd-watch.sh` descrito a continuación.
 
@@ -85,7 +141,7 @@ scripts/sdd-watch.sh --once --root ../todo-app                                # 
 | Sección | Qué muestra | Fuente |
 |---|---|---|
 | **Pipeline** | cada stage `done/running/stale/pending` con `lastRun`, contador `N/7`, `currentStage` | `pipeline-state.json` |
-| **Ahora** | etapa `running`; skill en curso por sesión (último `skill-start` sin `stop` posterior) y desde cuándo; task actual del principal y de cada worktree de `git worktree list` | `activity.jsonl`, `.sdd/current-task.json` |
+| **Ahora** | etapa `running`; skill en curso por sesión (último `skill-start` sin `skill-end` posterior) y desde cuándo; task actual del principal y de cada worktree de `git worktree list` | `activity.jsonl`, `.sdd/current-task.json` |
 | **Agentes** | subagentes activos (`subagent-start` sin `subagent-stop`): tipo, descripción, sesión/rol, duración; total lanzados en la última hora | `activity.jsonl` |
 | **Sesiones** | sesiones vivas del mismo repo: nombre, estado (`busy/idle/waiting`), rol, pid | `~/.claude/sessions/*.json`, `.claude/sdd-sessions.json` |
 | **Handoffs** | stages con `summary.handoff`: destino, resultado, hora | `pipeline-state.json` |
@@ -102,8 +158,17 @@ Eventos registrados (campo `event`) y de qué hook salen:
 | `agent-start` | `PreToolUse` con `tool_name=Agent` (o `Task`, nombre antiguo) | `agent_type` (`subagent_type`), `description` |
 | `subagent-start` / `subagent-stop` | `SubagentStart` / `SubagentStop` | `agent_type`, `agent_id` |
 | `stop` | `Stop` (fin de turno del agente principal) | — |
+| `skill-end` | `Stop` \| `SessionEnd`, cerrando el último `skill-start` abierto de esa sesión | `skill`, `seconds`, `reason` (`session-end` \| `headless-stop` \| `idle-stop`) |
 
-Campos comunes: `ts` (ISO UTC), `session` (8 primeros caracteres de `session_id`), `role` (`SDD_ROLE` o registro de sesiones; `-` sin rol), `cwd` (relativo al principal), `stage` (primer stage `running`), `task` (`taskId` del `.sdd/current-task.json` del worktree). El hook no escribe nada en proyectos sin `.sdd/` ni `pipeline-state.json`, siempre sale con 0 y rota el fichero a `activity.1.jsonl` al superar 5 MB. Como `SubagentStart` no trae la descripción, el panel la toma del `agent-start` anterior de la misma sesión y tipo (heurística). Una skill que termina el turno para preguntar al humano deja de contar como "en curso" hasta la siguiente invocación.
+Campos comunes: `ts` (ISO UTC), `session` (8 primeros caracteres de `session_id`), `role` (`SDD_ROLE` o registro de sesiones; `-` sin rol), `cwd` (relativo al principal), `stage` (primer stage `running`), `task` (`taskId` del `.sdd/current-task.json` del worktree). El hook no escribe nada en proyectos sin `.sdd/` ni `pipeline-state.json`, siempre sale con 0 y rota el fichero a `activity.1.jsonl` al superar 5 MB. Como `SubagentStart` no trae la descripción, el panel la toma del `agent-start` anterior de la misma sesión y tipo (heurística).
+
+Una skill se cierra con `skill-end`, **nunca** con `stop`: `Stop` se dispara al final de CADA turno y
+una skill larga que hace una pregunta de puerta sigue en curso después (con el criterio antiguo la
+barra perdía skill y reloj durante 14 de los 19 minutos de una etapa). El cierre es deliberadamente
+conservador —mejor una skill abierta de más que un reloj que desaparece a mitad de etapa— y ocurre:
+en `SessionEnd` siempre; en `Stop` si la sesión es **headless** (`claude -p`/SDK, donde un turno = una
+skill; se detecta por `entrypoint` en el registro `~/.claude/sessions/*.json`); y en `Stop` de una
+sesión interactiva solo si lleva más de `SDD_SKILL_IDLE_SECS` (900 s) sin ningún evento.
 
 ## Límites conocidos
 

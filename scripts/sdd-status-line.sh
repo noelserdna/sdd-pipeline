@@ -188,9 +188,13 @@ ACT_FILE="${STATE_ROOT:-${PROJECT_DIR:-.}}/.sdd/activity.jsonl"
 if [ -s "$ACT_FILE" ] && command -v jq >/dev/null 2>&1; then
   ACTIVITY=$(tail -n 400 "$ACT_FILE" 2>/dev/null | jq -r -s --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
     def secs: (sub("\\.[0-9]+";"") | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime);
-    [ .[] | select(type=="object") ] as $ev
+    [ .[] | select(type=="object") ] as $raw
+    | ($raw | to_entries | map(.value + {i: .key})) as $ev
     | ($ev | map(select(.event=="skill-start")) | last) as $sk
-    | (if $sk == null then null else ($ev | map(select(.event=="stop" and .session==$sk.session and .ts > $sk.ts)) | length) end) as $stopped
+    # La skill se cierra con skill-end (y con session-end como respaldo), NUNCA con `stop`: Stop se
+    # dispara al final de CADA turno y una skill larga que pregunta al humano sigue en curso después
+    # (medido: la barra perdía skill y reloj durante 14 de los 19 min de una etapa).
+    | (if $sk == null then null else ($ev | map(select((.event=="skill-end" or .event=="session-end") and .session==$sk.session and .i > $sk.i)) | length) end) as $stopped
     | ($ev | map(select(.event=="subagent-start") | .agent_id) | unique) as $started
     | ($ev | map(select(.event=="subagent-stop") | .agent_id) | unique) as $stopped_agents
     | (($started - $stopped_agents) | length) as $active

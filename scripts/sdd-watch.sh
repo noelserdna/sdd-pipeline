@@ -2,9 +2,10 @@
 # sdd-watch.sh — live terminal panel of the SDD pipeline: stages, running skill, agents, sessions,
 # handoffs, open questions, bench and the activity log written by hooks/sdd-activity-log.sh. Read-only.
 #
-# Usage: sdd-watch.sh [--root DIR] [--once] [--interval N]
-#   --root DIR     main checkout (default: $SDD_STATE_ROOT, else the parent of the git common dir, else cwd)
+# Usage: sdd-watch.sh [DIR | --root DIR] [--once] [--brief] [--interval N]
+#   DIR, --root    main checkout (default: $SDD_STATE_ROOT, else the parent of the git common dir, else cwd)
 #   --once         print the panel once and exit (tests, reports)
+#   --brief        one line per run; with no DIR it walks the global index (~/.claude/sdd/active-runs.json)
 #   --interval N   seconds between refreshes (default 5)
 #
 # Sources (all under ROOT unless noted)
@@ -38,10 +39,13 @@ while [ $# -gt 0 ]; do
     --interval)   shift; INTERVAL="${1:-}" ;;
     --interval=*) INTERVAL="${1#*=}" ;;
     -h|--help)    usage; exit 0 ;;
-    *)            echo "sdd-watch: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
+    -*)           echo "sdd-watch: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
+    *)            ROOT="$1" ;;   # ruta suelta: igual que --root (así lo llama /sdd-watch)
   esac
   shift
 done
+ROOT_GIVEN=false
+[ -z "$ROOT" ] || ROOT_GIVEN=true
 case "$INTERVAL" in ''|*[!0-9]*) die "--interval expects a number of seconds" ;; esac
 [ "$INTERVAL" -ge 1 ] || INTERVAL=1
 
@@ -57,6 +61,42 @@ done
 [ -n "$SDD_LIB" ] || die "hooks/lib/sdd-common.sh not found (run from the plugin checkout or set SDD_PLUGIN_ROOT)"
 # shellcheck source=../hooks/lib/sdd-common.sh
 . "$SDD_LIB"
+
+# ── --brief sin ruta: una línea por run del índice global ────────────────────
+# El índice (<config>/sdd/active-runs.json) lo escribe hooks/sdd-activity-log.sh, con una entrada por
+# checkout principal. Así `/sdd-watch` sin argumentos ve los pipelines que corren en OTROS procesos y
+# OTROS proyectos. Sin índice o sin entradas, sigue el camino normal (cwd).
+global_roots() {
+  local f
+  f=$(sdd_runs_file)
+  [ -f "$f" ] || return 0
+  if sdd_has_jq; then
+    jq -r '(.runs // {}) | (if type == "object" then . else {} end)
+           | [ .[] | select(type == "object" and (.root // "") != "") ] | sort_by(.last_seen // "") | reverse | .[] | .root' "$f" 2>/dev/null || true
+  elif sdd_has_node; then
+    SDD_RUNS_FILE="$f" node -e '
+      const fs = require("fs");
+      try {
+        const idx = JSON.parse(fs.readFileSync(process.env.SDD_RUNS_FILE, "utf8"));
+        const runs = (idx && typeof idx.runs === "object" && idx.runs) || {};
+        const all = Object.keys(runs).map((k) => runs[k]).filter((r) => r && r.root);
+        all.sort((a, b) => String(b.last_seen || "").localeCompare(String(a.last_seen || "")));
+        if (all.length) process.stdout.write(all.map((r) => r.root).join("\n") + "\n");
+      } catch (e) {}' 2>/dev/null || true
+  fi
+  return 0
+}
+if [ "$BRIEF" = true ] && [ "$ROOT_GIVEN" = false ]; then
+  GROOTS=$(global_roots) || GROOTS=""
+  if [ -n "$GROOTS" ]; then
+    printed=false
+    while IFS= read -r r; do
+      [ -n "$r" ] && [ -d "$r" ] || continue
+      bash "$0" --brief --root "$r" 2>/dev/null && printed=true
+    done <<< "$GROOTS"
+    [ "$printed" = false ] || exit 0
+  fi
+fi
 
 # ── Root ─────────────────────────────────────────────────────────────────────
 if [ -z "$ROOT" ]; then
@@ -155,7 +195,9 @@ def lines: split("\n") | map(select(length > 0) | (fromjson? // empty)) | map(se
 , (($act | lines) | to_entries | map(.value + {i: .key, e: (.value | ep)})) as $ev
 | (if ($ev | length) == 0 then (["ACT", "none"] | tsv) else
     (["ACT", "present", ($ev | length)] | tsv),
-    ( [ $ev[] | select(.event == "skill-start" or .event == "stop" or .event == "session-end" or .event == "subagent-stop")
+    # Una skill se cierra con skill-end (o session-end); la de un subagente, con su subagent-stop.
+    # `stop` NO cierra: se dispara al final de CADA turno y la skill sigue viva tras una pregunta.
+    ( [ $ev[] | select(.event == "skill-start" or .event == "skill-end" or .event == "session-end" or .event == "subagent-stop")
         | . + {k: (if .event == "subagent-stop" then ((.session // "-") + "/" + (.agent_id // "-"))
                    else ((.session // "-") + "/" + (.in_agent // "-")) end)} ]
       | group_by(.k) | map(max_by(.i)) | map(select(.event == "skill-start"))
@@ -172,6 +214,7 @@ def lines: split("\n") | map(select(length > 0) | (fromjson? // empty)) | map(se
     ( $ev[-8:][] | ["RECENT", ((.ts // "") | tostring | .[11:19]), .event, .role,
         (if .event == "skill-start" then ("/" + (.skill // "?") + (if .args then " " + (.args | tostring) else "" end)
                                           + (if .in_agent then " (in " + (.in_agent | tostring) + ")" else "" end))
+         elif .event == "skill-end" then ("/" + (.skill // "?") + " · " + ((.seconds // 0) | tostring) + "s (" + (.reason // "?") + ")")
          elif .event == "agent-start" then ((.agent_type // "?") + (if .description then ": " + (.description | tostring) else "" end))
          elif .event == "subagent-start" or .event == "subagent-stop" then ((.agent_type // "?") + " " + (.agent_id // "" | tostring))
          elif .event == "session-start" then (.source // "")
@@ -208,7 +251,8 @@ else {
   out.push(tsv(["ACT", "present", ev.length]));
   const last = {};
   for (const x of ev) {
-    if (!["skill-start", "stop", "session-end", "subagent-stop"].includes(x.event)) continue;
+    // skill-end / session-end cierran la skill; `stop` (fin de turno) no. Ver el comentario en JQ_PROG.
+    if (!["skill-start", "skill-end", "session-end", "subagent-stop"].includes(x.event)) continue;
     const k = x.event === "subagent-stop" ? `${x.session ?? "-"}/${x.agent_id ?? "-"}` : `${x.session ?? "-"}/${x.in_agent ?? "-"}`;
     last[k] = x;
   }
@@ -227,6 +271,7 @@ else {
   for (const x of ev.slice(-8)) {
     let d = "";
     if (x.event === "skill-start") d = "/" + (x.skill ?? "?") + (x.args ? " " + x.args : "") + (x.in_agent ? " (in " + x.in_agent + ")" : "");
+    else if (x.event === "skill-end") d = "/" + (x.skill ?? "?") + " · " + (x.seconds ?? 0) + "s (" + (x.reason ?? "?") + ")";
     else if (x.event === "agent-start") d = (x.agent_type ?? "?") + (x.description ? ": " + x.description : "");
     else if (x.event === "subagent-start" || x.event === "subagent-stop") d = (x.agent_type ?? "?") + " " + (x.agent_id ?? "");
     else if (x.event === "session-start") d = x.source ?? "";

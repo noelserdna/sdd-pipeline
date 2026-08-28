@@ -14,6 +14,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | `pipeline-state.json` | 1 (never overwritten) | No: per-checkout state, ignored |
 | git `commit-msg` hook | 2 | No: lives in the git dir, shared by all worktrees |
 | `.claude/sdd-status-line.sh` + `statusLine` in `.claude/settings.json` | 3 (optional) | Yes |
+| `~/.claude/sdd/status-line.sh` + `statusLine` in `~/.claude/settings.json` | 3b (optional) | No: user-level, outside the project |
 | `# sdd-begin ... # sdd-end` block in `.gitignore` | 4 | Yes |
 | `.claude/sdd-sessions.json`, `.claude/sdd/sdd-up.sh` | 4 (`--multisession`) | Yes |
 | H7/H8 quality gates in `.claude/settings.json` | 5 (opt-in) | Yes |
@@ -24,7 +25,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 /sdd-setup                   # interactive: asks about the optional steps
 /sdd-setup --multisession    # also creates .claude/sdd-sessions.json and .claude/sdd/sdd-up.sh
 /sdd-setup --quality-gates   # also merges the H7/H8 quality gates without asking
-/sdd-setup --no-status-line  # skips Step 3 without asking
+/sdd-setup --no-status-line  # skips Steps 3 and 3b without asking
 ```
 
 ## Ground rules
@@ -131,6 +132,43 @@ Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse
 
 If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `[<role>] SDD [4/7] audit !1stale > test · spec-auditor 8m · 4 agentes` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode; then the running skill with elapsed minutes and the number of active subagents, read from `.sdd/activity.jsonl`). `refreshInterval: 5` re-runs it every 5 s even while the session is idle waiting for subagents. The same step installs `subagentStatusLine` (`.claude/sdd-subagent-status.sh`): every subagent row in the agent panel shows `▶ <type> · <description> · <elapsed> · <tokens>k (<% of its context>)`. It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
 
+### Step 3b: Global status line (optional, **user-level**)
+
+Step 3 only sees the project of the session that paints it. When the pipeline runs in **other processes
+and other projects** (`claude -p` over another checkout — the usual setup while measuring or
+automating), that bar shows nothing. The global bar reads the run index the activity hook keeps in
+`~/.claude/sdd/active-runs.json` and shows the live run wherever the session sits:
+
+```
+SDD ▸ todo-app  5/7 done · task-generator 12m 30s · 3 agentes
+```
+
+Offer it when the user is likely to run the pipeline headless or across projects:
+
+```
+| Step 3b: Global status line (user-level, display-only)   |
+|   [A] Install                                            |
+|   [B] Skip  <- default                                   |
+```
+
+```bash
+bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh"             # --force replaces another statusLine
+bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh" --uninstall
+```
+
+Say clearly what it touches, because it is **not** part of the project: it copies the script to
+`~/.claude/sdd/status-line.sh` (a stable path — the plugin directory changes on every update) and
+writes `statusLine` into **`~/.claude/settings.json`**, the user's own settings, so the bar appears in
+every session on this machine and prints nothing in projects without SDD. It backs the settings up
+first and asks before replacing an existing `statusLine`; `--print-only` prints the block to merge by
+hand, `--dry-run` changes nothing. The script asks on a terminal: run it so the user can answer, and
+pass `--force` only if they already agreed. Nothing here is committed to the project, and it coexists
+with the per-project bar of Step 3.
+
+Related, needing no installation: `/sdd-watch` (one line per live run) and the one-line reminder of the
+live runs that the `UserPromptSubmit` hook prints with every prompt. Details in
+[`docs/multisesion.md`](../../docs/multisesion.md).
+
 ### Step 4: Versioning policy
 
 **4.1 `.gitignore`.** Apply the managed block (idempotent; refreshes an outdated block in place):
@@ -208,6 +246,7 @@ Report:
 | pipeline-state.json | Created (hooksVersion 3) / Preserved (stage <currentStage>) |
 | Git hook: commit-msg | Installed at <path> / Skipped (not a git repo) |
 | Status line | Configured / Skipped |
+| Global status line (user-level) | Configured / Skipped / Not offered |
 | .gitignore policy | Applied / Already up to date; pipeline-state.json tracked: yes/no |
 | Multi-session | <n> roles in .claude/sdd-sessions.json + .claude/sdd/sdd-up.sh / Not requested |
 | Quality gates H7/H8 | Configured / Skipped |

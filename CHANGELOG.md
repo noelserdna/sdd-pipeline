@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Visibilidad de pipelines que corren en otro proceso y otro proyecto** (`docs/multisesion.md` §"Ver qué está pasando"). Hasta ahora todo lo que pintaba el plugin se resolvía desde el `cwd` de la sesión, así que una sesión interactiva no veía nada de un pipeline lanzado con `claude -p` sobre otro checkout.
+  - Índice global de ejecuciones `~/.claude/sdd/active-runs.json` que mantiene `hooks/sdd-activity-log.sh` bajo lock: una entrada por **checkout principal** (clave `root`, nunca el nombre de sesión) con `{root, project, stage, skill, started_at, last_seen, agents, state, sessions}`; se borra al terminar la última sesión de ese root y nunca registra proyectos sin `pipeline-state.json` ni `.sdd/`.
+  - `scripts/sdd-status-line-global.sh`: status line **de usuario** (`SDD ▸ todo-app  5/7 done · task-generator 12m 30s · 3 agentes`, con `· sin latido (>90s)` y `· terminado`), con `~/.claude/sdd/watch-target` para fijar el proyecto vigilado. Silencio absoluto sin runs; < 0,2 s. Se instala con `scripts/install-global-statusline.sh` (copia a la ruta estable `~/.claude/sdd/status-line.sh` y escribe `statusLine` en el settings del usuario con copia de seguridad; `--uninstall` lo revierte) y se ofrece como paso 3b opcional de `/sdd-setup`.
+  - Comando `/sdd-watch`: una línea por run vivo (`scripts/sdd-watch.sh --brief` sin argumentos recorre el índice; con una ruta, ese checkout).
+  - Hook `UserPromptSubmit` (`hooks/sdd-runs-line.sh`): al escribir un prompt, una línea de `systemMessage` por run vivo (`SDD ▸ todo-app 5/7 · task-generator 12m · 3 agentes · último evento 40s`), silencio si no hay ninguno.
+- Evento `skill-end` en `.sdd/activity.jsonl` (`skill`, `seconds`, `reason`), emitido por `Stop` y `SessionEnd`.
+
+### Fixed
+- **La barra perdía la skill y el reloj a mitad de etapa** (medido: 14 de los 19 minutos de una etapa): `scripts/sdd-status-line.sh` y `scripts/sdd-watch.sh` trataban cualquier `stop` como fin de skill, pero `Stop` se dispara al final de CADA turno y una skill que pregunta al humano sigue en curso. Ahora cierran con `skill-end` (y `session-end` como respaldo). El cierre es conservador: en `SessionEnd` siempre; en `Stop` solo si la sesión es headless (`claude -p`, detectado por `entrypoint` en `~/.claude/sessions/*.json`) o si lleva más de `SDD_SKILL_IDLE_SECS` (900 s) sin eventos.
+
 ## [4.1.1] - 2026-08-27
 
 ## [4.1.0] - 2026-08-27
