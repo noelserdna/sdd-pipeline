@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-08-28
+
 ### Added
 - **Visibilidad de pipelines que corren en otro proceso y otro proyecto** (`docs/multisesion.md` §"Ver qué está pasando"). Hasta ahora todo lo que pintaba el plugin se resolvía desde el `cwd` de la sesión, así que una sesión interactiva no veía nada de un pipeline lanzado con `claude -p` sobre otro checkout.
   - Índice global de ejecuciones `~/.claude/sdd/active-runs.json` que mantiene `hooks/sdd-activity-log.sh` bajo lock: una entrada por **checkout principal** (clave `root`, nunca el nombre de sesión) con `{root, project, stage, skill, started_at, last_seen, agents, state, sessions}`; se borra al terminar la última sesión de ese root y nunca registra proyectos sin `pipeline-state.json` ni `.sdd/`.
