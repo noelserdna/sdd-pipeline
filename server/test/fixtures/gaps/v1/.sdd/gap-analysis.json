@@ -1,0 +1,38 @@
+{
+  "$schema": "sdd-gap-analysis-v1",
+  "generatedAt": "2026-09-06T10:00:00.000Z",
+  "projectFramework": "express",
+  "endpoints": {
+    "specified": [
+      { "id": "API-005", "method": "POST", "path": "/api/users", "specFile": "spec/contracts/users.md:24" }
+    ],
+    "implemented": [
+      { "id": "API-005", "method": "POST", "path": "/api/users", "codeFile": "src/routes/users.ts", "handler": "createUser", "line": 45 }
+    ],
+    "missing": [
+      { "id": "API-012", "method": "DELETE", "path": "/api/users/:id", "specFile": "spec/contracts/users.md:38" }
+    ],
+    "orphan": [
+      { "method": "GET", "path": "/api/legacy", "codeFile": "src/routes/legacy.ts", "handler": "getLegacy", "line": 12 },
+      { "method": "GET", "path": "/api/otra", "codeFile": "src/routes/otra.ts", "handler": "getOtra", "line": 7 }
+    ],
+    "mismatch": [
+      { "id": "API-003", "issue": "Spec expects field 'email', code uses 'mail'", "specFile": "spec/contracts/users.md:15", "codeFile": "src/routes/users.ts:30" }
+    ]
+  },
+  "bddCoverage": {
+    "totalScenarios": 50,
+    "withTestFiles": 42,
+    "withoutTestFiles": 8,
+    "missing": ["BDD-020", "BDD-033"]
+  },
+  "statistics": {
+    "totalSpecEndpoints": 20,
+    "implemented": 18,
+    "missing": 2,
+    "orphanRoutes": 3,
+    "mismatches": 1,
+    "endpointCoveragePercent": 90.0,
+    "bddCoveragePercent": 84.0
+  }
+}

@@ -55,3 +55,32 @@ test("con un grafo en dashboard/ las tools devuelven artefactos", { timeout: 15_
     await client.close();
   }
 });
+
+test("sdd_gaps lee el fichero que escribe la skill, a traves del bundle", { timeout: 15_000 }, async () => {
+  /*
+   * Esta prueba es la que vale, y por eso va aqui y no solo en gaps.test.ts.
+   *
+   * Claude Code no ejecuta el checkout que se edita: arranca `dist/server.js`.
+   * Una prueba sobre `src/` puede estar en verde mientras la herramienta viva
+   * sigue rota, que es exactamente lo que pasaba —la de humo ejercita el bundle,
+   * asi que sin reconstruir los tests pasan sobre el codigo viejo—.
+   *
+   * El fixture tiene la forma `sdd-gap-analysis-v1`, la que `sdd-gap-detector`
+   * escribe de verdad. Antes de este arreglo esta llamada devolvia un TypeError.
+   */
+  const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "gaps", "v1");
+  const client = await connect(fixture);
+  try {
+    const result = (await client.callTool({
+      name: "sdd_gaps",
+      arguments: { category: "missing", format: "detail" },
+    })) as { content: Array<{ type: string; text?: string }> };
+    const text = result.content.map((c) => c.text ?? "").join("\n");
+
+    assert.match(text, /API-012/, "el endpoint especificado y no implementado");
+    assert.match(text, /BDD-020/, "el escenario sin prueba");
+    assert.doesNotMatch(text, /TypeError/, "no revienta");
+  } finally {
+    await client.close();
+  }
+});

@@ -30858,23 +30858,127 @@ function loadGapAnalysis(cwd) {
     return null;
   }
 }
-function executeGaps(args) {
+function idDeHuerfano(e) {
+  const metodo = (e.method ?? "ANY").toUpperCase();
+  const ruta = e.path ?? e.codeFile ?? "desconocida";
+  return `ORPHAN-${metodo}-${ruta}`;
+}
+function esFormaV1(d) {
+  return d.$schema === "sdd-gap-analysis-v1" || typeof d.endpoints === "object" || typeof d.bddCoverage === "object";
+}
+function esFormaCanonica(d) {
+  return Array.isArray(d.findings);
+}
+function normalizarV1(d) {
+  const endpoints = d.endpoints ?? {};
+  const findings = [];
+  for (const e of endpoints.missing ?? []) {
+    findings.push({
+      id: e.id ?? `MISSING-${(e.method ?? "ANY").toUpperCase()}-${e.path ?? "?"}`,
+      category: "missing",
+      severity: "high",
+      artifact: e.specFile,
+      description: `${e.method ?? "?"} ${e.path ?? "?"} esta especificado pero no implementado`,
+      source: e.specFile
+    });
+  }
+  for (const e of endpoints.orphan ?? []) {
+    findings.push({
+      id: idDeHuerfano(e),
+      category: "orphan",
+      severity: "medium",
+      artifact: e.codeFile,
+      description: `${e.method ?? "?"} ${e.path ?? "?"} esta implementado en ${e.handler ?? "codigo"} pero no lo especifica ningun contrato`,
+      target: e.codeFile
+    });
+  }
+  for (const e of endpoints.mismatch ?? []) {
+    findings.push({
+      id: e.id ?? `MISMATCH-${e.specFile ?? "?"}`,
+      category: "mismatch",
+      severity: "high",
+      artifact: e.specFile,
+      description: e.issue ?? "El contrato y el codigo difieren",
+      source: e.specFile,
+      target: e.codeFile
+    });
+  }
+  const escenariosBdd = d.bddCoverage?.missing ?? [];
+  for (const id of escenariosBdd) {
+    findings.push({
+      id,
+      category: "missing",
+      severity: "medium",
+      description: `Escenario BDD ${id} sin fichero de prueba que lo implemente (no es un endpoint)`
+    });
+  }
+  const cuenta = (c) => findings.filter((f) => f.category === c).length;
+  return {
+    generatedAt: d.generatedAt,
+    projectName: null,
+    projectFramework: d.projectFramework ?? null,
+    summary: {
+      total: findings.length,
+      missing: cuenta("missing"),
+      orphan: cuenta("orphan"),
+      mismatch: cuenta("mismatch")
+    },
+    findings,
+    desglose: {
+      endpoints: (endpoints.missing ?? []).length,
+      escenariosBdd: escenariosBdd.length
+    },
+    estadisticasOrigen: d.statistics ?? null
+  };
+}
+function normalizarCanonica(d) {
+  return {
+    generatedAt: d.generatedAt,
+    projectName: d.projectName ?? null,
+    projectFramework: null,
+    summary: d.summary,
+    findings: d.findings,
+    desglose: {
+      endpoints: d.findings.filter((f) => f.category === "missing").length,
+      escenariosBdd: 0
+    },
+    estadisticasOrigen: null
+  };
+}
+function executeGaps(args, cwd) {
   const { category = "all", format = "summary" } = args;
-  const data = loadGapAnalysis();
-  if (!data) {
+  const crudo = loadGapAnalysis(cwd);
+  if (!crudo) {
     return JSON.stringify({
       error: true,
       message: "No gap analysis found. Run /sdd-gap-detector first."
+    });
+  }
+  let data;
+  if (esFormaCanonica(crudo)) {
+    data = normalizarCanonica(crudo);
+  } else if (esFormaV1(crudo)) {
+    data = normalizarV1(crudo);
+  } else {
+    const claves = Object.keys(crudo);
+    return JSON.stringify({
+      error: true,
+      message: `El fichero .sdd/gap-analysis.json no tiene ninguna de las dos formas conocidas. Se esperaba un array "findings" (forma canonica) o un objeto "endpoints"/"bddCoverage" (sdd-gap-analysis-v1). Claves encontradas: ${claves.join(", ") || "(ninguna)"}.`,
+      clavesEncontradas: claves,
+      formasSoportadas: ["findings[]", "sdd-gap-analysis-v1"]
     });
   }
   const findings = category === "all" ? data.findings : data.findings.filter((f) => f.category === category);
   if (format === "detail") {
     const output2 = {
       generatedAt: data.generatedAt,
-      projectName: data.projectName ?? null,
+      projectName: data.projectName,
+      projectFramework: data.projectFramework,
       filter: category,
       totalFindings: findings.length,
       summary: data.summary,
+      desglose: data.desglose,
+      estadisticasOrigen: data.estadisticasOrigen,
       findings: findings.map((f) => ({
         id: f.id,
         category: f.category,
@@ -30906,8 +31010,14 @@ function executeGaps(args) {
   });
   const output = {
     generatedAt: data.generatedAt,
-    projectName: data.projectName ?? null,
+    projectName: data.projectName,
+    projectFramework: data.projectFramework,
     filter: category,
+    // Cuantos de los `missing` son rutas sin implementar y cuantos escenarios BDD
+    // sin prueba. Sin este desglose las dos cosas se suman y el total enganna.
+    desglose: data.desglose,
+    // Lo que escribio el generador, sin reinterpretar.
+    estadisticasOrigen: data.estadisticasOrigen,
     stats: {
       total: data.summary.total,
       missing: data.summary.missing,

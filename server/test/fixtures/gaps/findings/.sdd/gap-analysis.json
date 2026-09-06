@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-09-06T11:00:00.000Z",
+  "projectName": "proyecto-canonico",
+  "summary": { "total": 3, "missing": 1, "orphan": 1, "mismatch": 1 },
+  "findings": [
+    { "id": "G-001", "category": "missing", "severity": "high", "artifact": "spec/a.md", "description": "Falta implementar A", "recommendation": "Implementar A" },
+    { "id": "G-002", "category": "orphan", "severity": "low", "artifact": "src/b.ts", "description": "B no lo especifica nadie" },
+    { "id": "G-003", "category": "mismatch", "severity": "critical", "description": "C difiere", "source": "spec/c.md", "target": "src/c.ts" }
+  ]
+}
