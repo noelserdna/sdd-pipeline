@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`sdd_gaps` no entendia el fichero que escribe su propia skill.** `executeGaps` esperaba `{summary, findings[]}` con `category` en cada hallazgo, pero `sdd-gap-detector` escribe `sdd-gap-analysis-v1`: los hallazgos repartidos en `endpoints.{missing,orphan,mismatch}` y `bddCoverage.missing`, mas un bloque `statistics`. Con el fichero real `data.findings` era `undefined` y **las tres rutas lanzaban TypeError** —el filtro por categoria, `format: "detail"` y `format: "summary"`—, no solo el filtro. No se notaba porque un proyecto sin `.sdd/gap-analysis.json` cae antes en el "No gap analysis found".
+  - La traduccion va campo a campo. Los huerfanos **no traen identificador**, asi que se sintetiza de metodo y ruta (`ORPHAN-GET-/api/legacy`) y no del indice del array: un `ORPHAN-0` cambiaria de significado en cuanto se anadiera una ruta por delante, de modo que el mismo hallazgo tendria identificadores distintos entre ejecuciones.
+  - `bddCoverage.missing` **no son endpoints**. Comparten la categoria `missing` porque las dos cosas faltan —darles categoria propia romperia el filtro que ya usa el resto del sistema—, pero un escenario sin prueba no es una ruta sin implementar: la descripcion lo dice, no llevan `artifact` de contrato, y la salida publica un `desglose` con cuantos son de cada tipo. Las `statistics` del generador se exponen intactas en `estadisticasOrigen`.
+  - Para una tercera forma, una guarda que **nombra las claves encontradas**: quien lee esta salida es un modelo que no puede abrir el fichero para averiguar por que fallo.
+  - `executeGaps` acepta un `cwd` opcional. Es parametro de la funcion y **no** del esquema de entrada de la herramienta —un cliente MCP no debe poder apuntar la lectura a donde quiera—; existe para que las pruebas sean hermeticas sin `process.chdir`, que es global al proceso.
+  - Pruebas: tres fixtures (forma canonica, forma de la skill, forma desconocida) y una prueba de humo que llama a `sdd_gaps` **a traves de `dist/server.js`**. Es la que vale: Claude Code no ejecuta el checkout, arranca el bundle, asi que una prueba sobre `src/` puede estar en verde mientras la herramienta viva sigue rota.
+
 ## [4.2.0] - 2026-08-28
 
 ### Added
