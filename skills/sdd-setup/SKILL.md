@@ -18,15 +18,30 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | `# sdd-begin ... # sdd-end` block in `.gitignore` | 4 | Yes |
 | `.claude/sdd-sessions.json`, `.claude/sdd/sdd-up.sh` | 4 (`--multisession`) | Yes |
 | H7/H8 quality gates in `.claude/settings.json` | 5 (opt-in) | Yes |
+| `## SDD Stack Profile` + `## Stack Conventions` block in root `CLAUDE.md`, `.claude/rules/sdd-<kit>-*.md` | 4b (`--stack`) | Yes |
 
 ## Invocation
 
 ```
-/sdd-setup                   # interactive: asks about the optional steps
-/sdd-setup --multisession    # also creates .claude/sdd-sessions.json and .claude/sdd/sdd-up.sh
-/sdd-setup --quality-gates   # also merges the H7/H8 quality gates without asking
-/sdd-setup --no-status-line  # skips Steps 3 and 3b without asking
+/sdd-setup                               # interactive: asks about the optional steps
+/sdd-setup --multisession                # also creates .claude/sdd-sessions.json and .claude/sdd/sdd-up.sh
+/sdd-setup --quality-gates               # also merges the H7/H8 quality gates without asking
+/sdd-setup --no-status-line              # skips Steps 3 and 3b without asking
+/sdd-setup --stack=rails --app-dir web   # also installs the rails stack kit for the app in web/
+/sdd-setup --stack=auto --port 3001      # detects the kit (root and first-level directories)
 ```
+
+### Flags
+
+| Flag | Step | Meaning |
+|------|------|---------|
+| `--multisession` | 4.3 | Roles file and tmux launcher |
+| `--quality-gates` | 5 | Merge H7/H8 without asking |
+| `--no-status-line` | 3, 3b | Skip the status lines |
+| `--stack=<kit\|auto>` | 4b | Install or refresh a stack kit (`rails`, `nextjs-prisma`, or `auto`) |
+| `--app-dir DIR` | 4b | Application directory relative to the repo root (`.` = root) |
+| `--port N` | 4b | Local server port written to the profile |
+| `--set key=value` | 4b | Override one profile key (repeatable, remembered on refresh) |
 
 ## Ground rules
 
@@ -210,6 +225,31 @@ Never overwrite an existing `sdd-sessions.json` (the user tailors roles, `owns` 
 - Without tmux: `SDD_ROLE=impl-f1a SDD_STATE_ROOT=$PWD claude -n <slug>-impl-f1a` in a separate terminal.
 - Recommend adding `"permissions": { "deny": ["Bash(tmux send-keys:*)"] }` to `.claude/settings.json` so no session (the lead included) types into another one; sessions coordinate through the handoff protocol, not through tmux.
 
+### Step 4b: Stack kit (`--stack`)
+
+The implementation skills never guess commands. Tests, lint, build, database reset, server and acceptance suite all come from the `## SDD Stack Profile` section of the root `CLAUDE.md` (contract, resolution order and limits: [`docs/stacks.md`](../../docs/stacks.md)). A **stack kit** writes that section for a known stack, plus a short `## Stack Conventions` section and path-scoped rules. Kits shipped with the plugin: `ls "$SDD_PLUGIN_ROOT/templates/stacks"` (`rails`, `nextjs-prisma`).
+
+| Situation | Action |
+|-----------|--------|
+| `--stack=<kit\|auto>` given | Show the `--dry-run` output, then install (the flag is the consent) |
+| `CLAUDE.md` already has `<!-- sdd-stack-begin kit=` | Refresh without asking: run the installer without `--stack` (it keeps `app_dir`, `port` and `--set` overrides) |
+| No flag and no block, but `--stack auto --dry-run` detects a kit | Offer `[A] Install <kit> for <app_dir>` / `[B] Skip` |
+| Nothing detected, or no kit for this stack | Skip, and suggest writing the `## SDD Stack Profile` section by hand following `docs/stacks.md` |
+
+```bash
+KIT_SH="$SDD_PLUGIN_ROOT/scripts/install-stack-kit.sh"
+bash "$KIT_SH" --stack rails --app-dir web --dry-run     # show verbatim
+bash "$KIT_SH" --stack rails --app-dir web               # + --port N, --set "acceptance=cd acceptance && npx playwright test"
+bash "$KIT_SH"                                           # refresh the installed kit
+```
+
+- **CLAUDE.md block.** Writes the rendered profile and conventions between `<!-- sdd-stack-begin kit=<kit> v<version> -->` and `<!-- sdd-stack-end -->` in the root `CLAUDE.md`. Text outside the block is preserved, a second run changes nothing, and a newer kit version refreshes the block in place.
+- **Rules.** Copies the rules to `.claude/rules/sdd-<kit>-<rule>.md`. It only overwrites files that carry the `sdd-stack-kit managed` header; report any `skipped … left untouched` line to the user.
+- **Detection and errors.** `auto` searches the root and first-level directories and sets `app_dir` to where it finds the stack. It exits 1 when it finds nothing or several stacks: ask for `--stack` and `--app-dir`. An unknown kit exits 2: list the available kits.
+- **Overrides.** `--set key=value` overrides one profile key and is remembered on refresh; `--set key=` drops the override. An `acceptance` other than `none` implies `e2e_scaffold: never`.
+- **Report and commit.** Show the `wiring:` and `layers:` lines it prints (`sdd-plan-architect` uses them) and recommend committing `CLAUDE.md` and `.claude/rules/sdd-*.md`.
+- **Never edit inside the block by hand.** `--uninstall` removes the block and the managed rules.
+
 ### Step 5: Quality gates (opt-in)
 
 Unless `--quality-gates` was given, ask. They add latency (about 30 s per Stop, 60 s per TaskCompleted) in exchange for an LLM check of pipeline consistency (H7, `Stop` prompt hook) and commit traceability (H8, `TaskCompleted` agent hook). Merge only the events the project does not define yet:
@@ -231,6 +271,7 @@ grep -q "SDD Commit" "$(git rev-parse --git-path hooks)/commit-msg"
 git check-ignore -q pipeline-state.json && git check-ignore -q .sdd/x
 jq -e '.statusLine.command' .claude/settings.json            # if Step 3 was applied
 jq -e '.roles | length > 0' .claude/sdd-sessions.json        # if --multisession
+grep -q '^<!-- sdd-stack-begin kit=' CLAUDE.md && ls .claude/rules/sdd-*.md   # if Step 4b was applied
 ls "$SDD_PLUGIN_ROOT/server/dist/server.js"                  # MCP bundle shipped with the plugin
 ```
 
@@ -249,6 +290,7 @@ Report:
 | Global status line (user-level) | Configured / Skipped / Not offered |
 | .gitignore policy | Applied / Already up to date; pipeline-state.json tracked: yes/no |
 | Multi-session | <n> roles in .claude/sdd-sessions.json + .claude/sdd/sdd-up.sh / Not requested |
+| Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Skipped (no kit detected) / Not requested |
 | Quality gates H7/H8 | Configured / Skipped |
 | Dependencies | node <v>, git <v>, jq yes/no (node fallback), python3 yes/no, tmux yes/no |
 

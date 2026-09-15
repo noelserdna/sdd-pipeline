@@ -324,7 +324,7 @@ Scan test files for references to SDD artifact IDs using the patterns from `refe
    }
    ```
 4. **Test name extraction**: Extract from the enclosing `it()`/`test()` block description. If inside a `describe()`, prepend the describe name: `"PDF Validator > validates size per INV-EXT-005"`.
-5. **Framework detection**: Check for `vitest.config.*`, `jest.config.*`, `pytest.ini`, or framework-specific imports.
+5. **Framework detection**: Check for `vitest.config.*`, `jest.config.*`, `pytest.ini`, Minitest (`Gemfile` with rails/minitest + `test/`, honouring the SDD Stack Profile `app_dir`), RSpec (`.rspec` or `spec/rails_helper.rb`), or framework-specific imports. Minitest has no JSON reporter: save `bin/rails test -v > .sdd/test-results-raw.txt` (from `app_dir`) and run the parser with `--runner minitest`.
 6. **Create relationships**: For each refId, create a relationship of type `tested-by` from the test file to the referenced artifact.
 7. **Propagate to REQs**: Same propagation logic as Step 5 — attach testRefs to upstream REQs.
 8. **Test-to-code association**: Link test files to source files via path convention or import analysis (for the HTML dashboard's code view).

@@ -1,0 +1,37 @@
+Running 6 tests in a single process (parallelization threshold is 50)
+Run options: -v --seed 4242
+
+# Running:
+
+TodoTest#test_BDD_UC_001_01_rejects_a_blank_title = 0.01 s = .
+TodoTest#test_BDD-UC-001-02_normalizes_the_title = 0.00 s = .
+TodosControllerTest#test_AC_001_02_redirects_with_see_other_after_create = 0.05 s = F
+
+
+Failure:
+TodosControllerTest#test_AC_001_02_redirects_with_see_other_after_create [test/controllers/todos_controller_test.rb:14]:
+Expected response to be a <3XX: redirect>, but was a <422: Unprocessable Content>
+
+
+bin/rails test test/controllers/todos_controller_test.rb:10
+
+TodosControllerTest#test_should_get_index = 0.02 s = .
+CompletionsControllerTest#test_TASK_F1_004_completes_a_todo = 0.03 s = E
+
+
+Error:
+CompletionsControllerTest#test_TASK_F1_004_completes_a_todo:
+NoMethodError: undefined method 'complete!' for an instance of Todo
+    app/controllers/completions_controller.rb:5:in 'CompletionsController#create'
+    test/controllers/completions_controller_test.rb:8:in 'block in <class:CompletionsControllerTest>'
+
+
+bin/rails test test/controllers/completions_controller_test.rb:7
+
+Admin::ReportsTest#test_exports_csv = 0.00 s = S
+
+
+Finished in 0.123456s, 48.6012 runs/s, 64.8016 assertions/s.
+6 runs, 8 assertions, 1 failures, 1 errors, 1 skips
+
+You have skipped tests. Run with --verbose for details.

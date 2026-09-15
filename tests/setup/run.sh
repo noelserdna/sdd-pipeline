@@ -10,6 +10,10 @@ bad()  { echo "FAIL $1"; fail=1; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then pass "$d"; else bad "$d"; fi; }
 contains() { case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
 
+# Variables heredadas de una sesión de Claude Code con el plugin activo (SDD_STATE_ROOT apunta a OTRO checkout
+# y rompe sdd-up.sh / migrate-hooks-v3.sh): fuera antes de nada.
+unset SDD_STATE_ROOT SDD_PLUGIN_ROOT SDD_ROLE CLAUDE_PROJECT_DIR CLAUDE_PLUGIN_ROOT || true
+
 tmp="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -275,6 +279,121 @@ D="$tmp/fresh"; mkdir -p "$D"; cd "$D"; git init -q
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
 if contains "$out" "commit-msg" && contains "$out" ".gitignore" && ! contains "$out" "settings.json hooks"; then pass "migrate: proyecto nuevo solo propone commit-msg y .gitignore"; else bad "migrate: proyecto nuevo ($out)"; fi
 check "migrate: dry-run en proyecto nuevo no escribe" sh -c '[ ! -e .gitignore ] && [ ! -e .git/hooks/commit-msg ]'
+
+# ── 7. Stack kits: install-stack-kit.sh ──────────────────────────────────────
+KIT_SH="$SCRIPTS/install-stack-kit.sh"
+check "bash -n install-stack-kit.sh" bash -n "$KIT_SH"
+check "install-stack-kit.sh ejecutable" test -x "$KIT_SH"
+RAILS_V="$(jq -r .version "$ROOT/templates/stacks/rails/kit.json")"
+K="$tmp/kits"
+mkdir -p "$K" && cd "$K"
+git init -q
+git config user.name test; git config user.email test@example.com; git config commit.gpgsign false
+printf '# Mi proyecto\n\nTexto del usuario.\n' > CLAUDE.md
+cp CLAUDE.md "$tmp/kits.orig.md"
+git add CLAUDE.md; git commit -q -m "chore: init"
+
+# 7a. --dry-run y primera instalación (rails en web/)
+out="$(bash "$KIT_SH" --stack rails --app-dir web --dry-run 2>&1)"
+if contains "$out" "## SDD Stack Profile" && contains "$out" "- app_dir: web"; then pass "kit --dry-run: enseña el bloque renderizado"; else bad "kit --dry-run ($out)"; fi
+check "kit --dry-run: no escribe nada" sh -c 'cmp -s CLAUDE.md "$1" && [ ! -e .claude ]' _ "$tmp/kits.orig.md"
+bash "$KIT_SH" --stack rails --app-dir web >/dev/null 2>&1
+check "kit rails: marca de inicio kit=rails v$RAILS_V" grep -qxF "<!-- sdd-stack-begin kit=rails v$RAILS_V -->" CLAUDE.md
+check "kit rails: marca de fin" grep -qxF '<!-- sdd-stack-end -->' CLAUDE.md
+check "kit rails: sección ## SDD Stack Profile v1" sh -c 'grep -qx "## SDD Stack Profile" CLAUDE.md && grep -qxF "<!-- sdd-stack-profile v1 kit=rails -->" CLAUDE.md'
+check "kit rails: app_dir y rutas con prefijo web/" sh -c 'grep -qx -- "- app_dir: web" CLAUDE.md && grep -qx -- "- code_paths: web/app, web/config, web/db, web/lib" CLAUDE.md && grep -qx -- "- test_paths: web/test" CLAUDE.md'
+check "kit rails: ## Stack Conventions" grep -qx '## Stack Conventions' CLAUDE.md
+check "kit rails: conserva el texto del usuario" sh -c 'head -1 CLAUDE.md | grep -qx "# Mi proyecto" && grep -qx "Texto del usuario." CLAUDE.md'
+check "kit rails: 5 reglas en .claude/rules/sdd-rails-*.md" sh -c '[ "$(ls .claude/rules/sdd-rails-*.md | wc -l | tr -d " ")" = 5 ]'
+check "kit rails: sin {app_dir} ni {port} sin resolver" sh -c '! grep -qE "\{(app_dir|port)\}" CLAUDE.md .claude/rules/*.md'
+check "kit rails: solo quedan marcadores de ejecución {file} {files} {pattern}" sh -c '[ -z "$(grep -ohE "\{[a-z_]+\}" CLAUDE.md .claude/rules/*.md | grep -vxE "\{(file|files|pattern)\}")" ]'
+check "kit rails: reglas con frontmatter en la línea 1, globs web/ y cabecera gestionada" sh -c 'for f in .claude/rules/sdd-rails-*.md; do [ "$(head -1 "$f")" = "---" ] && grep -q "^  - \"web/" "$f" && grep -q "<!-- sdd-stack-kit managed kit=rails" "$f" || exit 1; done'
+
+# 7b. idempotencia y texto del usuario
+git add -A; git commit -q -m "chore: stack kit"
+bash "$KIT_SH" --stack rails --app-dir web >/dev/null 2>&1
+check "kit: idempotente (git diff --quiet tras la segunda pasada)" git diff --quiet
+check "kit: segunda pasada sin ficheros nuevos" sh -c '[ -z "$(git status --porcelain)" ]'
+bash "$KIT_SH" >/dev/null 2>&1
+check "kit: sin --stack refresca el kit instalado (sin cambios)" sh -c 'git diff --quiet && [ -z "$(git status --porcelain)" ]'
+printf '\nNota final del usuario.\n' >> CLAUDE.md
+bash "$KIT_SH" --stack rails --app-dir web >/dev/null 2>&1
+check "kit: conserva el texto del usuario escrito después del bloque" grep -qx 'Nota final del usuario.' CLAUDE.md
+check "kit: un solo bloque" sh -c '[ "$(grep -c "^<!-- sdd-stack-begin" CLAUDE.md)" = 1 ]'
+git commit -q -am "docs: nota"
+
+# 7c. --port y --set (recordados en el refresco; key= los olvida)
+bash "$KIT_SH" --stack rails --port 3001 --set "acceptance=cd acceptance && BASE_URL=http://127.0.0.1:{port} npx playwright test" >/dev/null 2>&1
+check "kit --set: acceptance con {port} sustituido" grep -qxF -- "- acceptance: cd acceptance && BASE_URL=http://127.0.0.1:3001 npx playwright test" CLAUDE.md
+check "kit --port: port y server" sh -c 'grep -qx -- "- port: 3001" CLAUDE.md && grep -q -- "^- server: bin/rails server -p 3001 " CLAUDE.md'
+check "kit --set acceptance ⇒ e2e_scaffold: never" grep -qx -- '- e2e_scaffold: never' CLAUDE.md
+check "kit: sin --app-dir conserva el app_dir del bloque" grep -qx -- '- app_dir: web' CLAUDE.md
+git commit -q -am "chore: acceptance"
+bash "$KIT_SH" --stack rails >/dev/null 2>&1
+check "kit: el refresco sin flags recuerda --set y --port" sh -c 'git diff --quiet && grep -qx -- "- port: 3001" CLAUDE.md'
+bash "$KIT_SH" --stack rails --set "acceptance=" >/dev/null 2>&1
+check "kit --set key=: vuelve al valor del kit" sh -c 'grep -qx -- "- acceptance: none" CLAUDE.md && grep -qx -- "- e2e_scaffold: allowed" CLAUDE.md && ! grep -q "sdd-stack-set" CLAUDE.md'
+if bash "$KIT_SH" --stack rails --set "nope=1" >/dev/null 2>&1; then bad "kit --set: una clave desconocida debería fallar"; else pass "kit --set: clave desconocida → exit ≠ 0"; fi
+git commit -q -am "chore: sin acceptance"
+
+# 7d. regla sin cabecera gestionada: no se toca
+printf -- '---\npaths:\n  - "web/app/views/**/*.erb"\n---\n\n# Mis vistas\n' > .claude/rules/sdd-rails-views.md
+out="$(bash "$KIT_SH" --stack rails 2>&1)"
+check "kit: no sobrescribe una regla sin la cabecera gestionada" grep -qx '# Mis vistas' .claude/rules/sdd-rails-views.md
+if contains "$out" "left untouched"; then pass "kit: avisa de la regla no gestionada"; else bad "kit: sin aviso de regla no gestionada ($out)"; fi
+rm .claude/rules/sdd-rails-views.md
+bash "$KIT_SH" >/dev/null 2>&1
+check "kit: recrea la regla gestionada borrada" grep -q "sdd-stack-kit managed kit=rails" .claude/rules/sdd-rails-views.md
+
+# 7e. --app-dir . quita el prefijo
+bash "$KIT_SH" --stack rails --app-dir . >/dev/null 2>&1
+check "kit --app-dir .: perfil sin prefijo" sh -c 'grep -qx -- "- app_dir: ." CLAUDE.md && grep -qx -- "- code_paths: app, config, db, lib" CLAUDE.md && grep -qx -- "- test_paths: test" CLAUDE.md'
+check "kit --app-dir .: globs de reglas sin prefijo" grep -qF '  - "app/models/**/*.rb"' .claude/rules/sdd-rails-models.md
+check "kit --app-dir .: ni {app_dir} ni web/ en bloque y reglas" sh -c '! grep -qE "\{app_dir\}|web/" CLAUDE.md .claude/rules/sdd-rails-*.md'
+
+# 7f. kit desconocido
+cp CLAUDE.md "$tmp/kits.before-unknown.md"
+if bash "$KIT_SH" --stack cobol >/dev/null 2>&1; then bad "kit desconocido debería fallar"; else pass "kit desconocido → exit ≠ 0"; fi
+check "kit desconocido: CLAUDE.md intacto" cmp -s CLAUDE.md "$tmp/kits.before-unknown.md"
+
+# 7g. subida de versión: copia del plugin con el kit en 9.9.9 (el kit se resuelve junto al script)
+PC="$tmp/plugin-copy"
+mkdir -p "$PC/scripts" "$PC/templates"
+cp "$KIT_SH" "$PC/scripts/"; cp -R "$ROOT/templates/stacks" "$PC/templates/"
+jq '.version = "9.9.9"' "$ROOT/templates/stacks/rails/kit.json" > "$PC/templates/stacks/rails/kit.json"
+bash "$PC/scripts/install-stack-kit.sh" --stack rails --app-dir web >/dev/null 2>&1
+check "kit: refresco en su sitio al subir la versión (v9.9.9, un bloque)" sh -c 'grep -qxF "<!-- sdd-stack-begin kit=rails v9.9.9 -->" CLAUDE.md && [ "$(grep -c "^<!-- sdd-stack-begin" CLAUDE.md)" = 1 ]'
+check "kit: reglas refrescadas a v9.9.9" grep -q "kit=rails v9.9.9" .claude/rules/sdd-rails-models.md
+check "kit: texto del usuario intacto tras el refresco" sh -c 'grep -qx "Texto del usuario." CLAUDE.md && grep -qx "Nota final del usuario." CLAUDE.md'
+
+# 7h. --uninstall
+bash "$KIT_SH" --uninstall >/dev/null 2>&1
+check "kit --uninstall: sin bloque" sh -c '! grep -q "sdd-stack-" CLAUDE.md'
+check "kit --uninstall: sin reglas gestionadas" sh -c '! ls .claude/rules/sdd-*.md >/dev/null 2>&1'
+check "kit --uninstall: conserva el texto del usuario sin líneas en blanco dobles" sh -c 'grep -qx "Texto del usuario." CLAUDE.md && grep -qx "Nota final del usuario." CLAUDE.md && awk "NF == 0 { if (++b > 1) exit 1; next } { b = 0 }" CLAUDE.md'
+
+# 7i. auto: rails en web/, nextjs-prisma en app/, nada → error
+A="$tmp/kits-auto"
+mkdir -p "$A/web/config" && cd "$A" && git init -q
+printf 'source "https://rubygems.org"\ngem "rails"\n' > web/Gemfile; : > web/config/application.rb
+printf '# Auto\n\nTexto.\n' > CLAUDE.md; cp CLAUDE.md "$tmp/kits-auto.orig.md"
+out="$(bash "$KIT_SH" --stack auto 2>&1)"
+check "kit auto: web/Gemfile + web/config/application.rb → rails" grep -q '^<!-- sdd-stack-begin kit=rails ' CLAUDE.md
+check "kit auto: app_dir web" grep -qx -- '- app_dir: web' CLAUDE.md
+if contains "$out" "detected kit rails in web"; then pass "kit auto: informa de la detección"; else bad "kit auto: sin informe ($out)"; fi
+bash "$KIT_SH" --uninstall >/dev/null 2>&1
+check "kit --uninstall: CLAUDE.md idéntico al original" cmp -s CLAUDE.md "$tmp/kits-auto.orig.md"
+check "kit --uninstall: no deja .claude vacío" test ! -e .claude
+E="$tmp/kits-empty"
+mkdir -p "$E" && cd "$E" && git init -q
+rc=0; out="$(bash "$KIT_SH" --stack auto 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ] && contains "$out" "--stack"; then pass "kit auto sin stack: exit ≠ 0 y pide --stack"; else bad "kit auto sin stack (rc=$rc, $out)"; fi
+check "kit auto sin stack: no escribe" sh -c '[ ! -e CLAUDE.md ] && [ ! -e .claude ]'
+mkdir -p app && printf '{}\n' > app/package.json && : > app/next.config.ts
+bash "$KIT_SH" --stack auto >/dev/null 2>&1
+check "kit auto: app/package.json + app/next.config.ts → nextjs-prisma en app" sh -c 'grep -q "^<!-- sdd-stack-begin kit=nextjs-prisma " CLAUDE.md && grep -qx -- "- app_dir: app" CLAUDE.md'
+check "kit nextjs-prisma: glob de dominio app/src/{lib,domain,server}/**" grep -qF '"app/src/{lib,domain,server}/**"' .claude/rules/sdd-nextjs-prisma-domain.md
+check "kit nextjs-prisma: ningún reset de Prisma" sh -c '! grep -qiE "migrate +reset" CLAUDE.md .claude/rules/*.md'
 
 cd "$ROOT"
 [ "$fail" -eq 0 ] && echo "tests/setup: todo ok" || { echo "tests/setup: hay fallos"; exit 1; }

@@ -1,0 +1,34 @@
+{
+  "name": "nextjs-prisma",
+  "version": "1.0.0",
+  "description": "Next.js 15/16 App Router · TypeScript · Prisma 7 with a driver adapter · SQLite · Vitest",
+  "detect": {
+    "all": ["package.json"],
+    "any": ["next.config.ts", "next.config.mjs", "next.config.js", "next.config.cjs", "next.config.mts"]
+  },
+  "defaults": {
+    "stack": "nextjs-prisma",
+    "app_dir": ".",
+    "code_paths": "{app_dir}/src, {app_dir}/prisma",
+    "test_paths": "{app_dir}/src, {app_dir}/tests",
+    "install": "npm ci",
+    "test": "npx vitest run",
+    "test_file": "npx vitest run {file}",
+    "test_name": "npx vitest run {file} -t \"{pattern}\"",
+    "typecheck": "npx tsc --noEmit",
+    "lint_files": "npx eslint {files}",
+    "lint": "npx eslint .",
+    "build": "npm run build",
+    "coverage": "none",
+    "db_reset_safe": "find . -maxdepth 2 -type f \\( -name '*.db' -o -name '*.db-journal' -o -name '*.db-wal' -o -name '*.db-shm' \\) -not -path './node_modules/*' -delete && npx prisma migrate deploy && npx prisma generate",
+    "server": "npx next dev -p {port} -H 127.0.0.1",
+    "port": "3000",
+    "acceptance": "none",
+    "e2e_scaffold": "allowed",
+    "task_state": "trailers",
+    "task_format": "compact"
+  },
+  "rules": ["server-actions", "api-routes", "domain", "prisma", "testing"],
+  "wiring": ["src/app/layout.tsx", "prisma/schema.prisma"],
+  "layers": ["schema", "domain/data", "server actions", "components/page"]
+}

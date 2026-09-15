@@ -1,0 +1,49 @@
+{
+  "version": "3.13.2",
+  "seed": 4242,
+  "examples": [
+    {
+      "id": "./spec/models/todo_spec.rb[1:1]",
+      "description": "BDD-UC-002-01 toggles completion",
+      "full_description": "Todo BDD-UC-002-01 toggles completion",
+      "status": "passed",
+      "file_path": "./spec/models/todo_spec.rb",
+      "line_number": 4,
+      "run_time": 0.0021,
+      "pending_message": null
+    },
+    {
+      "id": "./spec/requests/todos_spec.rb[1:1]",
+      "description": "AC_002_03 keeps the active filter",
+      "full_description": "Todos AC_002_03 keeps the active filter",
+      "status": "failed",
+      "file_path": "./spec/requests/todos_spec.rb",
+      "line_number": 9,
+      "run_time": 0.0453,
+      "pending_message": null,
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "expected the response to redirect to /todos?filter=active",
+        "backtrace": []
+      }
+    },
+    {
+      "id": "./spec/requests/todos_spec.rb[1:2]",
+      "description": "exports CSV",
+      "full_description": "Todos exports CSV",
+      "status": "pending",
+      "file_path": "./spec/requests/todos_spec.rb",
+      "line_number": 20,
+      "run_time": 0.0,
+      "pending_message": "Not yet implemented"
+    }
+  ],
+  "summary": {
+    "duration": 0.0612,
+    "example_count": 3,
+    "failure_count": 1,
+    "pending_count": 1,
+    "errors_outside_of_examples_count": 0
+  },
+  "summary_line": "3 examples, 1 failure, 1 pending"
+}

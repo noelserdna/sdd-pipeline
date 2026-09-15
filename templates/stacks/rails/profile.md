@@ -1,0 +1,22 @@
+## SDD Stack Profile
+<!-- sdd-stack-profile v1 kit=rails -->
+- stack: rails
+- app_dir: {app_dir}
+- code_paths: {app_dir}/app, {app_dir}/config, {app_dir}/db, {app_dir}/lib
+- test_paths: {app_dir}/test
+- install: bundle install
+- test: bin/rails test
+- test_file: bin/rails test {file}
+- test_name: bin/rails test {file} -n "/{pattern}/"
+- typecheck: none
+- lint_files: bin/rubocop {files}
+- lint: bin/rubocop
+- build: none
+- coverage: none
+- db_reset_safe: bin/rails db:reset
+- server: bin/rails server -p {port} -b 127.0.0.1 -P tmp/pids/sdd-server.pid
+- port: {port}
+- acceptance: none
+- e2e_scaffold: allowed
+- task_state: trailers
+- task_format: compact

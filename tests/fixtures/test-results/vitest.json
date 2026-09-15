@@ -1,0 +1,38 @@
+{
+  "numTotalTestSuites": 1,
+  "numTotalTests": 3,
+  "numPassedTests": 1,
+  "numFailedTests": 1,
+  "numPendingTests": 1,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/home/ci/project/web/src/domain/todo.test.ts",
+      "status": "failed",
+      "assertionResults": [
+        {
+          "ancestorTitles": ["todo"],
+          "fullName": "todo BDD-UC-001-01 rejects a blank title",
+          "title": "BDD-UC-001-01 rejects a blank title",
+          "status": "passed",
+          "duration": 3
+        },
+        {
+          "ancestorTitles": ["todo"],
+          "fullName": "todo AC-001-02 trims the title",
+          "title": "AC-001-02 trims the title",
+          "status": "failed",
+          "duration": 5,
+          "failureMessages": ["expected 'a ' to be 'a'"]
+        },
+        {
+          "ancestorTitles": ["todo"],
+          "fullName": "todo toggles completion",
+          "title": "toggles completion",
+          "status": "skipped",
+          "duration": 0
+        }
+      ]
+    }
+  ]
+}

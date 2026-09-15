@@ -1,0 +1,22 @@
+## SDD Stack Profile
+<!-- sdd-stack-profile v1 kit=nextjs-prisma -->
+- stack: nextjs-prisma
+- app_dir: {app_dir}
+- code_paths: {app_dir}/src, {app_dir}/prisma
+- test_paths: {app_dir}/src, {app_dir}/tests
+- install: npm ci
+- test: npx vitest run
+- test_file: npx vitest run {file}
+- test_name: npx vitest run {file} -t "{pattern}"
+- typecheck: npx tsc --noEmit
+- lint_files: npx eslint {files}
+- lint: npx eslint .
+- build: npm run build
+- coverage: none
+- db_reset_safe: find . -maxdepth 2 -type f \( -name '*.db' -o -name '*.db-journal' -o -name '*.db-wal' -o -name '*.db-shm' \) -not -path './node_modules/*' -delete && npx prisma migrate deploy && npx prisma generate
+- server: npx next dev -p {port} -H 127.0.0.1
+- port: {port}
+- acceptance: none
+- e2e_scaffold: allowed
+- task_state: trailers
+- task_format: compact
