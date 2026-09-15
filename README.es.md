@@ -11,7 +11,7 @@ De los requisitos al código en producción: un pipeline estructurado, auditable
 
 - **24 skills** — el pipeline de 7 etapas, skills laterales, onboarding brownfield, utilidades y el lead multi-sesión
 - **5 agentes** — orquestador interactivo, auditor end-to-end, guardián de contexto, garante de la constitución, auditor cruzado
-- **7 hooks** (13 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, actualización de estado y trace-map, contexto de trazabilidad, el registro de actividad que alimenta la status line y `sdd-watch`, y un recordatorio de una línea con los runs vivos en cada prompt
+- **8 hooks** (14 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, guardia contra el consentimiento fabricado en herramientas que exigen a un humano, actualización de estado y trace-map, contexto de trazabilidad, el registro de actividad que alimenta la status line y `sdd-watch`, y un recordatorio de una línea con los runs vivos en cada prompt
 - **Servidor MCP** — 6 tools, 7 recursos y 2 prompts sobre `dashboard/traceability-graph.json`
 - **Implementación multi-sesión** — sesiones con rol (`SDD_ROLE`), Streams paralelos en worktrees de git, handoffs al lead
 
@@ -34,6 +34,7 @@ En el primer uso Claude Code pide aprobar el servidor MCP `sdd`. Tras actualizar
 
 ```
 /sdd-setup                       # pipeline-state.json, hook git commit-msg, política .gitignore, status line opcional
+/sdd-setup --stack=rails --app-dir=web   # kit por stack opcional: SDD Stack Profile, convenciones, reglas por ruta (docs/stacks.md)
 /sdd-requirements-engineer       # elicitar y escribir requirements/REQUIREMENTS.md
 /sdd-specifications-engineer     # spec/ (dominio, casos de uso, workflows, contratos, ADRs, BDD)
 /sdd-spec-auditor                # audits/AUDIT-BASELINE.md — puerta PASS / CONDITIONAL / BLOCKED
@@ -55,7 +56,7 @@ sdd-spec-auditor            →  audits/AUDIT-BASELINE.md + spec/ corregido
    ↳ laterales (opcionales): sdd-security-auditor, sdd-tech-designer, sdd-ux-designer
 sdd-test-planner            →  test/TEST-PLAN.md, TEST-MATRIX-*.md, E2E-SCENARIOS.md
 sdd-plan-architect          →  plan/ (ARCHITECTURE.md, PLAN.md, fases/)
-sdd-task-generator          →  task/TASK-FASE-*.md, TASK-INDEX.md, TASK-ORDER.md
+sdd-task-generator          →  task/TASK-FASE-*.md, TASK-ORDER.md (TASK-INDEX.md opcional)
 sdd-task-implementer        →  src/, tests/, commits git
 ```
 
@@ -128,6 +129,7 @@ Declarados en [`hooks/hooks.json`](hooks/hooks.json) y ejecutados desde el direc
 | `sdd-session-start.sh` | SessionStart | Inyecta el estado del pipeline (`N/7 done`, stages stale, siguiente paso, rol de la sesión y pares vivos) |
 | `sdd-upstream-guard.sh` | PreToolUse Edit/Write | Deniega escrituras en artefactos upstream mientras corre una etapa posterior (art. 4 de la constitución); aplica la posesión por rol |
 | `sdd-augment-hook.js` | PreToolUse Read/Edit/Write | Añade contexto de trazabilidad del fichero que se toca |
+| `sdd-tool-guard.sh` | PreToolUse Bash | Deniega comandos que asignan variables de consentimiento humano para acciones de IA (p. ej. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`): el consentimiento lo da una persona, nunca CLAUDE.md, las tareas ni los prompts |
 | `sdd-pipeline-state-updater.sh` | PostToolUse Write | Marca como `running` la etapa dueña de la ruta escrita (con lock, consciente de worktrees) |
 | `sdd-trace-map-updater.sh` | PostToolUse Write/Edit | Acumula mapeos fichero → task/refs en `.sdd/trace-map.json` |
 | `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Añade una línea JSON por evento a `.sdd/activity.jsonl` (skill, subagentes, sesión, rol, etapa, task) para el panel en vivo `scripts/sdd-watch.sh`, cierra la skill en curso con `skill-end` y mantiene el índice global de ejecuciones `~/.claude/sdd/active-runs.json` |
@@ -184,6 +186,8 @@ examples/todo-app proyecto de juguete para E2E       tests/       hooks, setup, 
 ```bash
 node scripts/validate-plugin.mjs        # manifiestos, skills, agentes, hooks, mcp
 bash tests/hooks/run.sh                 # comportamiento de los hooks (roles, worktrees, lock, activity log)
+bash tests/tasks/run.sh                 # gramática de línea de tarea (V-19) y estado por trailers
+bash tests/dashboard/run.sh             # parsers de resultados de tests (vitest, Minitest, RSpec)
 scripts/sdd-watch.sh --root ../mi-app   # panel en vivo: etapas, skill en curso, subagentes, sesiones, handoffs, preguntas (--once para una foto)
 scripts/sdd-watch.sh --brief            # una línea por run vivo del índice global (lo que ejecuta /sdd-watch)
 bash tests/e2e/run-all.sh               # B1 validación estática + B2 instalación real en un CLAUDE_CONFIG_DIR aislado
@@ -197,6 +201,7 @@ La CI ejecuta lint (shellcheck), validación, tests de hooks y la matriz de buil
 ## Documentación
 
 - [docs/instalacion.md](docs/instalacion.md) — instalación y primeros pasos
+- [docs/stacks.md](docs/stacks.md) — SDD Stack Profile y kits por stack (Rails, Next.js + Prisma)
 - [docs/migracion.md](docs/migracion.md) — migración desde los plugins anteriores y los hooks copiados
 - [docs/multisesion.md](docs/multisesion.md) — protocolo multi-sesión
 - [docs/guia-paso-a-paso.md](docs/guia-paso-a-paso.md) — guía paso a paso

@@ -11,7 +11,7 @@ From requirements to production code: a structured, auditable, traceable pipelin
 
 - **24 skills** — the 7-stage pipeline, lateral skills, brownfield onboarding, utilities and the multi-session lead
 - **5 agents** — interactive orchestrator, end-to-end auditor, context keeper, constitution enforcer, cross-auditor
-- **7 hooks** (13 event registrations) — pipeline status at session start, upstream immutability guard, state and trace-map updates, traceability context, the activity log that feeds the status line and `sdd-watch`, and a one-line reminder of the live runs on each prompt
+- **8 hooks** (14 event registrations) — pipeline status at session start, upstream immutability guard, a guard against fabricated consent for AI-gated tools, state and trace-map updates, traceability context, the activity log that feeds the status line and `sdd-watch`, and a one-line reminder of the live runs on each prompt
 - **MCP server** — 6 tools, 7 resources and 2 prompts over `dashboard/traceability-graph.json`
 - **Multi-session implementation** — role-scoped sessions (`SDD_ROLE`), parallel streams in git worktrees, lead handoffs
 
@@ -34,6 +34,7 @@ Migrating from `sdd@noelserdna-claude-plugin-sdd`, `sdd-pipeline@sdd-pipeline-lo
 
 ```
 /sdd-setup                       # pipeline-state.json, git commit-msg hook, .gitignore policy, optional status line
+/sdd-setup --stack=rails --app-dir=web   # optional stack kit: SDD Stack Profile, conventions, path rules (docs/stacks.md)
 /sdd-requirements-engineer       # elicit and write requirements/REQUIREMENTS.md
 /sdd-specifications-engineer     # spec/ (domain, use cases, workflows, contracts, ADRs, BDD)
 /sdd-spec-auditor                # audits/AUDIT-BASELINE.md — gate PASS / CONDITIONAL / BLOCKED
@@ -55,7 +56,7 @@ sdd-spec-auditor            →  audits/AUDIT-BASELINE.md + corrected spec/
    ↳ lateral (optional): sdd-security-auditor, sdd-tech-designer, sdd-ux-designer
 sdd-test-planner            →  test/TEST-PLAN.md, TEST-MATRIX-*.md, E2E-SCENARIOS.md
 sdd-plan-architect          →  plan/ (ARCHITECTURE.md, PLAN.md, fases/)
-sdd-task-generator          →  task/TASK-FASE-*.md, TASK-INDEX.md, TASK-ORDER.md
+sdd-task-generator          →  task/TASK-FASE-*.md, TASK-ORDER.md (TASK-INDEX.md optional)
 sdd-task-implementer        →  src/, tests/, git commits
 ```
 
@@ -128,6 +129,7 @@ Declared in [`hooks/hooks.json`](hooks/hooks.json) and run from the plugin direc
 | `sdd-session-start.sh` | SessionStart | Injects pipeline status (`N/7 done`, stale stages, next step, session role and live peers) |
 | `sdd-upstream-guard.sh` | PreToolUse Edit/Write | Denies writes to upstream artifacts while a downstream stage runs (constitution art. 4); enforces role ownership |
 | `sdd-augment-hook.js` | PreToolUse Read/Edit/Write | Adds traceability context for the file being touched |
+| `sdd-tool-guard.sh` | PreToolUse Bash | Denies commands that assign human-consent variables for AI actions (e.g. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`): consent comes from a human, never from CLAUDE.md, tasks or prompts |
 | `sdd-pipeline-state-updater.sh` | PostToolUse Write | Marks the stage that owns the written path as `running` (locked, worktree-aware) |
 | `sdd-trace-map-updater.sh` | PostToolUse Write/Edit | Accumulates file → task/refs mappings in `.sdd/trace-map.json` |
 | `sdd-activity-log.sh` | SessionStart/End, PreToolUse Skill/Agent, UserPromptExpansion, SubagentStart/Stop, Stop | Appends one JSON line per event to `.sdd/activity.jsonl` (skill, subagents, session, role, stage, task) for the live panel `scripts/sdd-watch.sh`, closes the running skill with `skill-end`, and keeps the global run index `~/.claude/sdd/active-runs.json` |
@@ -184,6 +186,8 @@ examples/todo-app toy project for E2E tests          tests/       hooks, setup, 
 ```bash
 node scripts/validate-plugin.mjs        # manifests, skills, agents, hooks, mcp
 bash tests/hooks/run.sh                 # hook behaviour (roles, worktrees, locking, activity log)
+bash tests/tasks/run.sh                 # task-line grammar (V-19) and trailer-based task status
+bash tests/dashboard/run.sh             # test-result parsers (vitest, Minitest, RSpec)
 scripts/sdd-watch.sh --root ../my-app   # live panel: stages, running skill, subagents, sessions, handoffs, questions (--once for a snapshot)
 scripts/sdd-watch.sh --brief            # one line per live run of the global index (what /sdd-watch runs)
 bash tests/e2e/run-all.sh               # B1 static validation + B2 real install in an isolated CLAUDE_CONFIG_DIR
@@ -197,6 +201,7 @@ CI runs lint (shellcheck), validation, hook tests and the server build/test matr
 ## Documentation
 
 - [docs/instalacion.md](docs/instalacion.md) — installation and first steps (Spanish)
+- [docs/stacks.md](docs/stacks.md) — SDD Stack Profile and stack kits (Rails, Next.js + Prisma)
 - [docs/migracion.md](docs/migracion.md) — migrating from the previous plugins and copied hooks
 - [docs/multisesion.md](docs/multisesion.md) — multi-session protocol
 - [docs/guia-paso-a-paso.md](docs/guia-paso-a-paso.md) — step-by-step guide (Spanish)

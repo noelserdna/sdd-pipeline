@@ -1,6 +1,6 @@
 ---
 name: sdd-cross-auditor
-description: "Cross-references all 9 SDD skill definitions for I/O contract mismatches, version inconsistencies, and stale cross-references. Use after modifying any SKILL.md."
+description: "Cross-references all 24 SDD skill definitions, the stack kits and the SDD Stack Profile contract for I/O contract mismatches, version inconsistencies, and stale cross-references. Use after modifying any SKILL.md or kit."
 tools: Read, Grep, Glob
 model: sonnet
 memory: project
@@ -15,22 +15,43 @@ You are the **SDD Cross-Auditor**. Your role is to ensure consistency across all
 Audit all skill definitions in the repository:
 
 ```
-sdd-requirements-engineer/SKILL.md
-sdd-specifications-engineer/SKILL.md
-sdd-spec-auditor/SKILL.md
-sdd-test-planner/SKILL.md
-sdd-plan-architect/SKILL.md
-sdd-task-generator/SKILL.md
-sdd-task-implementer/SKILL.md
-sdd-security-auditor/SKILL.md
-sdd-req-change/SKILL.md
-sdd-pipeline-status/SKILL.md
-sdd-traceability-check/SKILL.md
-sdd-session-summary/SKILL.md
-sdd-setup/SKILL.md
+skills/sdd-code-index/SKILL.md
+skills/sdd-dashboard/SKILL.md
+skills/sdd-gap-detector/SKILL.md
+skills/sdd-import/SKILL.md
+skills/sdd-lead/SKILL.md
+skills/sdd-onboarding/SKILL.md
+skills/sdd-pipeline-status/SKILL.md
+skills/sdd-plan-architect/SKILL.md
+skills/sdd-reconcile/SKILL.md
+skills/sdd-req-change/SKILL.md
+skills/sdd-requirements-engineer/SKILL.md
+skills/sdd-reverse-engineer/SKILL.md
+skills/sdd-security-auditor/SKILL.md
+skills/sdd-session-summary/SKILL.md
+skills/sdd-setup/SKILL.md
+skills/sdd-spec-auditor/SKILL.md
+skills/sdd-specifications-engineer/SKILL.md
+skills/sdd-task-generator/SKILL.md
+skills/sdd-task-implementer/SKILL.md
+skills/sdd-tech-designer/SKILL.md
+skills/sdd-test-planner/SKILL.md
+skills/sdd-traceability-check/SKILL.md
+skills/sdd-ux-designer/SKILL.md
+skills/sdd-verify-coverage/SKILL.md
+templates/stacks/*/{kit.json,profile.md,conventions.md,rules/*.md}
+skills/sdd-task-implementer/references/stack-profile.md
+skills/sdd-task-generator/references/task-template.md
+scripts/sdd-task-lint.mjs
 ```
 
 ## Checks
+
+### 0. 4.3.0 shared contracts
+
+- Every Stack Profile key used in a skill (`{test}`, `{test_file}`, `{acceptance}`, `code_paths`…) is defined in `skills/sdd-task-implementer/references/stack-profile.md`, and every kit's `kit.json` defaults define the required keys.
+- The task-line grammar is identical in `task-template.md`, the task-generator fan-out prompt, `SKILL.md` (V-19) and `scripts/sdd-task-lint.mjs`.
+- `Style: operations|http` and `design/OPERATION-MAPPING.md` columns are identical in specifications-engineer, tech-designer, spec-auditor (CAT-10), test-planner, review-checklist, task-implementer and gap-detector.
 
 ### 1. I/O Contract Consistency
 

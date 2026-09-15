@@ -79,3 +79,5 @@ jobs:
       - run: git config --global user.email ci@example.com && git config --global user.name ci
       - run: bash tests/setup/run.sh
       - run: bash tests/bench/run.sh
+      - run: bash tests/tasks/run.sh
+      - run: bash tests/dashboard/run.sh

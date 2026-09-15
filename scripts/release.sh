@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Publica una versión: única fuente = .claude-plugin/plugin.json, propagada a marketplace.json, server/package.json y CHANGELOG.
-# Uso: scripts/release.sh X.Y.Z[-pre]   (árbol limpio; crea commit y tag sdd-pipeline--vX.Y.Z con `claude plugin tag`)
+# Uso: scripts/release.sh X.Y.Z[-pre] [--no-push]   (árbol limpio; crea commit y tag sdd-pipeline--vX.Y.Z con `claude plugin tag`)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VER="${1:-}"
+NO_PUSH=false; [ "${2:-}" = "--no-push" ] && NO_PUSH=true
 [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "uso: $0 X.Y.Z[-pre]"; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "árbol sucio: commitea o descarta antes de publicar"; exit 1; }
 
@@ -30,7 +31,10 @@ command -v claude >/dev/null && claude plugin validate ./ --strict >/dev/null
 
 git add -A
 git commit -q -m "chore(release): sdd-pipeline v$VER"
-if command -v claude >/dev/null; then
+if [ "$NO_PUSH" = true ]; then
+  git tag -a "sdd-pipeline--v$VER" -m "sdd-pipeline v$VER"
+  echo "versión local sdd-pipeline v$VER (commit y tag sin push)"; exit 0
+elif command -v claude >/dev/null; then
   claude plugin tag -m "sdd-pipeline v%s" --push
 else
   git tag -a "sdd-pipeline--v$VER" -m "sdd-pipeline v$VER" && git push --follow-tags

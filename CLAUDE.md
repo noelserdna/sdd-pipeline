@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 23 Claude Code skills (9 pipeline + 4 onboarding + 7 utility + 1 setup + 2 lateral) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+This is a **meta-project**: a collection of 24 Claude Code skills (9 pipeline + 4 onboarding + 7 utility + 1 setup + 2 lateral + 1 multi-session lead) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
 
 ## Pipeline & Skill Execution Order
 
@@ -23,7 +23,7 @@ sdd-plan-architect  →  plan/ (fases/FASE-*.md, PLAN.md, ARCHITECTURE.md, fase-
         ↓
 sdd-task-generator  →  task/TASK-FASE-*.md
         ↓
-sdd-task-implementer  →  src/, tests/, git commits
+sdd-task-implementer  →  code/test paths from the SDD Stack Profile (default src/, tests/), git commits
 ```
 
 **Lateral skills** (invoke at any point):
@@ -48,7 +48,10 @@ sdd-task-implementer  →  src/, tests/, git commits
 - `sdd-verify-coverage` → LLM-as-judge heuristic layer (P3): verifies requirement coverage via structured binary prompts against source code, produces confidence-scored results in `.sdd/verification-results.json`
 
 **Setup skill**:
-- `sdd-setup` → Installs automation (hooks, agents, settings) into target projects
+- `sdd-setup` → Installs automation (hooks, agents, settings) into target projects; `--stack=<rails|nextjs-prisma>` also installs a stack kit (SDD Stack Profile, conventions, path rules — `docs/stacks.md`)
+
+**Multi-session skill**:
+- `sdd-lead` → Multi-session lead: dispatches stages to role sessions after each human gate, receives handoffs, answers station questions (`docs/multisesion.md`)
 
 ## Repository Structure
 
@@ -67,7 +70,10 @@ automation/
 │   ├── sdd-upstream-guard.sh            # H2: Upstream artifact immutability guard
 │   ├── sdd-pipeline-state-updater.sh    # H3: Auto-update pipeline-state.json on writes
 │   ├── sdd-augment-hook.js              # H5: Enriches tool context with SDD traceability data
-│   └── sdd-trace-map-updater.sh         # H6: Auto-updates traceability map on writes
+│   ├── sdd-trace-map-updater.sh         # H9: Auto-updates traceability map on writes
+│   ├── sdd-activity-log.sh              # H10: Activity log (.sdd/activity.jsonl, ~/.claude/sdd/active-runs.json)
+│   ├── sdd-runs-line.sh                 # H11: One-line reminder of the live runs on each prompt
+│   └── sdd-tool-guard.sh                # H12: Denies assigning human-consent variables for AI-gated tools
 ├── agents/                              # Agent definitions (installed to target .claude/agents/)
 │   ├── sdd-constitution-enforcer.md     # A1: Validates against 11 SDD Constitution articles
 │   ├── sdd-cross-auditor.md             # A2: Cross-references skill definitions for mismatches
@@ -77,7 +83,7 @@ automation/
 │   └── sdd-status-line.sh              # Pipeline status line for Claude Code CLI (opt-in)
 ├── scripts/
 │   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
-├── settings-template.json               # P1: Settings template with H1-H3, H5-H6 hook configs + statusLine
+├── settings-template.json               # P1: Settings template with H1-H3, H5, H9 hook configs + statusLine
 ├── settings-optional-quality-gates.json # P2: Opt-in prompt/agent quality gate hooks (H7-H8)
 └── INSTALL.md                           # Manual installation guide
 ```
@@ -121,7 +127,7 @@ Reference implementations and external tools used as inspiration/comparison for 
 - **Graph schema v6**: `codeRefs[].origin`, `codeRefs[].inferredFrom`, `commitRefs[].files`, BFS N-hop propagation (max depth 3), `.sdd/overrides.json` for manual pin/suppress
 - **Clarification-first**: Skills never assume — they ask the user via structured option tables
 - **Baseline auditing**: First audit creates baseline; subsequent audits only report new/regression findings
-- **Revert strategies**: Each task documents rollback approach (SAFE, COUPLED, MIGRATION, CONFIG)
+- **Revert strategies**: Each task documents rollback approach (SAFE, COUPLED, MIGRATION, CONFIG); with `task_format: compact` a task without a Revert block is SAFE
 - **Specs are the source of truth** (Art. 12 — see below)
 
 ## Article 12: Specification Primacy
@@ -190,7 +196,7 @@ Lateral skills (`security-auditor`, `req-change`) store their state as additiona
 | test-planner             | `spec/`, `audits/`, `ux/` (optional) | `test/`                   |
 | plan-architect           | `spec/`, `audits/`, `test/`, `design/` (optional), `ux/` (optional)  | `plan/`                   |
 | task-generator           | `plan/`                      | `task/`                   |
-| task-implementer         | `task/`, `spec/`, `plan/`    | `src/`, `tests/`          |
+| task-implementer         | `task/`, `spec/`, `plan/`    | code/test paths from the SDD Stack Profile (default `src/`, `tests/`) |
 
 **Staleness rules:**
 - A stage is **stale** when its `inputHash` no longer matches the current hash of its input directory.
@@ -225,7 +231,10 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - **H3 — State Updater** (`sdd-pipeline-state-updater.sh`): Auto-updates `pipeline-state.json` on writes. Event: `PostToolUse` (matcher: `Write`, async).
 - **H4 — Stop Hook** (inline prompt in settings): Verifies pipeline state consistency on session end. Uses haiku model.
 - **H5 — Context Augment** (`sdd-augment-hook.js`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`). JavaScript (Node.js).
-- **H6 — Trace Map Updater** (`sdd-trace-map-updater.sh`): Auto-updates traceability map on spec/code writes. Event: `PostToolUse` (matcher: `Write|Edit`, async).
+- **H9 — Trace Map Updater** (`sdd-trace-map-updater.sh`): Auto-updates traceability map on spec/code writes (code paths from the SDD Stack Profile). Event: `PostToolUse` (matcher: `Write|Edit`, async).
+- **H10 — Activity Log** (`sdd-activity-log.sh`): Appends skill/agent events to `.sdd/activity.jsonl` and keeps the global run index `~/.claude/sdd/active-runs.json` that feeds the status line and `sdd-watch`. Events: SessionStart (matcher: `startup|resume`), PreToolUse (matcher: `Skill|Agent|Task`), UserPromptExpansion, SubagentStart, SubagentStop, Stop, SessionEnd.
+- **H11 — Runs Line** (`sdd-runs-line.sh`): One `systemMessage` line per live run on each prompt, silent when none. Events: UserPromptSubmit.
+- **H12 — Tool Guard** (`sdd-tool-guard.sh`): Denies Bash commands that assign human-consent variables for AI actions (e.g. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`); CLAUDE.md, tasks and prompts are never human consent. Event: `PreToolUse` (matcher: `Bash`).
 
 **Git hooks** (installed by `sdd-setup` into target `.git/hooks/`):
 - **commit-msg**: Enforces traceability trailers (`Refs:` and/or `Task:`) on commit messages, ensuring every commit links back to SDD artifacts.
@@ -245,7 +254,7 @@ SDD automation is installed into target projects via `/sdd-setup` or the install
 - **A1 — Constitution Enforcer** (`sdd-constitution-enforcer.md`): Validates operations against the 11 SDD Constitution articles. Model: haiku.
 - **A2 — Cross-Auditor** (`sdd-cross-auditor.md`): Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
 - **A3 — Context Keeper** (`sdd-context-keeper.md`): Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
-- **A4 — Pipeline Auditor** (`sdd-pipeline-auditor.md`): End-to-end pipeline audit. Executes ALL 23 skills on a test project, verifies artifacts, runs E2E tests, documents bugs/improvements. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking. Model: opus. Has project memory.
+- **A4 — Pipeline Auditor** (`sdd-pipeline-auditor.md`): End-to-end pipeline audit. Executes ALL 24 skills on a test project, verifies artifacts, runs E2E tests, documents bugs/improvements. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking. Model: opus. Has project memory.
 
 **Pipeline State Schema** (authoritative source: `sdd-req-change/references/cascade-patterns.md`):
 - Uses `lastRun` (not `completedAt`), no `inputHash`, adds `staleReason`, `error` status, `lastChange` block.

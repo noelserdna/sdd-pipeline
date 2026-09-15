@@ -7,13 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Motivación: una carrera con la misma spec SDD implementada en paralelo con Next.js + Prisma y con Rails 8.1 (Sonnet 5, headless) terminó en empate, pero casi toda la fricción venía del propio pipeline: comandos npm/vitest fijos, rutas y códigos HTTP impuestos por las plantillas de contrato, tareas de test separadas del código, formato de tarea distinto en cada ejecución, subagentes para tareas triviales, hooks ciegos con la app en `web/` y un agente que fabricó el consentimiento de Prisma 12 veces.
+
+### Added
+- **SDD Stack Profile**: sección `## SDD Stack Profile` en el CLAUDE.md del proyecto con los comandos del stack (`test`, `test_file`, `test_name`, `typecheck`, `lint_files`, `lint`, `build`, `coverage`, `db_reset_safe`, `server`, `port`, `acceptance`), rutas (`app_dir`, `code_paths`, `test_paths`) y modo de tareas (`task_state`, `task_format`). Contrato en `skills/sdd-task-implementer/references/stack-profile.md`. Resolución: sección declarada → detección por ficheros (Rails, Next.js + Prisma, Workers, Python) → heurística anterior → `plan/ARCHITECTURE.md`.
+- **Kits por stack** `templates/stacks/{rails,nextjs-prisma}`: perfil, convenciones (≤ 2,5k caracteres, cargadas en cada turno) y reglas por ruta. Se instalan con `scripts/install-stack-kit.sh` o `/sdd-setup --stack=`. Guía en `docs/stacks.md`.
+- **`scripts/sdd-task-lint.mjs`**: `lint` (gramática de línea de tarea V-19, además de V-05/V-06/V-09/V-16), `json`, `status` (estado real por trailers `Task:`, descontando reverts) e `index` (deriva `TASK-INDEX.md`).
+- **Contratos de comportamiento**: Template 12b *Operations Contract* (`Style: operations`) en specifications-engineer; `design/OPERATION-MAPPING.md` en tech-designer (operación → ruta o acción, verbo, éxito, error de validación, fallback sin JS, elemento accesible); **CAT-10 Sobreespecificación de transporte** (prefijo `TRN-`) en spec-auditor.
+- task-generator `--compact` (sin bloque Review, Revert solo si no es SAFE, sin `TASK-INDEX.md`) y `task_state: trailers` en task-implementer (no edita casillas).
+- Parsers: Minitest y RSpec en `sdd-dashboard/test-result-parser.py`; rutas Rails (`bin/rails routes --expanded`) y Server Actions de Next.js en gap-detector; operaciones `API-NNN-NN` en filas de tabla en el grafo del dashboard.
+- Catálogos: Rails + Hotwire y Next.js App Router en tech-designer y plan-architect; "Recomendado" solo si coincide con un ADR, el perfil o un kit.
+- Pruebas: `tests/tasks/run.sh`, `tests/dashboard/run.sh`, perfil y tool-guard en `tests/hooks/run.sh`, instalación de kits en `tests/setup/run.sh`. `validate-plugin.mjs` valida los kits y avisa de flags sin documentar, comandos de stack fijos y SKILL.md de más de 62k caracteres.
+- `scripts/release.sh X.Y.Z --no-push`: commit y tag locales.
+
+### Changed
+- **Granularidad de tareas**: los tests van dentro de la tarea que implementa el comportamiento (test-first dentro de la tarea, Art. 8); cortes verticales por operación siguiendo las capas del kit; fases internas Setup → Foundation → Slices → Integration → Verification (se siguen aceptando las antiguas). La fase "Tests después de Contracts" contradecía el Art. 8.
+- **task-implementer sin stack fijo**: usa los comandos del perfil; tests acotados por tarea, suite completa solo en el checkpoint Foundation y en la verificación, build solo en la verificación; reutiliza la suite E2E existente (`{acceptance} --grep`) en lugar de montar Playwright o hacer smoke con curl; subagentes solo para lotes de al menos 2 tareas `[P]` no triviales, siempre en primer plano. `SKILL.md` no crece (60,7k caracteres): Stack Detection, verificación, recuperación e informe pasan a referencias.
+- **Transporte**: specifications-engineer exige HTTP solo con `Style: http`; review-checklist, task-implementer y test-planner comprueban la semántica contra el contrato y el transporte contra `OPERATION-MAPPING`; ux-designer no fija HTTP ni URLs que no exija un REQ, y la validación de cliente no puede bloquear los mensajes del servidor. **Las baselines de auditoría existentes recibirán hallazgos CAT-10 nuevos.**
+- Hooks: state-updater, trace-map, upstream-guard y augment-hook usan `code_paths`/`test_paths` del perfil (app en `web/`, Minitest en `test/`).
+- `TASK-INDEX.md` es opcional y `sdd-pipeline-status` ya no marca INCONSISTENT sin él. La numeración de artículos del constitution-enforcer se alinea con `references/sdd-constitution.md`.
+
 ### Fixed
+- La tabla de flags de task-implementer no listaba `--parallel` ni `--sequential`.
+- `generate.py` no leía tareas con el ID en negrita ni operaciones `API-NNN-NN`.
+- Los hooks no registraban la implementación con la app fuera de `src/` (p. ej. `web/`) y bloqueaban `test/` de Minitest con la app en la raíz.
 - **`sdd_gaps` no entendia el fichero que escribe su propia skill.** `executeGaps` esperaba `{summary, findings[]}` con `category` en cada hallazgo, pero `sdd-gap-detector` escribe `sdd-gap-analysis-v1`: los hallazgos repartidos en `endpoints.{missing,orphan,mismatch}` y `bddCoverage.missing`, mas un bloque `statistics`. Con el fichero real `data.findings` era `undefined` y **las tres rutas lanzaban TypeError** —el filtro por categoria, `format: "detail"` y `format: "summary"`—, no solo el filtro. No se notaba porque un proyecto sin `.sdd/gap-analysis.json` cae antes en el "No gap analysis found".
   - La traduccion va campo a campo. Los huerfanos **no traen identificador**, asi que se sintetiza de metodo y ruta (`ORPHAN-GET-/api/legacy`) y no del indice del array: un `ORPHAN-0` cambiaria de significado en cuanto se anadiera una ruta por delante, de modo que el mismo hallazgo tendria identificadores distintos entre ejecuciones.
   - `bddCoverage.missing` **no son endpoints**. Comparten la categoria `missing` porque las dos cosas faltan —darles categoria propia romperia el filtro que ya usa el resto del sistema—, pero un escenario sin prueba no es una ruta sin implementar: la descripcion lo dice, no llevan `artifact` de contrato, y la salida publica un `desglose` con cuantos son de cada tipo. Las `statistics` del generador se exponen intactas en `estadisticasOrigen`.
   - Para una tercera forma, una guarda que **nombra las claves encontradas**: quien lee esta salida es un modelo que no puede abrir el fichero para averiguar por que fallo.
   - `executeGaps` acepta un `cwd` opcional. Es parametro de la funcion y **no** del esquema de entrada de la herramienta —un cliente MCP no debe poder apuntar la lectura a donde quiera—; existe para que las pruebas sean hermeticas sin `process.chdir`, que es global al proceso.
   - Pruebas: tres fixtures (forma canonica, forma de la skill, forma desconocida) y una prueba de humo que llama a `sdd_gaps` **a traves de `dist/server.js`**. Es la que vale: Claude Code no ejecuta el checkout, arranca el bundle, asi que una prueba sobre `src/` puede estar en verde mientras la herramienta viva sigue rota.
+
+### Security
+- **Hook `sdd-tool-guard.sh`** (PreToolUse Bash): deniega comandos que asignan variables de consentimiento humano para acciones de IA (p. ej. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`). task-implementer añade *AI Tool Guardrails*: CLAUDE.md, las tareas o los prompts nunca son consentimiento humano; ante una negativa, `db_reset_safe` o `PAUSE: Tool guardrail` con la categoría de feedback `TOOL-GUARDRAIL`.
 
 ## [4.2.0] - 2026-08-28
 
