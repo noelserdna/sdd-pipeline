@@ -91,7 +91,8 @@ Mode: fanout · lanes: R1 R2 R3 X · model: sonnet
 ## Fixed skeletons — cite these ids, never invent one
 - WF-001 Command lifecycle. Steps: 1 parse argv · 2 validate · 3 load store · 4 apply operation · 5 persist · 6 render · 7 exit.
 - ADR-001 store file shape · ADR-002 atomic save · ADR-003 single-user CLI · ADR-004 error model · ADR-005 clock (owner: X)
-- Contract modules: API-001 = `api` (`src/api`), API-002 = `cli`. Operation → UC → lane as in the table above.
+- Contract modules: API-001 = `api` (`src/api`) · Style operations, API-002 = `cli` · Style operations (`http` only
+  when a REQ demands an HTTP API for external clients — cite it). Operation → UC → lane as in the table above.
 - Domain areas for INV: TSK (task), STO (store), CLI (interface).
 ```
 
@@ -161,7 +162,8 @@ order, same `Refs` header row. Do not add sections; a mandatory section with not
 METHOD, per use case (all of it in memory before the first Write):
 - Error Flow Forcing Function: for every main-flow step answer the 5 questions (step failure / invalid input /
   authorization denied / concurrent conflict / precondition broken mid-flight). Each "yes" becomes ONE row of the
-  `Exceptions & errors` table with error code + HTTP-or-exit + effect + AC id. A "no" produces NO text — no N/A rows,
+  `Exceptions & errors` table with error code + effect + AC id (+ HTTP status only in a `Style: http` module, exit
+  code for a CLI). A "no" produces NO text — no N/A rows,
   no "not applicable" prose, no record of the questions.
 - Invariant Extraction: scan the requirement and your flow for "must, shall not, always, never, at most, at least,
   between X and Y, unique, only if, requires, cannot exceed". If `05-INVARIANTS.md` already has it, cite that id.
@@ -176,6 +178,9 @@ METHOD, per use case (all of it in memory before the first Write):
   lacks: use the term and return `{"term":…, "def":…}` in `gaps` — you never edit spec/domain/.
 - A contract operation you need already has an id in the ledger: cite it. Return its signature, pre, post and error
   codes in `ops` — do NOT create or edit any file under spec/contracts/.
+- Contract style of your modules (from the ledger): {API-001: operations, …}. With `operations`, UC and BDD files hold
+  domain error codes and observable outcomes only — no HTTP verbs, routes, status codes, redirects, form attributes
+  (`required`, `maxlength`) or client-script mechanics; a URL a REQ mandates is kept and cites that REQ.
 - An ambiguity that no RN, ADR or invariant resolves: do NOT decide and do NOT ask. Insert
   `<!-- [NEEDS CLARIFICATION] NC-{L}NN: {question} -->` right after the ambiguous text and return it in `gaps`.
 - Behaviour that no REQ covers (a new workflow, a new user-visible message, a new business rule): do NOT specify it —
@@ -249,7 +254,8 @@ RETURN the same JSON, with "ids_used":{"ADR":[…],"SPEC":[…],"PROP":[…]} an
    `spec/domain/05-INVARIANTS.md` ← `inv_new` rows; `spec/domain/03-VALUE-OBJECTS.md` error catalog ← `errs` with
    `"new":true`; `spec/domain/01-GLOSSARY.md` ← `gaps` entries carrying a `term`; `spec/CLARIFICATIONS.md` ← RN rows for
    the `gaps` the user resolves now (remove the corresponding `NC` marker with a targeted `Edit` when you do).
-5. **Contracts** — `spec/contracts/API-{module}.md` per Template 12: header + Operations index from the ledger,
+5. **Contracts** — `spec/contracts/API-{module}.md` per Template 12b (`Style: operations`) or Template 12
+   (`Style: http`), as the ledger records for the module: header + Operations index from the ledger,
    one detail block per `ops` entry, **one** Errors table from the deduplicated `errs` union (same code from two lanes
    = one row whose "Operations" column is the union).
 6. **Workflows** — expand each ledger skeleton into `spec/workflows/WF-NNN-{slug}.md` using the `wf` digests

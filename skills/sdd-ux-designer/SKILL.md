@@ -441,6 +441,12 @@ When `ux/` already has artifacts (update mode):
 - Technical terms: English (ubiquitous language)
 - Design token names: English (CSS/JSON convention)
 
+### 6. Transport-Neutral, Server-Authoritative UI
+
+- No HTTP methods, routes, status codes or URL mechanics unless a REQ demands them (cite it); transport lives in `design/OPERATION-MAPPING.md`.
+- Client validation never prevents server messages the spec requires: no blocking `required`/`maxlength`/`pattern`; use `aria-required`, `aria-invalid`, `aria-describedby`.
+- A decision (incl. Tier-1) changing an element's role, type or accessible name (button↔link) is checked against the REQ accessibility/UI contract before Phase 4; on conflict ask or record a deviation.
+
 ---
 
 ## Standards Referenced

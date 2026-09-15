@@ -137,6 +137,7 @@ Check if requirements exist for:
 
 - [ ] All external systems identified
 - [ ] Communication protocol defined (REST, GraphQL, SOAP, gRPC, messaging)
+- [ ] Does a REQ demand an HTTP API for external clients (public API, third-party consumers)? No → contracts use `Style: operations` and transport is decided later by `sdd-tech-designer` (`design/OPERATION-MAPPING.md`); yes → `Style: http`, citing that REQ
 - [ ] Authentication method for each integration
 - [ ] Data format and schema for each integration
 - [ ] Error handling for each integration (retry, circuit breaker, fallback)

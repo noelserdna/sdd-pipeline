@@ -249,6 +249,28 @@ Decisiones arquitectónicas tomadas sin documentación formal.
 
 ---
 
+### CAT-10: Sobreespecificación de Transporte
+
+Mecánica de transporte o de UI fijada sin que un REQ la exija: ata la spec a un stack y choca con sus convenciones.
+
+**Señales** (corpus `spec/`, `ux/` y `test/` si existen; greps en `references/detection-patterns.md` § CAT-10):
+- Verbos/paths HTTP, códigos de estado o redirects fuera de contratos `Style: http`
+- Atributos `required|maxlength|pattern` que bloquean mensajes de validación del servidor
+- Mecánica JS ("sin script de cliente", "recarga completa") o URLs (`?editar=`) no exigidas por un REQ
+
+**Severidad:** ≤ P2; P1 si bloquea mensajes o comportamientos que la spec exige. **Fix:** reescribir como semántica de operación + "transport: see design/OPERATION-MAPPING.md"; nunca eliminar transporte que un REQ exige (citar el REQ).
+
+**Ejemplo de hallazgo:**
+```markdown
+### TRN-001: Contract fixes routes and statuses no REQ demands — P2 · CAT-10 · new
+- **Where:** `contracts/API-tareas.md:14`
+- **What:** `POST /tareas/{id}/titulo` + 400/404 per error in a `Style: operations` module.
+- **Why:** No REQ demands it; it pushes custom routes over the stack idiom.
+- **Fix:** Operation `renameTask` + domain codes; transport → `design/OPERATION-MAPPING.md`.
+```
+
+---
+
 ### Category Disambiguation Rules
 
 When a finding could belong to multiple categories, apply these rules to assign exactly ONE category:
@@ -259,6 +281,8 @@ When a finding could belong to multiple categories, apply these rules to assign 
 | **CAT-02 vs CAT-07** | CAT-02 = behavior assumed but never stated anywhere. CAT-07 = constraint IS stated in prose but lacks formal INV-ID. If the rule is not mentioned at all → CAT-02. If mentioned but not formalized → CAT-07. |
 | **CAT-03 vs CAT-06** | CAT-03 = a specific scenario is not handled ("what if timeout?"). CAT-06 = a structural element is missing (empty section, TBD, broken reference). If a specific scenario is missing from a populated section → CAT-03. If the entire section/field is missing or empty → CAT-06. |
 | **CAT-09 materiality** | Only flag missing ADRs for significant architectural decisions (data stores, auth mechanisms, infrastructure platforms, communication protocols). Common industry-standard choices (HTTP, JSON, REST, UTF-8) do NOT require ADRs. |
+| **CAT-09 vs CAT-10** | CAT-09 = a material decision lacks its ADR (fix: write it). CAT-10 = transport/UI mechanics no REQ demands (fix: move to `design/OPERATION-MAPPING.md`, no ADR). |
+| **CAT-10 vs SEC-CAT-10** | Unrelated: `SEC-CAT-10` (`sdd-security-auditor`) = security decision without ADR. A mechanic a security control demands (CSRF token, `SameSite`) is not CAT-10. |
 
 > A finding MUST be classified under exactly ONE category. Dual-categorization is not permitted.
 
@@ -266,7 +290,7 @@ When a finding could belong to multiple categories, apply these rules to assign 
 
 > Extends the 3-dimensional verification protocol (used post-implementation by `sdd-task-implementer`)
 > to the specification level. Inspired by OpenSpec's `/opsx:verify` stage-agnostic approach.
-> These checks complement CAT-01..CAT-09 by providing a structural pass/fail gate before implementation.
+> These checks complement CAT-01..CAT-10 by providing a structural pass/fail gate before implementation.
 
 ### Dimension 1: Completeness (Spec Coverage)
 
@@ -451,7 +475,7 @@ These finding families MUST be discovered and reported together in a single pass
 | Family | What to check | How to check |
 |---|---|---|
 | Missing BDD | ALL UCs for BDD coverage | For each UC, verify at least 1 happy + 1 error BDD scenario exists |
-| Missing API error codes | ALL API contracts for error responses | For each endpoint, verify 401, 403, 404, 409, 429 are documented where applicable |
+| Missing API error codes | ALL `Style: http` contracts for error responses | For each endpoint, verify 401, 403, 404, 409, 429 are documented where applicable |
 | Terminology violations | ALL docs for glossary compliance | Grep for every "NO usar" term from glossary across all spec/ files |
 | Value inconsistencies | ALL shared values across ALL docs | For each value in LIMITS.md/PERFORMANCE.md, grep all spec/ files for that value |
 | Missing invariants | ALL UCs for unformalized constraints | Scan UC text for "must", "shall not", "always", "never", "at least", "at most" without INV-ID reference |
@@ -675,6 +699,7 @@ After an audit has been performed AND audit questions have been answered, use Mo
 | INV (Weak Invariants) | NEW INVARIANT | Formalize rules with ID, validation, constraint |
 | EVO (Evolution Risks) | ADR REQUIRED | Document extensibility strategy |
 | ADR (Missing ADRs) | ADR REQUIRED | Create ADR with context, decision, alternatives |
+| TRN (Transport over-specification) | SPEC CHANGE | Rewrite as operation semantics + "transport: see design/OPERATION-MAPPING.md"; keep REQ-mandated transport, citing the REQ |
 
 ### Fix Process
 
@@ -914,7 +939,7 @@ When `--focused` is provided together with `--scope` pointing to a Change Report
 
 1. **Scope restriction:** Only audit the documents listed in the Change Report's "Documents Modified" section. All other spec documents are treated as unchanged context (read but not audited).
 2. **Skip full cross-document audit:** Do NOT perform a full Phase 1-6 sweep. Instead, focus exclusively on verifying alignment and consistency of the changed documents against each other and against their immediate neighbors in the traceability chain.
-3. **Output:** Generate a focused audit report at `audits/AUDIT-FOCUSED-{change-report-id}.md` (e.g., `audits/AUDIT-FOCUSED-CR-007.md`). It uses the compact template (`references/report-template.md` §3, without the Baseline and History sections), the same categories (CAT-01..CAT-09) and severity classification, and includes only findings related to the modified documents. Execution is sequential unless the change set itself exceeds the fan-out threshold.
+3. **Output:** Generate a focused audit report at `audits/AUDIT-FOCUSED-{change-report-id}.md` (e.g., `audits/AUDIT-FOCUSED-CR-007.md`). It uses the compact template (`references/report-template.md` §3, without the Baseline and History sections), the same categories (CAT-01..CAT-10) and severity classification, and includes only findings related to the modified documents. Execution is sequential unless the change set itself exceeds the fan-out threshold.
 4. **3C Verification:** Run the 3C Protocol checks (Completeness, Correctness, Coherence) scoped to the changed documents only. The verdict applies to the change set, not to the entire specification.
 5. **Cascade origin:** This mode is typically invoked automatically by `sdd-req-change` Phase 9 (Pipeline Cascade) after requirements changes have been propagated to spec documents. It provides a lightweight validation gate without requiring a full re-audit.
 
@@ -953,7 +978,7 @@ Each auditor uses its prefix for **provisional** ids in its JSON; the consolidat
 |---------|--------|------------|-------------------------|
 | Domain | `DOM-` | `spec/domain/`, `spec/CLARIFICATIONS.md` | Terminology violations; rules without invariant |
 | Use cases / Workflows | `UC-` | `spec/use-cases/`, `spec/workflows/` | Unformalized constraints in UC text; state transitions vs `04-STATES.md` |
-| Contracts / BDD | `CON-` | `spec/contracts/`, `spec/tests/` | Missing BDD per UC; missing API error codes; permissions |
+| Contracts / BDD | `CON-` | `spec/contracts/`, `spec/tests/` | Missing BDD per UC; missing API error codes; permissions; CAT-10 over `spec/`+`ux/`+`test/` |
 | NFR / ADR / Runbooks | `NFR-` | `spec/nfr/`, `spec/adr/`, `spec/runbooks/`, `spec/VALUE-REGISTRY.md` | Shared-value inconsistencies; ADR status/materiality |
 | Main thread | — | index, `README.md`, `TRACEABILITY-MATRIX.md`, `DERIVED-SPECS.md`, `CLARIFICATIONS-PENDING.md`, REQ ids | Cross-references, REQ coverage, markers, SC03, SH05, baseline, regression |
 
@@ -964,7 +989,7 @@ Auditors: `subagent_type: general-purpose`, `model: sonnet` (omit when `CLAUDE_C
 1. Merge the four JSON results; `docs_read` union → Coverage table.
 2. Deduplicate: same document + same line (±5) or section + same defect type → keep the most complete finding, union the locations, mark `[CROSS-VALIDATED]` (highest confidence; both `Source` prefixes kept). A contradiction reported from both sides is one finding located in the divergent document (Minority Rule).
 3. Apply the baseline filter (Phase 0) and the Phase 7 batching/cascade rules across dimensions.
-4. Assign final ids per category (`AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR-`) in severity order; the final `CON-` means CAT-05, not the Contracts auditor.
+4. Assign final ids per category (`AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR- TRN-`) in severity order; the final `CON-` means CAT-05, not the Contracts auditor.
 5. Review every P0/P1 against its cited lines (`sed -n`, ≤ 60 lines) before it enters the report; downgrade or drop without evidence.
 6. Compute 3C, metrics and Gate; write the report; Persist Summary with `metrics.mode = "fanout"`.
 

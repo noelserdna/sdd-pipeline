@@ -300,7 +300,9 @@ Runs only Phase 2 (Quality Attributes). Produces `design/QUALITY-ATTRIBUTES.md` 
    - File naming: `design/ADR-DRAFT-NNN-{slug}.md`
    - These are DRAFTS — user should review and move to `spec/adr/` if approved
 
-4. **Update pipeline-state.json** (see Persist Summary section)
+4. **Generate `design/OPERATION-MAPPING.md`** if a contract declares `Style: operations` (optional for `http`): every `API-` op mapped, seeded from the stack kit conventions (`templates/stacks/<kit>/conventions.md`, CLAUDE.md `## Stack Conventions` / `## SDD Stack Profile`). Template: `references/output-templates.md` §OPERATION-MAPPING
+
+5. **Update pipeline-state.json** (see Persist Summary section)
 
 **Output:**
 - `design/TECHNICAL-DESIGN.md` — Main design document
@@ -315,6 +317,7 @@ Runs only Phase 2 (Quality Attributes). Produces `design/QUALITY-ATTRIBUTES.md` 
 design/
 ├── TECHNICAL-DESIGN.md          ← Main document: 12 dimensions with decisions
 ├── QUALITY-ATTRIBUTES.md        ← Quality attribute analysis with trade-offs
+├── OPERATION-MAPPING.md         ← API-op → stack idiom (Style: operations)
 └── ADR-DRAFT-NNN-{slug}.md     ← Draft ADRs for key decisions (optional)
 ```
 

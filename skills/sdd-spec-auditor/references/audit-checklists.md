@@ -120,7 +120,7 @@
 
 ### Errores
 - [ ] ¿Cada error tiene código único?
-- [ ] ¿Cada error tiene HTTP status?
+- [ ] ¿Cada error tiene código de dominio? (HTTP status solo con `Style: http`)
 - [ ] ¿Cada error indica cuándo ocurre?
 
 ### Trazabilidad
@@ -177,19 +177,29 @@
 
 ## Checklist: API Contract (contracts/API-{module}.md)
 
-### Endpoint
+### Estilo
+- [ ] ¿El header declara `Style: operations` o `Style: http`? (sin fila `Style` y con columnas `Method | Path` = contrato pre-4.3 → se trata como http)
+- [ ] ¿`Style: http` cita el REQ que exige una API HTTP para clientes externos? Sin ese REQ → hallazgo CAT-10
+
+### Operación (`Style: operations`)
+- [ ] ¿Cada fila tiene Operation, Actor, Input (VO), Effect / post (INV), Domain errors y UC?
+- [ ] ¿Errores como `Code | Operations | Condition | Message (VO)`, sin columna HTTP?
+- [ ] ¿Sin Method/Path/status, verbos HTTP, rutas, redirects ni mecánica de formulario/JS (CAT-10), salvo URLs exigidas por un REQ y citadas?
+- [ ] ¿Header con `Transport` → `design/OPERATION-MAPPING.md`?
+
+### Endpoint (`Style: http`)
 - [ ] ¿Tiene método HTTP y path?
 - [ ] ¿Tiene authentication requirement?
 - [ ] ¿Tiene rate limit?
 - [ ] ¿Tiene version (v1, v2)?
 
-### Request
+### Request (`Style: http`; en `operations` basta el Input (VO) de la fila)
 - [ ] ¿Headers requeridos están listados?
 - [ ] ¿Path params tienen tipo y validación?
 - [ ] ¿Query params tienen tipo y default?
 - [ ] ¿Body tiene schema completo?
 
-### Response
+### Response (`Style: http`)
 - [ ] ¿Hay schema para success (200/201)?
 - [ ] ¿Hay schema para cada error code?
 - [ ] ¿Los error codes son únicos globalmente?
@@ -199,7 +209,7 @@
 - ¿El rate limit es consistente con nfr/LIMITS.md?
 - ¿Los error codes coinciden con UC correspondiente?
 - ¿Hay campos en response no documentados?
-- ¿El endpoint está en la lista de rutas del sistema?
+- (solo `Style: http`) ¿El endpoint está en la lista de rutas del sistema?
 - ¿Hay version strategy documentada?
 ```
 

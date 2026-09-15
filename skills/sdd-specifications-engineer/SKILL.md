@@ -104,16 +104,18 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
    | Question | If yes, create... |
    |---|---|
-   | 1. What if this step fails (network, timeout, service down)? | Exception course with error code + HTTP status |
-   | 2. What if the input is invalid or missing? | Exception course with VALIDATION_ERROR + 400 |
-   | 3. What if authorization is denied? | Exception course with 403 + specific permission |
-   | 4. What if there is a concurrent conflict? | Exception course with 409 + conflict resolution |
+   | 1. What if this step fails (network, timeout, service down)? | Exception course with domain error code (+ HTTP status only with `Style: http`) |
+   | 2. What if the input is invalid or missing? | Exception course with a validation code (e.g. `E_TITLE_EMPTY`) |
+   | 3. What if authorization is denied? | Exception course with an authorization code + specific permission |
+   | 4. What if there is a concurrent conflict? | Exception course with a conflict code + conflict resolution |
    | 5. What if a precondition was met when checked but became false during execution? | Exception course with race condition handling |
 
    A "no" or "not applicable" answer produces **no text**: no N/A cells, no comments, no forcing-function matrix in the document. The goal is a non-empty exceptions table, not a record of the questions.
 
+   **Contract style** (per module, recorded in the id ledger): `Style: operations` by default (Template 12b — domain codes and user-visible outcomes; routes, verbs, statuses and form mechanics go to `design/OPERATION-MAPPING.md`); `Style: http` (Template 12) only when a REQ demands an HTTP API for external clients — cite it.
+
    Each exception row also yields, in the same pass (never as a later patch to a written file):
-   - Its error code in the error catalog (`domain/03-VALUE-OBJECTS.md`, the only place with message/class/HTTP) and one row in the contract's single Errors table — in fan-out mode the lane does not write either file: it returns the code in `errs` (marking `new: true` when the catalog does not already have it) and the main thread appends the catalog row and writes the contract in phase D
+   - Its error code in the error catalog (`domain/03-VALUE-OBJECTS.md`, the only place with message/class/HTTP-or-exit) and one row in the contract's single Errors table — in fan-out mode the lane does not write either file: it returns the code in `errs` (marking `new: true` when the catalog does not already have it) and the main thread appends the catalog row and writes the contract in phase D
    - One scenario in `tests/BDD-UC-NNN.md`, whose AC id the exception row cites
    - Exceptions shared by every UC (global error handler, storage failure) are described once — in the workflow or the contract — and cited by id from the UC
 
@@ -121,7 +123,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
 
    | Tier | Condition | Action |
    |---|---|---|
-   | **Tier 2** | The exception is a technical detail of a UC that already traces to a REQ (e.g., adding 404 to an existing endpoint) | Register in `spec/DERIVED-SPECS.md` as `[Derived from REQ-X]` — no REQ needed |
+   | **Tier 2** | The exception is a technical detail of a UC that already traces to a REQ (e.g., adding a not-found error to an existing operation) | Register in `spec/DERIVED-SPECS.md` as `[Derived from REQ-X]` — no REQ needed |
    | **Tier 1** | The exception implies new user-visible behavior NOT covered by any REQ (e.g., a new retry workflow, a new notification to the user) | **STOP** — present to user, ask if a new REQ should be created via `sdd-req-change` |
    | **Tier 3** | Structural/cosmetic (e.g., reordering error codes in a table) | No registration needed |
 
@@ -157,7 +159,7 @@ Use when requirements are ready (after Mode 1 analysis or user indicates readine
    3. If >3 Tier 1 items exist without REQs, **alert the user**: "There are {N} specification artifacts that introduce new user-visible behavior without corresponding requirements. Consider running `/sdd-req-change` to create REQs before proceeding."
 
    > **Research Questions:** When specifying technical decisions that require evaluation
-   > of alternatives (e.g., REST vs GraphQL, encryption algorithm selection, database
+   > of alternatives (e.g., REST vs GraphQL — only for `Style: http` modules —, encryption algorithm selection, database
    > engine choice), document the open question instead of assuming an answer.
    > Create `spec/RESEARCH-QUESTIONS.md` listing each question with its context,
    > the specification(s) it blocks, and candidate options identified so far.
@@ -271,7 +273,7 @@ spec/
 ├── workflows/
 │   └── WF-NNN-{slug}.md                   # Multi-step processes spanning use cases
 ├── contracts/
-│   ├── API-{module}.md                    # REST/GraphQL API contracts per module
+│   ├── API-{module}.md                    # Operation contracts per module (Style: operations | http)
 │   ├── EVENTS-{module}.md                 # Domain events and async contracts
 │   └── PERMISSIONS-MATRIX.md              # Role-based access control matrix
 ├── adr/
@@ -410,10 +412,10 @@ phase C is the per-requirement work (fanned out above the threshold — § Execu
 
 | Phase | Thread | Write (once) | Source |
 |---|---|---|---|
-| A. Plan | main, always sequential | **Id ledger** → `.sdd/spec-id-plan.md` (outside `spec/`): REQ → UC ids + titles, `AC` ranges, WF ids **with their numbered step skeleton**, contract modules and every `API-NNN-NN` operation id with its owner, INV areas, ADR ids, RN counter, and — in fanout mode — the lane table with each lane's reserved `INV-{AREA}-{L}NN` / `NC-{L}NN` blocks and write-set | `requirements/REQUIREMENTS.md` read once + user decisions (Mode 1) |
+| A. Plan | main, always sequential | **Id ledger** → `.sdd/spec-id-plan.md` (outside `spec/`): REQ → UC ids + titles, `AC` ranges, WF ids **with their numbered step skeleton**, contract modules with their `Style` (operations | http) and every `API-NNN-NN` operation id with its owner, INV areas, ADR ids, RN counter, and — in fanout mode — the lane table with each lane's reserved `INV-{AREA}-{L}NN` / `NC-{L}NN` blocks and write-set | `requirements/REQUIREMENTS.md` read once + user decisions (Mode 1) |
 | B. Shared homes | main, always sequential | `domain/01..05` (glossary, entities, value objects + error catalog, states, invariants for all requirements — Step 6b), `VALUE-REGISTRY.md`, `CLARIFICATIONS.md` (the RN rows decided in Mode 1 — lanes must be able to cite them) | Ledger A |
 | C. Per module, per requirement | **fan-out lanes** (or main, sequential) | For each UC: Step 6a in memory → write `UC-NNN` then `BDD-UC-NNN`. Lane X writes `nfr/*` and `adr/`. Contract operations, new invariants, derived items, gaps and Tier 1 items are **returned as JSON**, not written. Sequential mode keeps the running lists in context instead | Ledger A + B on disk — do not re-open written files |
-| D. Cross-cutting | main | `contracts/API-{module}` (from the lanes' `ops`/`errs`), `WF-NNN` (skeleton + `wf` digests), `adr/`+`nfr/*` if there was no lane X, `DERIVED-SPECS.md`, `RESEARCH-QUESTIONS.md`, `TRACEABILITY-MATRIX.md`, `README.md`, `CLARIFICATIONS-PENDING.md`, `EVENTS-*` / `PERMISSIONS-MATRIX` (one line when N/A). Sanctioned appends (rows only, one Edit each): new INV rows to `domain/05-INVARIANTS.md`, new error codes to the catalog in `domain/03-VALUE-OBJECTS.md`, missing terms to `domain/01-GLOSSARY.md`, resolved gaps as RN rows to `CLARIFICATIONS.md` | Returned JSON (fanout) or running lists from C (sequential) |
+| D. Cross-cutting | main | `contracts/API-{module}` (Template 12b or 12 per `Style`, from the lanes' `ops`/`errs`), `WF-NNN` (skeleton + `wf` digests), `adr/`+`nfr/*` if there was no lane X, `DERIVED-SPECS.md`, `RESEARCH-QUESTIONS.md`, `TRACEABILITY-MATRIX.md`, `README.md`, `CLARIFICATIONS-PENDING.md`, `EVENTS-*` / `PERMISSIONS-MATRIX` (one line when N/A). Sanctioned appends (rows only, one Edit each): new INV rows to `domain/05-INVARIANTS.md`, new error codes to the catalog in `domain/03-VALUE-OBJECTS.md`, missing terms to `domain/01-GLOSSARY.md`, resolved gaps as RN rows to `CLARIFICATIONS.md` | Returned JSON (fanout) or running lists from C (sequential) |
 | E. Gate | main | Self-Validation Gate with `grep` / `wc`; fix only what fails; short console table | `spec/` via grep, never `cat` |
 
 ## Needs Clarification Markers
@@ -511,7 +513,7 @@ Run before Step 1, on the lanes' JSON and `ls` / `grep` — never by opening a f
 
 ### Step 2: Pre-Flight Defect Scan
 
-> **Detection patterns reference:** These checks are derived from `sdd-spec-auditor/references/detection-patterns.md`. If available, also load the auditor's grep patterns for CAT-01 (ambiguity words), CAT-04 (glossary synonyms), and CAT-06 (TBD/empty sections) to augment the checks below.
+> **Detection patterns reference:** These checks are derived from `sdd-spec-auditor/references/detection-patterns.md`. If available, also load the auditor's grep patterns for CAT-01 (ambiguity words), CAT-04 (glossary synonyms), CAT-06 (TBD/empty sections) and CAT-10 (transport over-specification) to augment the checks below.
 
 Run these lightweight grep checks against ALL generated spec documents to catch the most common audit findings BEFORE handing off to sdd-spec-auditor:
 
@@ -521,8 +523,9 @@ Run these lightweight grep checks against ALL generated spec documents to catch 
 4. **Error flow completeness**: For every UC, verify the `Exceptions & errors` table has at least one row. Flag UCs with an empty table.
 5. **Invariant formalization**: Scan all UC text for constraint language ("must", "shall not", "always", "never", "at least", "at most", "between X and Y", "unique", "only if", "requires") that does NOT have a corresponding INV-ID reference. Flag unformalized constraints.
 6. **Cross-reference validity**: Verify every `UC-NNN`, `WF-NNN`, `INV-XXX-NNN`, `ADR-NNN`, `RN-NNN` reference resolves to an existing document or section.
-7. **API error responses**: For every API contract endpoint, verify standard error responses are documented (401 for auth endpoints, 403 for protected endpoints, 404 for resource endpoints, 429 for rate-limited endpoints). Flag missing standard errors.
+7. **API error responses** (`Style: http` only): For every HTTP endpoint, verify standard error responses are documented (401 for auth endpoints, 403 for protected endpoints, 404 for resource endpoints, 429 for rate-limited endpoints). Flag missing standard errors.
 8. **Derived specs registration**: Verify that ALL artifacts generated by Step 6a (Error Flow Forcing), Step 6b (Invariant Extraction), and Step 6c are registered in `spec/DERIVED-SPECS.md` with correct Tier classification. Flag any Tier 1 items marked `[PENDING REQ]` — if >3 exist, alert the user before proceeding.
+9. **Transport neutrality** (`Style: operations` modules): `grep -rnE '\| *(Method|Path|HTTP) *\||\b(GET|POST|PUT|PATCH|DELETE) +/|(status|HTTP) *[1-5][0-9]{2}|redirect' spec/contracts spec/use-cases spec/tests spec/workflows` shows no Method/Path/status columns, HTTP verbs, routes, statuses or redirects, except a URL a REQ mandates (quoted with its REQ id). Rewrite hits as operation semantics (auditor CAT-10).
 
 ### Step 3: Fix Pre-Flight Findings
 

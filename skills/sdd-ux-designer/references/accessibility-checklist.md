@@ -176,6 +176,24 @@ Information and the operation of user interface must be understandable.
 | 3.3.3 Error Suggestion | AA | Error messages suggest corrections when known | Form validation |
 | 3.3.4 Error Prevention (Legal, Financial, Data) | AA | Reversible, verified, or confirmable submissions | Critical forms (payment, deletion) |
 
+> **Server-authoritative validation (SDD rule, SKILL.md Constraint 6).** When the spec requires validation messages
+> from the server (UC exception rows, BDD scenarios asserting an error code or message), client-side constraints must
+> not pre-empt them. Do not specify blocking constraint attributes (`required`, `maxlength`, `minlength`, `pattern`,
+> native `type="email"` blocking) on those fields: the browser would stop the submit and the required message would
+> never render. Instead: `aria-required="true"` (and a visible "obligatorio" hint), the server message in an element
+> referenced by `aria-describedby`, `aria-invalid="true"` on error, focus moved to the first invalid field or to an
+> error summary (3.3.1, 3.3.3, 4.1.3). Length limits are shown as hints, enforced by the server. The spec states the
+> behaviour, not the attribute — `novalidate` or omitting the attributes is an implementation choice.
+>
+> **Role and name stability (4.1.2).** A control whose role and accessible name a requirement fixes (e.g. button
+> "Guardar") keeps them: turning it into a link, or renaming it, changes `getByRole` queries and breaks acceptance
+> tests. Such a change — even a Tier-1 decision — is checked against the requirement's accessibility/UI contract before
+> Phase 4; on conflict ask the user or record a deviation with its REQ id.
+>
+> **No transport in ux/.** HTTP methods, routes, status codes, redirects, "full page reload" or URL shapes
+> (`?editar=`) appear only when a REQ demands them, citing it; otherwise the interaction is described by outcome
+> ("after saving, the list shows the new title") and the transport is in `design/OPERATION-MAPPING.md`.
+
 ---
 
 ## 4. Robust

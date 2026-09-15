@@ -297,7 +297,7 @@ threshold, or when the `Agent` tool is not in your tool list, and say why in `su
    - test/TEST-PLAN.md §3 (conventions; never repeat them in the matrix)
    For each UC write test/TEST-MATRIX-UC-{NNN}.md following this template exactly:
    {template}
-   Rules: one row per case; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
+   Rules: one row per case; expected = domain error code + observable outcome, HTTP status only with `Style: http`; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
    Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
    ```
 4. Main thread: continue with Mode 3 (and with Mode 5's Smoke tier and field-inventory cross-validation when Mode 5 is delegated) while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
@@ -339,7 +339,7 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 
 | ID | Precondition / Input | Expected (status · output · state) | Type | Refs |
 |----|----------------------|-------------------------------------|------|------|
-| T01 | {C1=no} `{input}` · {store state} | {exit/status} · {stdout/body or —} · {store effect or unchanged} | error | AC-{NNN}-03, RN-{NNN} |
+| T01 | {C1=no} `{input}` · {store state} | `{E_CODE}` {+ exit (CLI) or HTTP status (Style http only)} · {message/stdout/body or —} · {store effect or unchanged} | error | AC-{NNN}-03, RN-{NNN} |
 | T02 | `{input}` · {store state} | {status} · {output} · {effect} | happy | AC-{NNN}-01 |
 | T03 | {rule} `expand: BVA(1,1000)` | {status} per point | boundary | AC-{NNN}-09 |
 
@@ -446,8 +446,10 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
    ```
    IF ux/ directory exists AND ux/WIREFRAMES.md is present:
      → project_type = WEB-APP (full browser E2E with page objects)
-   ELIF spec/contracts/API-*.md exists AND no ux/:
+   ELIF spec/contracts/API-*.md is `Style: http` (or pre-4.3 `Method | Path`) AND no ux/:
      → project_type = API-ONLY (API E2E via HTTP, no browser)
+   ELIF contracts are `Style: operations` AND a user-facing WF exists:
+     → project_type = WEB-APP without UX enrichment (locators from REQ roles/names)
    ELIF project is CLI tool (detected from plan/ARCHITECTURE.md or CLAUDE.md):
      → project_type = CLI (subprocess E2E)
    ELSE:
@@ -532,7 +534,7 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
    **b. Required-field validation scenarios (P0):**
    - For each required field: leave it empty, fill all others with valid values, attempt submit
-   - Assert: specific validation error message for that field (from UC exception flows or API 400 response)
+   - Assert: specific validation error message for that field (the UC exception row's error code and its catalog message; an HTTP 400 only with `Style: http`)
    - Combine into a variation table when possible (one row per required field)
 
    **c. Invalid-value scenarios (P1):**
@@ -726,7 +728,7 @@ Use when the user needs end-to-end acceptance test scenarios that validate compl
 
 | Variant ID | Diverges at step | Input change | Expected behavior | Spec Ref |
 |------------|------------------|-------------|-------------------|----------|
-| E2E-WF-{NNN}-EX01 | Step {N} | {precondition not met} | {error/redirect/fallback} | UC-{NNN} §exception.{N} |
+| E2E-WF-{NNN}-EX01 | Step {N} | {precondition not met} | {error code → message shown or fallback; state unchanged} | UC-{NNN} §exception.{N} |
 
 ### E2E-WF-{NNN} — Accessibility (P1)
 
@@ -819,6 +821,9 @@ Each test must be independent — no shared mutable state, no execution order de
 
 ### Traceability
 Every test traces to a spec element (UC, INV, NFR, API contract). No test exists without a spec justification. No spec element exists without a test.
+
+### Observable Outcomes, Not Transport
+Expected results are domain error codes (`E_TITLE_EMPTY`) and what the user or caller observes: message shown, accessible role/name, state after reload or restart, exit code for a CLI. An HTTP status, route or redirect is expected only when the contract declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http); with `Style: operations` transport lives in `design/OPERATION-MAPPING.md` and is never a test oracle, except a URL a REQ mandates.
 
 ### Risk-Based Prioritization
 Not all tests are equal. Prioritize by:

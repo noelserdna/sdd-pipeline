@@ -326,6 +326,66 @@ grep -rniE "(trade.off|compromise|alternativa)" spec/
 
 ---
 
+## CAT-10: Sobreespecificación de Transporte - Detección
+
+> Corpus: `spec/`, más `ux/` y `test/` si existen (lo cubre el auditor Contracts & BDD sobre todo el corpus).
+> `design/` es el hogar legítimo del transporte (`design/OPERATION-MAPPING.md`) y **no** se escanea.
+
+### Grep Patterns
+
+```bash
+CORPUS="spec"; [ -d ux ] && CORPUS="$CORPUS ux"; [ -d test ] && CORPUS="$CORPUS test"
+
+# 0. Estilo por módulo. Sin fila Style + columnas Method/Path = contrato pre-4.3 → se trata como http
+grep -nE '^\| *Style *\|' spec/contracts/API-*.md
+grep -lE '^\| *(ID *\| *)?Method *\| *Path' spec/contracts/API-*.md
+
+# 1. Verbos + rutas HTTP y columnas de transporte
+grep -rnE '\b(GET|POST|PUT|PATCH|DELETE)\b +`?/' $CORPUS
+grep -rnE '^\| *(ID *\| *)?(Method|HTTP|Path|Route|Endpoint) *\|' $CORPUS
+
+# 2. Códigos de estado y redirects
+grep -rnE '\b(status|HTTP|código) *:? *[1-5][0-9]{2}\b|redirect|redirig' $CORPUS
+
+# 3. Atributos de formulario que bloquean mensajes del servidor (revisar cada hit: la columna
+#    "Required" de un inventario de campos o "required" en prosa NO es señal; el atributo HTML sí)
+grep -rnE '\b(maxlength|minlength)\b|\bpattern=|<(input|textarea|select)[^>]*\brequired|`required`' $CORPUS | grep -v 'aria-required'
+
+# 4. Mecánica de cliente / recarga
+grep -rniE 'sin (javascript|js|script)|no (client|js) script|full.?page reload|recarga (completa|de (la )?página)|preventDefault|fetch\(' $CORPUS
+
+# 5. Estructura de URL y query params
+grep -rnE '\?[a-z_]+=' $CORPUS
+```
+
+### Cuándo NO es hallazgo
+
+- El módulo es `Style: http` (o contrato pre-4.3 con `Method | Path`) y el hit está en ese contrato o en sus escenarios de API.
+- Un REQ exige ese transporte (`grep -n '?estado=' requirements/REQUIREMENTS.md` devuelve la línea): es transporte obligatorio y debe citar el REQ; si no lo cita → P3 "citar REQ".
+- Controles de seguridad exigidos (token CSRF, `SameSite`, `Secure`): dominio de `sdd-security-auditor`.
+- `aria-required`, `aria-invalid`, `aria-describedby`: accesibilidad, no transporte.
+
+### Severidad
+
+| Situación | Sev |
+|---|---|
+| El transporte bloquea un mensaje o comportamiento exigido (`required`/`maxlength` que impide ver `E_TITLE_EMPTY`; enlace donde el REQ nombra un botón) | P1 |
+| Rutas, verbos, estados, redirects, mecánica JS o URLs no exigidas en contratos `operations`, UC, BDD, ux o test | P2 |
+| Transporte exigido por un REQ pero sin citarlo | P3 |
+
+### Reescritura (Mode Fix)
+
+| Antes | Después |
+|---|---|
+| `POST /tareas/{id}/titulo` → 400 `E_TITLE_EMPTY` | `renameTask(id, title)` → `E_TITLE_EMPTY`; transport: see design/OPERATION-MAPPING.md |
+| "Recarga la página completa y redirige a `?editar=`" | "Tras guardar, la lista muestra el título nuevo" (+ REQ si la URL es obligatoria) |
+| `<input required maxlength=120>` | "Título obligatorio, ≤ `TITLE_MAX_LENGTH` (INV-TSK-003); `E_TITLE_EMPTY` se muestra junto al campo" |
+| `Then status 400` | `Then error E_TITLE_EMPTY is shown and the list is unchanged` |
+
+Nunca se elimina una URL o mecánica que un REQ exige: se conserva y se cita el REQ.
+
+---
+
 ## Scripts de Auditoría Automatizada
 
 ### Script: Buscar Todas las Ambigüedades

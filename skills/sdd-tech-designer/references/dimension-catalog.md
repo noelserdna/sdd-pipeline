@@ -70,7 +70,9 @@ Canal web seleccionado pero sin framework.
 
 | Opción | Descripción |
 |--------|-------------|
-| React + Next.js | Full-featured, SSR/SSG, grande ecosystem |
+| Next.js App Router (full-stack) | React Server Components + Server Actions, `<form action>` con progressive enhancement; sin API HTTP propia si no hay clientes externos |
+| Rails + Hotwire (full-stack) | Server-rendered, REST resources + Turbo/Stimulus; formularios funcionan sin JS, poco JS propio |
+| React + Next.js (SPA/SSG + API) | Full-featured, SSR/SSG, grande ecosystem |
 | Vue + Nuxt | Buena DX, curva menor, progressive |
 | Svelte + SvelteKit | Mínimo bundle, excelente performance |
 | Astro | Content-first, islands architecture, multi-framework |
@@ -78,6 +80,11 @@ Canal web seleccionado pero sin framework.
 
 **Contexto:** [tipo de app], [complejidad UI], [team expertise]
 ```
+
+> **Stack ya decidido.** Con Stack Profile (CLAUDE.md `## SDD Stack Profile`), kit instalado (`templates/stacks/<kit>`,
+> sección `## Stack Conventions`) o ADR de stack aceptado, DIM-1-002, DIM-3-001 y DIM-3-002 están **Resolved**: se
+> muestra la evidencia, se recomienda lo ya elegido y no se reabre la pregunta. Las recomendaciones de las demás
+> dimensiones (datos, auth, CI, infra) deben ser compatibles con ese stack.
 
 ### Common Patterns
 
@@ -168,6 +175,7 @@ APPLICABLE WHEN:
 RESOLVED WHEN:
 - ADR exists selecting language + framework + runtime
 - CLAUDE.md has "Active Technologies" with specific versions
+- CLAUDE.md has `## SDD Stack Profile` / `## Stack Conventions`, or a stack kit is installed (`templates/stacks/<kit>`)
 - Existing codebase already uses a stack
 
 N/A WHEN:
@@ -183,6 +191,7 @@ No hay selección de lenguaje/runtime de implementación.
 | Opción | Descripción |
 |--------|-------------|
 | TypeScript + Node.js | Amplio ecosystem, full-stack capability |
+| Ruby + Rails | Convención sobre configuración, full-stack server-rendered (Hotwire), muy productivo en CRUD |
 | Python + FastAPI | Rápido para APIs, ML ecosystem |
 | Go | Performance, concurrency, simple deployment |
 | Rust | Maximum performance, memory safety |
@@ -199,6 +208,10 @@ Lenguaje seleccionado ({lang}) pero sin framework backend.
 | Opción | Descripción |
 |--------|-------------|
 | {Framework options based on selected language} |
+| *Ruby:* Rails | Full-stack: REST resources, Active Record, Hotwire; formularios sin JS (`form_with`, `button_to`) |
+| *Ruby:* Sinatra / Hanami | Ligero / arquitectura limpia, menos convenciones |
+| *TypeScript:* Next.js App Router | Full-stack: Server Components + Server Actions; Route Handlers solo para clientes HTTP externos |
+| *TypeScript:* Fastify / Hono / NestJS | API HTTP pura (clientes externos, contratos `Style: http`) |
 
 **Contexto:** [runtime], [tipo de API], [complejidad]
 ```
@@ -394,6 +407,7 @@ RESOLVED WHEN:
 
 N/A WHEN:
 - No API (standalone CLI, desktop app, embedded system)
+- Every contract is `Style: operations` (no external HTTP clients): the transport of a server-rendered or client UI app is not API design — it goes to `design/OPERATION-MAPPING.md`
 ```
 
 ### Question Templates

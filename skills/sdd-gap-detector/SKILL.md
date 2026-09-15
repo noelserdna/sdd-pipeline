@@ -3,7 +3,7 @@ name: sdd-gap-detector
 description: "Detects spec-vs-code gaps: compares API contracts, use cases and BDD scenarios with source to find MISSING endpoints, ORPHAN code, SCHEMA mismatches. Use when: 'detect gaps', 'find missing implementations', 'what's not implemented', 'orphan code', 'gap analysis', 'verify implementation completeness', 'qué falta por implementar', 'código huérfano'."
 context: fork
 agent: Explore
-allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Write(.sdd/*), Write(audits/*)
+allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Bash(bin/rails routes:*), Write(.sdd/*), Write(audits/*)
 ---
 
 # SDD Gap Detector
@@ -45,9 +45,9 @@ Build a "spec manifest" — what the system SHOULD do.
 
 #### 1.1 Extract API Endpoint Definitions
 
-Read `spec/contracts/*.md` and extract endpoint definitions. Look for markdown tables with columns matching: Method, Path, Description, Status Codes.
+Read `spec/contracts/*.md` and extract endpoint definitions. Look for markdown tables with columns matching: Method, Path, Description, Status Codes — or the `Style: operations` table (§8b).
 
-**Table detection patterns** (see `references/language-parsers.md` Section 7):
+**Table detection patterns** (see `references/language-parsers.md` §8):
 - Header row containing `Method` and `Path` (or `Endpoint`, `Route`)
 - Each data row: `| METHOD | /path/to/resource | ... |`
 
@@ -121,12 +121,14 @@ Detect the project's language and framework by checking for:
 | `pyproject.toml` or `requirements.txt` with `flask` | Flask |
 | `pyproject.toml` or `requirements.txt` with `fastapi` | FastAPI |
 | `manage.py` or `urls.py` | Django |
+| `Gemfile` with `rails` + `config/routes.rb` | Rails (`bin/rails routes --expanded`, static fallback) |
+| `"use server"` in `app/**` or `src/**` | Next.js Server Actions |
 
 If multiple frameworks detected, process ALL of them. If none detected, set `projectFramework: "unknown"` and attempt generic route detection using all parsers.
 
 #### 2.2 Extract Route Definitions
 
-Using the regex patterns from `references/language-parsers.md`, scan `src/**/*` for route/endpoint definitions.
+Using the regex patterns from `references/language-parsers.md`, scan the Stack Profile `code_paths` (CLAUDE.md `## SDD Stack Profile`; else `src/**/*`) for routes, endpoints and Server Actions.
 
 For each route found, record:
 - `method`: HTTP method
@@ -184,15 +186,14 @@ For each endpoint in `specManifest.endpoints`:
    - Prefix tolerance: spec `/users` matches code `/api/users` (common prefix addition)
 3. If NO match found: classify as **MISSING**
 
+**`Style: operations` contracts:** compare API-op ↔ `design/OPERATION-MAPPING.md` row ↔ route/action in code (`references/language-parsers.md` §8b); method + path equality applies only to `Style: http`.
+
 #### 3.2 ORPHAN Routes
 
 For each route in `codeManifest.routes`:
 1. Search `specManifest.endpoints` for a matching spec entry
 2. If NO match found: classify as **ORPHAN**
-3. Exclude common framework routes from orphan detection:
-   - Health checks: `/health`, `/healthz`, `/ready`, `/ping`
-   - Documentation: `/docs`, `/swagger`, `/openapi`
-   - Metrics: `/metrics`, `/prometheus`
+3. Exclude infrastructure and framework routes from orphan detection (`references/language-parsers.md` §10: health, docs, metrics, `/up`, `/rails/*`, `/cable`, `/_next/*`)
 
 #### 3.3 MISMATCH Detection
 
@@ -224,7 +225,7 @@ Write `.sdd/gap-analysis.json` with the following schema:
 {
   "$schema": "sdd-gap-analysis-v1",
   "generatedAt": "ISO-8601",
-  "projectFramework": "express|fastify|hono|nextjs|flask|fastapi|django|unknown",
+  "projectFramework": "express|fastify|hono|nextjs|nextjs-actions|flask|fastapi|django|rails|unknown",
   "endpoints": {
     "specified": [
       {

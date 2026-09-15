@@ -91,7 +91,7 @@ Phase assignment determines which FASE owns which spec files. The algorithm uses
 
 ## Rule 4: By Contract Module
 
-**How to detect:** List all files in `contracts/`. Each API contract file (e.g., `API-*.md`) exposes endpoints for a specific bounded context. Examine the base path and endpoint groupings.
+**How to detect:** List all files in `contracts/`. Each API contract file (e.g., `API-*.md`) exposes endpoints for a specific bounded context. Examine the base path and endpoint groupings. With `Style: operations` contracts there are no paths: group by operation IDs (`API-NNN-*`) and the UCs/aggregates they serve, and take the per-stack transport from `design/OPERATION-MAPPING.md` when it exists — never invent routes in the plan.
 
 **How to assign:**
 

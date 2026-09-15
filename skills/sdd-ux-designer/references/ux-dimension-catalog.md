@@ -317,7 +317,7 @@ The priority of each dimension depends on the project type. Use this matrix to d
 
 ### What It Covers
 - Form layout patterns (single column, multi-column, multi-step)
-- Validation strategy (client-side, server-side, hybrid)
+- Validation strategy (client-side, server-side, hybrid, server-authoritative)
 - Error message conventions (inline, summary, toast)
 - Field types and input masks
 - Auto-save and draft persistence
@@ -336,6 +336,7 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: On submit only (validate all at once) — simplest
    - Option C: Real-time (validate on each keystroke) — most responsive, more complex
    - Option D: Hybrid (real-time for format, on blur for business rules, on submit for cross-field)
+   - Option E: Server-authoritative (submit → server validates → message beside the field; client hints are non-blocking `aria-required` / `aria-describedby`, no blocking `required` / `maxlength` / `pattern`) — mandatory when the spec defines server-side validation messages; works without JS (see `accessibility-checklist.md` §3.3)
 
 2. **Error Display:** "How should form errors be displayed?"
    - Option A: Inline below each field (red text + icon) — most accessible
@@ -360,6 +361,7 @@ The priority of each dimension depends on the project type. Use this matrix to d
 - File upload without size/type restrictions
 - Multi-step forms without save progress
 - No confirmation for irreversible actions
+- Blocking client validation (`required`, `maxlength`, `pattern`) on fields whose error messages the spec requires from the server — the message never renders
 
 ---
 
@@ -369,7 +371,7 @@ The priority of each dimension depends on the project type. Use this matrix to d
 - Primary navigation pattern (top bar, sidebar, bottom tabs)
 - Secondary navigation (breadcrumbs, tabs, pagination)
 - Search functionality (full-text, filters, facets)
-- URL structure and deep linking
+- URL structure and deep linking — only URLs a REQ demands (e.g. a `?estado=` filter), citing it; other routes are transport, decided in `design/OPERATION-MAPPING.md`
 - Sitemap / page hierarchy
 - Mobile navigation adaptation
 

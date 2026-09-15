@@ -64,7 +64,7 @@ This is what keeps the token cost of fan-out close to the sequential run instead
 |---|---|---|---|---|
 | Domain | `DOM-` | `spec/domain/**`, `spec/CLARIFICATIONS.md` | Terminology violations (every "NO usar" term of the glossary grepped over `spec/`); business rules (RN) without invariant | SH01, SH02, SR03 (definition side) |
 | Use cases & workflows | `UC-` | `spec/use-cases/**`, `spec/workflows/**` | Missing invariants (must/never/always/at most in UC text without INV-id); state transitions vs `04-STATES.md` (grep) | SR01, SR04, SC04 (own docs) |
-| Contracts & BDD | `CON-` | `spec/contracts/**`, `spec/tests/**` | Missing BDD per UC (≥ 1 happy + 1 error); missing API error codes (401/403/404/409/429 where applicable); permissions vs `PERMISSIONS-MATRIX.md` | SR05, SR03 (usage side) |
+| Contracts & BDD | `CON-` | `spec/contracts/**`, `spec/tests/**` | Missing BDD per UC (≥ 1 happy + 1 error); missing API error codes (401/403/404/409/429 where applicable, `Style: http` only); permissions vs `PERMISSIONS-MATRIX.md`; **transport over-specification (CAT-10) over the whole corpus** — `spec/`, plus `ux/` and `test/` if present, by grep hits (`detection-patterns.md` § CAT-10) | SR05, SR03 (usage side) |
 | NFR, ADR & runbooks | `NFR-` | `spec/nfr/**`, `spec/adr/**`, `spec/runbooks/**`, `spec/VALUE-REGISTRY.md` | Value inconsistencies (each registry / LIMITS / PERFORMANCE value grepped over `spec/`); ADR status and materiality (CAT-09) | SH04 |
 | main thread | — | `$IDX`, `spec/README.md`, `TRACEABILITY-MATRIX.md`, `DERIVED-SPECS.md`, `CLARIFICATIONS-PENDING.md`, `requirements/REQUIREMENTS.md` (ids only) | Cross-references (SH03: every referenced id exists in the id set); REQ coverage and orphans (SC01, SC02, SC05); subdirectories populated (SC03); `TBD|TODO|NEEDS CLARIFICATION` markers corpus-wide (SC04); template uniformity from heading counts (SH05); baseline and regression (Phases 0, 6) | SC01–SC03, SC05, SH03, SH05 |
 
@@ -98,7 +98,7 @@ Neighbours: for cross-document evidence use `grep -n` and `sed -n 'a,bp'` on oth
 lookup; never `cat` a file outside your scope. Glossary terms: {IDX slice of spec/domain/01-GLOSSARY.md, or "read it"}.
 Known findings — do NOT re-report: {baseline rows "ID — short description", or "none"}.
 
-Detect defects CAT-01..CAT-09 (definitions and one-category rule: {REFS}/../SKILL.md "Defect Categories";
+Detect defects CAT-01..CAT-10 (definitions and one-category rule: {REFS}/../SKILL.md "Defect Categories";
 checklists: {REFS}/audit-checklists.md sections {"Use Case", "Workflow", …}; grep patterns:
 {REFS}/detection-patterns.md sections {CAT-xx list}). Read only those sections.
 Rules:
@@ -128,7 +128,7 @@ Return ONLY this JSON (no prose, ≤ 6 000 chars), P0 first, at most 25 findings
 3. **Baseline filter** (Phase 0 lists): a finding matching an `Accepted`, `Won't fix` or unexpired `Deferred` row
    (same document + same defect) is dropped and counted as excluded.
 4. **Classify** `new | persistent | regression` against the previous report's ids (Phase 6).
-5. **Final ids by category:** `AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR-`, numbered within category in severity
+5. **Final ids by category:** `AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR- TRN-`, numbered within category in severity
    order; keep the provisional id as `Source` (e.g. `Source: DOM-004`). Note that the final `CON-` = CAT-05
    contradictions, not the Contracts auditor.
 6. **Severity review:** before a P0 or P1 enters the report, the main thread opens the cited lines once

@@ -1,0 +1,143 @@
+--[ Route 1 ]-------------------------------------------------------------------
+Prefix            | rails_health_check
+Verb              | GET
+URI               | /up(.:format)
+Controller#Action | rails/health#show
+Source Location   | config/routes.rb:3
+--[ Route 2 ]-------------------------------------------------------------------
+Prefix            | root
+Verb              | GET
+URI               | /
+Controller#Action | tasks#index
+Source Location   | config/routes.rb:5
+--[ Route 3 ]-------------------------------------------------------------------
+Prefix            | task_completion
+Verb              | DELETE
+URI               | /tasks/:task_id/completion(.:format)
+Controller#Action | completions#destroy
+Source Location   | config/routes.rb:8
+--[ Route 4 ]-------------------------------------------------------------------
+Prefix            |
+Verb              | POST
+URI               | /tasks/:task_id/completion(.:format)
+Controller#Action | completions#create
+Source Location   | config/routes.rb:8
+--[ Route 5 ]-------------------------------------------------------------------
+Prefix            | tasks
+Verb              | GET
+URI               | /tasks(.:format)
+Controller#Action | tasks#index
+Source Location   | config/routes.rb:7
+--[ Route 6 ]-------------------------------------------------------------------
+Prefix            |
+Verb              | POST
+URI               | /tasks(.:format)
+Controller#Action | tasks#create
+Source Location   | config/routes.rb:7
+--[ Route 7 ]-------------------------------------------------------------------
+Prefix            | edit_task
+Verb              | GET
+URI               | /tasks/:id/edit(.:format)
+Controller#Action | tasks#edit
+Source Location   | config/routes.rb:7
+--[ Route 8 ]-------------------------------------------------------------------
+Prefix            | task
+Verb              | PATCH
+URI               | /tasks/:id(.:format)
+Controller#Action | tasks#update
+Source Location   | config/routes.rb:7
+--[ Route 9 ]-------------------------------------------------------------------
+Prefix            |
+Verb              | PUT
+URI               | /tasks/:id(.:format)
+Controller#Action | tasks#update
+Source Location   | config/routes.rb:7
+--[ Route 10 ]------------------------------------------------------------------
+Prefix            |
+Verb              | DELETE
+URI               | /tasks/:id(.:format)
+Controller#Action | tasks#destroy
+Source Location   | config/routes.rb:7
+--[ Route 11 ]------------------------------------------------------------------
+Prefix            |
+Verb              |
+URI               | /cable
+Controller#Action | #<ActionCable::Server::Base:0x000000011f2a3b40 @config=#<ActionCable::Server::Configuration>, @mutex=#<Monitor>>
+Source Location   | config/routes.rb:11
+--[ Route 12 ]------------------------------------------------------------------
+Prefix            | turbo_recede_historical_location
+Verb              | GET
+URI               | /recede_historical_location(.:format)
+Controller#Action | turbo/native/navigation#recede
+Source Location   | turbo-rails (2.0.16) config/routes.rb:2
+--[ Route 13 ]------------------------------------------------------------------
+Prefix            | turbo_resume_historical_location
+Verb              | GET
+URI               | /resume_historical_location(.:format)
+Controller#Action | turbo/native/navigation#resume
+Source Location   | turbo-rails (2.0.16) config/routes.rb:3
+--[ Route 14 ]------------------------------------------------------------------
+Prefix            | turbo_refresh_historical_location
+Verb              | GET
+URI               | /refresh_historical_location(.:format)
+Controller#Action | turbo/native/navigation#refresh
+Source Location   | turbo-rails (2.0.16) config/routes.rb:4
+--[ Route 15 ]------------------------------------------------------------------
+Prefix            | rails_service_blob
+Verb              | GET
+URI               | /rails/active_storage/blobs/redirect/:signed_id/*filename(.:format)
+Controller#Action | active_storage/blobs/redirect#show
+Source Location   | activestorage (8.0.2) config/routes.rb:5
+--[ Route 16 ]------------------------------------------------------------------
+Prefix            | rails_direct_uploads
+Verb              | POST
+URI               | /rails/active_storage/direct_uploads(.:format)
+Controller#Action | active_storage/direct_uploads#create
+Source Location   | activestorage (8.0.2) config/routes.rb:36
+
+# ------------------------------------------------------------------------------
+# FIXTURE NOTES (not part of the Rails output; '#' lines are ignored by the block
+# patterns of references/language-parsers.md §7b)
+#
+# Source config/routes.rb:
+#   1  Rails.application.routes.draw do
+#   3    get "up" => "rails/health#show", as: :rails_health_check
+#   5    root "tasks#index"
+#   7    resources :tasks, only: %i[index create edit update destroy] do
+#   8      resource :completion, only: %i[create destroy]
+#   9    end
+#  11    mount ActionCable.server => "/cable"
+#  12  end
+#
+# Expected normalized table (path: (.:format) stripped; normalized: §9, params -> :param)
+#
+# | #  | method | path                                   | normalized                | handler                            | codeFile                                  | excluded (§10)       |
+# |----|--------|----------------------------------------|---------------------------|------------------------------------|-------------------------------------------|----------------------|
+# | 1  | GET    | /up                                    | /up                       | rails/health#show                  | config/routes.rb:3                        | yes — health check   |
+# | 2  | GET    | /                                      | /                         | tasks#index                        | config/routes.rb:5                        | no                   |
+# | 3  | DELETE | /tasks/:task_id/completion             | /tasks/:param/completion  | completions#destroy                | config/routes.rb:8                        | no                   |
+# | 4  | POST   | /tasks/:task_id/completion             | /tasks/:param/completion  | completions#create                 | config/routes.rb:8                        | no                   |
+# | 5  | GET    | /tasks                                 | /tasks                    | tasks#index                        | config/routes.rb:7                        | no                   |
+# | 6  | POST   | /tasks                                 | /tasks                    | tasks#create                       | config/routes.rb:7                        | no                   |
+# | 7  | GET    | /tasks/:id/edit                        | /tasks/:param/edit        | tasks#edit                         | config/routes.rb:7                        | no                   |
+# | 8  | PATCH  | /tasks/:id                             | /tasks/:param             | tasks#update                       | config/routes.rb:7                        | no                   |
+# | 9  | PUT    | /tasks/:id                             | /tasks/:param             | tasks#update                       | config/routes.rb:7                        | no                   |
+# | 10 | DELETE | /tasks/:id                             | /tasks/:param             | tasks#destroy                      | config/routes.rb:7                        | no                   |
+# | 11 | MOUNT  | /cable                                 | /cable                    | ActionCable::Server::Base          | config/routes.rb:11                       | yes — Action Cable   |
+# | 12 | GET    | /recede_historical_location            | /recede_historical_location | turbo/native/navigation#recede   | turbo-rails (2.0.16) config/routes.rb:2   | yes — Turbo Native   |
+# | 13 | GET    | /resume_historical_location            | /resume_historical_location | turbo/native/navigation#resume   | turbo-rails (2.0.16) config/routes.rb:3   | yes — Turbo Native   |
+# | 14 | GET    | /refresh_historical_location           | /refresh_historical_location | turbo/native/navigation#refresh | turbo-rails (2.0.16) config/routes.rb:4   | yes — Turbo Native   |
+# | 15 | GET    | /rails/active_storage/blobs/redirect/:signed_id/*filename | /rails/active_storage/blobs/redirect/:param/*filename | active_storage/blobs/redirect#show | activestorage (8.0.2) config/routes.rb:5 | yes — /rails/* |
+# | 16 | POST   | /rails/active_storage/direct_uploads   | /rails/active_storage/direct_uploads | active_storage/direct_uploads#create | activestorage (8.0.2) config/routes.rb:36 | yes — /rails/* |
+#
+# Code manifest after exclusions: 9 routes (rows 2-10), 7 distinct handlers.
+#
+# Comparison with a design/OPERATION-MAPPING.md for Style: operations (language-parsers.md §8b):
+#   API-001-01 createTask   -> tasks#create          (row 6)        implemented
+#   API-001-02 listTasks    -> tasks#index           (rows 2 and 5) implemented (root shares the mapped handler)
+#   API-001-03 renameTask   -> tasks#update          (rows 8 and 9) implemented (PUT twin of PATCH is not ORPHAN)
+#                              tasks#edit            (row 7)        mapped: cited in the renameTask row (edit form)
+#   API-001-04 completeTask -> completions#create    (row 4)        implemented
+#   API-001-05 reopenTask   -> completions#destroy   (row 3)        implemented
+#   API-001-06 deleteTask   -> tasks#destroy         (row 10)       implemented
+#   Expected result: missing = 0, orphan = 0, mismatch = 0.

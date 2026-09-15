@@ -231,7 +231,7 @@ Each specification must include:
 | Postconditions | Yes | Success / failure, one bullet each |
 | Main flow | Yes | Numbered `Actor: action` / `System: result`, ≤ 10 steps |
 | Extensions | If applicable | One line each, AC id at the end |
-| Exceptions & errors | Yes | One table: step, condition, code, HTTP/exit, effect, AC id |
+| Exceptions & errors | Yes | One table: step, condition, code, HTTP/exit (HTTP only with `Style: http`, exit for a CLI), effect, AC id |
 | Acceptance criteria | Yes | In `tests/BDD-UC-NNN.md` only; the UC cites AC ids |
 | Open questions | If applicable | `NC-NNN` lines; section omitted when none |
 
@@ -277,7 +277,7 @@ Templates and ceilings: `document-templates.md`, SKILL.md § Output Budget.
 6. **spec/domain/05-INVARIANTS.md** — One table row per invariant (Template 10)
 7. **spec/use-cases/UC-NNN-{slug}.md** — One file per use case (Template 2)
 8. **spec/workflows/WF-NNN-{slug}.md** — Multi-step processes spanning use cases (Template 11)
-9. **spec/contracts/API-{module}.md** — One contract per module, one Errors table (Template 12)
+9. **spec/contracts/API-{module}.md** — One contract per module, one Errors table: `Style: operations` (Template 12b, default) or `Style: http` when a REQ demands an HTTP API for external clients (Template 12)
 10. **spec/contracts/PERMISSIONS-MATRIX.md** — Role × operation grid; one row when there is a single role (Template 20)
 11. **spec/tests/BDD-UC-NNN.md** — Scenarios per use case; defines the AC-NNN-NN ids (Template 13)
 12. **spec/nfr/PERFORMANCE.md**, **LIMITS.md**, **SECURITY.md** — One table each; N/A categories are one row (Template 7)

@@ -32,16 +32,17 @@ Every task, regardless of type, includes these base checks:
 - [ ] Tenant isolation field present (org_id) per INV-SYS-001
 ```
 
-### API Endpoint Tasks
+### API Endpoint / Operation Tasks
 
 ```markdown
-- [ ] Route matches spec/contracts/*.md exactly
-- [ ] HTTP method and path correct
+- [ ] Operation satisfies its API-op semantics in spec/contracts/*.md (input VOs, effect/post INV, domain error codes)
+- [ ] Transport matches design/OPERATION-MAPPING.md (idiom, route/action, verb, success, validation error, no-JS fallback, accessible element) — or the plan's fallback when that file does not exist
+- [ ] Method + path equal the contract only when it declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http)
 - [ ] Request/response schemas match contract
 - [ ] Authentication required per INV-SYS-003
-- [ ] Rate limiting applied per ADR-025
-- [ ] Error responses follow ADR-026 format
-- [ ] API versioning prefix /api/v1/ per ADR-033
+- [ ] Rate limiting applied per ADR-025 *(example id — cite the project's own ADR)*
+- [ ] Error responses follow ADR-026 format *(example id — cite the project's own ADR)*
+- [ ] API versioning prefix /api/v1/ per ADR-033 *(example id; `Style: http` only)*
 - [ ] Tenant isolation in queries per INV-SYS-001
 ```
 
@@ -136,7 +137,7 @@ Every task, regardless of type, includes these base checks:
 - [ ] Secrets use proper secret management (not env vars)
 - [ ] Default values are production-safe
 - [ ] Configuration validation at startup
-- [ ] wrangler.toml bindings correct
+- [ ] Runtime/deploy config valid for the project's stack — the Stack Profile commands pass (`skills/sdd-task-implementer/references/stack-profile.md`); e.g. `wrangler.toml` bindings (Cloudflare), `config/database.yml` + credentials (Rails), `next.config.*` + env (Next.js)
 ```
 
 ### Integration / Wiring Tasks

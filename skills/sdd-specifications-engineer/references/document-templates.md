@@ -6,14 +6,14 @@
 
 | # | Rule |
 |---|---|
-| W1 | **One home per fact.** Requirement text → `requirements/REQUIREMENTS.md`. Terms → `domain/01-GLOSSARY.md`. Shared values → `VALUE-REGISTRY.md`. Error code → message → class → HTTP/exit → error catalog in `domain/03-VALUE-OBJECTS.md`. Rules → `domain/05-INVARIANTS.md` (INV) and `CLARIFICATIONS.md` (RN). Given/When/Then → `tests/BDD-UC-NNN.md` (AC-NNN-NN ids are *defined* there). Decisions → `adr/`. Every other document cites the ID. |
+| W1 | **One home per fact.** Requirement text → `requirements/REQUIREMENTS.md`. Terms → `domain/01-GLOSSARY.md`. Shared values → `VALUE-REGISTRY.md`. Error code → message → class (→ HTTP only with `Style: http`, exit for a CLI) → error catalog in `domain/03-VALUE-OBJECTS.md`. Rules → `domain/05-INVARIANTS.md` (INV) and `CLARIFICATIONS.md` (RN). Given/When/Then → `tests/BDD-UC-NNN.md` (AC-NNN-NN ids are *defined* there). Decisions → `adr/`. Every other document cites the ID. |
 | W2 | **ID + at most one clause.** `REQ-F-001 (create task)` is the maximum context. Never copy a requirement statement or its acceptance criteria into a UC, contract, ADR, BDD or matrix. |
 | W3 | **Table or list, never prose repeating it.** A TypeScript/YAML schema block replaces an attribute table. A transitions table replaces a state diagram unless the machine has more than 5 states. |
 | W4 | **Empty = `None.`** Mandatory section: `None.`; optional section: omit the heading. Never explain why something does not apply — the justification, if one exists, is an ADR/RN id in `Refs`. |
 | W5 | **`Refs` once.** One `Refs` row in the header of each document holds all traceability ids (REQ, UC, WF, API, INV, RN, ADR, BDD, PROP). No trailing "Traceability" section; no separate "Business rules" / "Invariants" / "Related" lists. Ids are also cited inline exactly where they apply. |
 | W6 | **No narrative sections.** No "Description" longer than 2 sentences, no "Implementation notes", "UI/UX notes", "Notes", "Rationale", "Evolution", "Prevention", "Interface notes". Rationale is an ADR; a rule is an RN/INV. |
-| W7 | **Boilerplate once per file, not per item.** Auth, rate limit, version: once per contract. Actors: one header row per UC (no per-actor responsibility table). Standard errors: one table per contract with an "Operations" column, not one table per endpoint. Exceptions shared by every UC (global error handler, storage failure): specified once in the workflow or contract, cited by id in the UC. |
-| W8 | **Error rows cite the code.** UC/contract/BDD rows carry `E_CODE` + HTTP/exit + condition; message text, class and description live only in the error catalog. Quote a literal message only where a REQ acceptance criterion quotes it. |
+| W7 | **Boilerplate once per file, not per item.** Auth, rate limit, version: once per contract. Actors: one header row per UC (no per-actor responsibility table). Standard errors: one table per contract with an "Operations" column, not one table per operation. Exceptions shared by every UC (global error handler, storage failure): specified once in the workflow or contract, cited by id in the UC. |
+| W8 | **Error rows cite the code.** UC/contract/BDD rows carry `E_CODE` + condition (+ HTTP status only with `Style: http`, exit code for a CLI); message text, class and description live only in the error catalog. Quote a literal message only where a REQ acceptance criterion quotes it. |
 | W9 | **Write each file once.** Plan ids, invariants and exception rows before writing; never patch an already-written file to add a cross-reference. |
 
 ---
@@ -110,7 +110,7 @@ interface XxxOutput { field: Type }
 - NC-NNN: … *(omit the section when there are none)*
 ````
 
-Rules: main flow ≤ 10 steps, each `Actor: action` or `System: result`. Extensions and exceptions are one line/row each; the `AC` column points to the scenario in `BDD-UC-NNN` that verifies it — no Given/When/Then in the UC. Exception rows are the output of the Error Flow Forcing Function (SKILL.md Step 6a): questions that yield no exception produce **no text**. The `Refs` header row is the traceability section; the `Exceptions & errors` table is both the exception flows and the error list.
+Rules: main flow ≤ 10 steps, each `Actor: action` or `System: result`. Extensions and exceptions are one line/row each; the `AC` column points to the scenario in `BDD-UC-NNN` that verifies it — no Given/When/Then in the UC. Exception rows are the output of the Error Flow Forcing Function (SKILL.md Step 6a): questions that yield no exception produce **no text**. The `Refs` header row is the traceability section; the `Exceptions & errors` table is both the exception flows and the error list. With `Style: operations` (Template 12b) omit the `HTTP / exit` column (a CLI keeps `exit`) and state the user-visible outcome in `Effect` — never a route, redirect or status code.
 
 ---
 
@@ -316,13 +316,14 @@ None. *(or a table: Event | Step | Payload | Consumers)*
 
 ---
 
-## Template 12: API Contract (`contracts/API-{module}.md`, ≤ 6,000 chars per module)
+## Template 12: HTTP API Contract (`contracts/API-{module}.md`, `Style: http`, ≤ 6,000 chars per module)
 
 ````markdown
 # API-{module}
 
 | Field | Value |
 |---|---|
+| Style | http — REQ-… demands an HTTP API for external clients |
 | Base / Version | `/api/v1` · v1 |
 | Auth | JWT bearer *(or: Not applicable — in-process calls, ADR-NNN)* |
 | Rate limit | `RATE_LIMIT_USER` per user *(or: Not applicable)* |
@@ -365,7 +366,50 @@ Path params: `id: number` (VO-001). Query: `status?: TaskStatus` (default: all).
 | 429 | `RATE_LIMIT_EXCEEDED` | all | limit exceeded |
 ````
 
-Rule: 400 if the operation accepts input, 401 if authenticated, 403 if role-restricted, 404 if it addresses a resource by id, 409 on concurrent modification, 429 if rate-limited. Omit rows that do not apply — no justification. Per-operation sections hold only the schema and one behaviour line; a function-level (non-HTTP) contract uses `Signature` instead of `Method/Path` and `exit code` instead of `HTTP`.
+Rule (`Style: http` only — a REQ demands an HTTP API for external clients; cite it in `Refs`): 400 if the operation accepts input, 401 if authenticated, 403 if role-restricted, 404 if it addresses a resource by id, 409 on concurrent modification, 429 if rate-limited. Omit rows that do not apply — no justification. Per-operation sections hold only the schema and one behaviour line. A function-level contract (library, CLI, in-process calls) uses Template 12b, with the signature in the `Operation` cell and, for a CLI, an `exit` column in its Errors table.
+
+**Choosing the style** (phase A, per module, recorded in the id ledger): `http` only when a requirement demands an HTTP API for external clients (public API, third-party or mobile consumers, webhooks); otherwise `operations` — including server-rendered web apps and client UIs, whose routes, verbs and statuses are stack idioms decided in `design/OPERATION-MAPPING.md` (`sdd-tech-designer`). A pre-4.3 contract without a `Style` row and with `Method | Path` columns is read as `http`.
+
+---
+
+## Template 12b: Operations Contract (`contracts/API-{module}.md`, `Style: operations`, ≤ 6,000 chars per module)
+
+````markdown
+# API-{module}
+
+| Field | Value |
+|---|---|
+| Style | operations |
+| Auth | session user *(or: Not applicable — single local user, ADR-NNN)* |
+| Refs | REQ-…; UC-…; ADR-… |
+| Errors | catalog in `domain/03-VALUE-OBJECTS.md` § ErrorCode |
+| Transport | see `design/OPERATION-MAPPING.md` |
+
+## Operations
+
+| ID | Operation | Actor | Input (VO) | Effect / post (INV) | Domain errors | UC |
+|---|---|---|---|---|---|---|
+| API-NNN-01 | createTask | user | title: Title (VO-002) | task added as `pending` (INV-TSK-001, INV-TSK-003) | `E_TITLE_EMPTY`, `E_TITLE_TOO_LONG` | UC-001 |
+| API-NNN-02 | listTasks | user | filter?: TaskStatus (VO-003) | tasks matching the filter; no state change | — | UC-002 |
+| API-NNN-03 | renameTask | user | id: TaskId (VO-001), title: Title (VO-002) | title replaced, status unchanged (INV-TSK-003) | `E_TASK_NOT_FOUND`, `E_TITLE_EMPTY`, `E_TITLE_TOO_LONG` | UC-003 |
+
+## Errors
+
+| Code | Operations | Condition | Message (VO) |
+|---|---|---|---|
+| `E_TITLE_EMPTY` | 01, 03 | title blank after trim | VO-010 |
+| `E_TITLE_TOO_LONG` | 01, 03 | title longer than `TITLE_MAX_LENGTH` | VO-010 |
+| `E_TASK_NOT_FOUND` | 03 | no task with `id` | VO-010 |
+| `E_STORAGE_UNAVAILABLE` | all | store cannot be read or written | VO-010 |
+
+## Requirement-mandated transport
+
+| URL / mechanic | REQ | Operations |
+|---|---|---|
+| `?estado=` filter reflected in the address bar | REQ-F-004 AC2 | 02 |
+````
+
+Rules: no `Method`, `Path` or status columns, and no HTTP verbs, routes, redirects, form attributes (`required`, `maxlength`, `pattern`) or client-script mechanics ("full page reload", "no JS") anywhere in the contract — `sdd-spec-auditor` reports them as CAT-10. `Message (VO)` cites the catalog entry; the literal text stays in the catalog (W1). *Requirement-mandated transport* exists only when a REQ names a URL or mechanic (cite it); otherwise omit the section. Add a per-operation schema block only when the input is not a list of VOs. File name, `API-NNN-NN` ids and the single Errors table are the same as in Template 12: the dashboard, MCP `sdd_trace` and `sdd-gap-detector` key on them.
 
 ---
 
@@ -393,7 +437,7 @@ Scenario: AC-NNN-02 — [extension 2a]
 
 Scenario: AC-NNN-03 — [exception E1] [REQ-F-NNN AC3]
   When [action]
-  Then error `E_CODE` with status 400
+  Then error `E_CODE` [with status 400 — `Style: http` only]
   And [state unchanged]
 
 Scenario: AC-NNN-04 — [edge case / invariant INV-XXX-NNN]
@@ -402,7 +446,7 @@ Scenario: AC-NNN-04 — [edge case / invariant INV-XXX-NNN]
   Then [outcome]
 ````
 
-Rules: exactly one scenario per main flow, per extension, per exception row and per edge case; AC ids are defined **here** and cited by the UC. ≤ 6 lines per scenario; the `[REQ-X ACn]` tag marks which requirement acceptance criterion it satisfies. Assert error code + status, not message text (W8). No separate "invariant enforcement" scenario when an exception row already covers that invariant.
+Rules: exactly one scenario per main flow, per extension, per exception row and per edge case; AC ids are defined **here** and cited by the UC. ≤ 6 lines per scenario; the `[REQ-X ACn]` tag marks which requirement acceptance criterion it satisfies. Assert error code + observable outcome (status only with `Style: http`, exit code for a CLI), not message text (W8). No separate "invariant enforcement" scenario when an exception row already covers that invariant.
 
 ---
 
@@ -511,7 +555,7 @@ type TaskStatus = 'pending' | 'completed';  // VO-003
 | `E_TITLE_EMPTY` | ValidationError | 400 / 2 | `title must not be empty` | API-002-06 | REQ-F-001, RN-001 |
 ````
 
-A schema block replaces attribute tables (W3); the error catalog is the only place where messages, classes and HTTP/exit mappings are written.
+A schema block replaces attribute tables (W3); the error catalog is the only place where messages, classes and HTTP/exit mappings are written. The `HTTP / exit` column holds HTTP only when some contract is `Style: http` and exit codes only for a CLI; with operations-only web or UI modules it is omitted.
 
 ---
 

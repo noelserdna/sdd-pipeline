@@ -302,6 +302,57 @@ The following architecture decisions were identified during design and should be
 
 ---
 
+## §OPERATION-MAPPING — design/OPERATION-MAPPING.md
+
+**When:** mandatory when any `spec/contracts/API-*.md` declares `Style: operations`; optional with `Style: http` (to record handler idioms).
+**Seed:** the installed stack kit (`templates/stacks/<kit>/conventions.md`) and the project CLAUDE.md sections `## Stack Conventions` / `## SDD Stack Profile` (canonical description: `skills/sdd-task-implementer/references/stack-profile.md`). Accepted ADRs win over kit defaults; a divergence from the kit goes to *Deviations*.
+**Consumers:** `sdd-plan-architect`, `sdd-task-generator` (review checklist), `sdd-task-implementer`, `sdd-gap-detector` (API-op ↔ mapping ↔ routes/actions), `sdd-test-planner` (never as a test oracle).
+
+```markdown
+# Operation Mapping — {Project Name}
+
+> Stack: {kit / Stack Profile} · Conventions: {templates/stacks/<kit>/conventions.md | CLAUDE.md § Stack Conventions | ADR-NNN} · Contracts: spec/contracts/API-*.md ({N} operations)
+
+## Mapping
+
+| API-op | Idiom | Route / action | Verb | Success | Validation error | No-JS fallback | Accessible element |
+|--------|-------|----------------|------|---------|------------------|----------------|--------------------|
+| {API-NNN-NN} {operation} | {stack idiom} | {route → controller#action, or action fn @ file} | {verb} | {response on success} | {how domain error codes render} | {how it works without JS, or "JS required — REQ-…"} | {role + accessible name} |
+
+## Requirement-mandated transport
+
+| URL / mechanic | REQ | API-op | Implemented as |
+|----------------|-----|--------|----------------|
+| {e.g. `?estado=` filter} | {REQ-F-NNN ACn} | {API-NNN-NN} | {GET /tasks?estado=pendientes} |
+
+## Deviations from kit conventions
+
+| API-op | Deviation | Reason (ADR / RN) |
+|--------|-----------|-------------------|
+```
+
+**Column rules:**
+- **Idiom** — the stack's idiomatic construct; a custom one only when no idiom fits (then a *Deviations* row). REST resource action, nested singular resource, Server Action, Route Handler (external HTTP clients only), CLI command.
+- **Route / action** — route + `controller#action`, or the action function and its file; it must exist in code after implementation (gap-detector compares it).
+- **Verb** — what the framework actually uses (e.g. `PATCH` through `_method`), not what a spec said.
+- **Success / Validation error** — per domain error code family; statuses are the stack's (`:see_other`, `:unprocessable_content`), never copied from the spec.
+- **No-JS fallback** — the progressive-enhancement path; "JS required" only when a REQ allows it.
+- **Accessible element** — role + accessible name used by the UI and the acceptance suite (from the REQ or `ux/`); never changes a role a REQ fixes (button ≠ link).
+- **Completeness** — every `API-NNN-NN` of `spec/contracts/` appears exactly once: `grep -rhoE 'API-[0-9]{3}-[0-9]{2}' spec/contracts | sort -u` equals the ids of the Mapping table. Requirement-mandated URLs keep their literal form.
+
+**Examples** (illustrative — the kit conventions are authoritative):
+
+| API-op | Idiom | Route / action | Verb | Success | Validation error | No-JS fallback | Accessible element |
+|---|---|---|---|---|---|---|---|
+| API-001-01 createTask (Rails) | `resources :tasks` create | `POST /tasks` → `tasks#create` | POST | `redirect_to tasks_path, status: :see_other` | `render :index, status: :unprocessable_content`, message beside the field | plain `form_with` | button "Añadir" |
+| API-001-03 renameTask (Rails) | `resources :tasks` update | `PATCH /tasks/:id` → `tasks#update` | PATCH | `redirect_to tasks_path, status: :see_other` | `render :edit, status: :unprocessable_content` | `form_with model:` (hidden `_method`) | button "Guardar" |
+| API-001-04 completeTask (Rails) | nested singular `resource :completion` | `POST /tasks/:task_id/completion` → `completions#create` (reopen: `DELETE` → `#destroy`) | POST / DELETE | `redirect_to tasks_path, status: :see_other` | — | `button_to` | button "Completar" |
+| API-001-05 deleteTask (Rails) | `resources :tasks` destroy | `DELETE /tasks/:id` → `tasks#destroy` | DELETE | `redirect_to tasks_path, status: :see_other` | — | `button_to …, method: :delete` | button "Eliminar" |
+| API-001-01 createTask (Next.js) | Server Action | `createTask` in `app/tasks/actions.ts` (`"use server"`), `<form action={createTask}>` | POST (action) | `revalidatePath("/")` + `redirect("/")` | `useActionState` returns `{ errors }`, rendered via `aria-describedby` | `<form action>` works before hydration | button "Añadir" |
+| API-001-02 listTasks (Next.js) | Server Component page | `app/page.tsx` reads `searchParams.estado` | GET | server-rendered list | — | no JS needed | list "Tareas" |
+
+---
+
 ## Notes
 
 - All templates use English for section headers and Spanish for descriptive text (following project convention).
