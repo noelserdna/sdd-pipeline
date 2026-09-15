@@ -18,7 +18,7 @@ hooks:
 - Implement code from task documents (`task/TASK-FASE-{N}.md`) one task at a time
 - Follow test-first development: write failing tests, then implementation, then verify
 - Create atomic commits with conventional commit messages from task definitions
-- Track progress by marking completed tasks as `[x]` in task documents
+- Track progress with `[x]` in task documents, or only through `Task:` trailers (`task_state: trailers`)
 - Verify implementation satisfies acceptance criteria before committing
 - Enforce spec traceability — every code artifact traces to UC, ADR, INV, REQ
 - Pause on blockers, ambiguities, or design issues instead of guessing
@@ -88,29 +88,12 @@ This is the foundational rule of SDD implementation. Violation of any point belo
 ### Pipeline Position
 
 ```
-Requisitos → sdd-specifications-engineer → sdd-spec-auditor (fix) →
-                                                        ↓
-                                                 sdd-plan-architect
-                                                        ↓
-                                                sdd-task-generator
-                                                        ↓
-                                               sdd-task-implementer ← YOU ARE HERE
-
-Herramientas laterales (opcionales):
-  sdd-requirements-engineer        ← retrofit: derivar REQs cuando se empezo por specs
-  sdd-req-change        ← gestionar cambios de requisitos post-facto
-  sdd-security-auditor  ← auditoria de seguridad complementaria
+Requisitos → sdd-specifications-engineer → sdd-spec-auditor (fix) → sdd-plan-architect
+  → sdd-task-generator → sdd-task-implementer ← YOU ARE HERE
+Laterales (opcionales): sdd-requirements-engineer (retrofit), sdd-req-change, sdd-security-auditor
 ```
 
-> SWEBOK v4 alignment:
-> - Ch04 §1: Software Construction Fundamentals (minimize complexity, construct for verification)
-> - Ch04 §2: Managing Construction (planning, dependencies)
-> - Ch04 §3: Practical Considerations (coding, testing, quality, integration)
-> - Ch04 §4.4: Assertions, Design by Contract, Defensive Programming
-> - Ch04 §4.16: Test-First Programming (TDD)
-> - Ch04 §4.17: Feedback Loop for Construction
-> - Ch03 §1.4: Software Design Principles (abstraction, SoC, coupling, cohesion)
-> - Ch12 §1: Software Quality Fundamentals (error → defect → failure chain)
+> SWEBOK v4: Ch04 §1-§3 (construction fundamentals, managing construction, practical considerations), §4.4 (assertions, DbC), §4.16 (test-first), §4.17 (feedback loop); Ch03 §1.4 (design principles); Ch12 §1 (quality fundamentals).
 
 ---
 
@@ -172,7 +155,7 @@ WRONG: Implementar todas las tasks de un FASE y luego integrar
 WRONG: No verificar build/tests entre tasks
 WRONG: Saltarse rollback checkpoints
 
-RIGHT: Despues de cada task → build → tests → commit
+RIGHT: Despues de cada task → tests de la task + typecheck/lint de lo cambiado → commit; build y suite completa en checkpoints
 RIGHT: Despues de cada phase interna → checkpoint tag
 RIGHT: Integracion incremental: cada commit deja el sistema en estado funcional
 ```
@@ -227,7 +210,7 @@ Implementa una task especifica. Verifica que sus dependencias esten completas.
 /sdd-task-implementer --continue
 ```
 
-Resume desde la ultima task incompleta del FASE activo. Detecta el punto de continuacion leyendo los marcadores `[x]` en task documents.
+Resume desde la ultima task incompleta del FASE activo. Detecta el punto de continuacion leyendo los marcadores `[x]` en task documents (o `status` con `task_state: trailers`, ver Task state).
 
 ### Mode 4: Verify
 
@@ -254,7 +237,7 @@ Crea un rollback checkpoint tag en el punto actual sin implementar mas tasks.
 Implementa unicamente las tasks generadas por un cascade de `sdd-req-change`.
 
 - Cuando se proporciona `--new-tasks-only`, solo se implementan tasks que contengan el marcador `Source: CASCADE-{id}` en su definicion.
-- Las tasks ya marcadas como completadas (`[x]`) se omiten automaticamente.
+- Las tasks ya completadas (`[x]`, o done en `status` con `task_state: trailers`) se omiten automaticamente.
 - Se sigue el mismo proceso test-first y commit atomico de los modos normales (Phases 3-8).
 - Este modo es invocado tipicamente por `sdd-req-change` Phase 9 (Pipeline Cascade) cuando se ejecuta con `--cascade=auto`. El flujo completo es: `sdd-req-change` detecta cambios → genera nuevas tasks con marcador CASCADE → invoca `sdd-task-implementer --fase {N} --new-tasks-only` para implementarlas.
 
@@ -300,6 +283,8 @@ Runs in the main checkout, clean tree, on the project's base branch. For each le
 | `--new-tasks-only` | 6 | Only `Source: CASCADE-*` tasks |
 | `--stream X` | 7 | Only the tasks of Stream X; `base` for the foundation Stream |
 | `--integrate` | 8 | Merge Stream branches and finish the FASE |
+| `--parallel` | 1, 3, 6, 7, 8 | Subagents for every `[P]` batch, even below the non-trivial threshold |
+| `--sequential` | 1, 3, 6, 7, 8 | Every `[P]` task inline, no subagents |
 
 Session variables read in every mode: `SDD_ROLE` (station role, `references/handoff-protocol.md`), `SDD_STATE_ROOT` (main checkout holding `pipeline-state.json`; default `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"`). In a worktree `git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`.
 
@@ -308,9 +293,9 @@ Session variables read in every mode: `SDD_ROLE` (station role, `references/hand
 ## Output Artifacts
 
 ```
-src/                          ← Codigo de implementacion (estructura segun plan/)
-tests/                        ← Tests unitarios, integracion, BDD
-task/TASK-FASE-{N}.md         ← Checkboxes actualizados [x]
+{code_paths}                  ← Codigo (Stack Profile, default src/; estructura segun plan/)
+{test_paths}                  ← Tests unitarios, integracion, BDD (default tests/)
+task/TASK-FASE-{N}.md         ← Checkboxes [x] (nunca con task_state: trailers)
 feedback/IMPL-FEEDBACK-FASE-{N}.md  ← Feedback de issues spec-level (para sdd-req-change)
 ```
 
@@ -318,9 +303,9 @@ feedback/IMPL-FEEDBACK-FASE-{N}.md  ← Feedback de issues spec-level (para sdd-
 
 | Artifact | Action | Notes |
 |----------|--------|-------|
-| `src/**/*` | CREATE/MODIFY | Codigo de implementacion |
-| `tests/**/*` | CREATE/MODIFY | Tests unitarios e integracion |
-| `task/TASK-FASE-{N}.md` | MODIFY (checkboxes only) | `- [ ]` → `- [x]` — included in same atomic commit |
+| `{code_paths}` | CREATE/MODIFY | Codigo de implementacion (default `src/`) |
+| `{test_paths}` | CREATE/MODIFY | Tests unitarios e integracion (default `tests/`) |
+| `task/TASK-FASE-{N}.md` | MODIFY (checkboxes only) | `- [ ]` → `- [x]` — included in same atomic commit; never with `task_state: trailers` |
 | `feedback/IMPL-FEEDBACK-FASE-{N}.md` | CREATE/APPEND | Spec-level issues found during implementation |
 | `.sdd/current-task.json` | CREATE/DELETE | Breadcrumb per task (per worktree) — `taskId`, `fase`, `refs`, `stream`, `role` |
 | `.sdd/bench/events.jsonl` | APPEND | One JSON line per bench event (per worktree; consolidated by `--integrate`) |
@@ -348,7 +333,7 @@ feedback/IMPL-FEEDBACK-FASE-{N}.md  ← Feedback de issues spec-level (para sdd-
 
 **Goal:** Cargar todo el contexto necesario para implementar con precision.
 
-1. Leer `CLAUDE.md` del proyecto para tech stack, convenciones, estructura
+1. Leer `CLAUDE.md` del proyecto (convenciones, estructura) y resolver el **Stack Profile** (ver Stack Profile): comandos, `app_dir`, `task_state`, `task_format`
 2. Leer `spec/domain/01-GLOSSARY.md` para lenguaje ubicuo
 3. Leer `spec/domain/02-ENTITIES.md` y `03-VALUE-OBJECTS.md` para modelo de dominio
 4. Leer `spec/domain/04-STATES.md` para maquinas de estado
@@ -363,13 +348,9 @@ feedback/IMPL-FEEDBACK-FASE-{N}.md  ← Feedback de issues spec-level (para sdd-
 
 ```
 FASE-0 Context Map:
-├── UCs: UC-001, UC-002, UC-003
-├── ADRs: ADR-001 (tech stack), ADR-002 (encryption), ADR-025 (rate limiting)
-├── INVs: INV-SYS-001 (multi-tenant), INV-SYS-003 (auth required)
-├── REQs: REQ-BOOT-001, REQ-BOOT-002, REQ-BOOT-003
-├── Entities: User, Organization, ApiKey
-├── VOs: Email, HashedPassword, Role
-├── States: UserState (active, suspended, deleted)
+├── UCs: UC-001, UC-002 · ADRs: ADR-001, ADR-025 · INVs: INV-SYS-001, INV-SYS-003 · REQs: REQ-BOOT-001
+├── Domain: User, Organization (entities) · Email, Role (VOs) · UserState (states)
+├── Stack: rails, app_dir web (profile: declared) · task_state: trailers · task_format: compact
 └── Streams: base(2) → A(2) ∥ B(2) → integración(1) → verificación(1)   (only when the table exists)
 ```
 
@@ -386,10 +367,11 @@ FASE-0 Context Map:
 | G-05 | All referenced specs in Refs fields exist | HALT: missing spec files |
 | G-06 | Git working tree is clean | WARN: recommend committing pending changes |
 | G-07 | Previous FASE tasks complete (if FASE > 0) | WARN: unfinished dependencies |
-| G-08 | Tech stack tools available (compiler, test runner) | HALT: install required tools |
+| G-08 | Stack Profile resolved (`references/stack-profile.md` §3) and its tools available | HALT: install required tools; nothing resolved → stop and ask |
 | G-09 | (`--stream X`) `## Stream Ownership` table in `task/TASK-FASE-{N}.md` lists Stream X | HALT: table missing → re-run `sdd-task-generator`; unknown name → list the Streams of the table |
 | G-10 | (`--stream X`, X ≠ base) cwd is a worktree — `git rev-parse --git-dir` ≠ `git rev-parse --git-common-dir` — and `git branch --show-current` = `feat/fase-{N}-{x}` | WARN + `Question: Not in the Stream worktree. Continue here?  Options: [A] stop; create it with git worktree add ../<project>-f{N}{x} -b feat/fase-{N}-{x} fase-{N}-foundation (recommended)  [B] continue on the current branch (no isolation, no push)`. For `--stream base` the check is inverted: HALT if cwd is a worktree |
-| G-11 | (`--stream X`) every `base` task is `[x]` in `git show HEAD:task/TASK-FASE-{N}.md` | HALT: "run base tasks in the main checkout first (`--fase {N} --stream base`)" |
+| G-11 | (`--stream X`) every `base` task is `[x]` in `git show HEAD:task/TASK-FASE-{N}.md` (trailers: done in `status`) | HALT: "run base tasks in the main checkout first (`--fase {N} --stream base`)" |
+| G-12 | Task lines parse: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" lint --fase {N}` (grammar: `references/stack-profile.md` §6) | Legacy shapes → WARN, tolerant parse; 0 tasks parsed → HALT |
 
 G-09..G-11 apply only with `--stream`. The stale-upstream brake (Phase 3, step 0a) is not a gate: it runs in every mode before every task. `--integrate` has its own preconditions I-01..I-09 in `references/integration-protocol.md`.
 
@@ -397,8 +379,8 @@ G-09..G-11 apply only with `--stream`. The stale-upstream brake (Phase 3, step 0
 
 **Goal:** Determinar que tasks implementar y en que orden.
 
-1. Parsear `task/TASK-FASE-{N}.md` extrayendo todas las tasks
-2. Identificar tasks ya completas (`[x]`) y pendientes (`[ ]`)
+1. Parsear `task/TASK-FASE-{N}.md` extrayendo todas las tasks (`sdd-task-lint.mjs json --fase {N}`, G-12)
+2. Identificar tasks ya completas (`[x]`) y pendientes (`[ ]`) — ver Task state
 3. Leer dependencias del grafo en la seccion Dependencies del task document
 4. Construir orden de ejecucion respetando:
    - Dependencias explicitas (task A bloquea task B)
@@ -413,8 +395,8 @@ G-09..G-11 apply only with `--stream`. The stale-upstream brake (Phase 3, step 0
 ```
 Execution Plan:
 Phase 1 (Setup):
-  → TASK-F0-001 [PENDING] Configure wrangler.toml
-  → TASK-F0-002 [PENDING] Initialize TypeScript project
+  → TASK-F0-001 [PENDING] Configure toolchain
+  → TASK-F0-002 [PENDING] Initialize app skeleton
 
 Phase 2 (Foundation):
   → TASK-F0-003 [P] [PENDING] Create auth middleware
@@ -432,6 +414,8 @@ Execution Plan — FASE-1 Stream A (branch feat/fase-1-a, base [x] in HEAD)
   · TASK-F1-004 [EXTERNAL, B]     · TASK-F1-006 [EXTERNAL, B]
   · TASK-F1-009 [EXTERNAL, integración]   · TASK-F1-010 [EXTERNAL, verificación]
 ```
+
+**Task state** (`references/stack-profile.md` §6). `task_state: checkbox` (default) is what this skill describes. With `task_state: trailers` nothing edits checkboxes: a task is done when `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase {N} --json` reports it. Every "`[x]`" / "`[x]` in HEAD" check (Modes 3, 6, 7, G-11, `--verify`, I-06/I-09) reads that output, "mark `[!]`" means an OPEN BLOCKER entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md`, divergences are WARN and the "keep both `[x]`" merge rule does not apply. `task_format: compact`: a task may lack Review/Revert (absent Revert = `SAFE`).
 
 ### Phase 3: Pre-Implementation Design
 
@@ -473,24 +457,15 @@ Para cada task que tiene componente testeable:
 2. **Escribir tests para cada criterio de aceptacion** del campo **Acceptance**
 3. **Escribir tests para exception flows** de los UCs referenciados
 4. **Escribir tests para invariantes** que aplican (INV-*)
-5. **Ejecutar tests** → Verificar que FALLAN (RED phase)
+5. **Ejecutar** `{test_file}` (o `{test_name}`) → Verificar que FALLAN (RED phase)
 6. Si tests pasan sin implementacion → los tests estan mal escritos → corregir
 
-**Test Naming Convention:**
+**Test Naming:** comportamiento + criterio/invariante (`should return 401 when token is expired`); ver `references/tdd-workflow.md`.
 
-```typescript
-describe('AuthMiddleware', () => {
-  it('should extract user context from valid JWT', () => { ... });
-  it('should return 401 when token is missing', () => { ... });
-  it('should return 401 when token is expired', () => { ... });
-  it('should enforce tenant isolation (INV-SYS-001)', () => { ... });
-});
-```
-
-**Tasks sin tests:** Algunas tasks (config, wrangler.toml, env setup) no requieren tests unitarios. En estos casos, Phase 4 define una **verificacion manual** en lugar de tests automatizados:
+**Tasks sin tests:** Algunas tasks (config, toolchain, env setup) no requieren tests unitarios. En estos casos, Phase 4 define una **verificacion manual** en lugar de tests automatizados:
 
 ```
-Verification: wrangler.toml parses correctly → `npx wrangler dev` starts without errors
+Verification: config parses correctly → `{server}` starts without errors (server helper; legacy ts-workers, e.g. `npx wrangler dev`)
 ```
 
 ### Phase 5: Implementation
@@ -498,11 +473,11 @@ Verification: wrangler.toml parses correctly → `npx wrangler dev` starts witho
 **Goal:** Escribir el codigo que hace pasar los tests. (SWEBOK §4.3.3)
 
 1. **Implementar la solucion minima** que satisface los criterios de aceptacion
-2. **Seguir los contratos exactamente**: schemas, tipos, rutas, HTTP methods del spec
+2. **Seguir los contratos exactamente**: semantica de la operacion (inputs, outputs, errores, schemas) del spec; transporte (idiom, ruta/action, verbo) segun `design/OPERATION-MAPPING.md` (fallback: tabla `API-op | Transport` de plan/); Method/Path literales solo con `Style: http`
 3. **Aplicar invariantes** como validaciones en el codigo
 4. **Manejar errores** segun los exception flows de los UCs
 5. **Usar lenguaje ubicuo** del glosario en nombres de variables, funciones, clases
-6. **Ejecutar tests** → Verificar que PASAN (GREEN phase)
+6. **Ejecutar** `{test_file}` → Verificar que PASAN (GREEN phase)
 7. **Refactorizar** si es necesario manteniendo tests verdes (REFACTOR phase)
 
 **Construction Rules (SWEBOK §4.1):**
@@ -520,8 +495,8 @@ Verification: wrangler.toml parses correctly → `npx wrangler dev` starts witho
 [ ] Tipos match entity specs (domain/02-ENTITIES.md)
 [ ] Validaciones match invariants (domain/05-INVARIANTS.md)
 [ ] Error handling match UC exception flows
-[ ] HTTP routes match contracts (contracts/*.md)
-[ ] Request/Response schemas match contracts
+[ ] Operation semantics + schemas match contracts (contracts/*.md)
+[ ] Transport matches OPERATION-MAPPING (Method/Path only for Style: http)
 [ ] Rate limits match ADR-025 / nfr/LIMITS.md
 [ ] Auth required per INV-SYS-003
 [ ] Tenant isolation per INV-SYS-001
@@ -533,11 +508,10 @@ Verification: wrangler.toml parses correctly → `npx wrangler dev` starts witho
 
 **Goal:** Ejecutar el review checklist de la task antes de commitear. (SWEBOK §4.3.6)
 
-1. **Ejecutar el Review checklist** del campo **Review** de la task
-2. **Ejecutar tests completos** (no solo los de esta task, sino la suite completa)
-3. **Verificar build** — el proyecto compila sin errores
-4. **Verificar lint/format** — sin warnings relevantes
-5. **Cross-check contra spec** — la implementacion cumple cada criterio de aceptacion
+1. **Ejecutar el Review checklist** del campo **Review** de la task (`task_format: compact` sin Review → checklist de su tipo en `skills/sdd-task-generator/references/review-checklist.md` del plugin)
+2. **Checks por task**: `{test_file}` sobre los tests de la task y de los ficheros cambiados, `{typecheck}`, `{lint_files}` sobre los ficheros cambiados
+3. **Nunca por task**: `{test}` completo (solo checkpoint Foundation y Phase 9), `{build}` (solo Phase 9), `{acceptance}` completo, arrancar servidor + `curl` + kill. `{db_reset_safe}` solo tras cambiar schema/migraciones si el runner no prepara la DB. Una task E2E esta hecha cuando pasa `{acceptance} --grep <E2E-ID>` (cadencia: `references/stack-profile.md` §9)
+4. **Cross-check contra spec** — la implementacion cumple cada criterio de aceptacion
 
 **Review Execution Protocol:**
 
@@ -551,9 +525,9 @@ Para cada item `- [ ]` del campo **Review** de la task:
 
 ```
 Task Quality Report:
-├── Tests: 5/5 passing
-├── Build: Clean (0 errors, 0 warnings)
-├── Lint: Clean
+├── Tests: 5/5 passing ({test_file})
+├── Typecheck: Clean (or n/a)
+├── Lint (changed files): Clean
 ├── Review Checklist: 7/7 verified
 ├── Acceptance Criteria: 3/3 satisfied
 └── Invariants: INV-SYS-001 ✓, INV-SYS-003 ✓
@@ -563,7 +537,7 @@ Task Quality Report:
 
 **Goal:** Crear el commit atomico con el mensaje exacto de la task y capturar su SHA para trazabilidad.
 
-> **IMPORTANTE — Checkbox-first:** El marcado `[x]` se realiza ANTES del commit y se incluye en el mismo commit atomico. Esto garantiza que si el contexto se desborda o la sesion se interrumpe despues del commit, el checkbox ya esta persistido. Nunca marcar el checkbox en un paso posterior al commit.
+> **IMPORTANTE — Checkbox-first:** El marcado `[x]` se realiza ANTES del commit y se incluye en el mismo commit atomico. Esto garantiza que si el contexto se desborda o la sesion se interrumpe despues del commit, el checkbox ya esta persistido. Nunca marcar el checkbox en un paso posterior al commit. Con `task_state: trailers` se omite el paso 1 y no se stagea el task document: el trailer `Task:` es el estado.
 
 1. **Marcar la task como completa** en `task/TASK-FASE-{N}.md`: `- [ ]` → `- [x]` — ANTES de hacer commit
 2. **Stage los archivos de la task + el task document** — nunca `git add -A`
@@ -593,30 +567,17 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 **Git Commands:**
 
 ```bash
-# 1. Mark task as complete BEFORE committing
-# Edit task/TASK-FASE-0.md: change "- [ ] TASK-F0-003" to "- [x] TASK-F0-003"
-
-# 2. Stage implementation files + updated task document
-git add src/middleware/auth.ts tests/middleware/auth.test.ts task/TASK-FASE-0.md
-
-# 3. Commit with exact message from task
+# checkbox mode: "- [ ] TASK-F0-003" → "- [x] TASK-F0-003" in task/TASK-FASE-0.md BEFORE committing
+git add src/middleware/auth.ts tests/middleware/auth.test.ts task/TASK-FASE-0.md   # never git add -A
 git commit -m "$(cat <<'EOF'
 feat(auth): add JWT authentication middleware
-
-Implement token validation, user context extraction,
-and tenant isolation enforcement.
 
 Refs: FASE-0, UC-002, ADR-003, INV-SYS-001, INV-SYS-003
 Task: TASK-F0-003
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
-
-# 4. Capture SHA for traceability
-COMMIT_SHA=$(git rev-parse --short HEAD)
-# Store: TASK-F0-003 → $COMMIT_SHA
-
-# 5. Bench event (after clearing the breadcrumb)
+COMMIT_SHA=$(git rev-parse --short HEAD)   # store TASK-F0-003 → $COMMIT_SHA
 sdd_bench_event task-commit TASK-F0-003 "$COMMIT_SHA"
 ```
 
@@ -659,12 +620,9 @@ In Stream mode the counter is the Stream's: `✓ TASK-F1-003 completed (Stream A
    - Para cada criterio, verificar que la implementacion lo cumple
    - Documentar evidencia para cada criterio
 
-3. **Ejecutar suite completa de tests**
+3. **Ejecutar una vez** `{test}`, `{typecheck}`, `{lint}`, `{build}`; despues `{acceptance}` **una vez** y re-ejecutar solo los IDs fallidos con `--grep <ID>` (fail fast). Smoke manual (server helper + `curl`) solo sin suite de aceptacion ni tasks E2E
 
-4. **Verificar coverage per-file** (si el plan incluye Coverage Map §7.4):
-   ```bash
-   npx vitest run --coverage
-   ```
+4. **Verificar coverage per-file** (si el plan incluye Coverage Map §7.4) con `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`):
    - Para cada source file en Coverage Map §7.4, verificar que tiene coverage > 0%
    - Para cada source file con tipo `logic`/`entity`/`service`/`state-machine`, verificar coverage >= 80% lines
    - Si un archivo tiene 0% y NO esta en Exclusions → **FAIL** — crear test task pendiente
@@ -675,21 +633,15 @@ In Stream mode the counter is the Stream's: `✓ TASK-F1-003 completed (Stream A
 ```
 FASE-0 Implementation Complete
 ================================
-Total tasks: 12
-Completed: 12 (100%)
-Tests: 45 passing, 0 failing
-Coverage: 92% lines (threshold: 80%)
-  - Files below 80%: {list or "none"}
-  - Files at 0% (not excluded): {list or "none"}
-Criterios de Exito: 5/5 verified
-Checkpoint: git tag fase-0-verified
+Tasks: 12/12 (100%) · Tests: 45 passing, 0 failing · Acceptance: 18/18
+Coverage: 92% lines (threshold 80%) — below 80%: {list|none}; 0% not excluded: {list|none}
+Criterios de Exito: 5/5 verified · Checkpoint: git tag fase-0-verified
+Skipped: {WARN <key>: n/a (stack profile) | none}
 
 Commit Log:
 | Task | SHA | Message | Refs |
 |------|-----|---------|------|
-| TASK-F0-001 | abc1234 | chore(bootstrap): configure wrangler.toml | FASE-0 |
-| TASK-F0-002 | def5678 | feat(bootstrap): initialize TypeScript project | FASE-0, ADR-001 |
-| TASK-F0-003 | ghi9012 | feat(auth): add JWT authentication middleware | FASE-0, UC-002, ADR-003, INV-SYS-001 |
+| TASK-F0-003 | ghi9012 | feat(auth): add JWT authentication middleware | FASE-0, UC-002, ADR-003 |
 | ... | ... | ... | ... |
 
 Commits: 12 atomic (abc1234..xyz9012)
@@ -699,7 +651,7 @@ Commits: 12 atomic (abc1234..xyz9012)
 
 Replaces Phase 9 inside a Stream worktree. No tag, no Persist Summary.
 
-1. **Run the test suite** of the worktree (full suite; report the Stream's own test files from its write-set separately). A failure → `PAUSE: Test regression`, no push.
+1. **Run `{test}`** in the worktree (full suite; report the Stream's own test files from its write-set separately). A failure → `PAUSE: Test regression`, no push.
 2. **Report**:
    ```
    Stream A complete: 2 tasks, commits 9f3c2a1..b71e0d4, branch feat/fase-1-a
@@ -722,12 +674,12 @@ Checkpoints se crean automaticamente al completar todas las tasks de un phase in
 
 | After Phase | Tag | Verification |
 |------------|-----|-------------|
-| Setup complete | `fase-{N}-setup` | Project builds |
-| Foundation complete | `fase-{N}-foundation` | Smoke tests pass |
+| Setup complete | `fase-{N}-setup` | `{install}` + `{typecheck}` clean |
+| Foundation complete | `fase-{N}-foundation` | Full `{test}` green |
 | Domain complete | `fase-{N}-domain` | Domain unit tests pass |
 | Contracts complete | `fase-{N}-contracts` | Contract tests pass |
 | Integration complete | `fase-{N}-integration` | Integration tests pass |
-| Tests complete | `fase-{N}-tests` | Full test suite green |
+| Tests complete | `fase-{N}-tests` | Phase test files green |
 | Verification complete | `fase-{N}-verified` | All FASE criteria met |
 
 Tags are placed in the **main checkout only**. `fase-{N}-foundation` is the branching point for the Stream worktrees (`git worktree add ../<project>-f{N}{x} -b feat/fase-{N}-{x} fase-{N}-foundation`). In Stream mode (`--stream X`, X ≠ base) the same milestones are only reported in the log (`checkpoint fase-{N}-domain reached (not tagged in Stream mode)`): a tag is repository-wide and two worktrees would race for it. `--integrate` places only `fase-{N}-verified`.
@@ -736,17 +688,19 @@ Tags are placed in the **main checkout only**. `fase-{N}-foundation` is the bran
 
 ## Multi-Agent Strategy
 
-Para tasks marcadas con `[P]` (paralelizables), **se lanzan agentes paralelos por defecto**: es parte del contrato de
-esta skill, no una expansión de alcance. Invocar `/sdd-task-implementer` sobre una FASE con tasks `[P]` *es* la petición
-explícita de esos agentes: cada uno implementa una task acotada con sus tests, escribe solo los ficheros de su task
-(garantizado disjunto por `sdd-task-generator`), no commitea y no anida. No degrades a un solo hilo por prudencia;
-hazlo solo con `--sequential`, cuando no haya tasks `[P]` en el lote, o cuando el tool `Agent` no esté en tu lista, y
-deja el motivo en `summary.highlights` y en `metrics.mode` (`parallel` | `sequential`). `--parallel` fuerza el modo.
+Para lotes de tasks `[P]` **no triviales se lanzan agentes paralelos por defecto**: es parte del contrato de esta skill,
+no una expansión de alcance; invocar `/sdd-task-implementer` sobre una FASE con tasks `[P]` *es* la petición explícita.
+Un lote va a subagentes con **≥2 tasks `[P]` no triviales** (write-set ≥2 ficheros incluido su test, ≥3 criterios de
+aceptación, no setup/config/scaffold); el resto de `[P]` se hace **inline** (subagentes de 9–25 s para tasks triviales
+cuestan más que hacerlas). Cada agente implementa una task acotada con sus tests, escribe solo sus
+ficheros (disjuntos por `sdd-task-generator`), no commitea y no anida. No degrades por prudencia: solo con
+`--sequential`, lote bajo el umbral o sin el tool `Agent`; el motivo va en `summary.highlights`, `metrics.mode`
+(`parallel` | `sequential`) y `metrics.inline_p_tasks`. `--parallel` lanza agentes también bajo el umbral.
 
-Lotes: agrupa las tasks `[P]` cuyo grafo de dependencias esté satisfecho (máx. 4 agentes simultáneos) y ejecútalas en
-una sola respuesta con varias llamadas a `Agent`; el agente principal recoge los resultados, ejecuta la Phase 7 de cada
-una y hace los commits en orden. Medido el 2026-08-27 (`docs/medidas.md`): FASE-0 con 17 tasks (11 marcadas `[P]`)
-tardó 24 min en un solo hilo — ninguna de las tres ejecuciones llegó a lanzar un agente.
+Lotes: tasks `[P]` no triviales con dependencias satisfechas (máx. 4 agentes), lanzadas en **primer plano** en una sola
+respuesta con varias llamadas a `Agent` (nunca en background); el principal espera todos los resultados, ejecuta la
+Phase 7 de cada una y commitea en orden. **Nunca termines un turno con agentes pendientes.** Medido el 2026-08-27
+(`docs/medidas.md`): FASE-0 con 17 tasks (11 `[P]`) tardó 24 min en un hilo sin lanzar ningún agente.
 
 | Agent | Scope | Reads | Writes |
 |-------|-------|-------|--------|
@@ -757,11 +711,10 @@ tardó 24 min en un solo hilo — ninguna de las tres ejecuciones llegó a lanza
 
 1. Solo tasks marcadas `[P]` pueden ejecutarse en paralelo
 2. Tasks paralelas NUNCA tocan los mismos archivos (garantizado por sdd-task-generator)
-3. Cada agente ejecuta Phases 3-7 completas para su task
-4. Cada agente marca su checkbox en Phase 7 (incluido en su commit atomico)
-5. Si un agente falla, los demas continuan — el fallo se reporta al final
-6. Los commits se crean secuencialmente (git no soporta commits paralelos)
-7. **Modelo de los subagentes**: lanza cada Task-agent con `model: sonnet` (rápido: implementan una task acotada con sus tests) salvo que `CLAUDE_CODE_SUBAGENT_MODEL` esté definido, en cuyo caso no pases `model` y deja que el entorno decida. La revisión final (Phase 7 checklist), el commit y la verificación de FASE (Phase 9) las hace siempre el agente principal con su modelo
+3. Cada agente ejecuta Phases 3-6 para su task; la Phase 7 (checkbox, commit) la hace el principal
+4. Si un agente falla, los demas continuan — el fallo se reporta al final
+5. Los commits se crean secuencialmente (git no soporta commits paralelos)
+6. **Modelo de los subagentes**: lanza cada Task-agent con `model: sonnet` (rápido: implementan una task acotada con sus tests) salvo que `CLAUDE_CODE_SUBAGENT_MODEL` esté definido, en cuyo caso no pases `model` y deja que el entorno decida. La revisión final (Phase 7 checklist), el commit y la verificación de FASE (Phase 9) las hace siempre el agente principal con su modelo
 
 ### Composition with Streams (`--stream`)
 
@@ -803,6 +756,8 @@ Read these files before coding:
 ## Constraints
 - ONLY modify files listed in task entry
 - ONLY implement what acceptance criteria require
+- Run only {test_file}, {typecheck}, {lint_files} on your files (resolved commands pasted here); no full suite, build or server
+- NEVER set or export human-consent variables/flags (e.g. PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION); if a tool refuses, stop and report
 - PAUSE if you find ambiguity or [DECISION PENDIENTE]
 - Use ubiquitous language from glossary
 ```
@@ -812,10 +767,6 @@ Read these files before coding:
 ## Bench Events
 
 The implementer appends one JSON line per event to `.sdd/bench/events.jsonl` of the **current checkout** (worktree or main; the path is git-ignored). `--integrate` concatenates the worktree files into `$SDD_STATE_ROOT/.sdd/bench/events.jsonl` before suggesting the worktree removal, and `scripts/sdd-bench.sh [--fase N]` turns the file into the per-FASE table (`BENCH-FASE-N.md`). Skipping an event never blocks a task; the script falls back to `git log` when events are missing.
-
-```json
-{"ts":"2026-08-24T10:12:00Z","role":"impl-f1a","fase":1,"stream":"A","event":"task-commit","task":"TASK-F1-003","sha":"9f3c2a1"}
-```
 
 | Field | Value |
 |-------|-------|
@@ -882,10 +833,12 @@ PAUSE: [DECISION PENDIENTE] found
 ```
 PAUSE: Conflict detected
   Task: TASK-F0-008
-  Spec says: "POST /api/v1/extractions" (contracts/API-extraction.md)
-  Plan says: "POST /api/v1/extract" (plan/PLAN-FASE-1.md)
+  Spec says: API-005-02 returns the Extraction or E2 "unsupported format" (contracts/API-extraction.md)
+  Plan says: API-005-02 → upload only, no E2 (plan/PLAN-FASE-1.md)
   Action needed: Resolve conflict — spec takes precedence
 ```
+
+A conflict is semantic (inputs, outputs, errors, states) or, only for `Style: http`, Method/Path. A route, verb or idiom that differs from a `Style: operations` contract but follows `design/OPERATION-MAPPING.md` is not; an operation without a mapping row is (transport undefined).
 
 ### PAUSE: Build Failure
 
@@ -932,7 +885,7 @@ PAUSE: External dependency in Stream A
 
 ### PAUSE: Merge Conflict (`--integrate`)
 
-Format and resolution rules in `references/integration-protocol.md` §2 (`task/TASK-FASE-{N}.md`: keep both `[x]`; code: resolve by hand, `git add` + `git commit` without `--no-verify`, never squash).
+Format and resolution rules in `references/integration-protocol.md` §2 (`task/TASK-FASE-{N}.md`: keep both `[x]` in checkbox mode; code: resolve by hand, `git add` + `git commit` without `--no-verify`, never squash).
 
 ---
 
@@ -964,7 +917,7 @@ One file per FASE, appended as issues are discovered during implementation.
 | **Severity**       | BLOCKER | WARNING |
 | **Task**           | TASK-F{N}-{SEQ} |
 | **Affected Specs** | {comma-separated spec file paths} |
-| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION |
+| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION | TOOL-GUARDRAIL |
 | **Status**         | OPEN | RESOLVED | WONT-FIX |
 
 **Problem:**
@@ -986,17 +939,11 @@ One file per FASE, appended as issues are discovered during implementation.
 
 1. **On PAUSE** — evaluate if the issue is spec-level or implementation-level
 2. **If spec-level** — append entry to `feedback/IMPL-FEEDBACK-FASE-{N}.md` (create file if first issue)
-3. **If BLOCKER** — mark the task as `[!]` (blocked) and skip to next non-dependent task
+3. **If BLOCKER** — mark the task as `[!]` (blocked; with `task_state: trailers` the OPEN entry is the mark) and skip to next non-dependent task
 4. **If WARNING** — document workaround, proceed with implementation, flag for later reconciliation
 5. **Continue** implementing non-blocked tasks while feedback is pending
 6. **At session end** — include feedback summary in Implementation Session Report
 7. **Resolution** — user runs `sdd-req-change --file feedback/IMPL-FEEDBACK-FASE-{N}.md` to process spec corrections
-
-### Output Artifacts (additions)
-
-| Artifact | Action | Notes |
-|----------|--------|-------|
-| `feedback/IMPL-FEEDBACK-FASE-{N}.md` | CREATE/APPEND | Spec-level issues found during implementation |
 
 > **SWEBOK v4 §4.4.17 — Feedback Loop for Construction:**
 > Implementation discoveries feed back into specifications through a formal, traceable channel.
@@ -1006,78 +953,32 @@ One file per FASE, appended as issues are discovered during implementation.
 
 ## Verification Protocol (Mode: --verify)
 
-Cuando se invoca con `--verify`, ejecuta verificacion sin escribir codigo. Solo cuentan los commits alcanzables desde `HEAD` (`git log HEAD`, nunca `--all`): las ramas de Stream no integradas no existen para `--verify` hasta que `--integrate` las fusiona; dentro de un worktree, `HEAD` es la rama del Stream y solo sus tasks pueden dar PASS.
-
-### Dimension 1: Completeness
-
-Para cada task con `[x]`:
-- Verificar que los archivos listados existen
-- Verificar que el commit referenciado existe en git log
-- Contar tasks completas vs totales
-
-### Dimension 2: Correctness
-
-Para cada task completa:
-- Verificar que cada criterio de aceptacion se cumple en el codigo
-- Verificar que los tests existen y pasan
-- Verificar que los invariantes referenciados estan implementados
-
-### Dimension 3: Coherence
-
-- Verificar que el codigo sigue la arquitectura del plan/
-- Verificar que los naming conventions siguen el glosario
-- Verificar que no hay code smells obvios (archivos >500 lineas, funciones >50 lineas)
-
-**Verification Report:**
-
-```
-FASE-0 Verification Report
-===========================
-Completeness: 10/12 tasks implemented (83%)
-  Missing: TASK-F0-011, TASK-F0-012
-
-Correctness: 10/10 implemented tasks pass verification
-  TASK-F0-001: 3/3 acceptance criteria ✓
-  TASK-F0-002: 2/2 acceptance criteria ✓
-  ...
-
-Coherence: 2 observations
-  - src/middleware/auth.ts:45 — function 32 lines (OK, under 50)
-  - src/services/extraction.ts — uses "job" instead of "Extraction" (glossary violation)
-
-Overall: 83% complete, 1 coherence issue to fix
-```
+Solo lectura, sin escribir codigo. Dimensiones (Completeness, Correctness, Coherence, Coverage), checks, severidades e informe: `references/verification-protocol.md`. Solo cuentan los commits alcanzables desde `HEAD` (`git log HEAD`, nunca `--all`): las ramas de Stream no integradas no existen para `--verify` hasta que `--integrate` las fusiona; dentro de un worktree solo las tasks de su Stream pueden dar PASS. Completeness parte de las tasks `[x]` o, con `task_state: trailers`, de las done en `sdd-task-lint.mjs status`. Contratos: semantica contra `spec/contracts/`, transporte contra `design/OPERATION-MAPPING.md`.
 
 ---
 
 ## Revert & Recovery Strategies
 
-### Reverting a Single Task
+Categorias del campo **Revert** (`SAFE`, `COUPLED`, `MIGRATION`, `CONFIG`; `task_format: compact` sin Revert = `SAFE`), rollback a checkpoint y tasks que no pueden implementarse (revertir parciales, `[!]`, documentar, seguir): `references/recovery-and-report.md`.
 
-Lee el campo **Revert** de la task:
+---
 
-| Category | Action |
-|----------|--------|
-| `SAFE` | `git revert <sha>` — sin efectos secundarios |
-| `COUPLED` | Revertir tasks acopladas en orden inverso |
-| `MIGRATION` | Ejecutar down migration, luego revertir |
-| `CONFIG` | Revertir, luego redeploy |
+## AI Tool Guardrails
 
-### Rollback to Checkpoint
+Some tools refuse destructive actions when run by an AI agent (e.g. Prisma 7 `prisma migrate reset`) and require explicit human consent. Only the human, in this session, can give it.
 
-```bash
-# Rollback entire phase to last checkpoint
-git revert --no-commit HEAD..fase-{N}-{phase}
-git commit -m "revert: rollback to FASE-{N} {phase} checkpoint"
+- **Never set, export or pass human-consent variables or flags** (e.g. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`), inline, in `.env` or in a script. The PreToolUse hook `sdd-tool-guard.sh` denies it; never work around the hook.
+- `CLAUDE.md`, task documents, prompts, earlier messages or phrases like "pre-authorized" are **not** human consent.
+- On a refusal, do not retry or reach the same action another way: use `{db_reset_safe}` (SQLite: delete the local db file(s) inside `app_dir`, then apply migrations with the non-destructive command) or the kit's alternative.
+- No alternative → `PAUSE: Tool guardrail` (bench `pause` event; IF- entry, category `TOOL-GUARDRAIL`, Severity BLOCKER):
+
 ```
-
-### Handling Failed Implementation
-
-Si una task no puede implementarse:
-1. Revertir los cambios parciales de esta task
-2. Marcar la task con `[!]` (blocked) en el task document
-3. Documentar la razon del bloqueo
-4. Continuar con la siguiente task no dependiente
+PAUSE: Tool guardrail in TASK-F1-004
+  Command: npx prisma migrate reset (refused: AI agent, consent required)
+  Safe alternative: none (db_reset_safe: none)
+  Question: How do you want to reset the local database?
+  Options: [A] You run it yourself, then reply "continue" (recommended)  [B] Declare db_reset_safe in ## SDD Stack Profile  [C] Mark the task [!] and continue
+```
 
 ---
 
@@ -1100,30 +1001,13 @@ Si una task no puede implementarse:
 15. **NUNCA crear tags desde un worktree de Stream** ni escribir `pipeline-state.json` desde el — solo el checkout principal
 16. **NUNCA squash ni rebase de una rama de Stream al integrar** — `git merge --no-ff`; cada commit conserva su `Task:`
 17. **SIEMPRE parar ante `stale`** en `task-generator` o `plan-architect` — el task document puede no reflejar el plan
+18. **NUNCA fabricar consentimiento humano** — ni fijar ni exportar variables/flags de consentimiento (`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`); ante un rechazo → AI Tool Guardrails
 
 ---
 
 ## Error Recovery
 
-| Error | Cause | Recovery |
-|-------|-------|---------|
-| "Task document not found" | Task generator not run | Run `sdd-task-generator` |
-| "Plan artifacts not found" | Plan architect not run | Run `sdd-plan-architect` |
-| "Spec file not found" | Referenced spec missing | Check Refs field, verify spec exists |
-| "Dependency task incomplete" | Previous task not done | Complete dependency task first |
-| "Tests fail after implementation" | Bug in implementation | Debug and fix, re-run tests |
-| "Build fails" | Syntax error or missing dependency | Fix compilation error |
-| "Merge conflict" | Parallel task touched same file | Tasks marked [P] should not conflict — investigate |
-| "Checkpoint tag exists" | Phase already checkpointed | Skip checkpoint or force with `--force` |
-| "[DECISION PENDIENTE] found" | Spec has unresolved decision | Pause, ask user, resolve in spec first |
-| "Git working tree dirty" | Uncommitted changes | Commit or stash pending changes |
-| "Stale upstream" | `task-generator`/`plan-architect` marked `stale` | Re-run the stale skill, then `--continue` |
-| "Stream X not in Stream Ownership table" (G-09) | Table missing or wrong name | Re-run `sdd-task-generator`; check the Stream column |
-| "Not in the Stream worktree" (G-10) | `--stream X` run in the main checkout or wrong branch | `git worktree add ../<project>-f{N}{x} -b feat/fase-{N}-{x} fase-{N}-foundation` and run there |
-| "Run base tasks in the main checkout first" (G-11) | `base` tasks not `[x]` in HEAD | `--fase {N} --stream base` in the main checkout, recreate the worktree from `fase-{N}-foundation` |
-| "External dependency not in HEAD" | `blocked-by` on a task of another Stream | Mark `[!]`, continue; implement after `--integrate` |
-| "Merge conflict during --integrate" | Two Streams touched the same file (V-15 violated) or both marked `task/TASK-FASE-{N}.md` | `references/integration-protocol.md` §2: keep both `[x]`, resolve code by hand, `git add` + `git commit`, log feedback CONFLICT |
-| "Duplicate Task: trailer after merge" | Same task committed on two branches | Keep the merge, `git revert` the later duplicate, report |
+Tabla error → causa → recuperacion (gates, dependencias, build/tests, `--integrate`, guardrails): `references/recovery-and-report.md`.
 
 ---
 
@@ -1141,7 +1025,7 @@ Si una task no puede implementarse:
 | P5 | `spec/domain/02-ENTITIES.md` | Entity schemas and relationships |
 | P6 | `spec/domain/05-INVARIANTS.md` | Business rules to enforce |
 | P7 | `spec/domain/04-STATES.md` | State machine transitions |
-| P8 | `CLAUDE.md` | Tech stack, coding conventions, project structure |
+| P8 | `CLAUDE.md` | Coding conventions, project structure (Stack Profile: Phase 0) |
 
 ### Lazy Loading
 
@@ -1149,28 +1033,16 @@ No cargar TODOS los specs de golpe. Cargar P0-P3 siempre. Cargar P4-P8 solo cuan
 
 ---
 
-## Integration with Tech Stack
+## Stack Profile
 
-Este skill NO prescribe un tech stack. Lee el stack del proyecto desde `CLAUDE.md` y `plan/ARCHITECTURE.md`.
+Este skill NO prescribe un tech stack. Todo comando es una clave del **SDD Stack Profile** — `{test}`, `{test_file}`, `{test_name}`, `{typecheck}`, `{lint_files}`, `{lint}`, `{build}`, `{coverage}`, `{install}`, `{server}`, `{db_reset_safe}`, `{acceptance}` — resuelto una vez en Phase 0 (G-08):
 
-### Stack Detection
+1. Seccion `## SDD Stack Profile` del `CLAUDE.md` raiz
+2. Deteccion por ficheros en la raiz y el primer nivel (rails, nextjs-prisma, ts-workers, python; reglas en §3 de la referencia) con los defaults de `templates/stacks/<kit>/kit.json`
+3. Heuristica legacy sobre `CLAUDE.md`: TypeScript + Cloudflare Workers → vitest/wrangler; Python → pytest (valores de antes de 4.3)
+4. `plan/ARCHITECTURE.md` §2.1 nombra un stack con kit → defaults del kit y recomendar `/sdd-setup --stack=<kit>`; si no, G-08 para y pregunta
 
-```
-IF CLAUDE.md mentions "TypeScript" AND "Cloudflare Workers":
-  → Test runner: vitest
-  → Build: wrangler
-  → Deploy: wrangler deploy
-  → DB: D1 (SQLite migrations)
-  → Queue: Cloudflare Queues
-
-IF CLAUDE.md mentions "Python":
-  → Test runner: pytest
-  → Build: pip/poetry
-  → Deploy: varies
-
-IF plan/ARCHITECTURE.md exists:
-  → Follow its project structure exactly
-```
+Comandos desde `app_dir` salvo `{acceptance}` (raiz; filtro `--grep <ID>`). Clave `none` → paso omitido con `WARN <key>: n/a (stack profile)`. Placeholders, tabla legacy, ejemplos rails/nextjs-prisma, server helper (`.sdd/server.log`, `.sdd/server.pid`, puerto ≤60 s, siempre parado al final) y cadencia: `references/stack-profile.md`. Si `plan/ARCHITECTURE.md` existe, su estructura manda.
 
 ### Common Patterns by Task Type
 
@@ -1180,36 +1052,7 @@ See `references/construction-protocol.md` for implementation patterns per task t
 
 ## Output Format: Implementation Session Report
 
-Al finalizar una sesion de implementacion:
-
-```markdown
-## Implementation Session Report
-
-**Date:** {YYYY-MM-DD}
-**FASE:** {N}
-**Tasks completed:** {list}
-**Tasks remaining:** {count}
-
-### Progress
-
-| Task | Status | Tests | SHA | Commit Message |
-|------|--------|-------|-----|----------------|
-| TASK-F0-001 | ✓ Complete | 3/3 | abc1234 | chore(bootstrap): configure wrangler.toml |
-| TASK-F0-002 | ✓ Complete | 5/5 | def5678 | feat(bootstrap): init TypeScript project |
-| TASK-F0-003 | ⏸ Paused | 2/4 | — | — |
-| TASK-F0-004 | ○ Pending | — | — | — |
-
-### Pauses
-- TASK-F0-003: [DECISION PENDIENTE] in ADR-025 line 45
-
-### Next Steps
-1. Resolve ADR-025 decision
-2. Continue with TASK-F0-003
-3. Then TASK-F0-004 (parallel with F0-005)
-
-### Checkpoints
-- `fase-0-setup` after TASK-F0-002
-```
+Al finalizar una sesion: plantilla (Progress con SHA y Commit Message, Pauses, Next Steps, Checkpoints) en `references/recovery-and-report.md`.
 
 ---
 
@@ -1221,8 +1064,8 @@ After completing a FASE or a batch of tasks, update `pipeline-state.json`. **Not
 2. Set `stages["task-implementer"].status` = `"done"` (or `"running"` if more FASEs remain)
 3. Set `stages["task-implementer"].lastRun` = current ISO-8601
 4. Set `stages["task-implementer"].summary`:
-   - `artifacts`: list of key files created/modified in `src/` and `tests/` with labels (e.g., `{"file": "src/extraction/pdf-parser.ts", "label": "PDF Parser"}`)
-   - `metrics`: `{ "tasks_completed": N, "tasks_remaining": N, "commits": N, "tests_passed": N, "tests_failed": N, "mode": "parallel"|"sequential", "task_agents": N, "pauses": N }` — `mode` records whether the `[P]` tasks were given to parallel agents (Multi-Agent Strategy) and `task_agents` how many were launched in total (0 in sequential mode); when `mode` is `sequential` and the batch had `[P]` tasks, the first `summary.highlights` entry states why. `--integrate` adds `"streamsIntegrated": N, "mergeConflicts": N`
+   - `artifacts`: list of key files created/modified in `{code_paths}` and `{test_paths}` with labels (e.g., `{"file": "src/extraction/pdf-parser.ts", "label": "PDF Parser"}`)
+   - `metrics`: `{ "tasks_completed": N, "tasks_remaining": N, "commits": N, "tests_passed": N, "tests_failed": N, "mode": "parallel"|"sequential", "task_agents": N, "pauses": N, "stack": "<stack>", "profile_source": "declared"|"detected"|"legacy"|"architecture", "inline_p_tasks": N }` — `mode` records whether the `[P]` tasks were given to parallel agents (Multi-Agent Strategy) and `task_agents` how many were launched in total (0 in sequential mode), `inline_p_tasks` how many `[P]` tasks ran inline (reason in `highlights`); when `mode` is `sequential` and the batch had `[P]` tasks, the first `summary.highlights` entry states why. `--integrate` adds `"streamsIntegrated": N, "mergeConflicts": N`
    - `highlights`: top 3-5 notable observations (e.g., "FASE-0 complete: 8/8 tasks", "All 24 tests passing"); `--integrate` adds one line per merged branch (`Merged feat/fase-1-a (3 tasks) → 9f3c2a1`) and one per conflict (`Conflict in task/TASK-FASE-1.md resolved (both [x] kept)`)
    - `nextStep`: `"Run /sdd-task-implementer --fase=N"` (next FASE) or `"Pipeline complete"` (if last FASE)
    - `generatedAt`: current ISO-8601

@@ -173,8 +173,8 @@ For each FASE, in order:
 
 ### Phase 9: E2E Tests
 
-1. Ask: "¿Quieres que escriba y ejecute los tests E2E con Playwright?"
-2. If yes: write E2E tests from test/E2E-SCENARIOS.md, run them
+1. If the project already has an E2E suite (SDD Stack Profile `acceptance`, `acceptance/playwright.config.*`, `e2e/` or `test/system/`), run it; otherwise ask: "¿Quieres que escriba y ejecute los tests E2E (Playwright)?"
+2. If yes: write E2E tests from test/E2E-SCENARIOS.md (never when `e2e_scaffold: never`), run them
 3. If tests fail: fix code, not tests (Art. 12)
 4. Show results table
 

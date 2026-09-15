@@ -1,6 +1,6 @@
 # Integration Protocol (`--integrate --fase N`)
 
-> **Role requirement.** When `SDD_ROLE` is set, the role must own the `integración`/`verificación` write-set (`src/*`, `tests/*`, `.github/*`, config files, `task/TASK-FASE-*.md`, `.sdd/*`) or the upstream guard will deny the writes and the run will PAUSE. The default `sdd-lead` role in `templates/sdd-sessions.example.json` owns it; alternatively run `--integrate` without `SDD_ROLE`.
+> **Role requirement.** When `SDD_ROLE` is set, the role must own the `integración`/`verificación` write-set (the Stack Profile `code_paths`/`test_paths` — default `src/*`, `tests/*` —, `.github/*`, config files, `task/TASK-FASE-*.md`, `.sdd/*`) or the upstream guard will deny the writes and the run will PAUSE. The default `sdd-lead` role in `templates/sdd-sessions.example.json` owns it; alternatively run `--integrate` without `SDD_ROLE`.
 
 > Brings the Stream branches of a FASE back into the main checkout: one `--no-ff` merge per Stream, then the
 > `integración` and `verificación` tasks, then the normal FASE checkpoint. Every task commit keeps its own SHA and
@@ -66,10 +66,10 @@ checkout either way; `.sdd/current-task.json` and `.sdd/bench/events.jsonl` are 
 | I-03 | Integration branch = project base branch | `git branch --show-current` equals the branch that carries `fase-N-foundation` (`git branch --contains fase-N-foundation`), normally `main` | WARN + Question: [A] switch to it (recommended) [B] integrate here |
 | I-04 | Stream Ownership table present | `## Stream Ownership` in `task/TASK-FASE-N.md` with at least one lettered Stream | HALT: nothing to integrate; `--fase N` already covers this FASE |
 | I-05 | Stale brake | `stages["task-generator"].status` and `stages["plan-architect"].status` in `$SDD_STATE_ROOT/pipeline-state.json` are not `stale` | PAUSE `Stale upstream: re-run <skill> before continuing` |
-| I-06 | `base` tasks are `[x]` in HEAD and `fase-N-foundation` exists | `git show HEAD:task/TASK-FASE-N.md`, `git rev-parse -q --verify refs/tags/fase-N-foundation` | HALT: run `--fase N --stream base` first |
+| I-06 | `base` tasks are done in HEAD and `fase-N-foundation` exists | checkbox: `[x]` in `git show HEAD:task/TASK-FASE-N.md`; trailers: done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase N --json`; `git rev-parse -q --verify refs/tags/fase-N-foundation` | HALT: run `--fase N --stream base` first |
 | I-07 | Every lettered Stream has a branch | `git rev-parse -q --verify refs/heads/feat/fase-N-x`, else `git fetch origin feat/fase-N-x` and use `origin/feat/fase-N-x` | Question: [A] skip that Stream (partial integration, reported) [B] abort |
 | I-08 | Stream branch descends from the foundation tag | `git merge-base --is-ancestor fase-N-foundation feat/fase-N-x` | WARN: the branch was not created from the checkpoint; expect conflicts |
-| I-09 | Stream tasks complete on their branch | every task of the Stream is `[x]` in `git show feat/fase-N-x:task/TASK-FASE-N.md` | WARN + Question: [A] skip the Stream [B] integrate the partial Stream anyway |
+| I-09 | Stream tasks complete on their branch | checkbox: every task of the Stream is `[x]` in `git show feat/fase-N-x:task/TASK-FASE-N.md`; trailers: every task of the Stream is done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase N --rev feat/fase-N-x --state trailers --json` (trailers reachable from the branch, reverts subtracted) | WARN + Question: [A] skip the Stream [B] integrate the partial Stream anyway |
 
 Read the tables and branches once; keep `STREAMS="A B …"` in session memory.
 
@@ -87,8 +87,8 @@ done
   trailers (`Task:` uniqueness and `sdd-traceability-check` depend on it).
 - After a successful merge: `sdd_bench_event merge "" "$(git rev-parse --short HEAD)"` (Bench Events in SKILL.md) and
   add the Stream to the `merged` list with its merge SHA.
-- Run the full test suite after **every** merge, not only at the end; a failure here is a `PAUSE: Test regression`
-  whose cause is the merge itself.
+- Run the full test suite (`{test}`, Stack Profile) after **every** merge, not only at the end; a failure here is a
+  `PAUSE: Test regression` whose cause is the merge itself. `{build}` and `{acceptance}` wait for Phase 9.
 
 ### Merge conflict
 
@@ -102,6 +102,8 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
   Files: task/TASK-FASE-N.md, src/index.ts
   task/TASK-FASE-N.md → keep BOTH sides: every `[x]` marked by either branch stays `[x]`
                         (two Streams mark different tasks; a checkbox is never un-marked).
+                        task_state: trailers → this rule does not apply (no Stream edits checkboxes);
+                        a conflict here is a content conflict: resolve by hand.
   src/index.ts        → resolve by hand following the spec. Two Streams touching the same file
                         violates V-15 (disjoint write-sets): log it in feedback/IMPL-FEEDBACK-FASE-N.md
                         (category CONFLICT) so sdd-task-generator can fix the Stream assignment.
@@ -121,7 +123,7 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
 ## 3. After the merges
 
 1. **`integración` Stream**: implement its tasks with the normal Phases 3-7 (breadcrumb, test-first, one commit per
-   task with `Refs:`/`Task:`, checkbox-first). These are the wiring tasks that touch files shared by several Streams
+   task with `Refs:`/`Task:`, checkbox-first — or no checkbox with `task_state: trailers`). These are the wiring tasks that touch files shared by several Streams
    (`src/index.ts`, route indexes, migration indexes).
 2. **`--verify --fase N`** (read-only, `references/verification-protocol.md`): every task of `base` and of the
    lettered and `integración` Streams must PASS; only commits reachable from `HEAD` count. Any FAIL → fix before
@@ -134,7 +136,8 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
 ## 4. Post-merge checks (all must hold before Persist Summary)
 
 ```bash
-# every task of the FASE is [x]
+# every task of the FASE is [x]   (task_state: trailers → sdd-task-lint.mjs status --fase $N --json: 0 pending,
+# and no OPEN BLOCKER entry in feedback/IMPL-FEEDBACK-FASE-N.md)
 grep -cE '^- \[ \] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0
 grep -cE '^- \[!\] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0 (blocked tasks stop the FASE)
 # no task implemented twice (same Task: trailer on two commits)
@@ -167,7 +170,7 @@ done
 3. **Persist Summary** (SKILL.md) with, in addition to the usual fields:
    - `metrics.streamsIntegrated`: number of merged Streams; `metrics.mergeConflicts`: number of conflicted files
    - `highlights`: one line per merged branch (`Merged feat/fase-1-a (3 tasks) → 9f3c2a1`), one line per conflict
-     (`Conflict in task/TASK-FASE-1.md resolved (both [x] kept)`), `FASE-1 verified: fase-1-verified`
+     (`Conflict in task/TASK-FASE-1.md resolved (both [x] kept)` — checkbox mode), `FASE-1 verified: fase-1-verified`
    - `nextStep`: `"Run /sdd-task-implementer --fase N+1"` (or `--fase N+1 --stream base` when FASE N+1 has Streams)
 4. `git push --follow-tags` when `git remote get-url origin` succeeds (the Stream branches were already pushed by
    Phase 9-S; pushing the base branch publishes the merges and the tag).

@@ -63,7 +63,7 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 | 6 Architecture & Planning done | "¿Estás conforme con las FASEs y la arquitectura?" | `task-generator` |
 | 7 Task Generation done | "¿Quieres revisar los tasks antes de empezar a implementar?" | `task-implementer fase=0` |
 | 8 FASE-N done | "FASE-{N} completa. ¿Continuamos con FASE-{N+1}?" | `task-implementer fase=N+1`; one GO per Stream when `TASK-FASE-{N+1}.md` has a Stream Ownership table; Integrate FASE N first when it had Streams |
-| 9 Implementation done | "¿Quieres que escriba y ejecute los tests E2E con Playwright?" | `task-implementer e2e=true` to the implementer owner |
+| 9 Implementation done | "¿Quieres que escriba y ejecute los tests E2E con la suite E2E existente o una nueva?" | `task-implementer e2e=true` to the implementer owner |
 | 10 Gap Analysis done | Per finding: PROMOTE / REMOVE / ACCEPT / DEFER | `req-change` for PROMOTE; `task-implementer` for REMOVE |
 | 11 Verification | "¿Quieres generar el dashboard visual de trazabilidad?" | `traceability-check`, `dashboard` to the QA owner |
 

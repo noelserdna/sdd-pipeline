@@ -44,7 +44,7 @@ For each task with testable behavior:
 Purpose: Test isolated behavior of a single module
 Dependencies: Mocked or stubbed
 Speed: < 1 second per test
-Location: tests/unit/{module}.test.ts
+Location: {test_paths}/unit/{module}.test.ts (stack convention wins: e.g. test/models/ in Rails)
 ```
 
 **Naming convention:**
@@ -267,7 +267,8 @@ export class LoginPage {
 - Auth via `storageState`, not login-through-UI for every test
 - All assertions use locator-based `expect(locator)`, never `expect(await page.textContent(...))`
 - Wait for stable state before interacting (no arbitrary `page.waitForTimeout()`)
-- E2E tests require a running server — document in task how to start it
+- E2E tests require a running server — prefer the suite's own `webServer`; otherwise the server helper of `references/stack-profile.md` §8 (`{server}`, log `.sdd/server.log`, stopped at the end of the block)
+- When an acceptance suite already exists (`acceptance` key, `acceptance/playwright.config.*`, `e2e/`, `test/system/`) write the scenario inside it and never scaffold a new one; the task is done when `{acceptance} --grep <E2E-ID>` passes
 
 ---
 
@@ -283,7 +284,7 @@ Is this task testable?
 │       ├── YES → Write tests for each exception
 │       └── NO → Write happy path tests only
 │
-└── NO (config, setup, wrangler.toml, env variables)
+└── NO (config, setup, toolchain files, env variables)
     └── Define manual verification steps instead:
         "Verification: {command} produces {expected result}"
 ```
@@ -427,56 +428,65 @@ Before marking a test as complete:
 
 ## Non-Testable Tasks: Verification Steps
 
-For configuration and setup tasks, define explicit verification:
+For configuration and setup tasks, define explicit verification with the Stack Profile keys
+(`references/stack-profile.md`; a key resolved to `none` is skipped with `WARN <key>: n/a (stack profile)`):
 
 ```markdown
-### TASK-F0-001: Configure wrangler.toml
+### TASK-F0-001: Configure runtime / framework config
 Verification:
-  1. `npx wrangler dev` starts without errors
-  2. Health endpoint responds at localhost:8787/health
-  3. KV namespace binding resolves
+  1. `{server}` starts without errors (server helper, stack-profile.md §8)
+  2. Health endpoint responds at localhost:{port}/health
+  3. Bindings / credentials placeholders resolve
 
-### TASK-F0-002: Initialize TypeScript project
+### TASK-F0-002: Initialize project
 Verification:
-  1. `npm install` completes without errors
-  2. `npx tsc --noEmit` compiles without errors
-  3. `npm run lint` passes
+  1. `{install}` completes without errors
+  2. `{typecheck}` compiles without errors
+  3. `{lint}` passes
 
-### TASK-F0-010: Configure D1 database binding
+### TASK-F0-010: Configure database
 Verification:
-  1. `npx wrangler d1 list` shows the database
-  2. `npx wrangler d1 execute DB --command "SELECT 1"` returns result
+  1. Migrations apply with the stack's non-destructive command
+  2. `{test_file}` on the first repository/model test connects and passes
 ```
+
+Legacy `ts-workers` values give the pre-4.3 steps, e.g. `npx wrangler dev`, localhost:8787/health, `npm install`, `npx tsc --noEmit`, `npm run lint`, `npx wrangler d1 list` / `npx wrangler d1 execute DB --command "SELECT 1"`.
 
 ---
 
 ## Test Execution Strategy
 
+Commands are Stack Profile keys, run from `app_dir` (`references/stack-profile.md` §2, cadence §9). Legacy
+`ts-workers` values in comments.
+
 ### During Task Implementation (per-task)
 
 ```bash
 # Run only tests for current task
-npx vitest run tests/middleware/auth.test.ts
+{test_file}                 # e.g. npx vitest run tests/middleware/auth.test.ts
 
-# Or pattern-based
-npx vitest run --grep "AuthMiddleware"
+# Or name/pattern-based
+{test_name}                 # e.g. npx vitest run -t "AuthMiddleware"
 ```
 
-### After Task Complete (regression check)
+### After Task Complete (per-task checks)
 
 ```bash
-# Run full test suite to catch regressions
-npx vitest run
-
-# Or run only tests for current FASE
-npx vitest run tests/
+{test_file}                 # the task's tests + existing tests of the changed files
+{typecheck}                 # npx tsc --noEmit
+{lint_files}                # changed files only
 ```
 
-### At Phase Checkpoint
+The full suite is **not** run per task: regressions are caught at the Foundation checkpoint and in Phase 9. Run it
+earlier only when the task changes something shared by many tests (test helpers, DB schema, middleware chain, config).
+After a schema/migration change run `{db_reset_safe}` only when the test runner does not prepare the database itself.
+
+### At Foundation Checkpoint and Phase 9
 
 ```bash
-# Full suite with coverage
-npx vitest run --coverage
+{test}                      # e.g. npx vitest run — full own suite
+{coverage}                  # e.g. npx vitest run --coverage (Phase 9)
+{acceptance}                # Phase 9, once; then only failures: {acceptance} --grep <ID>
 ```
 
 **Per-file coverage verification:**
@@ -485,6 +495,7 @@ After running coverage, check the report for each source file listed in PLAN-FAS
 - If any domain logic file (entity, service, state-machine) shows < 80% lines → add tests before proceeding
 - Files in the Exclusions table with valid justification can be skipped
 - Report coverage summary in the FASE completion output
+- `coverage: none` → `WARN coverage: n/a (stack profile)`; report "Coverage: n/a"
 
 ### Handling Test Failures
 

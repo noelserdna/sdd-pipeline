@@ -1595,6 +1595,8 @@ If impact analysis reveals circular dependency between REQs:
 | MISSING-BEHAVIOR     | ADD or MODIFY   | Gap in spec coverage |
 | INCORRECT-CONTRACT   | MODIFY          | Contract does not match intended behavior |
 | STALE-DECISION       | MODIFY          | `[DECISION PENDIENTE]` needs resolution |
+| SPEC-DEVIATION       | MODIFY or none  | Implementation deviated on purpose: confirm it in the spec or revert the code |
+| TOOL-GUARDRAIL       | none            | A tool refused an AI agent (e.g. consent-gated reset): no spec change; a human decides or adds a non-destructive command to the SDD Stack Profile |
 
 > **Bidirectional feedback loop:** Specs drive implementation (`sdd-task-implementer` reads `spec/`),
 > and implementation discoveries drive spec corrections (`sdd-req-change` processes `feedback/`).

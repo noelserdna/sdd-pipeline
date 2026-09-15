@@ -44,13 +44,19 @@
 
 ```
 1. READ contract from spec/contracts/
-   - HTTP method, path, query params
-   - Request body schema
-   - Response body schema (success + error)
+   - Operation ID (API-NNN-NN) and `Style: operations|http`
+   - Inputs (params, body schema), outputs (success + error), errors
+   - HTTP method + path (literal only when `Style: http`)
    - Authentication requirements
    - Rate limiting requirements
-2. CREATE route handler
-   - Register route with exact path from contract
+1b. READ transport for the operation
+   - design/OPERATION-MAPPING.md row: | API-op | Idiom | Route / action | Verb | Success | Validation error | No-JS fallback | Accessible element |
+   - fallback: plan/ table | API-op | Transport | Handler | Note |
+   - `Style: operations` → the stack idiom from the mapping (Server Action, Rails resource route, Route Handler…)
+   - `Style: http` → method + path exactly as the contract
+   - no mapping row and `Style: operations` → PAUSE: Conflict (transport undefined), never invent a custom route
+2. CREATE handler in the mapped idiom
+   - Register route/action as the mapping (or, for `Style: http`, the contract) says
    - Apply auth middleware per relevant INV-SYS-* or INV-AUTH-* invariant
    - Apply rate limiting per relevant ADR and nfr/LIMITS.md
 3. IMPLEMENT request validation
@@ -77,7 +83,8 @@
 ```
 
 **Anti-patterns:**
-- Different route path than contract specifies
+- Different route path than contract specifies (`Style: http`) or than OPERATION-MAPPING specifies (`Style: operations`)
+- Adding custom routes/endpoints (member POST routes, extra Route Handlers) the mapping does not list
 - Missing auth middleware on protected endpoint
 - Business logic directly in route handler
 - Response schema not matching contract
@@ -145,6 +152,9 @@
    - Reversible: DROP TABLE or ALTER TABLE
    - No data loss for non-destructive operations
    - Document data loss risk for destructive operations
+   - Apply locally with the stack's non-destructive migrate command; a clean local DB comes from `{db_reset_safe}`,
+     never from a reset the tool refuses to run for an AI agent (SKILL.md → AI Tool Guardrails: never set consent
+     variables such as PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION)
 4. WRITE tests (if applicable):
    - Migration runs without errors (up)
    - Migration reverses cleanly (down)
@@ -232,18 +242,18 @@
 ```
 1. READ configuration requirements from plan and ADRs
 2. CREATE configuration files
-   - wrangler.toml, package.json, tsconfig.json, etc.
+   - Framework/runtime config of the stack (wrangler.toml, package.json, tsconfig.json, Gemfile, config/*.rb, next.config.ts, etc.)
    - Environment variables documented
    - Secrets use proper secret management (not env vars)
 3. VALIDATE configuration
    - Config parses correctly
    - Build succeeds with config
    - Dev server starts without errors
-4. VERIFICATION (instead of unit tests):
-   - `npm install` completes without errors
-   - `npx wrangler dev` starts successfully
-   - TypeScript compiles without errors
-   - Lint passes
+4. VERIFICATION (instead of unit tests; Stack Profile keys, `none` → skipped with WARN):
+   - `{install}` completes without errors
+   - `{server}` starts successfully (server helper, references/stack-profile.md §8 — stopped at the end)
+   - `{typecheck}` compiles without errors
+   - `{lint_files}` passes on the changed files
 ```
 
 ---
@@ -332,13 +342,19 @@
 **Input:** `test/E2E-SCENARIOS.md`, `spec/workflows/WF-*.md`, optionally `ux/WIREFRAMES.md`
 
 ```
+0. REUSE an existing suite (always first)
+   - An acceptance suite exists when the profile `acceptance` ≠ none, or acceptance/playwright.config.*,
+     e2e/ or test/system/ exists (repo root or app_dir) → NEVER scaffold Playwright (skip steps 2-3)
+   - Write the scenario inside that suite with its conventions (fixtures, page objects, helpers)
+   - Done = `{acceptance} --grep <E2E-ID>` passes (step 7)
+   - `e2e_scaffold: never` and no suite found → PAUSE: Ambiguity (where should E2E tests live?), no scaffold
 1. READ E2E scenario from test/E2E-SCENARIOS.md
    - Identify scenario ID (E2E-WF-NNN-NN)
    - Identify steps, elements, assertions
    - Identify auth fixture needed
    - Identify tier (smoke/critical/full)
-2. SETUP Playwright project (if first E2E task)
-   - npm init playwright@latest (or add to existing)
+2. SETUP Playwright project (only if step 0 found no suite, `e2e_scaffold` ≠ never, and this is the first E2E task)
+   - e.g. `npm init playwright@latest` in npm projects, or add Playwright to the existing test setup
    - Configure playwright.config.ts:
      - baseURL from environment
      - projects: chromium (default), firefox + webkit (for full tier)
@@ -366,15 +382,17 @@
    - Each row in the Variations table → a separate test
    - Reuse page objects, change inputs/preconditions
 7. VERIFY
-   - npx playwright test {scenario-file} → all pass
-   - npx playwright test --grep @smoke → smoke tier passes
-   - No flaky failures on 3 consecutive runs
+   - `{acceptance} --grep <E2E-ID>` → all pass (new suite without the key: npx playwright test {scenario-file})
+   - `{acceptance} --grep @smoke` → smoke tier passes (only when the suite tags tiers)
+   - No flaky failures on 3 consecutive runs of the filtered scenario
+   - Never the full suite per task and never a manual server start + curl + kill: the suite's webServer (or the
+     server helper, stack-profile.md §8) runs the app
 8. COMMIT with traceability
    - Refs: WF-NNN, UC-NNN
    - Task: TASK-F{N}-{SEQ}
 ```
 
-**Playwright config template:**
+**Playwright config template** (new suites only — step 2):
 
 ```typescript
 // playwright.config.ts
@@ -409,8 +427,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
+    command: 'npm run dev', // e.g. — the profile's {server} with {port} substituted, run from app_dir
+    url: 'http://localhost:3000', // {port}
     reuseExistingServer: !process.env.CI,
   },
 });
@@ -447,7 +465,7 @@ Before writing ANY code for any task type:
 [ ] Identify which invariants apply (INV-*)
 [ ] Know the file path(s) to create/modify
 [ ] Know the commit message to use
-[ ] Know the revert strategy
+[ ] Know the revert strategy (compact task without Revert = SAFE)
 [ ] No [DECISION PENDIENTE] in referenced specs
 ```
 
@@ -458,9 +476,9 @@ After implementing ANY task:
 ```
 [ ] All acceptance criteria verified
 [ ] Review checklist items all pass
-[ ] Tests exist and pass (or manual verification documented)
-[ ] Build succeeds (no compilation errors)
-[ ] Lint passes (no format issues)
+[ ] Tests exist and pass — `{test_file}` (or manual verification documented)
+[ ] `{typecheck}` clean (no compilation errors); `{build}` is Phase 9 only
+[ ] `{lint_files}` clean on the changed files
 [ ] No secrets or PII in code or logs
 [ ] Commit message matches task exactly
 [ ] Only task-specified files modified

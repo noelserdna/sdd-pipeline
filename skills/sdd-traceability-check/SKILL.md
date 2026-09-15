@@ -99,12 +99,12 @@ Verify the TASK → COMMIT link in the extended traceability chain.
 3. **Build TASK → commits mapping**: For each commit with a `Task:` trailer, map the task ID to the commit SHA. A task may have multiple commits (e.g., if amended or reworked).
 
 4. **Identify gaps**:
-   - **Tasks without commits**: TASKs defined in `task/TASK-FASE-*.md` that are marked `[x]` but have no matching commit in git log.
+   - **Tasks without commits**: TASKs defined in `task/TASK-FASE-*.md` that are marked `[x]` but have no matching commit in git log. When a task document has no checkboxes (`task_state: trailers` in the SDD Stack Profile), the done-state comes from the `Task:` trailers themselves (`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --json`): report only the divergences it lists.
    - **Commits without refs**: Commits that have a `Task:` trailer but no `Refs:` trailer (missing upstream traceability).
    - **Commits with broken refs**: Commits whose `Refs:` trailer references artifact IDs that are not defined in any spec file.
 
 5. **Compute commit coverage**:
-   - Total completed tasks (marked `[x]`): count from task documents
+   - Total completed tasks (marked `[x]`, or done in `sdd-task-lint.mjs status` when the task documents have no checkboxes): count from task documents
    - Tasks with at least one commit: count from TASK → commits mapping
    - Commit coverage percentage: tasks with commits / total completed tasks
 

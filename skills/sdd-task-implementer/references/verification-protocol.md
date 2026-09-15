@@ -12,7 +12,9 @@ Verify that ALL tasks have been implemented with all required artifacts.
 
 ### Per-Task Completeness Check
 
-For each task marked `[x]` in `task/TASK-FASE-{N}.md`:
+For each task marked `[x]` in `task/TASK-FASE-{N}.md` — with `task_state: trailers` (no checkboxes are edited), for each
+task reported done by `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase {N} --json`
+(its `Task:` trailer reachable from `HEAD`, not reverted); checkbox/trailer divergences it reports are WARNING:
 
 ```
 CHECK-C01: Source files exist
@@ -110,7 +112,7 @@ Detailed procedure for verifying that each task has a corresponding atomic commi
 
 | Task | Expected Message | Found SHA | Files Match | Status |
 |------|-----------------|-----------|-------------|--------|
-| TASK-F0-001 | chore(bootstrap): configure wrangler.toml | abc1234 | ✓ 2/2 | PASS |
+| TASK-F0-001 | chore(bootstrap): configure toolchain | abc1234 | ✓ 2/2 | PASS |
 | TASK-F0-002 | feat(bootstrap): init TypeScript project | def5678 | ⚠ 4/3 (+1 extra) | WARN |
 | TASK-F0-003 | feat(auth): add JWT auth middleware | — | — | FAIL |
 
@@ -141,13 +143,19 @@ CHECK-R02: Spec fidelity
     - Flag any deviations
 
 CHECK-R03: Contract compliance
-  If task implements an API endpoint:
-    - HTTP method matches contract
-    - Path matches contract
-    - Request schema matches contract
-    - Response schema matches contract
-    - Error responses match contract
+  If task implements an API operation (API-NNN-NN):
+    Semantics, against spec/contracts/API-*.md (every Style):
+    - Inputs / request schema match contract
+    - Outputs / response schema match contract
+    - Error cases match contract
+    Transport, against design/OPERATION-MAPPING.md (fallback: plan/ table | API-op | Transport | Handler | Note |):
+    - Idiom, route/action and verb match the mapping row
+    - Success, validation-error and no-JS-fallback behaviour match the mapping row
+    - Accessible element exists when the mapping names one
+    Only for `Style: http` contracts:
+    - HTTP method and path equal the contract
     - Status codes match contract
+    A route or verb that differs from a `Style: operations` contract but matches the mapping is PASS, not a deviation.
 
 CHECK-R04: Invariant enforcement
   For each INV-* in task's Refs:
@@ -294,11 +302,12 @@ CHECK-H09: Code duplication
 ### Severity Rules
 
 ```
-IF task marked [x] but files don't exist → CRITICAL
+IF task done ([x], or done in sdd-task-lint status with task_state: trailers) but files don't exist → CRITICAL
 IF acceptance criterion not satisfied → CRITICAL
 IF invariant not enforced → CRITICAL
 IF security issue (PII leak, no auth) → CRITICAL
 IF contract schema mismatch → WARNING
+IF transport differs from OPERATION-MAPPING (or Method/Path from a Style: http contract) → WARNING
 IF glossary term violation → WARNING
 IF complexity limit exceeded → WARNING
 IF naming inconsistency → OBSERVATION
@@ -319,7 +328,7 @@ Verify that every source file with testable logic has adequate test coverage.
 | CHECK-COV-04 | Global coverage thresholds (lines/branches/functions/statements) are met | CRITICAL |
 
 **Procedure:**
-1. Run `npx vitest run --coverage` and parse the coverage report
+1. Run the Stack Profile `{coverage}` command (`references/stack-profile.md`; legacy ts-workers, e.g. `npx vitest run --coverage`) and parse the coverage report; `coverage: none` → all CHECK-COV SKIPPED with `WARN coverage: n/a (stack profile)`
 2. For each file in Coverage Map §7.4, check its line coverage percentage
 3. For files at 0%, verify they appear in the Exclusions table with valid reason
 4. Flag any domain logic file below 80% line coverage
@@ -364,7 +373,7 @@ Verification adapts to available context:
 
 | Available Artifacts | Verification Scope |
 |--------------------|-------------------|
-| Only task/TASK-FASE-{N}.md | Completeness only (checkbox parsing) |
+| Only task/TASK-FASE-{N}.md | Completeness only (checkbox parsing, or `sdd-task-lint.mjs status` with `task_state: trailers`) |
 | + source code | Completeness + basic correctness (files exist) |
 | + spec/ files | Full correctness (spec-implementation alignment) |
 | + plan/ artifacts | Full coherence (architecture adherence) |
