@@ -24,7 +24,7 @@ Task: {TASK-ID}
 | `fix` | Bug fix discovered during implementation | `fix(auth): correct token expiry calculation` |
 | `refactor` | Code restructure, no behavior change | `refactor(domain): extract base entity class` |
 | `test` | Test files only | `test(matching): add property tests for score calculation` |
-| `chore` | Build, deps, config, tooling | `chore(bootstrap): configure wrangler.toml` |
+| `chore` | Build, deps, config, tooling | `chore(bootstrap): pin runtime and dependency versions` |
 | `docs` | Documentation only | `docs(api): add OpenAPI annotations` |
 | `ci` | CI/CD pipeline changes | `ci(deploy): add staging workflow` |
 | `perf` | Performance optimization | `perf(extraction): cache model responses` |
@@ -77,7 +77,7 @@ Use body for:
 ```
 feat(auth): add rate limiting middleware
 
-Implement token bucket algorithm using Cloudflare KV.
+Implement token bucket algorithm backed by the cache store (ADR-025).
 Burst: 100 req/min/session, Sustained: 1000 req/h/user.
 Returns 429 with Retry-After header per RN-289.
 
@@ -141,13 +141,23 @@ IF task modifies an existing interface used by other tasks:
 IF task creates or modifies database schema:
   → MIGRATION
 
-IF task modifies wrangler.toml, env vars, or deploy config:
+IF task modifies env vars or runtime/deploy config (see the per-stack table below):
   → CONFIG
 
 IF task adds an entity that later tasks reference:
   → COUPLED if later tasks are committed
   → SAFE if later tasks are NOT yet committed
 ```
+
+### Per-stack examples
+
+Stack-agnostic rules above; the commands come from the Stack Profile (`CLAUDE.md` ## SDD Stack Profile) or the kit.
+
+| Category | rails | nextjs-prisma | workers (example) |
+|----------|-------|---------------|-------------------|
+| `MIGRATION` recovery | `bin/rails db:rollback` before the revert | add a down migration; `prisma migrate reset` only on a dev DB (`db_reset_safe: yes`) | the migration's down script |
+| `CONFIG` files | `config/*.rb`, `config/credentials*`, `.env*` → restart the server | `next.config.*`, `.env*` → rebuild and restart | `wrangler.toml` bindings → redeploy |
+| Wiring (usually `COUPLED`) | `config/routes.rb`, `db/schema.rb`, layouts | `src/app/layout.tsx`, `prisma/schema.prisma` | `src/index.ts` |
 
 ### Revert Entry Format
 
@@ -156,6 +166,8 @@ IF task adds an entity that later tasks reference:
   - Revert with: {specific tasks if COUPLED}
   - Recovery: {steps after revert, e.g., "run down migration"}
 ```
+
+**Compact format** (`--compact` / `task_format: compact`): SAFE tasks omit the Revert line — an absent Revert line means SAFE. COUPLED, MIGRATION and CONFIG are always written.
 
 ### Examples
 
@@ -173,14 +185,14 @@ IF task adds an entity that later tasks reference:
 **MIGRATION revert:**
 ```markdown
 - **Revert:** MIGRATION — users table will be dropped
-  - Recovery: run `wrangler d1 execute DB --command "DROP TABLE users"` before revert
+  - Recovery: roll the migration back before reverting (e.g. rails `bin/rails db:rollback`; see Per-stack examples)
   - Data loss: existing user records will be lost
 ```
 
 **CONFIG revert:**
 ```markdown
-- **Revert:** CONFIG — KV namespace binding removed from wrangler.toml
-  - Recovery: redeploy after revert to remove stale binding
+- **Revert:** CONFIG — cache store binding removed from the deploy config
+  - Recovery: restart / redeploy after revert to drop the stale binding
 ```
 
 ---
@@ -193,13 +205,10 @@ Checkpoints are git tags placed at stable points within a FASE's implementation.
 
 | After Phase | Tag Format | Verification |
 |------------|------------|-------------|
-| Setup complete | `fase-{N}-setup` | Project builds |
-| Foundation complete | `fase-{N}-foundation` | Smoke tests pass |
-| Domain complete | `fase-{N}-domain` | Domain unit tests pass |
-| Contracts complete | `fase-{N}-contracts` | Contract tests pass |
-| Integration complete | `fase-{N}-integration` | Integration tests pass |
-| Tests complete | `fase-{N}-tests` | Full test suite green |
+| Setup + Foundation complete | `fase-{N}-foundation` | Smoke tests pass (branch point of every Stream worktree) |
 | Verification complete | `fase-{N}-verified` | All FASE criteria met |
+
+Only these two are created, and only in the main checkout (V-17); Stream worktrees never tag.
 
 ### Checkpoint Commands
 

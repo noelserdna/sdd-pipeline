@@ -90,12 +90,12 @@ Herramientas laterales (opcionales):
 WRONG: "Implement user authentication" (multiple files, multiple concerns)
 WRONG: "Setup project" (too broad, not atomic)
 
-RIGHT: "Create User entity schema in src/domain/user.ts"
-RIGHT: "Add authentication middleware in src/middleware/auth.ts"
-RIGHT: "Register auth routes in src/routes/auth.ts"
+RIGHT: "Create task (API-001-01), test-first" — one behaviour, all its paths on the task line
+RIGHT: "Add authentication middleware"
+RIGHT: "Register task routes" — a wiring file shared by several slices
 ```
 
-Each task MUST be completable and committable independently. If a task requires other uncommitted work, those are **dependencies**, not parts of the same task.
+Each task MUST be completable and committable independently, with its tests written first inside it. If a task requires other uncommitted work, those are **dependencies**, not parts of the same task.
 
 ### 2. Reversibility by Design
 
@@ -119,7 +119,7 @@ WRONG: Massive tasks touching 10+ files (unreviewable diff)
 WRONG: Tasks without test verification steps
 
 RIGHT: Clear acceptance criteria per task
-RIGHT: Single-concern tasks (1-3 files typically)
+RIGHT: One behaviour per task (typically 1-6 files, all listed on the task line)
 RIGHT: Verification commands that a reviewer can run
 ```
 
@@ -176,8 +176,8 @@ TASK-F{N}-{SEQ}
 Tasks that can execute concurrently (different files, no shared state) are marked with `[P]`:
 
 ```
-- [ ] TASK-F0-005 [P] Create AuditLog entity schema
-- [ ] TASK-F0-006 [P] Create DomainEvent entity schema
+- [ ] TASK-F0-005 [P] Create AuditLog entity schema | `{code_path}/audit_log.{ext}`
+- [ ] TASK-F0-006 [P] Create DomainEvent entity schema | `{code_path}/domain_event.{ext}`
 ```
 
 ### Dependency Markers
@@ -185,10 +185,10 @@ Tasks that can execute concurrently (different files, no shared state) are marke
 Tasks that block other tasks use `blocks:` and `blocked-by:` annotations:
 
 ```
-- [ ] TASK-F0-001 Create project structure
+- [ ] TASK-F0-001 Scaffold the app with pinned dependencies | `{app_dir}/`
   - blocks: TASK-F0-002, TASK-F0-003
 
-- [ ] TASK-F0-002 Initialize Hono framework
+- [ ] TASK-F0-002 Configure the web framework per ADR-001 | `{framework config file}`
   - blocked-by: TASK-F0-001
 ```
 
@@ -202,7 +202,7 @@ Tasks that block other tasks use `blocks:` and `blocked-by:` annotations:
 /sdd-task-generator
 ```
 
-Generates tasks for ALL FASEs that have plan artifacts. With 2 or more FASEs this runs in **fan-out mode**: one agent per FASE writes its `task/TASK-FASE-{N}.md`, the main thread writes `TASK-INDEX.md` + `TASK-ORDER.md` and runs the global validations (Execution Strategy, `references/fanout-protocol.md`).
+Generates tasks for ALL FASEs that have plan artifacts. With 2 or more FASEs this runs in **fan-out mode**: one agent per FASE writes its `task/TASK-FASE-{N}.md`, the main thread writes `TASK-ORDER.md` (+ `TASK-INDEX.md` in full format), runs `sdd-task-lint.mjs lint` (V-19) and the global validations (Execution Strategy, `references/fanout-protocol.md`).
 
 ### Mode 2: Per-FASE Generation
 
@@ -244,10 +244,10 @@ Generates only new or changed tasks for a single FASE, preserving already-comple
 **Behavior:**
 
 1. **Diff against existing tasks:** Compare the regenerated FASE plan (`plan/fase-plans/PLAN-FASE-{N}.md`) against the existing `task/TASK-FASE-{N}.md`.
-2. **Preserve completed tasks:** Tasks already marked as done (`[x]`) or that have not changed are left untouched. Already-completed tasks are NEVER regenerated.
+2. **Preserve completed tasks:** Tasks already done or unchanged are left untouched and NEVER regenerated. Done = `[x]` with `task_state: checkbox` (default); with `task_state: trailers`, `done` in `node "$TASK_LINT" status --fase N --json` (a `Task:` trailer reachable from HEAD, not reverted).
 3. **Generate delta only:** Only produce task entries for new plan items or plan items whose scope/acceptance criteria changed since the last generation.
 4. **Cascade traceability:** Every new or modified task includes a `Source: CASCADE-{change-report-id}` annotation linking back to the `sdd-req-change` change report that triggered the regeneration.
-5. **Update indexes:** Append new tasks to `TASK-INDEX.md` and update `TASK-ORDER.md` dependency graph to incorporate the delta.
+5. **Update indexes:** Update the `TASK-ORDER.md` dependency graph with the delta; if `TASK-INDEX.md` is present, regenerate it with `node "$TASK_LINT" index > task/TASK-INDEX.md`.
 6. **Recompute Stream Ownership:** Re-run Phase 3b for the FASE over the full task set (existing + delta). A completed task keeps its Stream; if a new task would join two existing work Streams, it goes to `integración` and the conflict is reported (V-15/V-18).
 
 **Requirements:**
@@ -261,8 +261,11 @@ Generates only new or changed tasks for a single FASE, preserving already-comple
 |------|--------|
 | `--fanout` | Forces one agent per FASE regardless of the FASE count (useful for benchmarking) |
 | `--sequential` | Forces a single thread; the reason is recorded in `metrics.mode` and `summary.highlights` |
+| `--compact` | Compact output (same as `task_format: compact` in the Stack Profile; default `full`): no Review block, Revert only when not SAFE, no `TASK-INDEX.md`, short FASE header and `TASK-ORDER.md` (Per-FASE Task File Structure) |
 
 Default (no flag): fan-out with **2 or more FASEs**; sequential with one FASE, with `--fase N` (a single FASE is one unit of work) and with `--incremental`. `--regen` does not change the mode. Same vocabulary as `sdd-spec-auditor` and `sdd-test-planner`; the implementer's equivalent pair is `--parallel` / `--sequential` (`docs/perfilado.md` § Paralelismo por etapa).
+
+**Task lint script** — `TASK_LINT="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs"`, run with `node`: `lint [--dir task]` (V-19, V-09, V-05/V-06, V-16; prints `file:line V-xx message`, exit 1 on errors), `json` (task list), `status [--fase N] [--json]` (done = `Task:` trailer reachable from HEAD, not reverted; checkbox divergences), `index` (TASK-INDEX markdown). Stack Profile keys: `../sdd-task-implementer/references/stack-profile.md`.
 
 ---
 
@@ -272,7 +275,7 @@ All artifacts are written to `task/` directory:
 
 ```
 task/
-  TASK-INDEX.md          ← Global index: all tasks across all FASEs
+  TASK-INDEX.md          ← Global index (full format only; derived by `$TASK_LINT index`)
   TASK-ORDER.md          ← Implementation order with dependency graph
   TASK-FASE-0.md         ← Tasks for FASE 0
   TASK-FASE-1.md         ← Tasks for FASE 1
@@ -291,8 +294,8 @@ The full protocol is `references/fanout-protocol.md`. The rules that govern ever
 1. **Index before files.** Phase 0 builds `$PIDX` with one `grep -rn` over `plan/` (headings and table rows, cut at 110 chars). Everything else is opened by section (`sed -n 'a,bp'`, ≤ 60 lines per call) using the index line numbers. **Never `cat` a plan file in the main thread**; a file ≤ 8 k chars may be read whole only by the thread that owns it (sequential mode, or the agent of that FASE).
 2. **Budget.** The main thread holds at most ~25 k tokens of plan content (index summaries, the cross-cutting contract, the returned JSONs). Each FASE agent holds its own `FASE-{N}-*.md` + `PLAN-FASE-{N}.md` plus ≤ 200 lines of neighbour lookups.
 3. **Fan-out by default — it is part of the skill's contract, not an optional expansion of scope.** Invoking `/sdd-task-generator` on a plan with **2 or more FASEs** *is* the explicit request for the FASE agents: writing `TASK-FASE-{N}.md` is mechanical and the files are independent (no FASE file references another), so each agent is bounded to one FASE, writes exactly one file that no other agent writes, does not nest and does not commit. Never downgrade to sequential out of caution; downgrade only for the reasons in `references/fanout-protocol.md` §1 (a single FASE, `--fase N`, `--incremental`, `--sequential`, or no `Agent` tool), and record the reason in `metrics.mode` and `summary.highlights`. Agents run on `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`); consolidation and the global validations always use the main model. **Flags:** `--fanout` forces the FASE agents regardless of the count; `--sequential` forces one thread.
-4. **What stays in the main thread.** The cross-cutting contract is fixed *before* the fan-out (id format `TASK-F{N}-{SEQ}`, commit conventions, path conventions, glossary, templates, and each FASE's `## Módulos y Conjuntos de Escritura` table). Afterwards the main thread writes `TASK-INDEX.md` and `TASK-ORDER.md` — both global — and runs the **global validations V-04, V-09, V-11, V-15, V-16, V-17, V-18 over the returned JSON**, never by re-reading the generated task files. The FASE agents self-check only the FASE-local validations (V-01..V-03, V-05..V-08, V-10, V-12..V-14) and report them in `checks`.
-5. **Compact output.** Each agent returns a JSON of ≤ 8 000 chars (`references/fanout-protocol.md` §6) — task ids, write-sets, `blocked-by`, Streams, counts, checks, gaps — and never the body of its file. `TASK-INDEX.md` and `TASK-ORDER.md` are built from those JSONs.
+4. **What stays in the main thread.** The cross-cutting contract is fixed *before* the fan-out (id format `TASK-F{N}-{SEQ}`, commit conventions, path conventions, glossary, templates, and each FASE's `## Módulos y Conjuntos de Escritura` table). Afterwards the main thread writes `TASK-ORDER.md` (and, in full format, `TASK-INDEX.md` via `$TASK_LINT index`), runs the **global validations V-04, V-09, V-11, V-15, V-16, V-17, V-18 over the returned JSON** and **V-19 with `node "$TASK_LINT" lint --dir task`**, never by re-reading the generated task files. The FASE agents self-check only the FASE-local validations (V-01..V-03, V-05..V-08, V-10, V-12..V-14) and report them in `checks`.
+5. **Compact output.** Each agent returns a JSON of ≤ 8 000 chars (`references/fanout-protocol.md` §6) — task ids, write-sets, `blocked-by`, Streams, counts, checks, gaps — and never the body of its file. `TASK-ORDER.md` is built from those JSONs.
 
 ### Phase 0: Inventory & Validation
 
@@ -307,8 +310,10 @@ INPUTS TO READ:
 3. plan/ARCHITECTURE.md                     (architecture views)
 4. plan/PLAN.md                             (global plan)
 5. spec/domain/01-GLOSSARY.md               (ubiquitous language)
-6. task/TASK-INDEX.md                        (existing tasks if any)
+6. task/TASK-FASE-*.md                       (existing tasks if any: `node "$TASK_LINT" json`; TASK-INDEX.md only if present)
 7. pipeline-state.json                       (stage status, for G-04; absent = no staleness info)
+8. CLAUDE.md ## SDD Stack Profile            (task_format, task_state, app_dir, code_paths, test_paths;
+                                              kit templates/stacks/{stack}/kit.json → layers, wiring)
 ```
 
 **Validation Gates:**
@@ -323,7 +328,7 @@ INPUTS TO READ:
 
 > G-04 replaces the previous WARN: generating tasks from a stale plan would publish write-sets and Streams that no longer match the specs, and the implementer would branch worktrees from them. `spec-auditor` stale is covered transitively (the `sdd-req-change` cascade marks `plan-architect` stale whenever it marks `spec-auditor` stale).
 
-**Mode decision (after the gates, before opening any plan section):** count the FASE files and pick fanout or sequential per `references/fanout-protocol.md` §1. In fan-out mode, fix the cross-cutting contract now (`fanout-protocol.md` §4: id format, commit conventions, path conventions from `CLAUDE.md`, glossary terms, the `references/` templates, and each FASE's `## Módulos y Conjuntos de Escritura` table) and launch the FASE agents at the start of Phase 1 — Phases 1–7 then run inside them, one FASE each, while the main thread prepares the FASE dependency graph, the Waves, the MVP strategy and the delivery checkpoints for `TASK-ORDER.md`.
+**Mode decision (after the gates, before opening any plan section):** count the FASE files and pick fanout or sequential per `references/fanout-protocol.md` §1. In fan-out mode, fix the cross-cutting contract now (`fanout-protocol.md` §4: id format, commit conventions, path conventions from `CLAUDE.md` and its Stack Profile, the output format (`full`/`compact`), the kit `layers` and `wiring`, glossary terms, the `references/` templates, and each FASE's `## Módulos y Conjuntos de Escritura` table) and launch the FASE agents at the start of Phase 1 — Phases 1–7 then run inside them, one FASE each, while the main thread prepares the FASE dependency graph, the Waves, the MVP strategy and the delivery checkpoints for `TASK-ORDER.md`.
 
 > Phases 1–7 below are the generation steps; in fan-out mode each one is executed by the agent that owns the FASE (`fanout-protocol.md` §4) and the main thread runs only the cross-FASE work and Phase 8's global validations. In sequential mode the main thread runs all of them, FASE by FASE, collecting the same JSON shape of `fanout-protocol.md` §6 before writing the global files.
 
@@ -344,27 +349,25 @@ For each FASE, extract:
 **Goal:** Decompose plan sections into atomic tasks.
 
 For each PLAN-FASE-{N}.md, extract:
-1. **Components to build** → individual tasks per component
-2. **Data models** → entity creation tasks
-3. **API endpoints** → route + handler + validation tasks
-4. **Tests** → test creation tasks
-5. **Configuration** → config/setup tasks
-6. **Integration points** → wiring/integration tasks
+1. **Components to build** → tasks, grouped by behaviour
+2. **Data models** → inside the first slice that needs them; a Foundation task only when ≥ 2 slices share them
+3. **API operations** (`API-NNN-NN`; transport in `design/OPERATION-MAPPING.md` when present) → one vertical slice each
+4. **Tests** (§7 + Coverage Map §7.4) → inside the task that implements the covered code, written first
+5. **Configuration** → setup tasks, one per concern
+6. **Integration points** → wiring tasks
 
-**Decomposition Rules:**
+**Decomposition Rules** (examples are illustrative):
 
 | Concern | Task Granularity | Example |
 |---------|-----------------|---------|
-| Entity/Model | 1 task per entity | "Create Organization entity" |
-| API Endpoint | 1 task per route-group | "Implement /api/v1/health endpoints" |
-| Middleware | 1 task per middleware | "Add rate limiting middleware" |
-| Service | 1 task per service class | "Implement EncryptionService" |
-| Migration | 1 task per schema change | "Create users table migration" |
-| Test file | **1 task per source file** that needs tests (from Coverage Map §7.4) | "Add unit tests for call-analyzer.step.ts" |
-| Config | 1 task per config concern | "Configure Cloudflare Workers environment" |
-| Integration | 1 task per integration | "Wire event bus to audit logger" |
+| Setup / config | 1 task per concern; **merge trivial steps of the same concern** (scaffold + pinned deps + generator init) | "Scaffold the app with pinned dependencies" |
+| Entity / model | Inside its first slice; own Foundation task only when shared by ≥ 2 slices | "Create Task model with title invariants" |
+| API operation | **1 vertical slice per operation**, layers in the kit `layers` order (rails: migration → model → controller → views; nextjs-prisma: schema → domain/data → server actions → components/page; no kit: `plan/ARCHITECTURE.md`) | "Create task (API-001-01), test-first" |
+| Middleware / cross-cutting | 1 task per concern | "Add 404/503 error handling" |
+| Tests | **Inside the implementing task** (test first, same commit). Separate test tasks only for cross-Stream suites, BDD/E2E journeys and Coverage Map exclusions verified elsewhere | "Journey WF-001 end to end" |
+| Wiring | 1 task per shared entry point touched by ≥ 2 slices (kit `wiring` list) | "Register task routes" |
 
-**Size Heuristic:** If a task would touch more than 3 files, split it. If a task description exceeds 2 sentences, it may be too broad.
+**Size Heuristic:** split a task above **6 files** or **2 API operations** (V-08 warns above 8); two trivially related operations sharing all their files may share one slice. A description over 2 sentences may be too broad.
 
 ### Phase 3: Dependency Resolution
 
@@ -393,13 +396,13 @@ For each PLAN-FASE-{N}.md, extract:
 
 **Phase Ordering Within Each FASE:**
 
-1. **Setup Phase**: Project structure, dependencies, configuration
-2. **Foundation Phase**: Shared infrastructure (DB schemas, middleware, base classes)
-3. **Domain Phase**: Entities, value objects, domain services
-4. **Contract Phase**: API routes, handlers, event schemas
-5. **Integration Phase**: Wiring, event handlers, background jobs
-6. **Test Phase**: Unit tests, integration tests, BDD scenarios
-7. **Verification Phase**: End-to-end validation, checkpoint
+1. **Setup**: scaffold, dependencies, configuration (merged per concern)
+2. **Foundation**: shared infrastructure used by ≥ 2 slices (schema, base layout, error handling, shared models)
+3. **Slices**: one vertical slice per API operation / behaviour, test-first inside, kit `layers` order
+4. **Integration**: wiring touching ≥ 2 slices (routes table, layout, navigation, barrels)
+5. **Verification**: cross-Stream suites, BDD/E2E journeys, FASE Criterios de Éxito, checkpoint
+
+Legacy labels are accepted when reading existing files: Domain and Contracts count as Slices, Tests as Verification (a test task covering one Stream joins it, Phase 3b step 5).
 
 ### Phase 3b: Stream Assignment
 
@@ -415,18 +418,20 @@ For each PLAN-FASE-{N}.md, extract:
    - The implementer tags the last base commit with checkpoint `fase-{N}-foundation`
      (branch point of every worktree of this FASE).
 
-2. Work graph G over the tasks of Domain (3), Contracts (4), Integration (5)
-   and any other internal phase between Foundation and Tests:
+2. Work graph G over the tasks of Slices (3) and Integration (4)
+   (legacy: Domain, Contracts, Integration and single-Stream Tests):
    - node  = task
    - edge(A, B) if write-set(A) ∩ write-set(B) ≠ ∅
                 or A is `blocked-by` B (or B is `blocked-by` A)
    - connected components of G → candidate Streams
 
 3. Wiring extraction (repeat until no candidate passes):
-   - Candidate: a task whose write-set contains a shared entry point / index / barrel
-     (`src/index.ts`, `src/app.ts`, `src/routes/index.ts`, `migrations/index.*`,
-     any `index.ts` re-exporting ≥ 2 directories) or whose `blocked-by` list spans
-     ≥ 2 top-level source directories.
+   - Candidate: a task whose write-set contains a shared entry point / index / barrel:
+     every path of the kit / Stack Profile `wiring` list, prefixed by `app_dir`
+     (rails: `config/routes.rb`, `db/schema.rb`, `app/views/layouts/application.html.erb`;
+     nextjs-prisma: `src/app/layout.tsx`, `prisma/schema.prisma`), or, without a kit,
+     `src/index.ts`, `src/app.ts`, `src/routes/index.ts`, `migrations/index.*`, any barrel
+     re-exporting ≥ 2 directories; or a task whose `blocked-by` spans ≥ 2 top-level source directories.
    - Test: remove the candidate from G. If the tasks it was connected to now fall into
      ≥ 2 components, the candidate touches ≥ 2 components → it leaves its component
      and goes to Stream `integración` (main checkout, after `--integrate --fase N`).
@@ -436,13 +441,11 @@ For each PLAN-FASE-{N}.md, extract:
 4. Letter the remaining components A, B, C… by task count, largest first
    (tie → the component containing the lowest task ID).
 
-5. Tests (internal phase 6):
-   - A test task whose test files cover source files of exactly ONE work Stream
-     (Coverage Map §7.4 Source → Test) joins that Stream; its test paths are added
-     to the Stream's Owns.
-   - Any other test task (integration/BDD/e2e across Streams) → Stream `verificación`.
+5. Tests live inside their slice and follow it. A separate test task (legacy, or an exclusion)
+   whose test files cover source files of exactly ONE work Stream (Coverage Map §7.4) joins that
+   Stream, its test paths added to the Owns; any other one → Stream `verificación`.
 
-6. Verification (internal phase 7) → Stream `verificación` (main checkout, implementer Phase 9).
+6. Verification (internal phase 5) → Stream `verificación` (main checkout, implementer Phase 9).
    Rollback checkpoints belong to the main checkout only: `fase-{N}-foundation` after the
    last base task and `fase-{N}-verified` after Verification. Worktrees never create tags.
 ```
@@ -453,7 +456,7 @@ For each PLAN-FASE-{N}.md, extract:
 
 **Single-Stream FASE:** a FASE whose work graph yields one component is valid. The table is written the same way (base + A + integración/verificación) and `TASK-ORDER.md` marks it `Streams: serial`.
 
-**Stream Ownership table** (mandatory in every `TASK-FASE-{N}.md`, right after "Parallel Execution Plan"; it replaces the former free-text Stream lists — do NOT add new markers to the task lines):
+**Stream Ownership table** (mandatory in every `TASK-FASE-{N}.md`, right after "Parallel Execution Plan"; it replaces the former free-text Stream lists — do NOT add new markers to the task lines; example paths):
 
 ```markdown
 ## Stream Ownership
@@ -482,20 +485,7 @@ Refs: {FASE}, {UC/ADR/INV references}
 Task: {TASK-ID}
 ```
 
-**Types:**
-
-| Type | Use For |
-|------|---------|
-| `feat` | New functionality (endpoints, services, entities) |
-| `fix` | Bug fixes found during implementation |
-| `refactor` | Restructuring without behavior change |
-| `test` | Adding or modifying tests |
-| `chore` | Configuration, build, tooling |
-| `docs` | Documentation only changes |
-| `ci` | CI/CD pipeline changes |
-| `perf` | Performance improvements |
-
-**Scope:** Module or bounded context name from FASE. Examples: `auth`, `extraction`, `matching`, `gdpr`, `admin`.
+**Types and scopes:** `references/commit-conventions.md` (`feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `ci`, `perf`, `style`; scope = the FASE's module or bounded context, e.g. `auth`, `tasks`).
 
 **Examples:**
 
@@ -505,7 +495,7 @@ feat(auth): add rate limiting middleware
 Refs: FASE-0, ADR-025, INV-SEC-003
 Task: TASK-F0-012
 
-chore(bootstrap): configure Cloudflare Workers environment
+chore(bootstrap): scaffold app with pinned dependencies
 
 Refs: FASE-0, ADR-036
 Task: TASK-F0-001
@@ -531,6 +521,8 @@ For each task, generate:
 - Requires coordinated revert with: {list of coupled tasks, if any}
 ```
 
+**Compact format:** write the `- **Revert:**` line only when the category is not SAFE; an absent Revert line means SAFE (V-07).
+
 **Revert Safety Categories:**
 
 | Category | Meaning | Action |
@@ -544,7 +536,7 @@ For each task, generate:
 
 **Goal:** Generate per-task review checklist for human reviewers.
 
-Every task includes a review checklist following this pattern:
+Every task includes a review checklist following this pattern (full format; compact omits the Review block and reviewers use `references/review-checklist.md`):
 
 ```markdown
 **Review Checklist:**
@@ -557,18 +549,7 @@ Every task includes a review checklist following this pattern:
 - [ ] {domain-specific checks based on task type}
 ```
 
-**Domain-Specific Review Items** (added per task type):
-
-| Task Type | Additional Review Items |
-|-----------|----------------------|
-| Entity | Schema matches spec/domain/02-ENTITIES.md |
-| API Endpoint | Contract matches spec/contracts/*.md |
-| Middleware | Rate limits match spec/nfr/LIMITS.md |
-| Migration | Has reversible down() function |
-| Event | Schema matches spec/contracts/EVENTS-domain.md |
-| Test | Covers acceptance criteria from FASE file |
-| PII-related | Encryption follows ADR-002 |
-| Multi-tenant | Tenant isolation enforced (INV-SYS-001) |
+**Domain-Specific Review Items** per task type (entity, API operation, migration, event, PII, multi-tenant, test): `references/review-checklist.md`.
 
 ### Phase 7: Document Generation
 
@@ -579,7 +560,7 @@ Generate documents using templates from `references/`:
 | Artifact | Written by | Content |
 |----------|-----------|---------|
 | **Per-FASE task file** (`TASK-FASE-{N}.md`) | the FASE agent (fan-out) or the main thread (sequential) | All tasks for one FASE, including the `## Stream Ownership` table from Phase 3b and the Rollback Checkpoints |
-| **Global index** (`TASK-INDEX.md`) | **always the main thread** | Summary of all tasks across FASEs, flat task list, traceability matrix — built from the returned JSON (`fanout-protocol.md` §6), never by re-reading the task files |
+| **Global index** (`TASK-INDEX.md`, full format only) | **always the main thread** | `node "$TASK_LINT" index > task/TASK-INDEX.md`: Summary by FASE, flat task list, traceability matrix from Refs — derived, never hand-written |
 | **Implementation order** (`TASK-ORDER.md`) | **always the main thread** | FASE dependency graph, Waves, critical path, one `Streams:` line per FASE, Cross-FASE Dependencies with the Stream of every task, MVP strategy, delivery checkpoints |
 
 A FASE agent writes **only** its own `TASK-FASE-{N}.md`: it never writes the two global files, never `pipeline-state.json`, never `spec/` or `plan/`, and never sends a handoff.
@@ -598,18 +579,19 @@ A FASE agent writes **only** its own `TASK-FASE-{N}.md`: it never writes the two
 | V-04 | No circular dependencies in task graph | ERROR |
 | V-05 | Every task has a commit message | ERROR |
 | V-06 | Every task has acceptance criteria | ERROR |
-| V-07 | Every task has a revert strategy | WARN |
-| V-08 | No task touches more than 5 files | WARN |
+| V-07 | Every task has a revert strategy (compact: absent Revert = SAFE) | WARN |
+| V-08 | No task touches more than 8 files (split rule: > 6 files or > 2 API operations) | WARN |
 | V-09 | All task IDs follow TASK-F{N}-{SEQ} format | ERROR |
 | V-10 | Task count per FASE is reasonable (5-80 tasks) | WARN |
 | V-11 | Critical path identified in TASK-ORDER.md | ERROR |
 | V-12 | All file paths use project conventions from CLAUDE.md | WARN |
-| V-13 | Every source file in Coverage Map §7.4 has a corresponding test task | ERROR |
+| V-13 | Every source file in Coverage Map §7.4 has its test inside the implementing task (test path on its line / `Files:`), in a cross-Stream test task, or an exclusion | ERROR |
 | V-14 | Every file in Coverage Map Exclusions has a justified reason | WARN |
 | V-15 | Write-sets of the work Streams (A, B, C…) are pairwise disjoint (no file, no glob overlap) | ERROR |
 | V-16 | Every task belongs to exactly one Stream (`base`, A…Z, `integración`, `verificación`); no task missing from the table, none listed twice | ERROR |
 | V-17 | Verification-phase tasks and rollback checkpoints appear only in Stream `verificación` / the main checkout; no checkpoint is assigned to a worktree Stream | ERROR |
 | V-18 | Every `blocked-by` of a Stream task points to the same Stream, to `base`, or to a task of an earlier FASE | WARN |
+| V-19 | Every task line matches the grammar (Per-FASE Task File Structure); no `### TASK-` headings, no `**TASK-…**` ids | ERROR |
 
 **Who runs which check.** The FASE-local checks are self-checked by the thread that generated the FASE (a FASE agent in fan-out mode) and reported in its `checks` field; the **global checks stay in the main thread and are computed from the returned JSON**, because they span FASEs or would otherwise let an agent grade its own homework:
 
@@ -620,180 +602,42 @@ A FASE agent writes **only** its own `TASK-FASE-{N}.md`: it never writes the two
 
 V-15..V-18 are computed from the Stream data of each FASE (the `## Stream Ownership` table, returned as `streams[]` in the JSON). `--audit` recomputes the table (Phase 3b) from the current task write-sets — one agent per FASE above the threshold, same JSON — compares it with the published one in the main thread, and reports both the drift and any V-15..V-18 finding without writing anything.
 
+**V-19 is mechanical:** once the FASE files exist, the main thread runs `node "$TASK_LINT" lint --dir task` (it also re-checks V-05, V-06, V-09 and V-16 on the files) and edits only the lines it reports — never regenerates a FASE for it. `--audit` runs it read-only.
+
 ---
 
 ## Per-FASE Task File Structure
 
-Every `TASK-FASE-{N}.md` follows this canonical structure:
+Templates: `references/task-template.md` (full and compact). Both formats share the task-line grammar and the `## Stream Ownership` / `### Rollback Checkpoints` tables that `sdd-task-implementer` parses.
+
+**Task line grammar (V-19, normative).** One line per task at column 0; continuation lines indented two spaces:
 
 ```markdown
-# Tasks: FASE-{N} - {Title}
-
-> **Input:** plan/fases/FASE-{N}-{slug}.md + plan/PLAN-FASE-{N}.md
-> **Generated:** {YYYY-MM-DD}
-> **Total tasks:** {count}
-> **Parallel capacity:** {number of work Streams from Stream Ownership}
-> **Critical path:** {count} tasks, ~{estimate}
-
----
-
-## Summary
-
-| Metric | Value |
-|--------|-------|
-| Total tasks | {N} |
-| Parallelizable | {N} ({%}) |
-| Work Streams | {N} (A: {n} tasks, B: {n} tasks) |
-| Setup phase | {N} tasks |
-| Foundation phase | {N} tasks |
-| Domain phase | {N} tasks |
-| Contract phase | {N} tasks |
-| Integration phase | {N} tasks |
-| Test phase | {N} tasks |
-| Verification phase | {N} tasks |
-
-## Traceability
-
-| Spec Reference | Task Coverage |
-|---------------|---------------|
-| UC-001 | TASK-F{N}-{X}, TASK-F{N}-{Y} |
-| ADR-002 | TASK-F{N}-{Z} |
-| INV-SEC-001 | TASK-F{N}-{W} |
-| REQ-EXT-001 | TASK-F{N}-{V} |
-
----
-
-## Phase 1: Setup
-
-**Purpose:** Project structure, dependencies, configuration.
-**Checkpoint:** Project initializes and builds successfully.
-
-- [ ] TASK-F{N}-001 [P] {Description} | `{file_path}`
-  - **Commit:** `chore({scope}): {message}`
-  - **Acceptance:** {criteria}
-  - **Refs:** {FASE, UC, ADR, INV, REQ}
-  - **Revert:** SAFE | {impact}
-  - **Review:** [ ] compiles [ ] follows glossary [ ] {domain-specific}
-
----
-
-## Phase 2: Foundation
-
-**Purpose:** Shared infrastructure blocking all subsequent phases.
-**Checkpoint:** Foundation services pass smoke tests.
-
-...
-
-## Phase 3: Domain
-
-**Purpose:** Entities, value objects, domain logic.
-**Checkpoint:** Domain model unit tests pass.
-
-...
-
-## Phase 4: Contracts
-
-**Purpose:** API endpoints, event schemas, handlers.
-**Checkpoint:** Contract tests pass against spec.
-
-...
-
-## Phase 5: Integration
-
-**Purpose:** Wiring, event handlers, cross-cutting concerns.
-**Checkpoint:** Integration tests pass.
-
-...
-
-## Phase 6: Tests
-
-**Purpose:** Remaining test coverage (BDD, property, e2e).
-**Checkpoint:** All test suites green.
-
-...
-
-## Phase 7: Verification
-
-**Purpose:** End-to-end validation against FASE Criterios de Exito.
-**Checkpoint:** All FASE acceptance criteria verified.
-
-- [ ] TASK-F{N}-{LAST} Verify all FASE-{N} Criterios de Exito
-  - **Commit:** `test({scope}): verify FASE-{N} acceptance criteria`
-  - **Acceptance:** All criteria from FASE-{N} marked as passing
-  - **Refs:** FASE-{N}
-  - **Revert:** SAFE
-  - **Review:** [ ] all criteria checked [ ] evidence documented
-
----
-
-## Dependencies
-
-### Task Dependency Graph
-
-{Mermaid or text-based dependency graph}
-
-### Critical Path
-
-{Sequence of tasks on the critical path}
-
-### Parallel Execution Plan
-
-{One line per work Stream: what it delivers; the task lists live in the table below}
-
-## Stream Ownership
-
-| Stream | Tasks | Owns (write-set) | Runs in |
-|--------|-------|------------------|---------|
-| base | {TASK-F{N}-001, ...} | {exact paths} | main checkout, before worktrees (checkpoint `fase-{N}-foundation`) |
-| A | {tasks} | {globs} | worktree `feat/fase-{N}-a` |
-| B | {tasks} | {globs} | worktree `feat/fase-{N}-b` |
-| integración | {tasks or —} | {exact paths or —} | main checkout, after `--integrate --fase {N}` |
-| verificación | {TASK-F{N}-{LAST}} | — | main checkout, Phase 9 |
-
-### Rollback Checkpoints
-
-| Checkpoint | After Task | Tag | Runs in |
-|-----------|------------|-----|---------|
-| Foundation | {last base task} | `fase-{N}-foundation` | main checkout |
-| Verified | TASK-F{N}-{LAST} | `fase-{N}-verified` | main checkout |
+- [ ] TASK-F{N}-{SEQ} [P] {Description} | `{path}`, `{path}`
+  - blocked-by: TASK-F{N}-{SEQ}, …                     (optional)
+  - **Files:** `{path}`, …                             (optional; extra write-set)
+  - **Commit:** `{type}({scope}): {message}`
+  - **Acceptance:** {criteria; the test written first comes first; nested bullets indented four spaces}
+  - **Refs:** FASE-{N}, {UC, API, INV, ADR, REQ}
+  - **Revert:** {SAFE|COUPLED|MIGRATION|CONFIG} — {impact}  (compact: only when not SAFE)
+  - **Review:** [ ] {check} [ ] {check}                 (full format only)
 ```
 
+```text
+^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$
+```
+
+`[ ]` pending · `[x]` done (checkbox state) · `[!]` blocked. Forbidden: `### TASK-…` headings, `**TASK-…**` bold ids, indented task lines, paths outside backticks; a `[PLAN GAP]` line may omit the path (WARN). Commit trailers stay `Refs:` + `Task: TASK-F{N}-{SEQ}`.
+
+**Full format** (default), in order: header (`> **Input:**`, `> **Total tasks:**`, `> **Parallel capacity:**`, `> **Critical path:**`), `## Summary`, `## Traceability`, one `## Phase N: {Setup|Foundation|Slices|Integration|Verification}` section per internal phase (Purpose + Checkpoint, then its task lines; Verification ends with the Test Exclusions table), `## Dependencies` (Task Dependency Graph, Critical Path, Parallel Execution Plan), `## Stream Ownership`, `### Rollback Checkpoints`.
+
+**Compact format** (`--compact` or `task_format: compact`): `# Tasks: FASE-{N} — {Title}`, one `> **Critical path:** …` line, `## Stream Ownership`, `### Rollback Checkpoints`, then `## Setup` … `## Verification` with task lines only — no Summary, Traceability, dependency graph, Parallel Execution Plan or Review blocks; Revert only when not SAFE. Derived views come from `$TASK_LINT json|index|status`.
+
 ---
 
-## TASK-INDEX.md Structure
+## TASK-INDEX.md
 
-```markdown
-# Task Index
-
-> **Generated:** {YYYY-MM-DD}
-> **Total tasks:** {count across all FASEs}
-> **FASEs covered:** {list}
-
-## Summary by FASE
-
-| FASE | Title | Tasks | Parallelizable | Status |
-|------|-------|-------|---------------|--------|
-| FASE-0 | Bootstrap Tecnico | 45 | 18 (40%) | pending |
-| FASE-1 | Extraccion PDF | 38 | 15 (39%) | pending |
-| ... | ... | ... | ... | ... |
-
-## All Tasks (Flat List)
-
-| ID | FASE | Phase | Description | Parallel | Status |
-|----|------|-------|-------------|----------|--------|
-| TASK-F0-001 | 0 | Setup | Create project structure | - | [ ] |
-| TASK-F0-002 | 0 | Setup | Initialize Hono framework | - | [ ] |
-| TASK-F0-003 | 0 | Foundation | Create base D1 schema | [P] | [ ] |
-| ... | ... | ... | ... | ... | ... |
-
-## Traceability Matrix
-
-| Spec | Tasks |
-|------|-------|
-| UC-001 | TASK-F1-005, TASK-F1-006, TASK-F1-012 |
-| UC-002 | TASK-F1-015, TASK-F1-016 |
-| ... | ... |
-```
+Full format only, always derived: `node "$TASK_LINT" index > task/TASK-INDEX.md` (Summary by FASE, flat task list, traceability matrix from the Refs lines). Compact format writes no index; consumers call `index` or `json`. Its absence is never an inconsistency.
 
 ---
 
@@ -855,6 +699,8 @@ Every `TASK-FASE-{N}.md` follows this canonical structure:
 
 **`Streams:` line rules:** one per FASE, inside its Wave entry. Format `Streams: base(n) → A(n) ∥ B(n) [∥ C(n)…] → integración(n) → verificación(n)` with the task count of each Stream in parentheses (a Stream with no tasks is written `integración(0)`). When the FASE has a single work Stream, write exactly `Streams: serial`. In Cross-FASE Dependencies, every task carries its Stream in parentheses.
 
+**Compact format:** `TASK-ORDER.md` ≤ 1 500 chars — keep `## FASE Dependency Graph` (one line per FASE), one Wave entry per FASE with its `Critical path:` and `Streams:` lines, and Cross-FASE Dependencies only when non-empty; drop MVP Strategy and Incremental Delivery Checkpoints. V-11 and `--audit` read only what is kept.
+
 ---
 
 ## Multi-Agent Strategy
@@ -873,8 +719,8 @@ Main thread (before):  gates G-01..G-05 · plan index · cross-cutting contract
    → JSON (tasks, write-sets, blocked-by, Streams, counts, checks, gaps)
         └─────────────────────┼─────────────────────┘
                               │
-Main thread (after):   V-04 · V-09 · V-11 · V-15..V-18 over the JSONs
-                       TASK-INDEX.md (flat list + traceability matrix)
+Main thread (after):   V-04 · V-09 · V-11 · V-15..V-18 over the JSONs · V-19 (sdd-task-lint.mjs lint)
+                       TASK-INDEX.md (full format: sdd-task-lint.mjs index)
                        TASK-ORDER.md (Waves, Streams: lines, Cross-FASE Dependencies, MVP)
                        Persist Summary (metrics.mode, metrics.task_agents)
 ```
@@ -883,8 +729,8 @@ Main thread (after):   V-04 · V-09 · V-11 · V-15..V-18 over the JSONs
 |---|---|---|
 | Unit | one FASE | the whole plan |
 | Reads | `plan/fases/FASE-{N}-*.md`, `plan/fase-plans/PLAN-FASE-{N}.md`, the ARCHITECTURE and `spec/` sections it cites | the plan index, the FASE `Dependencias` lines, the returned JSONs |
-| Writes | only `task/TASK-FASE-{N}.md` | `task/TASK-INDEX.md`, `task/TASK-ORDER.md`, `pipeline-state.json` |
-| Validations | the FASE-local ones (V-01..V-03, V-05..V-08, V-10, V-12..V-14), reported in `checks` | the global ones (V-04, V-09, V-11, V-15..V-18) |
+| Writes | only `task/TASK-FASE-{N}.md` | `task/TASK-ORDER.md`, `task/TASK-INDEX.md` (full), `pipeline-state.json`, V-19 line fixes |
+| Validations | the FASE-local ones (V-01..V-03, V-05..V-08, V-10, V-12..V-14), reported in `checks` | the global ones (V-04, V-09, V-11, V-15..V-19) |
 | Model | `sonnet` (omit when `CLAUDE_CODE_SUBAGENT_MODEL` is set) | the session's own model |
 | Never | writes another FASE's file, the global files, `spec/`, `plan/` or `pipeline-state.json`; nests agents; commits; sends a handoff | re-generates a FASE that has an agent, or re-reads a task file it can read from the JSON |
 
@@ -947,16 +793,7 @@ main (or feat/fase-{N})
 
 ### Revert Workflow
 
-```bash
-# Revert a single task
-git revert <sha-of-TASK-F0-012> --no-edit
-
-# Revert a phase within a FASE (e.g., all Integration tasks)
-git revert <sha-last-integration-task>..<sha-first-integration-task> --no-edit
-
-# Revert entire FASE (if on feature branch, just delete branch)
-git branch -D feat/fase-0
-```
+Single task: `git revert <sha> --no-edit`; COUPLED tasks in reverse commit order; checkpoints and whole-FASE rollback: `references/commit-conventions.md`.
 
 ---
 
@@ -965,7 +802,7 @@ git branch -D feat/fase-0
 | Artifact | Path | Overwrites |
 |----------|------|------------|
 | Per-FASE tasks | `task/TASK-FASE-{N}.md` | Yes (regenerated) |
-| Global index | `task/TASK-INDEX.md` | Yes (regenerated) |
+| Global index (full format) | `task/TASK-INDEX.md` | Yes (derived by `$TASK_LINT index`) |
 | Implementation order | `task/TASK-ORDER.md` | Yes (regenerated) |
 
 **NEVER modify:**
@@ -980,21 +817,20 @@ git branch -D feat/fase-0
 ### Good Task
 
 ```markdown
-- [ ] TASK-F0-012 Add rate limiting middleware | `src/middleware/rate-limiter.ts`
-  - **Commit:** `feat(auth): add rate limiting middleware`
+- [ ] TASK-F1-006 Create task (API-001-01) with server-side title validation, test-first | `test/controllers/tasks_controller_test.rb`, `app/controllers/tasks_controller.rb`, `app/views/tasks/_form.html.erb`
+  - blocked-by: TASK-F1-002
+  - **Commit:** `feat(tasks): create task with server-side title validation`
   - **Acceptance:**
-    - Burst limit: 100 req/min/session (ADR-025)
-    - Sustained limit: 1000 req/h/user (ADR-025)
-    - Returns 429 with Retry-After header (RN-289)
-    - Uses Cloudflare KV for counter storage (ADR-036)
-  - **Refs:** FASE-0, ADR-025, INV-SEC-003, REQ-NFR-042
-  - **Revert:** SAFE — endpoints work without rate limiting (less secure)
+    - Test first: a blank title answers 422 and re-renders the form with the alert (AC-001-02)
+    - A valid title redirects to the list with the task last (INV-TSK-004)
+  - **Refs:** FASE-1, UC-001, API-001-01, INV-TSK-002
+  - **Revert:** SAFE — the create form disappears; list and other operations keep working
   - **Review:**
-    - [ ] Limits match ADR-025 values exactly
-    - [ ] 429 response includes Retry-After header
-    - [ ] KV namespace configured
-    - [ ] Tenant isolation maintained (INV-SYS-001)
+    - [ ] The controller test failed before the action existed (Art. 8)
+    - [ ] Status, redirect and message match API-001-01 / `design/OPERATION-MAPPING.md`
 ```
+
+(Illustrative Rails slice; paths come from the Stack Profile and the kit `layers`.)
 
 ### Bad Task
 
@@ -1013,7 +849,8 @@ git branch -D feat/fase-0
 | "No plan artifacts found" | Plan architect not run | Run `sdd-plan-architect` |
 | "FASE references spec not in plan" | Plan incomplete | Run `sdd-plan-architect --fase {N}` |
 | "Circular dependency detected" | Task ordering error | Review dependency annotations |
-| "Task touches >5 files" | Task too broad | Split into smaller tasks |
+| "Task touches >8 files" (V-08) | Task too broad | Split by API operation or by layer (> 6 files) |
+| "Task line does not match grammar" (V-19) | Heading, bold id or missing write-set path | Rewrite only the lines `$TASK_LINT lint` prints |
 | "Orphan task (no FASE)" | Task lost traceability | Assign to correct FASE or remove |
 | "Plan is stale" (G-04) | `sdd-req-change` cascade marked `plan-architect` stale | Run `sdd-plan-architect` (affected FASEs), then regenerate tasks |
 | "Shared file between Streams" (V-15) | Two work Streams write the same file | Move the shared file's task to `integración`, or merge the two Streams |
@@ -1034,7 +871,7 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["task-generator"].lastRun` = current ISO-8601
 4. Set `stages["task-generator"].summary`:
    - `artifacts`: list of files created in `task/` with labels (e.g., `{"file": "task/TASK-FASE-1.md", "label": "FASE 1 Tasks"}`)
-   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N, "streamsPerFase": { "1": 2, "2": 1 }, "mode": "fanout"|"sequential", "task_agents": N }`
+   - `metrics`: `{ "total_tasks": N, "parallelizable_pct": N, "safe_revert": N, "coupled_revert": N, "streamsPerFase": { "1": 2, "2": 1 }, "mode": "fanout"|"sequential", "task_agents": N, "format": "full"|"compact" }`
      - `streamsPerFase` = number of work Streams A, B, C… per FASE; `1` = serial
      - `mode` = execution mode actually used (`fanout` even when one FASE had to be regenerated sequentially after two agent failures — say so in `highlights`)
      - `task_agents` = number of FASE agents actually launched (`0` in sequential mode); this is the number the status line and `scripts/sdd-watch.sh` show live as `N agentes` while the skill runs (`docs/multisesion.md`)

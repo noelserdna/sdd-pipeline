@@ -100,8 +100,8 @@ DEF_PATTERNS = [
     ("FASE", re.compile(r'^(#{1,6})\s+(FASE-\d{1,2})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # TASK: ### TASK-F0-001: title  or  ### [x] TASK-F0-001: title  or  ### ✅ TASK-F0-001: title
     ("TASK", re.compile(r'^(#{1,6})\s+(?:\[[ x]\]\s*)?(?:✅\s*)?(TASK-F\d{1,2}-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
-    # TASK in checkbox list: - [ ] TASK-F1-009 description  or  - [x] TASK-F1-009 description
-    ("TASK", re.compile(r'^(\s*-\s*\[[ x]\])\s+(TASK-F\d{1,2}-\d{3,4})\s+(.*)', re.IGNORECASE)),
+    # TASK in checkbox list: - [ ] TASK-F1-009 description | `path`  ·  - [x] / - [!] (blocked)  ·  legacy bold id - [ ] **TASK-F1-009** description
+    ("TASK", re.compile(r'^(\s*-\s*\[[ x!]\])\s+\**(TASK-F\d{1,2}-\d{3,4})\**\s+(.*?)(?:\s+\|\s+`.*)?$', re.IGNORECASE)),
 ]
 
 # Filename-based definitions: extract from filenames like UC-001-extract-pdf.md, ADR-001-hybrid.md, WF-001-xxx.md
@@ -115,6 +115,8 @@ FILENAME_PATTERNS = [
 
 # Table-based definitions: | REQ-XXX-001 | ... | or | INV-XXX-001 | ... |
 TABLE_DEF_PATTERNS = [
+    # Operation rows of a contract (Style: operations or http): | API-001-01 | Crear tarea | ...
+    ("API", re.compile(r'^\s*\|\s*(API-\d{3,4}-\d{2})\s*\|')),
     ("REQ", re.compile(r'\|\s*(REQ-[A-Z]+-\d{3,4}[a-z]?)\s*\|')),
     ("REQ", re.compile(r'\|\s*(REQ-\d{3,4})\s*\|')),
     ("INV", re.compile(r'\|\s*(INV-[A-Z]+-\d{3,4})\s*\|')),
@@ -131,6 +133,7 @@ REF_PATTERN = re.compile(
     r'|UC-\d{3,4}'
     r'|WF-\d{3,4}'
     r'|API-[a-zA-Z][a-zA-Z0-9-]*'
+    r'|API-\d{3,4}(?:-\d{2})?'
     r'|BDD-[a-zA-Z0-9][a-zA-Z0-9-]*'
     r'|INV-[A-Z]*-?\d{3,4}'
     r'|ADR-\d{3,4}'

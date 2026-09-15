@@ -182,7 +182,7 @@ Launch 3 background agents simultaneously:
 3. `Skill: sdd-pipeline:sdd-task-generator` → task/
 4. `Skill: sdd-pipeline:sdd-task-implementer` → **ALL FASEs** via dedicated agents
    - Commit with Refs: and Task: trailers
-   - Mark checkboxes [x]
+   - Mark checkboxes [x] (with `task_state: trailers` in the SDD Stack Profile checkboxes are not edited: verify with `sdd-task-lint.mjs status`)
    - Run unit tests after each FASE
 
 After each step: verify artifacts, count IDs, check pipeline-state, log to AUDIT-LOG.
@@ -190,7 +190,7 @@ After Phase 3: invoke A1 (constitution check).
 
 ### Phase 3b: Multi-session (worktrees, roles, handoffs)
 1. Run `bash <plugin-root>/tests/e2e/30-multisession.sh` (no model needed) and record the result
-2. Verify `task/TASK-FASE-1.md` has a **Stream Ownership** table and `task/TASK-ORDER.md` a `Streams:` line per FASE (V-15..V-18)
+2. Verify `task/TASK-FASE-1.md` has a **Stream Ownership** table and `task/TASK-ORDER.md` a `Streams:` line per FASE (V-15..V-18), and run `node <plugin-root>/scripts/sdd-task-lint.mjs lint --dir task` (V-19 task-line grammar). `task/TASK-INDEX.md` is optional (absent in compact format; `sdd-task-lint.mjs index` derives it) — its absence is not a finding
 3. If FASE-1 has ≥ 2 streams: implement them in two worktrees (`git worktree add ../<proj>-f1a -b feat/fase-1-a fase-1-foundation`, `--fase 1 --stream A` / `--stream B`), then `--integrate --fase 1` in the main checkout; log merges, conflicts in `task/TASK-FASE-1.md`, PAUSEs and `.sdd/bench/BENCH-FASE-1.md` (`scripts/sdd-bench.sh --fase 1`)
 4. Verify `sdd-lead` Status mode reads `.claude/sdd-sessions.json` + `pipeline-state.json` without live sessions (no messages are sent during the audit)
 

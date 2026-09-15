@@ -51,7 +51,7 @@ for s in A B; do
   w="$WA"; [ "$s" = "B" ] && w="$WB"
   n=$(git -C "$w" log "fase-$N-foundation..HEAD" --format=%B | grep -c "^Task: TASK-F$N-" || true)
   [ "$n" -gt 0 ] && ok "stream $s: $n commits con Task:" || bad "stream $s sin commits con Task:"
-  x=$(grep -c '^- \[x\] TASK-' "$w/task/TASK-FASE-$N.md" || true); echo "     stream $s: $x tasks marcadas en su worktree"
+  x=$(node "$ROOT/scripts/sdd-task-lint.mjs" status --repo "$w" --fase "$N" --json 2>/dev/null | jq -r '"\(.summary.done) hechas por trailer, \(.summary.divergences) divergencias"' 2>/dev/null) || x="status no disponible"; echo "     stream $s: $x en su worktree"
   git -C "$w" tag -l "fase-$N-*" | grep -qv "fase-$N-foundation" && bad "stream $s creó tags" || ok "stream $s no creó tags"
 done
 jq -e . pipeline-state.json >/dev/null && ok "pipeline-state.json válido tras dos streams concurrentes" || bad "pipeline-state.json corrupto"
@@ -60,7 +60,8 @@ jq -e . pipeline-state.json >/dev/null && ok "pipeline-state.json válido tras d
 # 4. integrar en el principal
 run "integrate" "$DIR" "sdd-lead" "/sdd-task-implementer --integrate --fase $N — merge feat/fase-$N-a and feat/fase-$N-b with --no-ff, run the integración and verificación tasks, verify, tag fase-$N-verified, persist summary. Without asking questions; take recommended options. If a merge conflict appears, resolve it keeping both [x] marks in task/TASK-FASE-$N.md."
 for b in "feat/fase-$N-a" "feat/fase-$N-b"; do git branch --merged HEAD | grep -q "$b" && ok "$b integrada" || bad "$b no integrada"; done
-[ "$(grep -c '^- \[x\] TASK-' "task/TASK-FASE-$N.md")" = "$(grep -c '^- \[[ x]\] TASK-' "task/TASK-FASE-$N.md")" ] && ok "todas las tasks de FASE-$N marcadas" || echo "WARN quedan tasks sin marcar: $(grep -c '^- \[ \] TASK-' "task/TASK-FASE-$N.md")"
+node "$ROOT/scripts/sdd-task-lint.mjs" lint --dir task >/dev/null 2>&1 && ok "sdd-task-lint lint tras integrar" || bad "sdd-task-lint lint tras integrar (conflicto mal resuelto en task/TASK-FASE-$N.md?)"
+if st_out=$(node "$ROOT/scripts/sdd-task-lint.mjs" status --fase "$N" --require-done 2>&1); then ok "todas las tasks de FASE-$N hechas (trailers Task:)"; else echo "WARN quedan tasks sin hacer: $(printf '%s\n' "$st_out" | tail -1)"; fi
 dup=$(git log HEAD --format='%(trailers:key=Task,valueonly)' | sed '/^$/d' | sort | uniq -d | wc -l | tr -d ' '); [ "$dup" = "0" ] && ok "sin Task: duplicados" || bad "$dup Task: duplicados"
 git tag -l "fase-$N-verified" | grep -q . && ok "tag fase-$N-verified" || echo "WARN sin tag fase-$N-verified"
 (npm test --silent 2>&1 | tail -3) || echo "WARN npm test falló"

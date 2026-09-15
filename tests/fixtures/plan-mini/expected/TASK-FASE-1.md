@@ -190,7 +190,7 @@ Files excluded from unit test coverage (from PLAN-FASE §7.4 Exclusions):
 **Purpose:** End-to-end validation against FASE Criterios de Exito.
 **Checkpoint:** All FASE acceptance criteria verified.
 
-- [ ] TASK-F1-009 Verify all FASE-1 Criterios de Exito
+- [ ] TASK-F1-009 Verify all FASE-1 Criterios de Exito | `src/`
   - blocked-by: TASK-F1-008
   - **Commit:** `test(mini): verify FASE-1 acceptance criteria`
   - **Acceptance:** All 4 criteria from FASE-1 marked as verified (`curl /health`, `ping`, `--help`, build + test green)

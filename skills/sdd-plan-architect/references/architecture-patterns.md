@@ -46,7 +46,7 @@ C4 (Context, Containers, Components, Code) is a hierarchical approach to softwar
 - Technologies labeled on each container
 - Communication protocols on arrows
 
-**ASCII Convention:**
+**ASCII Convention** (example stack — label each container with the technologies of the ADRs / Stack Profile, e.g. `[Web app] (Rails 8)` → `[DB] (SQLite)`):
 
 ```
 [Browser SPA]                    [API Worker]
@@ -101,7 +101,7 @@ C4 (Context, Containers, Components, Code) is a hierarchical approach to softwar
 
 ## 2. Deployment Patterns
 
-### 2.1 Serverless Edge (Cloudflare Workers)
+### 2.1 Serverless Edge (example: Cloudflare Workers)
 
 ```
                     ┌─ Edge Location A ─┐
@@ -302,7 +302,7 @@ Request
 
 | Anti-Pattern | Why It's Bad | Alternative |
 |-------------|-------------|-------------|
-| Shared mutable state | Workers are stateless | Use D1/KV/R2 |
+| Shared mutable state in process memory | Serverless and multi-process servers do not share memory | Keep state in the database / cache store |
 | Cross-module DB access | Breaks module boundaries | Use module interfaces |
 | Catching all errors silently | Hides bugs | Let errors propagate, handle at boundary |
 | Tenant filter in handler | Easy to forget | Enforce in middleware/repository |

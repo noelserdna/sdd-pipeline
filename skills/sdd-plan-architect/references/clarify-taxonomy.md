@@ -26,6 +26,7 @@ For each category, specs are classified as:
 3. **No hard limit**: Present questions until critical dimensions are covered (user can terminate early)
 4. **One at a time**: Present ONE question with recommended answer + alternatives
 5. **Early termination**: Accept "done", "proceed", "skip" to end clarify phase
+6. **"Recomendado" must be grounded**: mark an option `(Recomendado)` only when it is consistent with an ADR, the `## SDD Stack Profile` of CLAUDE.md, or an installed kit (`templates/stacks/{stack}`); cite that source in **Contexto**. With none of them, list the options without a recommended mark. The recommended marks in the templates below are placeholders, not defaults
 
 ---
 
@@ -107,23 +108,26 @@ Missing or incomplete technology choices for implementation: languages, framewor
 SCAN FOR:
 - ADR with tag "technology" or "stack" or "framework" → Resolved
 - CLAUDE.md "Active Technologies" section → Resolved
+- CLAUDE.md `## SDD Stack Profile` with `stack:` other than `none` → Resolved (language, framework and commands)
 - FASE files mentioning specific technologies → Partial
 - Specs referencing technology without selection → Missing
 - [DECISION PENDIENTE] related to tech choices → Missing
 
 SKIP IF:
 - ADR exists selecting language + framework + runtime
-- CLAUDE.md has "Active Technologies" with specific versions
+- CLAUDE.md has "Active Technologies" with specific versions, or a Stack Profile / installed kit fixing the stack
 ```
 
 ### Context-Aware Checks
 
 1. Read all ADR files with `technology|stack|framework|runtime|language` in content
-2. Read CLAUDE.md for "Active Technologies" section
+2. Read CLAUDE.md for "Active Technologies" and `## SDD Stack Profile`; if `stack` names a kit, read `templates/stacks/{stack}/kit.json`
 3. Read FASE-0 (bootstrap) for technology decisions
 4. Read nfr/ for technology constraints (compatibility, licensing)
 
 ### Question Templates
+
+`(Recomendado)` goes only on the option that matches an ADR, the Stack Profile or an installed kit (Rule 6); otherwise no option carries it.
 
 ```markdown
 **CL-TECH-001: Primary Language & Runtime**
@@ -132,25 +136,26 @@ lenguaje/runtime de implementación.
 
 | Opción | Descripción |
 |--------|-------------|
-| TypeScript + Node.js (Recomendado) | Alineado con ecosystem Cloudflare Workers |
-| TypeScript + Deno | Alternative runtime with built-in TypeScript |
+| Ruby + Rails | Full-stack server-rendered, convenciones fuertes, kit `rails` |
+| TypeScript + Node.js (Next.js App Router) | Full-stack React con server actions, kit `nextjs-prisma` |
+| TypeScript + Cloudflare Workers | Edge/serverless, sin estado en proceso |
 | Go | Performance-oriented, strong typing |
-| Rust + WASM | Maximum performance on Workers |
 
-**Contexto:** [ADRs encontrados], [tecnologías ya decididas]
+**Contexto:** [ADRs encontrados], [Stack Profile / kit], [tecnologías ya decididas]
 ```
 
 ```markdown
-**CL-TECH-002: HTTP Framework**
-Los contratos API definen {N} endpoints pero no hay selección de framework HTTP.
+**CL-TECH-002: Web / HTTP Framework**
+Los contratos definen {N} operaciones (API-NNN-NN) pero no hay selección de framework.
 
 | Opción | Descripción |
 |--------|-------------|
-| Hono (Recomendado) | Lightweight, Workers-native, TypeScript-first |
-| itty-router | Minimal, Workers-optimized |
-| Express (vía adapter) | Familiar but heavier |
+| Rails (controllers + ERB, Hotwire) | Rutas REST, formularios con fallback sin JS, Minitest |
+| Next.js App Router (server actions + route handlers) | Formularios con server actions, React Server Components |
+| Hono | Lightweight, Workers-native, TypeScript-first |
+| Express / Fastify | Node clásico, API JSON |
 
-**Contexto:** [runtime seleccionado], [constraints de plataforma]
+**Contexto:** [runtime seleccionado], [Stack Profile / kit], [constraints de plataforma]
 ```
 
 ---
@@ -598,8 +603,9 @@ El spec define BDD scenarios y property tests pero no selecciona framework.
 
 | Opción | Descripción |
 |--------|-------------|
-| Vitest (Recomendado) | Fast, ESM-native, Workers-compatible |
-| Jest + miniflare | Popular, needs config for Workers |
+| Minitest (Rails default) | Built into Rails: fixtures, controller and system tests |
+| Vitest | Fast, ESM-native; Next.js, Node and Workers |
+| Jest | Popular, broad ecosystem |
 | Node test runner | Zero-dep, built-in, limited features |
 
 **Contexto:** [test types defined], [runtime], [BDD scenario count]
@@ -754,6 +760,6 @@ Before generating a question:
 
 | Category | Status | Evidence |
 |----------|--------|----------|
-| CL-TECH | Resolved | ADR-001 (TypeScript + Hono), CLAUDE.md Active Technologies |
-| CL-DATA | Partial | ADR selects D1/R2 but no migration strategy |
+| CL-TECH | Resolved | ADR-001 (Ruby + Rails), CLAUDE.md ## SDD Stack Profile (`stack: rails`) |
+| CL-DATA | Partial | ADR selects SQLite but no migration strategy |
 ```

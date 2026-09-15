@@ -55,15 +55,15 @@
 
 ## Article 7 — One Task, One Atomic Commit
 
-**Principle:** Each task produces exactly one commit. The commit includes only the files listed in the task, uses the prescribed Conventional Commit message, and carries Refs/Task trailers. The system must remain functional after every commit.
+**Principle:** Each task produces exactly one commit. The commit includes only the files listed in the task — the backticked paths of the task line plus its `Files:` bullet — uses the prescribed Conventional Commit message, and carries Refs/Task trailers. A vertical slice may span several paths (e.g. migration, model, controller, view and their test) as long as all of them are listed. The system must remain functional after every commit, and every task declares how it reverts (SAFE/COUPLED/MIGRATION/CONFIG); in compact task format an absent Revert line means SAFE.
 
 **Rationale:** Atomic commits enable safe reverts, bisect debugging, and clear audit trails from code back to specs.
 
-**Enforced by:** `sdd-task-implementer` (Phase 7 commit protocol), `sdd-task-generator` (defines commit messages and file scope per task).
+**Enforced by:** `sdd-task-implementer` (Phase 7 commit protocol), `sdd-task-generator` (defines commit messages and file scope per task; V-19 task-line grammar checked by `scripts/sdd-task-lint.mjs`).
 
 ## Article 8 — Test-First Construction
 
-**Principle:** Tests are written before implementation. Each test derives from a spec acceptance criterion, invariant, or exception flow. Tests that pass without implementation are themselves defects.
+**Principle:** Tests are written before implementation, inside the same task that implements the behavior, and are committed with it. Each test derives from a spec acceptance criterion, invariant, or exception flow. Tests that pass without implementation are themselves defects. A test-only task scheduled after the code it covers contradicts this article; separate test tasks exist only for cross-Stream suites, BDD/E2E journeys and justified Coverage Map exclusions.
 
 **Rationale:** Test-first construction proves the spec is implementable and catches spec defects at the earliest possible moment (SWEBOK v4 Ch04 S4.16).
 

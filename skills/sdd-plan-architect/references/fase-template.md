@@ -127,6 +127,8 @@ Consumed by `sdd-task-generator` (Phase 3b Stream Assignment) to derive the work
 | Integración | — | `tests/e2e/**`, `tests/perf/**`, `.github/workflows/ci.yml` | código de producción | A, B |
 ```
 
+Example paths (Node layout). Use the project's `code_paths` / `test_paths` from the Stack Profile; the kit's `wiring` files (e.g. rails `config/routes.rb`, `db/schema.rb`; nextjs-prisma `prisma/schema.prisma`, `src/app/layout.tsx`) belong to `base` or `Integración`. Each block's write-set includes its tests (tests are written inside the task that implements the code).
+
 A FASE with a single block still writes the table (one work row) so the generator marks it `Streams: serial`.
 
 ### 6. Contenido Específico (OPTIONAL)
@@ -189,8 +191,9 @@ Routes/pages are framework-specific (`+page.svelte`, `page.tsx`, …). Each page
 ## Verificación
 
 \```bash
-npm run test:unit -- tests/unit/api      # A: PROP-001..011 green; src/api ≥ 90 %
-curl -X POST /api/v1/{path}              # 201 + {schema}
+{test_file with block A's test files}    # A: PROP-001..011 green  (Stack Profile `test_file`; `coverage` if not none)
+{acceptance}                             # Smoke + Critical green  (Stack Profile `acceptance`, against `server` on `port`)
+curl -X POST http://127.0.0.1:{port}/{route}   # {status} + {schema} (route/verb per design/OPERATION-MAPPING.md)
 \```
 
 \```markdown

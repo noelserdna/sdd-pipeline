@@ -23,12 +23,12 @@ For each stage marked as `done`, verify the expected output artifacts actually e
 | Stage | Expected Artifacts |
 |-------|-------------------|
 | requirements-engineer | `requirements/REQUIREMENTS.md` |
-| specifications-engineer | `spec/` with at least: `domain-model.md`, `use-cases.md`, `workflows.md`, `contracts.md`, `nfr.md` |
+| specifications-engineer | `spec/` with at least: `domain/` (e.g. `domain/01-GLOSSARY.md`), `use-cases/UC-*.md`, `contracts/`, `nfr/`, and `workflows/WF-*.md` when the requirements define user journeys |
 | spec-auditor | `audits/AUDIT-BASELINE.md` |
 | test-planner | `test/TEST-PLAN.md`, `test/TEST-MATRIX-*.md` |
 | plan-architect | `plan/PLAN.md`, `plan/ARCHITECTURE.md`, `plan/fases/FASE-*.md` |
-| task-generator | `task/TASK-FASE-*.md`, `task/TASK-INDEX.md` |
-| task-implementer | `src/` and/or `tests/` with implementation files |
+| task-generator | `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` (`task/TASK-INDEX.md` is optional: absent with `task_format: compact` — never INCONSISTENT) |
+| task-implementer | implementation files under the SDD Stack Profile `code_paths`/`test_paths` (default `src/`, `tests/`) |
 
 Flag any stage marked `done` whose artifacts are missing as **INCONSISTENT**.
 

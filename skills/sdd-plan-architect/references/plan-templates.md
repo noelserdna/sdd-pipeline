@@ -34,18 +34,19 @@ Budget ≤ 12 000 chars. Technology rows are `aspect · decision · reference` (
 
 | Aspect | Decision | Reference |
 |--------|----------|-----------|
-| Runtime | {e.g., Cloudflare Workers} | {ADR-xxx} |
-| Language | {e.g., TypeScript 5.x} | {ADR-xxx} |
-| HTTP Framework | {e.g., Hono} | {ADR-xxx} |
-| Build Tool | {e.g., Wrangler} | {ADR-xxx} |
+| Stack profile | {`stack: rails` · `nextjs-prisma` · … from `CLAUDE.md` ## SDD Stack Profile; kit `templates/stacks/{stack}` if installed; `none`} | {CLAUDE.md / ADR-xxx} |
+| Runtime | {e.g., Ruby 3.4 · Node 22 · Cloudflare Workers} | {ADR-xxx} |
+| Language | {e.g., Ruby · TypeScript 5.x} | {ADR-xxx} |
+| Web / HTTP Framework | {e.g., Rails 8 · Next.js App Router · Hono} | {ADR-xxx} |
+| Build / Test Tool | {Stack Profile `build` / `test`, e.g. `bin/rails test` · `npm test`} | {ADR-xxx} |
 
 ### 2.2 Storage
 
 | Store | Technology | Purpose | Reference |
 |-------|-----------|---------|-----------|
-| Primary DB | {e.g., Cloudflare D1} | Relational data | {ADR-xxx} |
-| Object Store | {e.g., Cloudflare R2} | PDF/document storage | {ADR-xxx} |
-| Cache/KV | {e.g., Cloudflare KV} | Rate limiting, sessions | {ADR-xxx} |
+| Primary DB | {e.g., SQLite · PostgreSQL · Cloudflare D1} | Relational data | {ADR-xxx} |
+| Object Store | {e.g., local disk · S3 · R2} | {e.g., document storage} | {ADR-xxx} |
+| Cache/KV | {e.g., Solid Cache · Redis · KV} | {e.g., rate limiting, sessions} | {ADR-xxx} |
 
 ### 2.3 External Integrations
 
@@ -186,9 +187,10 @@ Budget ≤ 10 000 chars. Decisions are cited by id (`ADR-NNN`, `D-PA-NNN`, `RES-
 
 | Aspect | Decision | Ref |
 |--------|----------|-----|
-| Runtime / language | {e.g. Node ≥ 18, TypeScript 5.x} | ADR-001 |
-| Topology | {e.g. modular monolith, one Worker} | ADR-xxx |
-| Storage | {e.g. D1 + R2; JSON file with atomic rename} | ADR-xxx |
+| Stack profile | {`stack:` of CLAUDE.md ## SDD Stack Profile · kit `templates/stacks/{stack}` · none} | CLAUDE.md |
+| Runtime / language | {e.g. Ruby 3.4 + Rails 8 · Node 22 + Next.js App Router · TypeScript on Workers} | ADR-001 |
+| Topology | {e.g. modular monolith, one deployable} | ADR-xxx |
+| Storage | {e.g. SQLite · PostgreSQL · JSON file with atomic rename} | ADR-xxx |
 | Auth | {none | JWT + RBAC} | ADR-xxx / nfr/SECURITY.md |
 | Error model | {classes → HTTP status / exit codes} | ADR-xxx |
 | Plan-level | {decision taken by this skill} | D-PA-NNN / RES-NNN |
@@ -416,7 +418,7 @@ Budget ≤ 6 000 chars when no question was asked, + ≤ 1 200 per real question
 
 ## Template: PLAN-FASE-{N}.md (Per-FASE Plan)
 
-Budget ≤ 9 000 chars. Signatures, not bodies; ids, not assertions. §7.4 Coverage Map keeps its exact format — it is consumed by `sdd-task-generator` (one test task per row, V-13/V-14) and by `sdd-task-implementer` (CHECK-COV).
+Budget ≤ 9 000 chars. Signatures, not bodies; ids, not assertions. §7.4 Coverage Map keeps its exact format — it is consumed by `sdd-task-generator` (each row's test goes inside the task that implements the source file, test-first; V-13/V-14) and by `sdd-task-implementer` (CHECK-COV).
 
 ```markdown
 # Implementation Plan — FASE-{N}: {FASE Title}
@@ -447,9 +449,9 @@ Budget ≤ 9 000 chars. Signatures, not bodies; ids, not assertions. §7.4 Cover
 
 **Responsibility:** {UC-/API-/INV-/RN- ids} · **Refs:** {ADR ids}
 
-```typescript
+```{language of the Stack Profile}
 // signatures derived from {contract id} — no bodies
-export function {name}({params}): {return};
+{signature, e.g. `def create(params)` · `export async function createTask(formData: FormData): Promise<void>`}
 ```
 
 **Notes (≤ 5, only what the contract does not say):**
@@ -461,9 +463,9 @@ export function {name}({params}): {return};
 
 ## 5. API Implementation Notes
 
-| Endpoint / function | Handler (file) | Middleware / validation | Note (≤ 80 chars) |
-|---------------------|----------------|-------------------------|--------------------|
-| {API id} | `{path}` | {auth, schema} | {note} |
+| API-op | Transport (see design/OPERATION-MAPPING.md) | Handler | Note (≤ 80 chars) |
+|--------|---------------------------------------------|---------|--------------------|
+| API-{NNN}-{NN} | {idiom · route / action · verb, e.g. `POST /tasks` form → 303} | `{path}#{action}` | {validation, auth, no-JS fallback} |
 
 ## 6. Data Changes
 
@@ -508,7 +510,7 @@ export function {name}({params}): {return};
 | {file_path} | {infrastructure wrapper / enum constant / tested via integration or E2E} |
 
 > Every source file with testable logic MUST appear in this table or in Exclusions.
-> This map drives task generation: each row becomes a test task.
+> This map drives task generation: each row is covered inside the task that implements the source file (test written first); only cross-Stream suites and BDD/E2E journeys become separate test tasks.
 
 ## 8. Dependencies on Shared Components
 

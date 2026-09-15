@@ -824,7 +824,7 @@ Genera: `plan/PLAN.md`, `plan/ARCHITECTURE.md`, `plan/fases/FASE-*.md`
 /sdd:task-generator
 ```
 
-Genera: `task/TASK-FASE-*.md`, `task/TASK-INDEX.md`, `task/TASK-ORDER.md`
+Genera: `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` y, en formato completo, `task/TASK-INDEX.md` (opcional desde 4.3.0: `scripts/sdd-task-lint.mjs index` lo deriva)
 
 ### Paso 7: Implementacion
 

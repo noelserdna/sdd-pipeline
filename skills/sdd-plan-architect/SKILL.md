@@ -80,7 +80,7 @@ Herramientas laterales (opcionales):
 
 ```
 ❌ "¿Qué lenguaje usarán?" (cuando ADR-001 ya lo define)
-❌ "¿Qué base de datos?" (cuando CLAUDE.md ya lista D1)
+❌ "¿Qué base de datos?" (cuando CLAUDE.md o su Stack Profile ya la fijan)
 ❌ Preguntar sobre algo ya decidido en specs
 
 ✅ Leer ADRs, CLAUDE.md, CLARIFICATIONS.md ANTES de generar preguntas
@@ -269,7 +269,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 2. **Context lines** (open by section from the index):
    - `spec/00-OVERVIEW.md` / `01-SYSTEM-CONTEXT.md` → system statement, actors, bounded contexts (heading + first table)
    - `spec/CLARIFICATIONS.md` → RN ids + titles only (`grep -n -E '^#+ *RN-|^\| *RN-'`); open an RN only when you cite it
-   - `CLAUDE.md` (all levels) → "Active Technologies" / constraints section only
+   - `CLAUDE.md` (all levels) → "Active Technologies" / constraints section and `## SDD Stack Profile` (stack, app_dir, paths, commands — `skills/sdd-task-implementer/references/stack-profile.md`) only; with a `stack` whose kit exists (`templates/stacks/{stack}/kit.json`), read its `layers` and `wiring`
    - `spec/domain/01-GLOSSARY.md` → term list, never the definitions
 
 3. **ADRs** — per file: title, `Status`, the `## Decision` block (≤ 15 lines). Not Context / Alternatives / Consequences.
@@ -561,7 +561,7 @@ Runs only Phase 3 (Technical Research). Requires existing CLARIFY-LOG.md with NE
 For each category:
 1. Search ADRs for relevant keywords
 2. Search CLARIFICATIONS.md for relevant RN-xxx rules
-3. Search CLAUDE.md for "Active Technologies" and decisions
+3. Search CLAUDE.md for "Active Technologies", the `## SDD Stack Profile` and decisions
 4. Search FASE-0 for bootstrap decisions
 5. If decision found → mark Resolved, skip question, log evidence
 
@@ -668,7 +668,7 @@ Generate using template from `references/plan-templates.md`:
    - From ADRs (authoritative)
    - From CLARIFY-LOG.md (session decisions)
    - From RESEARCH.md (research decisions)
-   - From CLAUDE.md (Active Technologies)
+   - From CLAUDE.md (Active Technologies, `## SDD Stack Profile`)
 
 2. **Component Decomposition** — Map bounded contexts to modules:
    - One module per bounded context (from 01-SYSTEM-CONTEXT.md)
