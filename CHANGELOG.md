@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-09-15
+
 Motivación: una carrera con la misma spec SDD implementada en paralelo con Next.js + Prisma y con Rails 8.1 (Sonnet 5, headless) terminó en empate, pero casi toda la fricción venía del propio pipeline: comandos npm/vitest fijos, rutas y códigos HTTP impuestos por las plantillas de contrato, tareas de test separadas del código, formato de tarea distinto en cada ejecución, subagentes para tareas triviales, hooks ciegos con la app en `web/` y un agente que fabricó el consentimiento de Prisma 12 veces.
 
 ### Added
