@@ -168,6 +168,94 @@ sdd_roots() {
   return 0
 }
 
+# ---------------------------------------------------------------- SDD Stack Profile
+# Sección `## SDD Stack Profile` del CLAUDE.md del proyecto (contrato v1): líneas `- clave: valor`
+# hasta el siguiente `## ` o EOF. Se busca en DIR/CLAUDE.md, DIR/.claude/CLAUDE.md y, si difiere,
+# en STATE_ROOT (checkout principal visto desde un worktree); gana el PRIMER fichero que tenga la
+# sección. Claves en minúsculas; valores recortados, tolera CRLF; el valor es todo lo que sigue a
+# los primeros `:` (admite `{}`, `&&`, comillas y más `:`). Encabezados dentro de ``` se ignoran.
+
+# sdd_profile_get KEY [DIR] → valor (vacío si no hay sección, clave o awk). DIR=${PROJECT_DIR}.
+sdd_profile_get() {
+  local key="${1:-}" dir="${2:-${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}}" files="" f
+  [ -n "$key" ] || return 0
+  command -v awk >/dev/null 2>&1 || return 0
+  for f in "$dir/CLAUDE.md" "$dir/.claude/CLAUDE.md" "${STATE_ROOT:-$dir}/CLAUDE.md" "${STATE_ROOT:-$dir}/.claude/CLAUDE.md"; do
+    [ -f "$f" ] || continue
+    case "
+$files" in *"
+$f"*) continue ;; esac
+    files="$files
+$f"
+  done
+  [ -n "$files" ] || return 0
+  # shellcheck disable=SC2086  # una ruta por línea: IFS de salto de línea abajo
+  (
+    IFS='
+'
+    set -f
+    awk -v want="$key" '
+      FNR == 1 { if (found) exit; insec = 0; fence = 0 }
+      { sub(/\r$/, "") }
+      /^[ \t]*```/ { fence = !fence; next }
+      fence { next }
+      /^## / {
+        if (insec) exit
+        h = $0; sub(/[ \t]+$/, "", h)
+        if (h == "## SDD Stack Profile") { insec = 1; found = 1 }
+        next
+      }
+      insec && /^[ \t]*-[ \t]/ {
+        line = $0; sub(/^[ \t]*-[ \t]+/, "", line)
+        i = index(line, ":"); if (i == 0) next
+        k = substr(line, 1, i - 1); gsub(/^[ \t]+|[ \t]+$/, "", k)
+        if (tolower(k) != want) next
+        v = substr(line, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v)
+        print v; exit
+      }
+    ' $files 2>/dev/null
+  ) || true
+  return 0
+}
+
+# sdd_is_code_path REL → 0 si REL (relativo al repo) está bajo alguna entrada de code_paths o
+# test_paths (listas separadas por comas). Sin sección o sin clave: code_paths=src, test_paths=tests
+# (comportamiento 4.2). Coincidencia literal por prefijo de directorio; se ignoran entradas vacías y `.`.
+sdd_is_code_path() {
+  local rel="${1:-}" code tests list entry
+  rel="${rel//\\//}"; rel="${rel#./}"
+  [ -n "$rel" ] || return 1
+  case "$rel" in /*|[A-Za-z]:/*) return 1 ;; esac
+  code=$(sdd_profile_get code_paths) || code=""
+  tests=$(sdd_profile_get test_paths) || tests=""
+  list="${code:-src},${tests:-tests},"
+  while [ -n "$list" ]; do
+    entry="${list%%,*}"; list="${list#*,}"
+    entry="${entry#"${entry%%[![:space:]]*}"}"; entry="${entry%"${entry##*[![:space:]]}"}"
+    entry="${entry//\\//}"; entry="${entry#./}"
+    while [ "${entry%/}" != "$entry" ]; do entry="${entry%/}"; done
+    case "$entry" in ''|.) continue ;; esac
+    case "$rel" in "$entry"|"$entry"/*) return 0 ;; esac
+  done
+  return 1
+}
+
+# sdd_is_impl_path REL → 0 si REL es código/test de implementación según el Stack Profile.
+# Los directorios de artefactos SDD no se pueden reclamar como código, salvo test/ (Minitest de
+# Rails con la app en la raíz): ahí solo los .md de primer nivel (TEST-PLAN.md, TEST-MATRIX-*.md,
+# E2E-SCENARIOS.md…) siguen siendo de test-planner; test/models/x_test.rb o test/test_helper.rb son
+# código si test_paths/code_paths los declaran.
+sdd_is_impl_path() {
+  local rel="${1:-}"
+  rel="${rel//\\//}"; rel="${rel#./}"
+  case "$rel" in
+    requirements/*|spec/*|audits/*|design/*|ux/*|plan/*|task/*|feedback/*|changes/*) return 1 ;;
+    test/*/*) ;;
+    test/*.md|test/*.MD) return 1 ;;
+  esac
+  sdd_is_code_path "$rel"
+}
+
 # ---------------------------------------------------------------- lock portable
 # sdd_lock FILE: crea FILE.lock con mkdir (atómico). 50 reintentos × 0,1 s (SDD_LOCK_RETRIES
 # lo ajusta); un lock con más de 60 s se considera huérfano y se rompe. Devuelve 1 si no

@@ -24,6 +24,68 @@ const path = require("path");
 
 let cachedGraph = null;
 let cachedIndex = null;
+// Project root (parent of dashboard/) and app_dir from the SDD Stack Profile, set by loadGraph
+let profileCtx = { root: "", appDir: "" };
+
+// ---------------------------------------------------------------------------
+// SDD Stack Profile (CLAUDE.md "## SDD Stack Profile", `- key: value` lines)
+// Same contract as sdd_profile_get in hooks/lib/sdd-common.sh; no dependencies.
+// ---------------------------------------------------------------------------
+
+function readProfileKey(root, key) {
+  for (const rel of ["CLAUDE.md", path.join(".claude", "CLAUDE.md")]) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(root, rel), "utf-8");
+    } catch {
+      continue;
+    }
+    let inSection = false;
+    let found = false;
+    let fence = false;
+    for (const raw of text.split("\n")) {
+      const line = raw.replace(/\r$/, "");
+      if (/^[ \t]*```/.test(line)) { fence = !fence; continue; }
+      if (fence) continue;
+      if (/^## /.test(line)) {
+        if (inSection) break;
+        if (line.replace(/[ \t]+$/, "") === "## SDD Stack Profile") inSection = found = true;
+        continue;
+      }
+      if (!inSection) continue;
+      const m = line.match(/^[ \t]*-[ \t]+([^:]*):(.*)$/);
+      if (m && m[1].trim().toLowerCase() === key) return m[2].trim();
+    }
+    if (found) return "";
+  }
+  return "";
+}
+
+function normAppDir(v) {
+  const d = (v || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  return d === "." ? "" : d;
+}
+
+// Repo-relative key without the app_dir/ prefix: /root/web/app/x.rb, web/app/x.rb and app/x.rb
+// (app_dir web) all become app/x.rb. Absolute paths outside the root stay absolute.
+function projectKey(p) {
+  if (!p) return "";
+  let k = p.replace(/\\/g, "/");
+  if (profileCtx.root) {
+    const r = profileCtx.root.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+    if (k.startsWith(r)) k = k.slice(r.length);
+  }
+  k = k.replace(/^\.\//, "");
+  const app = profileCtx.appDir;
+  if (app && k.startsWith(app + "/")) k = k.slice(app.length + 1);
+  return k;
+}
+
+function sameProjectFile(a, b) {
+  if (!profileCtx.appDir) return false;
+  const ka = projectKey(a);
+  return !!ka && !ka.startsWith("/") && ka === projectKey(b);
+}
 
 function findGraphFile(startDir) {
   let dir = startDir;
@@ -68,6 +130,9 @@ function loadGraph(cwd) {
       if (!relByTarget.has(rel.target)) relByTarget.set(rel.target, []);
       relByTarget.get(rel.target).push(rel);
     }
+
+    const root = path.dirname(path.dirname(graphPath));
+    profileCtx = { root, appDir: normAppDir(readProfileKey(root, "app_dir")) };
 
     cachedGraph = graph;
     cachedIndex = { byId, codeRefsByFile, relBySource, relByTarget };
@@ -172,7 +237,7 @@ function matchByFile(filePath, index) {
 
   // Direct code ref match
   for (const [file, refs] of index.codeRefsByFile) {
-    if (norm.includes(file) || file.includes(norm.replace(/^.*?src\//, "src/"))) {
+    if (norm.includes(file) || file.includes(norm.replace(/^.*?src\//, "src/")) || sameProjectFile(norm, file)) {
       for (const { artifact, ref } of refs) {
         results.push({ artifact, ref, matchType: "codeRef" });
       }
@@ -220,7 +285,10 @@ function findSymbolsForFile(filePath, codeIntel) {
   if (!codeIntel || !codeIntel.symbols) return [];
   const norm = filePath.replace(/\\/g, "/");
   return codeIntel.symbols.filter(
-    (s) => norm.includes(s.filePath) || s.filePath.includes(norm.replace(/^.*?src\//, "src/"))
+    (s) =>
+      norm.includes(s.filePath) ||
+      s.filePath.includes(norm.replace(/^.*?src\//, "src/")) ||
+      sameProjectFile(norm, s.filePath)
   );
 }
 

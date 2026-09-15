@@ -13,6 +13,9 @@
 #   - spec-auditor (Mode Fix): spec/ is allowed (by design)
 #   - task-implementer: Edit on task/TASK-FASE-*.md is allowed (checkbox updates)
 #                       Write on task/* is blocked (full overwrite protection)
+#                       test/* is allowed when it is implementation code declared in the SDD Stack
+#                       Profile of CLAUDE.md (code_paths/test_paths, e.g. Rails Minitest `test` at
+#                       repo root); top-level test/*.md (TEST-PLAN.md, TEST-MATRIX-*...) stays denied
 #   - req-change: requirements/ and spec/ are allowed (lateral skill)
 #   - Always allowed (infrastructure, not pipeline artifacts): pipeline-state.json, .sdd/*,
 #     changes/*, feedback/*, .claude/hooks/*, .claude/settings*.json, .claude/agents/*,
@@ -142,7 +145,13 @@ is_prohibited() {
       ;;
     task-implementer)
       case "$path" in
-        requirements/*|spec/*|audits/*|test/*|plan/*) return 0 ;;
+        test/*)
+          # test/ declared as code/tests in the SDD Stack Profile (Rails Minitest at repo root):
+          # test/models/x_test.rb is implementation; top-level test/*.md docs stay protected.
+          sdd_is_impl_path "$path" && return 1
+          return 0
+          ;;
+        requirements/*|spec/*|audits/*|plan/*) return 0 ;;
         task/TASK-FASE-*.md)
           # Allow Edit (checkbox updates), block Write (full overwrite)
           [ "$tool" = "Write" ] && return 0

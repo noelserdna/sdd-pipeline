@@ -33,15 +33,15 @@ fi
 
 sdd_roots "$INPUT" "$FILE_PATH"
 
-# Only proceed for src/ and tests/ files inside the project
-case "$REL_PATH" in
-  src/*|tests/*) ;;
-  *) exit 0 ;;
-esac
-
-# Check if breadcrumb exists (per worktree)
+# Check if breadcrumb exists (per worktree) — cheapest filter first
 CURRENT_TASK="$PROJECT_DIR/.sdd/current-task.json"
 if [ ! -f "$CURRENT_TASK" ]; then
+  exit 0
+fi
+
+# Only proceed for implementation code/tests inside the project: code_paths/test_paths of the
+# SDD Stack Profile in CLAUDE.md (default src, tests). Top-level test/*.md docs are not code.
+if ! sdd_is_impl_path "$REL_PATH"; then
   exit 0
 fi
 

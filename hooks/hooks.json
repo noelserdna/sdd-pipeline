@@ -1,5 +1,5 @@
 {
-  "description": "SDD pipeline guardrails: pipeline status injection at session start, upstream immutability guard, pipeline-state and trace-map updates, traceability context on file access, activity log (.sdd/activity.jsonl) for sdd-watch.sh, global run index (~/.claude/sdd/active-runs.json) and a one-line reminder of the live runs on each prompt.",
+  "description": "SDD pipeline guardrails: pipeline status injection at session start, upstream immutability guard, fabricated AI-consent guard on Bash, pipeline-state and trace-map updates, traceability context on file access, activity log (.sdd/activity.jsonl) for sdd-watch.sh, global run index (~/.claude/sdd/active-runs.json) and a one-line reminder of the live runs on each prompt.",
   "hooks": {
     "SessionStart": [
       {
@@ -20,6 +20,12 @@
         "matcher": "Edit|Write",
         "hooks": [
           { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-upstream-guard.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-tool-guard.sh", "timeout": 5 }
         ]
       },
       {

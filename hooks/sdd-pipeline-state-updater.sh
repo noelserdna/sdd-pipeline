@@ -72,7 +72,14 @@ path_to_stage() {
   esac
 }
 
-STAGE=$(path_to_stage "$REL_PATH")
+# Código y tests declarados en el SDD Stack Profile de CLAUDE.md (code_paths/test_paths; por defecto
+# src y tests) → task-implementer ANTES del case: web/app/..., o test/models/... con Minitest en la
+# raíz. Los .md de primer nivel de test/ siguen siendo de test-planner (sdd_is_impl_path).
+if sdd_is_impl_path "$REL_PATH"; then
+  STAGE="task-implementer"
+else
+  STAGE=$(path_to_stage "$REL_PATH")
+fi
 
 # If path doesn't map to a stage, skip
 if [ -z "$STAGE" ]; then

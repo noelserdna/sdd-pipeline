@@ -20,6 +20,9 @@ tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"   # macOS: /var → /private/var (git devuelve rutas físicas)
 cleanup() { [ -n "${PEER_PID:-}" ] && kill "$PEER_PID" 2>/dev/null; rm -rf "$tmp"; }
 trap cleanup EXIT
+# Sin git, sdd_roots cae a $PWD: ejecutar desde $tmp evita leer un pipeline-state.json que los hooks
+# del propio plugin hayan dejado en la raíz del repo (p. ej. al escribir en tests/).
+cd "$tmp"
 
 export HOME="$tmp/home"
 mkdir -p "$HOME/.claude/sessions"
@@ -67,7 +70,7 @@ reset_state() { cp "$FIX/$1" "$repo/pipeline-state.json"; }
 no_lock() { [ ! -d "$1.lock" ]; }
 
 # ---------------------------------------------------------------- 1. sintaxis
-for f in "$HOOKS"/*.sh "$HOOKS"/lib/*.sh "$STATUS_LINE" "$0"; do
+for f in "$HOOKS"/*.sh "$HOOKS"/lib/*.sh "$STATUS_LINE" "$ROOT/tests/hooks/run.sh"; do
   check "bash -n $(basename "$f")" bash -n "$f"
 done
 check "node --check sdd-augment-hook.js" node --check "$HOOKS/sdd-augment-hook.js"
@@ -578,5 +581,140 @@ check "install-global-statusline: deja copia de seguridad" sh -c "ls '$icfg'/set
 env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" --uninstall >/dev/null 2>&1 < /dev/null || true
 check "install-global-statusline: --uninstall quita statusLine y el script" \
   sh -c "jq -e '(.statusLine // null) == null and .env.A == \"1\"' '$icfg/settings.json' >/dev/null && [ ! -f '$icfg/sdd/status-line.sh' ]"
+
+# ---------------------------------------------------------------- 19. SDD Stack Profile (CLAUDE.md): app en web/ y Minitest en la raíz
+# prof DIR KEY → sdd_profile_get con PROJECT_DIR=STATE_ROOT=DIR
+prof() { bash -c '. "$1"; PROJECT_DIR="$2"; STATE_ROOT="$2"; sdd_profile_get "$3"' _ "$LIB" "$1" "$2" 2>/dev/null || echo "error"; }
+# codep DIR REL → yes | no (sdd_is_code_path)
+codep() { if bash -c '. "$1"; PROJECT_DIR="$2"; STATE_ROOT="$2"; sdd_is_code_path "$3"' _ "$LIB" "$1" "$2" 2>/dev/null; then echo yes; else echo no; fi; }
+rweb="$tmp/rweb"; git init -q "$rweb" && git -C "$rweb" commit -q --allow-empty -m init
+cp "$FIX/CLAUDE.rails-web.md" "$rweb/CLAUDE.md"
+rroot="$tmp/rroot"; git init -q "$rroot" && git -C "$rroot" commit -q --allow-empty -m init
+cp "$FIX/CLAUDE.rails-root.md" "$rroot/CLAUDE.md"
+rcrlf="$tmp/rcrlf"; mkdir -p "$rcrlf/.claude"
+printf '# Proyecto\n\nSin perfil en el CLAUDE.md raíz.\n' > "$rcrlf/CLAUDE.md"
+awk '{ printf "%s\r\n", $0 }' "$FIX/CLAUDE.rails-web.md" > "$rcrlf/.claude/CLAUDE.md"
+
+[ "$(prof "$rweb" app_dir)" = web ] && pass "sdd_profile_get app_dir=web (ignora el perfil de ejemplo dentro de \`\`\`)" || bad "sdd_profile_get app_dir: '$(prof "$rweb" app_dir)'"
+[ "$(prof "$rweb" test_name)" = 'bin/rails test {} -n "/{name}/"' ] && pass "sdd_profile_get: valor con {}, comillas y :" || bad "sdd_profile_get test_name: '$(prof "$rweb" test_name)'"
+[ "$(prof "$rweb" install)" = 'cd web && bundle install && bin/rails db:prepare' ] && pass "sdd_profile_get: valor con &&" || bad "sdd_profile_get install: '$(prof "$rweb" install)'"
+[ "$(prof "$rweb" acceptance)" = 'bin/rails test:system && echo "done: ok"' ] && pass "sdd_profile_get: el valor sigue a los PRIMEROS ':'" || bad "sdd_profile_get acceptance: '$(prof "$rweb" acceptance)'"
+[ -z "$(prof "$rweb" build)" ] && [ -z "$(prof "$rweb" nope)" ] && pass "sdd_profile_get: clave vacía o ausente → nada" || bad "sdd_profile_get vacío/ausente"
+[ "$(prof "$rweb" stack)" = rails ] && [ -z "$(prof "$rweb" after_section)" ] && pass "sdd_profile_get: la sección termina en el siguiente '## '" || bad "sdd_profile_get lee fuera de la sección"
+[ "$(prof "$rcrlf" app_dir)" = web ] && [ "$(prof "$rcrlf" test_name)" = 'bin/rails test {} -n "/{name}/"' ] && pass "sdd_profile_get: CRLF y .claude/CLAUDE.md cuando el raíz no tiene sección" || bad "sdd_profile_get CRLF: '$(prof "$rcrlf" app_dir | od -c | head -2)'"
+[ -z "$(prof "$nogit" app_dir)" ] && pass "sdd_profile_get sin CLAUDE.md → nada" || bad "sdd_profile_get sin CLAUDE.md"
+okc=1
+for spec in "$rweb web/app/models/task.rb yes" "$rweb web/lib/x.rb yes" "$rweb web/config/routes.rb yes" "$rweb web/db/schema.rb yes" "$rweb web/test/models/x_test.rb yes" \
+            "$rweb web/application.rb no" "$rweb src/x.ts no" "$rroot test/models/x_test.rb yes" "$rroot app/models/x.rb yes" \
+            "$nogit src/x.ts yes" "$nogit tests/x.test.ts yes" "$nogit test/models/x_test.rb no" "$nogit /etc/hosts no"; do
+  set -- $spec
+  [ "$(codep "$1" "$2")" = "$3" ] || { okc=0; echo "     sdd_is_code_path $2 en $(basename "$1"): esperaba $3"; }
+done
+set --
+[ "$okc" = 1 ] && pass "sdd_is_code_path: entradas recortadas, sin prefijos parciales, defaults src/tests sin perfil" || bad "sdd_is_code_path"
+
+# H3: la implementación en web/ y en test/<subdir> se registra como task-implementer
+cp "$FIX/pipeline-state.pending.json" "$rweb/pipeline-state.json"
+h3 "" "$rweb" "$rweb/web/app/models/task.rb"
+[ "$(status_of task-implementer "$rweb/pipeline-state.json")" = running ] && pass "H3 perfil web: web/app/models/task.rb → task-implementer" || bad "H3 perfil web no mapeó web/app/models/task.rb"
+cp "$FIX/pipeline-state.pending.json" "$rroot/pipeline-state.json"
+h3 "" "$rroot" "$rroot/test/TEST-PLAN.md"
+[ "$(status_of test-planner "$rroot/pipeline-state.json")" = running ] && [ "$(status_of task-implementer "$rroot/pipeline-state.json")" = pending ] && pass "H3 perfil raíz: test/TEST-PLAN.md sigue siendo de test-planner" || bad "H3 perfil raíz: test/TEST-PLAN.md mal mapeado"
+h3 "" "$rroot" "$rroot/test/models/x_test.rb"
+[ "$(status_of task-implementer "$rroot/pipeline-state.json")" = running ] && pass "H3 perfil raíz: test/models/x_test.rb → task-implementer" || bad "H3 perfil raíz no mapeó test/models/x_test.rb"
+check "H3 perfil: no deja .lock" no_lock "$rroot/pipeline-state.json"
+
+# H9: trace-map registra rutas del perfil y no los documentos de test-planner
+mkdir -p "$rweb/.sdd"; cp "$FIX/current-task.json" "$rweb/.sdd/current-task.json"
+h9 "" "$rweb" "$rweb/web/app/models/task.rb"
+h9 "" "$rweb" "$rweb/README.md"
+check "H9 perfil web: registra web/app/models/task.rb (y no README.md)" jq -e '[.mappings[].file] == ["web/app/models/task.rb"]' "$rweb/.sdd/trace-map.json"
+mkdir -p "$rroot/.sdd"; cp "$FIX/current-task.json" "$rroot/.sdd/current-task.json"
+h9 "" "$rroot" "$rroot/test/TEST-PLAN.md"
+h9 "" "$rroot" "$rroot/test/models/x_test.rb"
+check "H9 perfil raíz: registra test/models/x_test.rb, no test/TEST-PLAN.md" jq -e '[.mappings[].file] == ["test/models/x_test.rb"]' "$rroot/.sdd/trace-map.json"
+
+# H2: task-implementer running
+cp "$FIX/pipeline-state.impl-running.json" "$rweb/pipeline-state.json"
+cp "$FIX/pipeline-state.impl-running.json" "$rroot/pipeline-state.json"
+[ "$(guard "" "$rweb" Write "$rweb/web/test/models/x_test.rb")" = allow ] && pass "H2 perfil web: permite web/test/models/x_test.rb" || bad "H2 perfil web deniega web/test/models/x_test.rb"
+[ "$(guard "" "$rweb" Write "$rweb/test/models/x_test.rb")" = deny ] && pass "H2 perfil web: test/models/x_test.rb (no declarado) sigue denegado" || bad "H2 perfil web permite test/ no declarado"
+[ "$(guard "" "$rroot" Write "$rroot/test/models/x_test.rb")" = allow ] && pass "H2 perfil raíz: permite test/models/x_test.rb (test_paths: test)" || bad "H2 perfil raíz deniega test/models/x_test.rb"
+[ "$(guard "" "$rroot" Edit "$rroot/test/test_helper.rb")" = allow ] && pass "H2 perfil raíz: permite test/test_helper.rb" || bad "H2 perfil raíz deniega test/test_helper.rb"
+for p in test/TEST-PLAN.md test/TEST-MATRIX-UC-001.md spec/x.md plan/p.md; do
+  [ "$(guard "" "$rroot" Write "$rroot/$p")" = deny ] && pass "H2 perfil raíz: $p sigue protegido" || bad "H2 perfil raíz permite $p"
+done
+[ "$(guard "" "$rroot" Write "$rroot/task/TASK-FASE-1.md")" = deny ] && [ "$(guard "" "$rroot" Edit "$rroot/task/TASK-FASE-1.md")" = allow ] && pass "H2 perfil raíz: excepción task/TASK-FASE-*.md intacta" || bad "H2 perfil raíz: excepción TASK-FASE rota"
+reset_state pipeline-state.impl-running.json
+[ "$(guard "" "$repo" Write "$repo/test/models/x_test.rb")" = deny ] && pass "H2 sin perfil: test/models/x_test.rb sigue denegado (compatibilidad 4.2)" || bad "H2 sin perfil permite test/models/x_test.rb"
+jq '.stages["task-implementer"].status = "pending" | .stages["task-generator"].status = "running"' "$FIX/pipeline-state.impl-running.json" > "$rroot/pipeline-state.json"
+[ "$(guard "" "$rroot" Write "$rroot/test/models/x_test.rb")" = deny ] && pass "H2 perfil raíz: con task-generator running test/ sigue protegido" || bad "H2 perfil raíz: task-generator puede escribir test/"
+
+# H5: el grafo con codeRefs relativos a app_dir casa con la ruta real web/...
+mkdir -p "$rweb/dashboard" "$rroot/dashboard"
+graph='{"artifacts":[{"id":"REQ-TSK-001","type":"REQ","title":"Tareas","codeRefs":[{"file":"./app/models/task.rb","symbol":"Task"}]}],"relationships":[]}'
+printf '%s' "$graph" > "$rweb/dashboard/traceability-graph.json"
+printf '%s' "$graph" > "$rroot/dashboard/traceability-graph.json"
+out=$(pre_json "$rweb" Read "$rweb/web/app/models/task.rb" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+contains "$out" "REQ-TSK-001" && pass "H5 perfil web: quita el prefijo app_dir/ al mapear rutas" || bad "H5 perfil web: '$out'"
+out=$(pre_json "$rroot" Read "$rroot/web/app/models/task.rb" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+contains "$out" "REQ-TSK-001" && bad "H5 sin app_dir casa web/app/... con app/..." || pass "H5 sin app_dir (app_dir .) no quita prefijos"
+
+# ---------------------------------------------------------------- 20. H12 tool guard: consentimiento humano fabricado (PreToolUse Bash)
+TOOL_GUARD="$HOOKS/sdd-tool-guard.sh"
+# tg ENV cwd command → deny | allow | error(rc)
+tg_out() {
+  local envs="$1" cwd="$2" cmd="$3"
+  # shellcheck disable=SC2086
+  jq -cn --arg cwd "$cwd" --arg c "$cmd" '{session_id:"t",cwd:$cwd,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c}}' \
+    | env $envs bash "$TOOL_GUARD" 2>/dev/null
+}
+tg() {
+  local out rc=0
+  out=$(tg_out "$1" "$2" "$3") || rc=$?
+  [ "$rc" -eq 0 ] || { echo "error($rc)"; return 0; }
+  if contains "$out" '"permissionDecision":"deny"'; then echo deny; elif [ -z "$out" ]; then echo allow; else echo "raro: $out"; fi
+}
+okd=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = deny ] || { okd=0; echo "     no deniega: $c"; }
+done <<'EOF'
+PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION="x" npx prisma migrate reset
+export PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=x
+env PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=x npx prisma migrate reset --force
+cd web && PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes npx prisma db push
+FOO_AI_CONSENT=1 npm test
+SOME_CONSENT_FOR_AI_AGENT=yes ./bin/reset
+echo "${PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION:=yes}" && npx prisma migrate reset
+echo 'PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes' >> .env
+EOF
+[ "$(tg "" "$rroot" "$(printf 'ls\nPRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 npx prisma migrate reset')")" = deny ] || { okd=0; echo "     no deniega: multilínea"; }
+[ "$okd" = 1 ] && pass "H12 deniega asignaciones de consentimiento IA (prefijo, export, env, \${:=}, dotenv, multilínea, nombres *CONSENT*+AI)" || bad "H12 deja pasar alguna asignación"
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+grep PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION file
+grep -rn "PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=" .
+echo "$PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION"
+[ "$PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION" = yes ] && echo y
+unset PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION
+npx prisma migrate deploy
+COOKIE_CONSENT=1 npm test
+EMAIL_CONSENT=1 npm test
+AI_MODEL=x npm test
+EOF
+[ "$oka" = 1 ] && pass "H12 permite leer/mencionar la variable, migrate deploy y COOKIE_CONSENT/EMAIL_CONSENT (sin token AI)" || bad "H12 bloquea comandos legítimos"
+out=$(tg_out "" "$rroot" 'export FOO_AI_CONSENT=1' || true)
+if printf '%s' "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolUse" and .permissionDecision == "deny"
+     and (.permissionDecisionReason | contains("FOO_AI_CONSENT") and contains("human") and contains("RAILS_ENV=test bin/rails db:reset"))' >/dev/null 2>&1; then
+  pass "H12 salida deny con hookSpecificOutput y sugerencia db_reset_safe del perfil"
+else bad "H12 salida deny: $out"; fi
+out=$(tg_out "" "$repo" 'export FOO_AI_CONSENT=1' || true)
+contains "$out" "db_reset_safe" && contains "$out" "ask a human" && pass "H12 sin perfil: pide pausar para un humano o declarar db_reset_safe" || bad "H12 sin perfil: $out"
+printf '{not json' | bash "$TOOL_GUARD" >/dev/null 2>&1 && pass "H12 JSON roto → exit 0" || bad "H12 JSON roto falla"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  [ "$(tg "PATH=$bin" "$rroot" 'PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 npx prisma migrate reset')" = deny ] && pass "sin jq: H12 deniega (fallback node)" || bad "sin jq: H12 no deniega"
+fi
 
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }
