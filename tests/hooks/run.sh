@@ -457,7 +457,7 @@ gstatus() {
   printf '{"cwd":"%s","workspace":{"current_dir":"%s"}}' "$1" "$1" | env CLAUDE_CONFIG_DIR="$gcfg" bash "$G_LINE" 2>/dev/null || true
 }
 runs_line() {
-  printf '{"session_id":"z","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"hola"}' "${1:-$nogit}" \
+  printf '{"session_id":"z","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"hola"}' "$nogit" \
     | env CLAUDE_CONFIG_DIR="$gcfg" bash "$RUNS_HOOK" 2>/dev/null || true
 }
 count_ev() { jq -s --arg e "$1" '[ .[] | select(.event == $e) ] | length' "$galog" 2>/dev/null || echo -1; }
