@@ -16,6 +16,8 @@ When Jev is enabled, run the same command without `--mechanical`. It prints need
 
 ## 3. Examples review
 
+**Uncovered promises.** Before showing the examples, check that every promise a statement makes (uniqueness over time, ordering, a timestamp, persistence, a format, a limit) is exercised by at least one criterion. A promise no criterion checks is a promise nobody will test: when the adaptive route skips formal specs (`docs/ruta.md`), the criteria are the whole contract, and the todo-app run shipped reused ids and no completion timestamp because only the statement mentioned them. With Jev on, `sdd-jev.mjs req-lint requirements/REQUIREMENTS.md` flags these as `uncovered` (p ≥ 0.85); with Jev off (exit 3), read each statement against its criteria yourself. For each one, either add a criterion that checks that promise with a concrete example (`GIVEN tasks 1-3 and task 3 deleted WHEN the user adds a task THEN it gets id 4`), or narrow the statement to what the criteria check. The flag is a hint: a promise that is truly covered stays as is.
+
 Show each requirement's acceptance criteria with their concrete data, up to 4 requirements per question, options "The examples are right" / "Change them (say how)". Apply corrections, then write `- **Examples reviewed by:** {name (role)}, {date}` on each requirement, or once in the header when the whole set was reviewed in one sitting. The customer reviewing real examples is the cheapest place to catch a misunderstanding.
 
 ## 4. Priority validation

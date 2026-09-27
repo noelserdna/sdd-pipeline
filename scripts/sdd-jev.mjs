@@ -20,7 +20,9 @@
 //   node sdd-jev.mjs req-lint [requirements/REQUIREMENTS.md] [--out FILE.json] [--json]
 //       Parses `### REQ-…` blocks and screens each statement: vague terms, compound behaviour, unverifiable
 //       wording, implementation leak and EARS pattern (question set: scripts/jev/req-lint.json). REQ-C-* constraints
-//       skip the EARS and implementation-leak questions. Prints the flagged requirements; --json prints the JSON.
+//       skip the EARS and implementation-leak questions. A requirement with acceptance criteria also gets `uncovered`
+//       (a promise of the statement that no criterion checks; its own item {requirement: {statement, criteria}},
+//       flagged at p >= thresholds.uncovered of the JSON). Prints the flagged requirements; --json prints the JSON.
 //   node sdd-jev.mjs needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md] [--mechanical] [--out FILE.json] [--json]
 //       Need coverage. Always runs the mechanical check first (no network): every need covered by a `Needs:` line or
 //       out-of-scope with a decision, every REQ-F/REQ-NF traced to a need, a verification method per requirement,
@@ -280,28 +282,45 @@ async function reqLint(opts) {
   if (!existsSync(file)) die(`${file} not found`);
   const reqs = parseRequirements(readFileSync(file, "utf8"));
   if (!reqs.length) die(`no "### REQ-…" blocks found in ${file}`);
-  const all = loadQuestions(path.join(HERE, "jev", "req-lint.json"));
+  const cfgFile = path.join(HERE, "jev", "req-lint.json");
+  const { uncovered, ...all } = loadQuestions(cfgFile);
+  const uncoveredAt = JSON.parse(readFileSync(cfgFile, "utf8")).thresholds?.uncovered ?? THRESHOLD;
+  // Two items per requirement: the statement questions keep their validated state {requirement: <statement>};
+  // `uncovered` needs the acceptance criteria too, so it gets its own item, only when the requirement has criteria.
+  const UNC = "#uncovered";
   const items = reqs.map((r) => ({ id: r.id, state: { requirement: r.statement } }));
+  if (uncovered) for (const r of reqs) if (r.criteria.length)
+    items.push({ id: r.id + UNC, state: { requirement: { statement: r.statement, criteria: r.criteria } } });
   const isConstraint = (id) => /^REQ-C-/.test(id);
   const res = await judgeAll(items, (it) => {
+    if (String(it.id).endsWith(UNC)) return { uncovered };
     if (!isConstraint(it.id)) return all;
     const { ears, impl_leak, ...rest } = all;
     return rest;
   }, Number(opts.concurrency) || 16);
+  const byId = new Map(res.items.filter((it) => !String(it.id).endsWith(UNC)).map((it) => [it.id, it]));
+  for (const it of res.items) if (String(it.id).endsWith(UNC)) {
+    const base = byId.get(it.id.slice(0, -UNC.length));
+    if (base) Object.assign(base.answers, it.answers);
+  }
+  for (const e of res.errors) e.id = String(e.id).replace(UNC, "");
+  res.items = [...byId.values()];
   for (const it of res.items) {
     const a = it.answers;
     const flags = ["vague", "compound", "unverifiable", "impl_leak"].filter((k) => typeof a[k] === "number" && a[k] > THRESHOLD);
     if (a.ears && a.ears.choice === "not_ears") flags.push("not_ears");
+    if (typeof a.uncovered === "number" && a.uncovered >= uncoveredAt) flags.push("uncovered");
     it.flags = flags;
   }
   res.source = file;
   res.threshold = THRESHOLD;
+  res.thresholds = { default: THRESHOLD, uncovered: uncoveredAt };
   if (opts.out) emit(res, opts.out);
   if (opts.json) { emit(res); return res; }
   const flagged = res.items.filter((i) => i.flags.length);
   for (const i of flagged) {
     const a = i.answers;
-    const probs = ["vague", "compound", "unverifiable", "impl_leak"].filter((k) => k in a).map((k) => `${k}=${a[k].toFixed(2)}`).join(" ");
+    const probs = ["vague", "compound", "unverifiable", "impl_leak", "uncovered"].filter((k) => k in a).map((k) => `${k}=${a[k].toFixed(2)}`).join(" ");
     process.stdout.write(`${i.id}\t${i.flags.join(",")}\t${a.ears ? `ears=${a.ears.choice}(${a.ears.confidence.toFixed(2)}) ` : ""}${probs}\n`);
   }
   process.stdout.write(`req-lint: ${res.items.length} requirements, ${flagged.length} flagged, ${res.errors.length} errors, ` +

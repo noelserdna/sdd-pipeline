@@ -48,7 +48,7 @@ node .claude/sdd/sdd.mjs verify --range origin/main..HEAD        # lo que hace e
 
 Con una issue, el número va delante (`42-fase-3-billing`), porque GitLab enlaza ramas por ese prefijo.
 
-La regla, antes de cualquier commit: en la rama por defecto se crea la rama de trabajo (`git switch -c`, los cambios sin commitear viajan con ella); en una rama de trabajo se sigue en ella; con HEAD suelto se para y se pregunta. La aplican `sdd-req-change`, `sdd-task-implementer`, el Mode Fix del auditor, `sdd-reconcile`, las re-ejecuciones de specs e import, y el orquestador al reanudar.
+La regla, antes de cualquier commit: en la rama por defecto se crea la rama de trabajo (`git switch -c`, los cambios sin commitear viajan con ella); en una rama de trabajo se sigue en ella, salvo que `branch start fase N` se lance sobre la rama de otra FASE: si esa rama ya está fusionada en la rama por defecto, vuelve a ella y crea la nueva; si no, sale con 1 (fusiónala tras su aceptación, o pasa `--from-current` para apilar a propósito). Con HEAD suelto se para y se pregunta. La aplican `sdd-req-change`, `sdd-task-implementer`, el Mode Fix del auditor, `sdd-reconcile`, las re-ejecuciones de specs e import, y el orquestador al reanudar.
 
 ```bash
 node scripts/sdd.mjs branch status                  # rama actual, rama por defecto, HEAD suelto, worktree

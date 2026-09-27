@@ -21,6 +21,8 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | Minimal `## SDD Stack Profile` (`task_state: trailers`) in root `CLAUDE.md` when no kit is installed | 4b | Yes |
 | CI job, PR/MR and change-request templates (`.github/` or `.gitlab/`), `tracker:` profile key | 4c (`--tracker`) | Yes |
 
+Step 7 commits the versioned files this run wrote (`chore(sdd): setup`).
+
 ## Invocation
 
 ```
@@ -49,7 +51,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 - Run every check with Bash and **show what you found before changing anything**.
 - Run in the **main checkout** of the target project: not in the plugin repository, not in a linked worktree. If `git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`, stop and ask the user to run setup from the main checkout (that is where `pipeline-state.json` lives; hooks in worktrees write there through `SDD_STATE_ROOT`).
 - Never write absolute paths into project files: the plugin directory changes on every plugin update.
-- Never overwrite `pipeline-state.json`; never replace `.claude/settings.json` (merge only); never run `git rm`, `git commit` or `/plugin` commands on the user's behalf.
+- Never overwrite `pipeline-state.json`; never replace `.claude/settings.json` (merge only); never run `git rm` or `/plugin` commands on the user's behalf. The only commit setup makes is Step 7, of its own files.
 - Prefer `jq`; when it is missing use `node -e` for the same JSON edits.
 
 ## Locating the plugin root
@@ -172,7 +174,7 @@ bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --gitignore-only
 
 The script warns when `pipeline-state.json` is already tracked and prints the `git rm --cached pipeline-state.json` command: show it to the user, do not run it.
 
-**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.gitignore`, the vendored `.claude/sdd/*.mjs` and `.claude/sdd/lib/` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
+**4.2 Versioned files.** `.claude/settings.json`, `.gitignore`, the vendored `.claude/sdd/*.mjs` and `.claude/sdd/lib/` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh` belong in git; Step 7 commits the ones this run wrote.
 
 **4.3 `--multisession`.** Instantiate the roles file from the plugin template, replacing its project name with the project slug (directory name in kebab-case), and copy the launcher:
 
@@ -217,7 +219,7 @@ bash "$KIT_SH"                                           # refresh the installed
 - **Rules.** Copies the rules to `.claude/rules/sdd-<kit>-<rule>.md`. It only overwrites files that carry the `sdd-stack-kit managed` header; report any `skipped … left untouched` line to the user.
 - **Detection and errors.** `auto` searches the root and first-level directories and sets `app_dir` to where it finds the stack. It exits 1 when it finds nothing or several stacks: ask for `--stack` and `--app-dir`. An unknown kit exits 2: list the available kits.
 - **Overrides.** `--set key=value` overrides one profile key and is remembered on refresh; `--set key=` drops the override. An `acceptance` other than `none` implies `e2e_scaffold: never`.
-- **Report and commit.** Show the `wiring:` and `layers:` lines it prints (`sdd-plan-architect` uses them) and recommend committing `CLAUDE.md` and `.claude/rules/sdd-*.md`.
+- **Report.** Show the `wiring:` and `layers:` lines it prints (`sdd-plan-architect` uses them); `CLAUDE.md` and `.claude/rules/sdd-*.md` are committed in Step 7.
 - **Never edit inside the block by hand.** `--uninstall` removes the block and the managed rules.
 
 **Minimal profile (no kit).** New projects keep task state in the commits (`task_state: trailers`): the `Task:` trailer is the evidence, so no checkbox has to be kept in sync. When no kit is installed and `CLAUDE.md` has no `## SDD Stack Profile` section, append this block — without asking when `CLAUDE.md` does not exist yet, after asking (`[A] Add it (recommended)` / `[B] Skip`) when it exists:
@@ -288,7 +290,7 @@ ls .github/workflows/sdd.yml 2>/dev/null || ls .gitlab/sdd.gitlab-ci.yml       #
 ls "$SDD_PLUGIN_ROOT/server/dist/server.js"                  # MCP bundle shipped with the plugin
 ```
 
-Report:
+Report, once Step 7 has run:
 
 ```
 ## SDD Setup Complete
@@ -305,6 +307,7 @@ Report:
 | Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Minimal profile written (task_state: trailers) / Profile already present |
 | Tracker | <github\|gitlab>: CI job + PR/MR and issue templates, `tracker:` in the profile; merge setting printed / Not requested |
 | Quality gates H7/H8 | Configured / Skipped |
+| Setup commit | <sha> chore(sdd): setup / Skipped (<reason>; paths not committed) |
 | Dependencies | node <v>, git <v> (>= 2.32 for --trailer), jq yes/no (node fallback), python3 yes/no, tmux yes/no |
 
 ### Next steps
@@ -314,10 +317,27 @@ Report:
 4. --multisession: bash .claude/sdd/sdd-up.sh sdd-lead
 ```
 
+### Step 7: Commit the setup files
+
+A setup left uncommitted breaks the pipeline later: the first `git switch` to the default branch (merging a FASE, starting the next one) fails on the modified `CLAUDE.md` and `.gitignore`, and the vendored validator that CI runs is missing from the repository. So setup ends by committing what it wrote, as one `chore(sdd): setup` commit (`chore` needs no trailers).
+
+1. **Paths.** Only the files this run created or changed, from this list: `.gitignore`, `CLAUDE.md`, `.claude/sdd/`, `.claude/sdd-sessions.json`, `.claude/settings.json` (only when Step 5 merged into it), `.claude/rules/sdd-*.md`, and the Step 4c files (`.github/workflows/sdd.yml`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/change-request.md`, `.gitlab/`, `.gitlab-ci.yml`). Never `pipeline-state.json`, `.sdd/` or `.claude/settings.local.json`. When `CLAUDE.md` or `.gitignore` already had uncommitted edits by the user before this run, say so: the commit would include them.
+2. **Consent.** Interactive session: ask once — `Commit the setup files as "chore(sdd): setup"?` with `[A] Yes (recommended)` / `[B] No, I will commit them` — listing the paths. Station (`SDD_ROLE` set) or a non-interactive run (`claude -p`): commit without asking, since nobody is there to answer and the next stage needs a clean tree.
+3. **Commit.** A pathspec on `git commit` commits only those paths, leaving anything else the user staged untouched:
+
+```bash
+P=".gitignore CLAUDE.md .claude/sdd .claude/rules"   # the paths of step 1 that this run wrote
+git add -- $P
+git diff --cached --quiet -- $P || git commit -q -m "chore(sdd): setup" -- $P
+git status --short -- $P                              # empty: everything setup wrote is committed
+```
+
+Not a git repository, or the user answered B: skip, and the `Setup commit` row of the Step 6 report lists the paths as not committed.
+
 ## Constraints
 
 - Never overwrite `pipeline-state.json` or an existing `.claude/sdd-sessions.json`.
 - Never replace `.claude/settings.json`; merge only. Ask before changing anything under the user's Claude config directory.
 - Run the migration only after showing `--dry-run` output and getting confirmation.
-- Do not commit, do not `git rm`, do not uninstall plugins: print the commands for the user.
+- Commit only in Step 7, only the files this run wrote; do not `git rm`, do not uninstall plugins: print those commands for the user.
 - Warn about missing `jq`, `python3` or `tmux`; only missing `git` or `node` block a step.

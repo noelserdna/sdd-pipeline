@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests de scripts/sdd-jev.mjs sin red ni API key: un servidor mock local (SDD_JEV_URL) responde como la API de
-# TypeSafe. Cubre opt-in (exit 3), req-lint (parseo, REQ-C sin EARS, flags), judge (JSONL, estado demasiado grande,
+# TypeSafe. Cubre opt-in (exit 3), req-lint (parseo, REQ-C sin EARS, flags, `uncovered` con criterios y el fixture
+# etiquetado tests/jev/fixtures/req-uncovered.jsonl), judge (JSONL, estado demasiado grande,
 # reintento tras 429), needs (parseRequirements, comprobación mecánica de necesidades, Choice por necesidad), chunks,
 # los conjuntos de aceptación (test-adequacy.json, evidence.json: forma, umbrales y paso por `judge` con los
 # fixtures etiquetados de tests/jev/fixtures/) y que los conjuntos de preguntas de scripts/jev/*.json son JSON válido.
@@ -23,7 +24,8 @@ trap 'kill "$mock_pid" 2>/dev/null || true; wait "$mock_pid" 2>/dev/null || true
 CALIBRATE_KEY="${SDD_JEV_CALIBRATE_KEY:-}"
 unset TYPESAFE_API_KEY SDD_JEV SDD_JEV_URL SDD_JEV_CALIBRATE_KEY || true
 
-# ── mock: the noul "vague" is 0.9 when the state mentions "quickly", every other noul 0.1; choice picks not_ears for "should",
+# ── mock: the noul "vague" is 0.9 when the state mentions "quickly", "uncovered" 0.95 when the statement says timestamp or
+#    unique and no criterion does (else 0.4), every other noul 0.1; choice picks not_ears for "should",
 #    else the first option; the first request answers 429 once to exercise the retry path.
 cat > "$tmp/mock.mjs" <<'EOF'
 import http from "node:http";
@@ -36,7 +38,10 @@ const srv = http.createServer((req, res) => {
     const s = JSON.stringify(r.state);
     const answers = {};
     for (const [k, q] of Object.entries(r.questions)) {
-      if (q.type === "noul") answers[k] = { type: "noul", noul: (k === "vague" && /quickly/.test(s)) || (k === "asserts_then" && /expect\(|assert/.test(s)) ? 0.9 : 0.1 };
+      if (k === "uncovered") { // a statement word (timestamp, unique) that no criterion mentions → 0.95
+        const rq = r.state.requirement, crit = rq.criteria.join(" ").toLowerCase();
+        answers[k] = { type: "noul", noul: ["timestamp", "unique"].some((w) => rq.statement.toLowerCase().includes(w) && !crit.includes(w)) ? 0.95 : 0.4 };
+      } else if (q.type === "noul") answers[k] = { type: "noul", noul: (k === "vague" && /quickly/.test(s)) || (k === "asserts_then" && /expect\(|assert/.test(s)) ? 0.9 : 0.1 };
       else if (q.type === "choice") {
         const opts = Object.keys(q.criteria);
         let choice = /should/.test(s) && opts.includes("not_ears") ? "not_ears" : opts[0];
@@ -99,6 +104,36 @@ expect "req-lint: reintento tras 429 sin errores" "$(js 'j.errors.length')" "0"
 run req-lint "$tmp/REQ.md" --out "$tmp/out/lint.json"
 contains "$out" "3 requirements, 2 flagged" && pass "req-lint: resumen legible" || bad "req-lint: resumen legible ($out)"
 [ -f "$tmp/out/lint.json" ] && pass "req-lint --out escribe el fichero" || bad "req-lint --out escribe el fichero"
+expect "req-lint: REQ-F-002 con criterio recibe uncovered; umbral del JSON" "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(j.items.find(i=>i.id==="REQ-F-002").answers.uncovered+" "+j.thresholds.uncovered)' "$tmp/out/lint.json")" "0.4 0.85"
+cat > "$tmp/REQ2.md" <<'EOF'
+# Requirements
+## Functional Requirements
+### REQ-F-001: Create a task
+- **Statement:** WHEN the user runs `todo add <title>` THE system SHALL create a task with a unique incremental id and the creation timestamp.
+- **Acceptance criteria:**
+  - GIVEN an empty task list WHEN the user runs `todo add "Buy milk"` THEN a task with id 1 is stored
+### REQ-F-002: Delete a task
+- **Statement:** WHEN the user runs `todo rm <id>` THE system SHALL remove the task.
+- **Acceptance criteria:**
+  - GIVEN tasks 1 and 2 WHEN the user runs `todo rm 2` THEN only task 1 remains
+### REQ-F-003: Show the version
+- **Statement:** WHEN the user runs `todo --version` THE system SHALL print a unique build timestamp.
+EOF
+run req-lint "$tmp/REQ2.md" --json
+expect "uncovered: promesa sin criterio (p ≥ 0.85) → flag" "$(js 'j.items.find(i=>i.id==="REQ-F-001").flags.join()')" "uncovered"
+expect "uncovered: todo cubierto → sin flag" "$(js 'j.items.find(i=>i.id==="REQ-F-002").flags.join()+"|"+j.items.find(i=>i.id==="REQ-F-002").answers.uncovered')" "|0.4"
+expect "uncovered: sin criterios → no se pregunta" "$(js '"uncovered" in j.items.find(i=>i.id==="REQ-F-003").answers')" "false"
+expect "uncovered: un item por requisito en la salida" "$(js 'j.items.length+" "+j.errors.length')" "3 0"
+run req-lint "$tmp/REQ2.md"
+contains "$out" "REQ-F-001	uncovered" && pass "req-lint: imprime uncovered" || bad "req-lint: imprime uncovered ($out)"
+# fixture etiquetado (todo-app): label true = una promesa del enunciado sin criterio que la compruebe
+UNC_Q="$tmp/uncovered.json"
+node -e 'const q=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(JSON.stringify({questions:{uncovered:q.questions.uncovered}}))' "$ROOT/scripts/jev/req-lint.json" > "$UNC_Q"
+run judge --questions "$UNC_Q" --items "$ROOT/tests/jev/fixtures/req-uncovered.jsonl"
+expect "uncovered: fixture etiquetado → exit 0" "$rc" "0"
+expect "uncovered: el mock acierta las etiquetas del fixture" "$(node -e '
+  const fs=require("fs"),[f,o]=process.argv.slice(1);const lab=Object.fromEntries(fs.readFileSync(f,"utf8").trim().split("\n").map(l=>JSON.parse(l)).map(x=>[x.id,x.label]));
+  const j=JSON.parse(o);console.log(j.items.filter(i=>(i.answers.uncovered>=0.85)===lab[i.id]).length+"/"+j.items.length)' "$ROOT/tests/jev/fixtures/req-uncovered.jsonl" "$out")" "4/4"
 
 # ── judge ────────────────────────────────────────────────────────────────────
 big="$(node -e 'process.stdout.write("x".repeat(120000))')"
@@ -236,6 +271,10 @@ if [ -n "$CALIBRATE_KEY" ]; then
     export TYPESAFE_API_KEY="$CALIBRATE_KEY"; unset SDD_JEV_URL
     node "$JEV" judge --questions "$TA" --items "$ROOT/tests/jev/fixtures/test-adequacy.jsonl" --out "$tmp/ta.json" >/dev/null 2>&1 || true
     node "$JEV" judge --questions "$EV" --items "$ROOT/tests/jev/fixtures/evidence.jsonl" --out "$tmp/ev.json" >/dev/null 2>&1 || true
+    node "$JEV" judge --questions "$UNC_Q" --items "$ROOT/tests/jev/fixtures/req-uncovered.jsonl" --out "$tmp/unc.json" >/dev/null 2>&1 || true
+    node -e 'const fs=require("fs"),[f,o]=process.argv.slice(1);const lab=Object.fromEntries(fs.readFileSync(f,"utf8").trim().split("\n").map(l=>JSON.parse(l)).map(x=>[x.id,x.label]));
+      const it=JSON.parse(fs.readFileSync(o,"utf8")).items;console.log(`calibración (informativa): uncovered ${it.filter(i=>(i.answers.uncovered>=0.85)===lab[i.id]).length}/${it.length}`);
+      for (const i of it) console.log(`  ${i.id} (${lab[i.id]}): uncovered=${i.answers.uncovered.toFixed(2)}`)' "$ROOT/tests/jev/fixtures/req-uncovered.jsonl" "$tmp/unc.json" || echo "calibración uncovered: sin resultados"
     node -e '
       const fs=require("fs"), [ta,ev,fa,fe,qa,qe]=process.argv.slice(1);
       const lab=(f)=>Object.fromEntries(fs.readFileSync(f,"utf8").trim().split("\n").map(l=>JSON.parse(l)).map(o=>[o.id,o.label]));

@@ -18,13 +18,15 @@
 //   sdd verify --message FILE|- [--json]                       validate one commit message (the commit-msg hook)
 //   sdd verify --range A..B [--json]                           validate every commit in a range + squash detection
 //   sdd branch status [--json]                                 current branch, default branch, detached, worktree
-//   sdd branch start fase <N> <slug> [--issue N] [--json]      fase-{N}-{slug}
+//   sdd branch start fase <N> <slug> [--issue N] [--from-current] [--json]   fase-{N}-{slug}
 //   sdd branch start change <CHG-ID> <slug> [--issue N]        change/{CHG-ID}-{slug}
 //   sdd branch start audit [YYYY-MM-DD] [--issue N]            audit/fix-{date}
 //   sdd branch start acceptance [YYYY-MM-DD] [--issue N]       acceptance/{date} (global acceptance loop / sign-off)
-//       On the default branch: `git switch -c <name>` (uncommitted changes carry over). On another branch: stay there.
-//       Detached HEAD: exit 1. Default branch = Stack Profile default_branch → origin/HEAD → init.defaultBranch →
-//       main/master. --issue N prefixes the name with `{N}-`.
+//       On the default branch: `git switch -c <name>` (uncommitted changes carry over). On another branch: stay there,
+//       except fase on another FASE's branch (fase-M-*): merged into the default and clean → switch to the default and
+//       create; not merged → exit 1, unless --from-current (stack FASE-N on it). Detached HEAD: exit 1.
+//       Default branch = Stack Profile default_branch → origin/HEAD → init.defaultBranch → main/master.
+//       --issue N prefixes the name with `{N}-`.
 //   sdd lint --needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md] [--json]
 //       Need coverage (same check as sdd-jev.mjs needs --mechanical): every need covered or out-of-scope with a decision,
 //       every REQ-F/REQ-NF traced to a need, a valid Verification per requirement. Exit 1 on errors.
@@ -141,6 +143,7 @@ function parseArgs(argv) {
       case "--json": o.json = true; break;
       case "--files": o.withFiles = true; break;
       case "--require-done": o.requireDone = true; break;
+      case "--from-current": o.fromCurrent = true; break;
       case "-h": case "--help": help(0); break;
       case "-": o.args.push(a); break;
       default:
@@ -701,15 +704,35 @@ function cmdBranch(o) {
   const result = (action, code, msg) => { if (o.json) json({ action, branch: action === "refused" ? null : (action === "stayed" ? info.current : name), wanted: name, ...info, message: msg }); else out(msg); return code; };
   if (info.detached) return result("refused", 1, `branch: HEAD is detached — switch to a branch first (git switch ${info.default ?? "<default>"}), then run again`);
   if (!info.default) die("cannot detect the default branch: set `default_branch` in the SDD Stack Profile of CLAUDE.md");
-  if (!info.is_default) return result("stayed", 0, `branch: staying on work branch ${info.current} (default is ${info.default})`);
-  if (refExists(repo, `refs/heads/${name}`)) {
-    const dirty = git(repo, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim();
-    if (dirty) return result("refused", 1, `branch: ${name} already exists and tracked files have uncommitted changes — commit them or run git switch ${name} yourself`);
-    gitOk(repo, ["switch", "-q", name]);
-    return result("resumed", 0, `branch: switched to existing ${name}`);
+  const dirty = () => git(repo, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim();
+  const switchTo = (from) => {
+    if (refExists(repo, `refs/heads/${name}`)) {
+      if (dirty()) return result("refused", 1, `branch: ${name} already exists and tracked files have uncommitted changes — commit them or run git switch ${name} yourself`);
+      gitOk(repo, ["switch", "-q", name]);
+      return result("resumed", 0, `branch: switched to existing ${name}`);
+    }
+    gitOk(repo, ["switch", "-q", "-c", name]);
+    return result("created", 0, `branch: created ${name} from ${from}`);
+  };
+  if (!info.is_default) {
+    // Another FASE's branch (fase-M-*, optionally issue-prefixed): FASE N starts from the default branch once FASE M
+    // is merged there, so each FASE branch carries only its own tasks; stacking on an unmerged FASE is a deliberate
+    // choice (--from-current). Any other work branch, or FASE N's own branch, keeps the "stay" rule.
+    const prev = kind === "fase" ? info.current.match(/^(?:\d+-)?fase-(\d+)-/) : null;
+    const n = kind === "fase" ? Number(String(id).replace(/^FASE-/i, "")) : null;
+    if (prev && Number(prev[1]) !== n) {
+      const m = Number(prev[1]);
+      if (o.fromCurrent) return switchTo(info.current);
+      const merged = refExists(repo, `refs/heads/${info.default}`)
+        && git(repo, ["merge-base", "--is-ancestor", "HEAD", `refs/heads/${info.default}`]).status === 0;
+      if (!merged) return result("refused", 1, `branch: FASE-${m} branch ${info.current} not merged into ${info.default}: merge it (after its acceptance) or pass --from-current to stack FASE-${n} on it`);
+      if (dirty()) return result("refused", 1, `branch: FASE-${m} branch ${info.current} is merged into ${info.default} but tracked files have uncommitted changes — commit them, then run again`);
+      gitOk(repo, ["switch", "-q", info.default]);
+      return switchTo(info.default);
+    }
+    return result("stayed", 0, `branch: staying on work branch ${info.current} (default is ${info.default})`);
   }
-  gitOk(repo, ["switch", "-q", "-c", name]);
-  return result("created", 0, `branch: created ${name} from ${info.current}`);
+  return switchTo(info.current);
 }
 
 // ------------------------------------------------------------------ main

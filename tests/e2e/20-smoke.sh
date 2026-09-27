@@ -63,6 +63,12 @@ if active setup; then
   [ -x "$(git rev-parse --git-path hooks)/commit-msg" ] && ok "commit-msg instalado" || bad "commit-msg"
   ignored pipeline-state.json .sdd/x .claude/worktrees/x && ok ".gitignore policy" || bad ".gitignore policy"
   git commit -q --allow-empty -m "feat: sin trailer" 2>/dev/null && bad "commit-msg no rechaza feat sin trailer" || ok "commit-msg rechaza feat sin trailer"
+  # F19: setup commitea lo que escribe (chore(sdd): setup); si no, el primer `git switch main` falla más tarde
+  setup_files=(.gitignore .claude/sdd); [ -f CLAUDE.md ] && setup_files+=(CLAUDE.md); [ -d .claude/rules ] && setup_files+=(.claude/rules)
+  check_committed "${setup_files[@]}"
+  git log --format=%s | grep -qx 'chore(sdd): setup' && ok "commit chore(sdd): setup" || bad "sin commit chore(sdd): setup"
+  [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "árbol trackeado limpio tras setup" || { bad "setup deja cambios trackeados"; git status --porcelain --untracked-files=no | head -5; }
+  git ls-files --error-unmatch pipeline-state.json >/dev/null 2>&1 && bad "pipeline-state.json commiteado" || ok "pipeline-state.json fuera de git"
   # requisitos ya escritos y aprobados: marcar la etapa como done sin ejecutar la skill
   tmp=$(mktemp); jq '.stages["requirements-engineer"].status="done" | .stages["requirements-engineer"].lastRun=(now|todate) | .currentStage="specifications-engineer"' pipeline-state.json > "$tmp" && mv "$tmp" pipeline-state.json
 fi

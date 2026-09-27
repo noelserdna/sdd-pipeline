@@ -790,8 +790,8 @@ Genera: `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` y, en formato completo, `tas
 ```
 
 Implementa tarea por tarea con TDD (Red → Green → Refactor → Commit), en una **rama de trabajo**: en la rama por
-defecto crea `fase-{N}-{slug}` con `node scripts/sdd.mjs branch start fase N <slug>` (en otra rama sigue ahi; con HEAD
-suelto se para). Una tarea = un commit, con los trailers escritos por git:
+defecto crea `fase-{N}-{slug}` con `node scripts/sdd.mjs branch start fase N <slug>` (en otra rama sigue ahi, salvo en la rama de otra FASE: si ya esta fusionada
+vuelve a la rama por defecto y crea la nueva, si no sale con 1 salvo `--from-current`; con HEAD suelto se para). Una tarea = un commit, con los trailers escritos por git:
 
 ```bash
 git commit -m "feat(tasks): create task with server-side validation" \

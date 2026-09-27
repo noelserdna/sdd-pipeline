@@ -3,7 +3,8 @@
 # modos de fallo del bloque de trailers (prosa detrás, `Closes #12` dentro, Co-Authored-By en otro párrafo, clave en
 # minúsculas), cada regla de verify, REQ-F-01 frente a REQ-F-012, revert y revert de un revert, lectura legacy del cuerpo,
 # trace why por línea y por fichero, trace delivered por tag, branch start en la rama por defecto (`trunk` por
-# init.defaultBranch y `develop` por origin/HEAD), seguir en la rama de trabajo, negarse con HEAD suelto, detección de
+# init.defaultBranch y `develop` por origin/HEAD), seguir en la rama de trabajo, FASE anterior sin mergear
+# (exit 1, --from-current) o mergeada (vuelve a la rama por defecto), negarse con HEAD suelto, detección de
 # squash en un rango y el alias sdd-task-lint.mjs. Fixtures en tests/fixtures/git/messages/{valid,invalid}.
 # Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git ≥ 2.32 y node ≥ 18.
 set -euo pipefail
@@ -188,10 +189,21 @@ run branch start acceptance 2026-09-27 --repo "$b"; expect "acceptance/fecha" "$
 git -C "$b" switch -q trunk
 run branch start acceptance 27-09-2026 --repo "$b"; expect "acceptance con fecha mal formada → 2" "$rc" 2
 run branch start fase 3 billing-core --repo "$b" --json; expect "rama existente con árbol limpio: se retoma" "$(js 'j.action')" "resumed"
+run branch start fase 4 x --repo "$b"
+expect "en otra FASE sin mergear → 1" "$rc:$(git -C "$b" symbolic-ref --short HEAD)" "1:fase-3-billing-core"; has "FASE sin mergear: mensaje" "FASE-3 branch fase-3-billing-core not merged into trunk"
+expect "FASE sin mergear: no se crea rama" "$(git -C "$b" branch --list 'fase-4-*')" ""
+run branch start fase 3 billing-core --repo "$b" --json; expect "en su propia FASE: se queda" "$rc:$(js 'j.action')" "0:stayed"
+run branch start fase 4 x --from-current --repo "$b" --json
+expect "--from-current apila sobre la FASE actual" "$rc:$(js 'j.action+" "+j.branch'):$(git -C "$b" rev-parse HEAD)" "0:created fase-4-x:$(git -C "$b" rev-parse fase-3-billing-core)"
+git -C "$b" switch -q trunk; git -C "$b" merge -q --no-ff -m "Merge fase-3-billing-core" fase-3-billing-core; git -C "$b" switch -q fase-3-billing-core
+run branch start fase 5 y --repo "$b" --json
+expect "FASE anterior mergeada: vuelve a trunk y crea fase-5-y" "$rc:$(js 'j.action+" "+j.branch'):$(git -C "$b" symbolic-ref --short HEAD):$(git -C "$b" rev-parse HEAD)" "0:created fase-5-y:fase-5-y:$(git -C "$b" rev-parse trunk)"
+git -C "$b" switch -q -c 42-fase-6-z; echo z > "$b/z"; git -C "$b" add z; git -C "$b" commit -q -m "chore: z"
+run branch start fase 7 w --repo "$b"; expect "rama de FASE con prefijo de issue sin mergear → 1" "$rc" 1
 git -C "$b" switch -q trunk
 git -C "$b" checkout -q --detach
-run branch start fase 4 x --repo "$b"; expect "HEAD suelto → 1" "$rc" 1; has "HEAD suelto: mensaje" "HEAD is detached"
-expect "HEAD suelto: no se crea rama" "$(git -C "$b" branch --list 'fase-4-*')" ""
+run branch start fase 8 x --repo "$b"; expect "HEAD suelto → 1" "$rc" 1; has "HEAD suelto: mensaje" "HEAD is detached"
+expect "HEAD suelto: no se crea rama" "$(git -C "$b" branch --list 'fase-8-*')" ""
 git -C "$b" switch -q trunk
 run branch start fase x slug --repo "$b"; expect "fase sin número → 2" "$rc" 2
 printf '# P\n\n## SDD Stack Profile\n\n- default_branch: release\n' > "$b/CLAUDE.md"

@@ -56,9 +56,13 @@ Repeated `Refs` trailers are fine; readers join them. Check a message before com
 With an issue, prefix the issue number: `42-fase-3-billing` (GitLab links branches by that prefix).
 
 Rule before any commit: on the default branch, create the work branch (`git switch -c`, uncommitted changes carry
-over); on a work branch, keep working there; on a detached HEAD, stop and ask. `node "$SDD" branch start
-<fase|change|audit|acceptance> <id> <slug> [--issue N]` applies it (`audit` and `acceptance` take only an optional
-`YYYY-MM-DD`, default today); `branch status` reports the state. The default branch is
+over); on a work branch, keep working there; on a detached HEAD, stop and ask. One exception keeps each FASE branch
+limited to its own tasks: starting FASE N while on another FASE's branch (`fase-M-*`, with or without issue prefix).
+If that branch is merged into the default branch and the tree is clean, switch to the default branch and create
+`fase-N-*` there; if it is not merged, stop: merge it first (after its acceptance), or stack FASE N on it
+deliberately with `--from-current`. `node "$SDD" branch start <fase|change|audit|acceptance> <id> <slug> [--issue N]
+[--from-current]` applies all of this (`audit` and `acceptance` take only an optional `YYYY-MM-DD`, default today;
+`--from-current` is for `fase`); `branch status` reports the state. The default branch is
 `default_branch` in the SDD Stack Profile, else `origin/HEAD`, else `init.defaultBranch`, else `main`/`master`.
 Stream worktrees (`--stream`) and their integration (`--integrate`) manage their own branches and skip this rule.
 
