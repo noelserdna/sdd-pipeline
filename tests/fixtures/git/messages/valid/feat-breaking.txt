@@ -1,0 +1,4 @@
+feat(api)!: rename task status field
+
+Task: TASK-F4-0012
+Refs: API-004

@@ -1,0 +1,4 @@
+feat(tasks): list tasks
+
+task: TASK-F2-006
+refs: UC-003

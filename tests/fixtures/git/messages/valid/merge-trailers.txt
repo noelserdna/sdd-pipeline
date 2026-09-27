@@ -1,0 +1,3 @@
+Merge fase-3-billing: FASE-3 billing
+
+Refs: FASE-3, REQ-F-020

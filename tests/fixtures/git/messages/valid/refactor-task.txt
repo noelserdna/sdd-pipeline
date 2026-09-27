@@ -1,0 +1,3 @@
+refactor(tasks): extract validator
+
+Task: TASK-F2-005

@@ -1,0 +1,3 @@
+test(tasks): cover title validation
+
+Task: TASK-F2-002

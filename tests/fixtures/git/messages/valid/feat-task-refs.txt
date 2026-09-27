@@ -1,0 +1,7 @@
+feat(tasks): create task with server-side validation
+
+Validates title length and due date per RN-004.
+
+Task: TASK-F2-003
+Refs: UC-002, API-002-01, RN-004
+Refs: BDD-UC-002

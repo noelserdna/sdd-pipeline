@@ -1,0 +1,3 @@
+docs(specs): clarify
+
+Refs: #12

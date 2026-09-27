@@ -1,0 +1,3 @@
+docs(specs): clarify RN-004 retry window
+
+Refs: CR-12, REQ-F-004, UC-002
