@@ -46,6 +46,9 @@ export const ROUTES = {
   rerun: "rerun-tests",
   remeasure: "remeasure",
 };
+/** Symbol-keyed flag on each requirement of a ledger (JSON output ignores it): false when the project has no
+ *  spec/tests, i.e. the route skipped the specifications and the requirement criteria are the contract. */
+export const SPEC_TESTS = Symbol("specTests");
 
 // ------------------------------------------------------------------ requirements
 const norm = (s) => String(s ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
@@ -321,6 +324,7 @@ export function evaluate(opts) {
   const recs = decisions.records;
   const staleDecisions = [];
   const requirements = [];
+  const specTests = existsSync(path.join(root, "spec", "tests"));
 
   for (const req of reqs) {
     const hash = reqHash(req);
@@ -328,7 +332,7 @@ export function evaluate(opts) {
     const method = VERIFICATION_METHODS.includes(req.verification) ? req.verification : null;
     const base = { id: req.id, type: req.type, title: req.title, priority, needs: req.needs || [], verification: method,
       verification_raw: method ? null : req.verification, reqHash: hash,
-      in_scope: scope ? scope.has(req.id) : true };
+      in_scope: scope ? scope.has(req.id) : true, [SPEC_TESTS]: specTests };
     const mine = recs.filter((r) => r.req === req.id);
     if (req.deprecated) {
       requirements.push({ ...base, verdict: "DEPRECATED", criteria: [], criteria_total: 0, criteria_passing: 0, evidence: [], waiver: null, stale_evidence: false });
@@ -424,6 +428,7 @@ export function evaluate(opts) {
     scope: scope ? { fase, requirements: [...scope] } : null,
     junit: (junit?.files || []).map((f) => ({ path: rel(f.path), cases: f.cases.length, fresh: junitFresh.get(f.path).ok, stale_reason: junitFresh.get(f.path).why })),
     junit_sha: junitSha,
+    spec_tests: specTests,
     requirements, summary,
     fase_acceptances: faseAcceptances,
     stale_decisions: staleDecisions,
@@ -461,24 +466,30 @@ export function summarize(list) {
 /** A stale measurement whose latest record has a command: `sdd accept --remeasure` re-runs it, no person needed. */
 const remeasurable = (c) => c.state === "stale" && c.evidence.some((e) => e.kind === "measurement" && e.command);
 
+/** A criterion with neither a scenario nor a test: without spec/tests there is no scenario layer to fill in, so the
+ *  criterion itself is the contract and the work is a test named after it (`REQ-X-NNN ACn`); with spec/tests the
+ *  missing scenario is a spec gap for a human. `ctx.specTests` overrides the flag stored on the requirement. */
+const uncovered = (c) => !c.scenarios.length && !c.tests.length;
+const specGapFor = (r, ctx) => ((ctx && ctx.specTests !== undefined ? ctx.specTests : r[SPEC_TESTS]) === false ? ROUTES.implement : ROUTES.specGap);
+
 /** Deterministic route hint for a requirement that is not VERIFIED / WAIVED / DEPRECATED. */
-export function routeHint(r) {
+export function routeHint(r, ctx) {
   if (r.verdict === "FAILING") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
   const open = r.criteria.filter((c) => c.state !== "pass");
   if (r.verification === "measurement" && open.length && open.every(remeasurable)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
-  if (open.some((c) => !c.scenarios.length && !c.tests.length)) return ROUTES.specGap;
+  if (open.some((c) => uncovered(c))) return specGapFor(r, ctx);
   if (open.every((c) => c.state === "stale")) return ROUTES.rerun;
   return ROUTES.implement;
 }
-export function criterionHint(r, c) {
+export function criterionHint(r, c, ctx) {
   if (c.state === "pass") return null;
   if (c.state === "fail") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
   if (r.verification === "measurement" && remeasurable(c)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
-  if (!c.scenarios.length && !c.tests.length) return ROUTES.specGap;
+  if (uncovered(c)) return specGapFor(r, ctx);
   if (c.state === "stale") return ROUTES.rerun;
   return ROUTES.implement;
 }

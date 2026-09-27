@@ -312,7 +312,8 @@ Schema for `dashboard/traceability-graph.json`, written by `scripts/sdd-graph.py
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Stage identifier (e.g., `"requirements-engineer"`) |
-| `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"`, `"pending"` |
+| `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"`, `"pending"`, `"skipped"` (left out by the adaptive route, `sdd route --write`) |
+| `skipReason` | string or null | No | Only on `skipped` stages: the route's reason, copied from `pipeline-state.json` (e.g. `"skip: 6 REQ-F (≤ 8), one user type, no integrations, no sensitive data, no complex state"`) |
 | `lastRun` | string or null | Yes | ISO-8601 timestamp of last completion, null if never run |
 | `artifactCount` | number | Yes | Count of artifacts produced by this stage |
 | `stageLabel` | string | No | Unit label for `artifactCount` (e.g., `"requirements"`, `"findings"`). Defaults to `"artifacts"`. |
@@ -320,7 +321,9 @@ Schema for `dashboard/traceability-graph.json`, written by `scripts/sdd-graph.py
 
 ### pipeline.lateralStages[]
 
-Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `tech-designer`, `ux-designer`). Same schema as `pipeline.stages[]`. Only present when these stages have been run at least once.
+Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `tech-designer`, `ux-designer`). Same schema as `pipeline.stages[]`. Only present when these stages have been run at least once (or the adaptive route recorded them as `skipped`).
+
+A `skipped` stage counts as satisfied: in the aggregated group status (`pipeline.groups[].status`, `aggregate_group_status` in `scripts/sdd-graph.py`) it neither makes a group `partial` nor keeps it `pending` (done + skipped → `done`, pending + skipped → `pending`); a group whose stages are all skipped is `skipped`. The MCP resource `sdd://pipeline/status` leaves skipped stages out of the progress denominator (`"1/4 stages complete, 3 skipped"`), lists them in `skippedStages` with their reason, and never proposes one as the next action.
 
 ### pipeline.stages[].summary
 

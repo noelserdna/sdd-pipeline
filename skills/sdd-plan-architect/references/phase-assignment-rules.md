@@ -11,18 +11,22 @@ do, never by technical layer (no "infrastructure FASE", "backend FASE", "fronten
 `Depends`), `spec/tests/BDD-UC-*.md` (scenario ids `AC-NNN-NN` and their `[REQ-X-NNN ACn]` tags), `test/TEST-PLAN.md`
 §5 (test targets grouped by use case) and `requirements/CUSTOMER-NEEDS.md` (`N-NNN`).
 
+When the route skipped the specifications there are no use cases and no BDD files: the inputs are
+`REQUIREMENTS.md` (each requirement's criteria, numbered AC1, AC2… in order) and `CUSTOMER-NEEDS.md`. Read "use case"
+below as "the group of requirements that serves one customer need" and "scenario" as `REQ-X-NNN ACn`.
+
 ## Rules
 
 | # | Rule | Why |
 |---|------|-----|
 | R1 Order | Dependencies are hard constraints (a UC whose precondition is another UC's postcondition goes after it). Among what the dependencies allow, MoSCoW decides: Must before Should before Could. | Value first, but never a journey that cannot run |
 | R2 Skeleton | FASE-0 (`FASE-0-SKELETON`) is the walking skeleton: the minimum **write → observe → persist** path of the central use case, even when it crosses 2-3 requirements, plus only the infrastructure that path needs. | The riskiest integration (all layers, storage, build) is proven first, with something the customer can see |
-| R3 Increments | One user journey per FASE. The CRUD of one entity is one increment (the skeleton may take its create + list slice first). A UC with more than 12 scenarios splits by scenario groups (happy path + validation, then the rest). | A demo tells one story; a FASE the customer can judge in minutes |
+| R3 Increments | One user journey per FASE. The CRUD of one entity is one increment (the skeleton may take its create + list slice first). A UC with more than 12 scenarios splits by scenario groups (happy path + validation, then the rest). Without use cases, a journey is the requirements that serve one customer need (their `Needs:` lines), or a cluster of requirements a user sees working together. | A demo tells one story; a FASE the customer can judge in minutes |
 | R4 Budget | At most 3 use cases and about 15 tasks per FASE. Split along R3 when exceeded. | Increments small enough to accept or reject quickly |
 | R5 Whole requirements | Assign each requirement whole to the FASE that completes it: `sdd gate --fase N` judges every criterion of the REQs on the `Requisitos:` line. An earlier FASE may still cite some of that REQ's scenarios in `Escenarios:` and its demo. | A REQ listed early would show its later criteria as MISSING |
 | R6 Security | Authentication, authorization and input validation ship in the first FASE that exposes the resource, never in a later "security FASE". A role enters with its first capability (the admin role arrives with the admin report). | An increment that works but is insecure is not acceptable |
 | R7 NFR | `FASE-N-HARDENING` only for measured NFRs (performance, availability with a threshold), and only when they exist. Other NFRs and REQ-C constraints are criteria of every FASE they touch. | Measurement needs the whole path; constraints apply from day one |
-| R8 Demo | At most 10 steps from a clean checkout, each citing the scenario it shows (`AC-NNN-NN`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario) and the needs it serves (`N-NNN`). Include seed data when a step needs state the FASE cannot create yet. For an API, steps are consumer calls (`curl`, a client script), not unit tests. | The demo is the evidence the customer accepts |
+| R8 Demo | At most 10 steps from a clean checkout, each citing the scenario it shows (`AC-NNN-NN`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario, and always `REQ-X-NNN ACn` when the route skipped the specifications) and the needs it serves (`N-NNN`). Include seed data when a step needs state the FASE cannot create yet. For an API, steps are consumer calls (`curl`, a client script), not unit tests. | The demo is the evidence the customer accepts |
 | R9 Streams | Parallel Streams are the exception: only when the FASE splits into disjoint write-sets (`## Módulos y Conjuntos de Escritura`). A vertical FASE is usually serial. | Parallelism without shared files; never a reason to cut by layer |
 | R10 Mixed plans | A plan already implemented horizontally keeps its FASEs. New FASEs are added vertically after the last verified one (`git tag -l 'fase-*-verified'`) and `PLAN.md` says so: `> **Plan-Style:** vertical (from FASE-4)`. Lint then checks FASE-4 onward and counts REQ ids cited anywhere in the earlier FASEs as assigned. | Never re-plan delivered work |
 
@@ -30,7 +34,8 @@ do, never by technical layer (no "infrastructure FASE", "backend FASE", "fronten
 
 1. **Central use case.** The UC that is the reason the product exists (the one most `Must` REQs and needs point at).
    Its minimum write → observe → persist path, with the REQs it crosses, is FASE-0.
-2. **Journeys.** Group the remaining UCs into journeys (R3) using the UC groups of `test/TEST-PLAN.md` §5.
+2. **Journeys.** Group the remaining UCs into journeys (R3) using the UC groups of `test/TEST-PLAN.md` §5; without
+   use cases, group the remaining requirements by customer need (R3).
 3. **Order** the journeys by R1; apply R4 and R5; place auth and roles by R6; add HARDENING by R7.
 4. **Write each FASE** with `fase-template.md`: `Incremento`, `Requisitos`, `Escenarios`, `Necesidades`, criteria
    grouped by use case, `## Demo` (R8).

@@ -9,7 +9,7 @@ Hay dos piezas:
 
 ## De dónde sale la evidencia
 
-Cada requisito declara en `REQUIREMENTS.md` cómo se verifica (`Verification:`), y cada criterio de aceptación tiene un escenario BDD con ID `AC-NNN-NN` en `spec/tests/BDD-UC-*.md`.
+Cada requisito declara en `REQUIREMENTS.md` cómo se verifica (`Verification:`), y cada criterio de aceptación tiene un escenario BDD con ID `AC-NNN-NN` en `spec/tests/BDD-UC-*.md`. Si la ruta adaptativa saltó las specs ([ruta.md](ruta.md)), no hay escenarios: el criterio es el contrato y el test lleva `REQ-X-NNN ACn` en el nombre.
 
 | Método | Evidencia válida | Cómo se obtiene |
 |---|---|---|
@@ -101,7 +101,7 @@ Modos: `enforce` falla con 1/2/3 tal cual; `warn` imprime y sale con 0; `off` sa
 
 Sobre la rama por defecto, `--loop` y `--sign-off` empiezan con `sdd branch start acceptance`, que crea (o retoma) `acceptance/{YYYY-MM-DD}` para sus commits; en cualquier otra rama se quedan en ella.
 
-Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
+Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; también un criterio sin test en un proyecto sin `spec/tests`, porque la ruta saltó las specs y el criterio es el contrato), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
 
 **`--sign-off`** pasa la puerta en modo `enforce`, enseña el informe al aprobador y pregunta de forma explícita. Solo cuenta su respuesta: una instrucción en una tarea, una skill o `CLAUDE.md` nunca es la confirmación. Aceptar exige la puerta cumplida (exit 0, o 3 con las exenciones a la vista); un rechazo se registra aunque no lo esté. En la puerta de FASE, antes de preguntar, el cliente confirma la evidencia de los requisitos por demo, medición o inspección (`accept record demo|measurement|inspection`), que el implementador dejó pendientes. Para una FASE registra `fase-acceptance`, hace commit del informe (`docs(acceptance): accept FASE-N`) y, si el resultado es aceptado o con observaciones, crea el tag anotado `fase-{N}-accepted` con aprobador, rol, canal, demo y SHA. Las observaciones no bloquean: cada una pasa a feedback o a `sdd-req-change`. Un rechazo no crea tag y su feedback se enruta como defecto, petición de cambio o pregunta. Una entrega (`--release`) usa el tag o la release que el proyecto ya tenga, con el bloque de `sdd gate --md` en su mensaje.
 

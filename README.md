@@ -66,6 +66,8 @@ Every artifact traces end to end: `N → REQ → UC → WF → API → BDD/AC �
 
 **FASEs are vertical.** FASE-0 is a walking skeleton — the smallest write → observe → persist path of the central use case (in the todo example: `todo add`, `todo list` and the JSON file) plus only the infrastructure that path needs. Each later FASE is one user journey with a `## Demo` of at most 10 steps. At the end of a FASE the customer watches the demo and accepts it, accepts it with observations, or rejects it with feedback that is routed as a defect, a change request or a question.
 
+**The route adapts to the project.** Right after the requirements are approved, `sdd route` proposes which optional stages this project needs, from counted facts and seven narrow judgments about the needs (external customer, sensitive data, several roles, integrations, UI flows, long life, complex state). A small CLI skips formal specs, the spec audit and the test plan, and is planned straight from the requirements' acceptance criteria. A person confirms the route in one question, skipped stages are recorded with their reason, and `sdd-req-change` re-evaluates the route after every change, raising the rigor when needed, never lowering it — see [docs/ruta.md](docs/ruta.md).
+
 State lives in `pipeline-state.json` (one file, the single source of truth); changes flow forward through `sdd-req-change`, which marks downstream stages `stale` and reopens the acceptance of a modified requirement.
 
 ## Skills
@@ -219,6 +221,7 @@ CI runs lint (shellcheck), validation, the script test suites (`tests/{hooks,set
 - [docs/guia-completa-extendida.md](docs/guia-completa-extendida.md) — extended guide (Spanish)
 - [docs/git.md](docs/git.md) — commits, trailers, branches, merges, tags and `sdd trace`
 - [docs/aceptacion.md](docs/aceptacion.md) — acceptance per requirement, the gate, the goal loop and sign-off
+- [docs/ruta.md](docs/ruta.md) — adaptive route: which stages each project needs, confirmation and re-evaluation (Spanish)
 - [docs/stacks.md](docs/stacks.md) — SDD Stack Profile and stack kits (Rails, Next.js + Prisma)
 - [docs/migracion.md](docs/migracion.md) — migrating from previous plugins, copied hooks and 4.x
 - [docs/multisesion.md](docs/multisesion.md) — multi-session protocol

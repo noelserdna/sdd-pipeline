@@ -62,7 +62,7 @@ Report the total as `metrics.test_chars` (`wc -c test/*.md`) in Persist Summary 
 
 | Gate | Check | On failure |
 |---|---|---|
-| G0 | `pipeline-state.json` → `stages["spec-auditor"].summary.metrics.gate_result` ∈ {`PASS`, `CONDITIONAL`} | Missing or `FAIL`: tell the user and ask whether to run `sdd-spec-auditor` first (recommended) or plan against the unaudited spec; in the latter case add a first highlight "planned against spec with audit gate {FAIL|missing}" |
+| G0 | `pipeline-state.json` → `stages["spec-auditor"].summary.metrics.gate_result` ∈ {`PASS`, `CONDITIONAL`} | `stages["spec-auditor"].status == "skipped"` (the confirmed route left the audit out, `docs/ruta.md`) → n/a, no question. Missing or `FAIL`: tell the user and ask whether to run `sdd-spec-auditor` first (recommended) or plan against the unaudited spec; in the latter case add a first highlight "planned against spec with audit gate {FAIL|missing}" |
 | G1 | `spec/domain/`, `spec/use-cases/`, `spec/contracts/` exist and are non-empty | Stop: nothing to plan from; recommend `sdd-specifications-engineer` |
 | G2 | `spec/tests/BDD-UC-*.md` exist (at least partially) | Continue; every UC without a BDD file becomes a `MISSING-BDD` gap |
 | G3 | `spec/nfr/*.md` exist | Continue; Mode 3 writes only "Not planned" and TEST-PLAN §4 gets a `MISSING-NFR-TEST` gap per quantified NFR expected by a REQ-NF |

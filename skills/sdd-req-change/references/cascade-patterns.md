@@ -14,11 +14,17 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
   "lastUpdated": "ISO 8601 timestamp",
   "stages": {
     "{stage-name}": {
-      "status": "done | stale | running | error",
+      "status": "pending | running | done | stale | error | skipped",
       "outputHash": "sha256:{hash} — hash of output directory/files",
       "lastRun": "ISO 8601 timestamp",
-      "staleReason": "CHG-YYYY-MM-DD-NNN or null"
+      "staleReason": "CHG-YYYY-MM-DD-NNN or null",
+      "skipReason": "why the confirmed route leaves this stage out (only with status skipped)"
     }
+  },
+  "route": {
+    "decidedAt": "ISO 8601", "factors": {}, "facts": {}, "doubts": [],
+    "stages": { "{stage-name}": { "run": true, "reason": "text" } },
+    "confirmedBy": "Name (role) or null", "reqHash": "hash of the requirements the route was decided on"
   },
   "lastChange": {
     "changeReportId": "CHG-YYYY-MM-DD-NNN",
@@ -33,11 +39,14 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"` |
+| `status` | enum | Yes | `"pending"`, `"running"`, `"done"`, `"stale"`, `"error"`, `"skipped"` |
+| `skipReason` | string | With `skipped` | The route's reason for leaving the stage out (`sdd route --write`, `docs/ruta.md`) |
 | `outputHash` | string | No | `sha256:{hash}` of output directory/files |
 | `lastRun` | string | No | ISO 8601 timestamp |
 | `staleReason` | string | No | `CHG-YYYY-MM-DD-NNN` or null |
 | `summary` | object | No | Stage completion summary (see Section 9) |
+
+`skipped` is written only by `sdd route --write` after a person confirms the route, never by hand or by a cascade. A skipped stage counts as satisfied for the stages after it (gates, lead dispatch, `next`), and a stage that is `done` or `running` is never turned into `skipped`.
 
 ### Stage Names (pipeline order)
 
@@ -65,6 +74,7 @@ When an artifact changes, every downstream stage that depends on it becomes **st
 
 | Changed Artifact | Invalidated Stages |
 |---|---|
+| `requirements/` when the route skipped `specifications-engineer` | `plan-architect` → `task-generator` → `task-implementer` (the plan is built from the requirements) |
 | `requirements/` (not yet propagated to specs) | `specifications-engineer` → `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` |
 | `spec/` (any file) | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer`; laterals `tech-designer` and `ux-designer` when their outputs exist |
 | security requirement or `spec/nfr/SECURITY.md` | additionally `security-auditor` (lateral) |
@@ -73,9 +83,12 @@ When an artifact changes, every downstream stage that depends on it becomes **st
 
 `sdd-req-change` edits `requirements/` and propagates the change into `spec/` in the same run, so its changes count as `spec/` changes: `specifications-engineer` stays `done` (Persist restores it if the H3 hook flipped it) and staleness starts at `spec-auditor`.
 
+When the route skipped `specifications-engineer` there is no `spec/` to propagate into: the change is applied to `requirements/` only and the cascade starts at `plan-architect`. After an approved ADD or MODIFY, `sdd route --json` is run again: stages it now marks to run while they are `skipped` (its `escalations`) are recommended to the user, and on a yes recorded with `route --write --set <stage>=run --confirm "<name> (<role>)"` and run before the plan. The route never lowers the rigor by itself: a stage that already ran is never switched to `skipped`.
+
 ### Key Rules
 
 - Invalidation always propagates **forward** (downstream) — never backward.
+- A `skipped` stage is never marked stale: it has no output to invalidate. It runs again only when a person puts it back on the route.
 - A `stale` stage is re-executed before any stage after it.
 - Several artifacts changed at once → the **union** of invalidated stages.
 - Affected FASEs (Section 5) narrow which FASEs are regenerated, never which stages are stale.
@@ -90,8 +103,8 @@ Skills run in this order; only `stale` stages run.
 
 | Step | Skill Invocation | Condition |
 |------|-----------------|-----------|
-| 1 | `sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md` | Always (spec/ changed) |
-| 2 | `sdd-test-planner`, Mode 4 (Audit Test Coverage) over the changed UCs/NFRs | Always |
+| 1 | `sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md` | spec/ changed and the stage is not `skipped` |
+| 2 | `sdd-test-planner`, Mode 4 (Audit Test Coverage) over the changed UCs/NFRs | The stage is not `skipped` |
 | 3 | `sdd-plan-architect --regenerate-fases --affected={N,M}` | Always |
 | 4 | `sdd-task-generator --fase={N} --incremental` | Once per affected FASE |
 | 5 | `sdd-task-implementer --fase {N} --new-tasks-only` | Once per affected FASE; `auto` mode only |

@@ -22,7 +22,7 @@ Section headers and header labels stay in Spanish — other tools parse them: `s
 ```
 
 - **Requisitos** — the requirements this FASE completes, whole (rule R5). `sdd gate --fase N` judges exactly these; list every id, no ranges.
-- **Escenarios** — every scenario the FASE makes pass: `AC-NNN-NN` from `spec/tests/BDD-UC-*.md`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario (a measured NFR). Each id individually (no `..` ranges): the task generator checks that every one is cited by a task, and the lint that it exists.
+- **Escenarios** — every scenario the FASE makes pass: `AC-NNN-NN` from `spec/tests/BDD-UC-*.md`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario (a measured NFR, or every requirement when the route skipped the specifications and there is no `spec/`). Each id individually (no `..` ranges): the task generator checks that every one is cited by a task, and the lint that it exists.
 - **Necesidades** — the customer needs (`requirements/CUSTOMER-NEEDS.md`) the increment serves.
 - FASE-0 is `FASE-0-SKELETON.md`; a measured-NFR FASE is `FASE-{N}-HARDENING.md`.
 

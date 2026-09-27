@@ -47,3 +47,21 @@ test("sdd_coverage cuenta como inferido todo origin distinto de direct (grafo v6
   assert.ok(!("hookCaptured" in b) && !("codeIndex" in b), "retired origins are not counted");
   assert.ok(!("codeIntelligence" in out), "no codeIntelligence block");
 });
+
+test("sdd://pipeline/status: una etapa skipped sale del denominador y nunca es la siguiente acción", async () => {
+  const { readResource } = await import("../src/resources.js");
+  const st = (name: string, status: string, extra = {}) => ({ name, status, lastRun: null, artifactCount: 0, ...extra });
+  const g = {
+    ...emptyGraph(),
+    pipeline: {
+      currentStage: "plan-architect",
+      stages: [st("requirements-engineer", "done"), st("specifications-engineer", "skipped", { skipReason: "6 REQ-F" }),
+        st("spec-auditor", "skipped"), st("test-planner", "skipped"), st("plan-architect", "pending"),
+        st("task-generator", "pending"), st("task-implementer", "pending")],
+    },
+  } as unknown as import("../src/graph-loader.js").TraceabilityGraph;
+  const out = JSON.parse(readResource("sdd://pipeline/status", g, {} as never).contents[0].text);
+  assert.equal(out.progress, "1/4 stages complete, 3 skipped");
+  assert.equal(out.nextAction, "Continue with /sdd-plan-architect");
+  assert.deepEqual(out.skippedStages[0], { name: "specifications-engineer", reason: "6 REQ-F" });
+});

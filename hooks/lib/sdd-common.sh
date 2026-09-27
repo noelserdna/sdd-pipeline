@@ -337,15 +337,18 @@ sdd_unlock() {
 
 # ---------------------------------------------------------------- estado de las etapas
 # Orden canónico de las 7 etapas lineales. Las laterales (req-change, security-auditor, tech-designer,
-# ux-designer, gap-detector…) no cuentan para el progreso N/7.
+# ux-designer, gap-detector…) no cuentan para el progreso N/M; las lineales `skipped` tampoco (M = 7 − saltadas).
 SDD_STAGE_ORDER="requirements-engineer specifications-engineer spec-auditor test-planner plan-architect task-generator task-implementer"
 
-# sdd_stage_summary FILE → UNA línea `done|7|running|stale|error|next|current` (vacío si no se puede leer).
+# sdd_stage_summary FILE → UNA línea `done|total|running|stale|error|next|current|skipped` (vacío si no se puede leer).
 #   done     etapas lineales con status done (0..7)
+#   total    etapas lineales que no están `skipped` (7 menos las que la ruta adaptativa dejó fuera)
 #   running  stale  error   listas separadas por espacios: primero las lineales en orden de pipeline
 #                           (de arriba abajo), luego las laterales en el orden del fichero
-#   next     primera etapa lineal pending/stale (o ausente); vacío si no queda ninguna
+#   next     primera etapa lineal pending/stale (o ausente); vacío si no queda ninguna. Las skipped
+#            nunca son la siguiente: cuentan como satisfechas.
 #   current  .currentStage
+#   skipped  etapas lineales `skipped`, separadas por espacios (el progreso se lee "N/M done, K skipped")
 # Separador `|` (no tab): `read` colapsa tabs consecutivos cuando un campo está vacío.
 sdd_stage_summary() {
   local f="$1"
@@ -358,10 +361,12 @@ sdd_stage_summary() {
       | ($o + (($s | keys_unsorted) - $o)) as $all
       | def st($k): ($s[$k] | obj | .status // (if $s[$k] == null then "absent" else "pending" end));
         def pick($v): [ $all[] | select(st(.) == $v) ] | join(" ");
-        [ ([ $o[] | select(st(.) == "done") ] | length | tostring), ($o | length | tostring),
+        [ ([ $o[] | select(st(.) == "done") ] | length | tostring),
+          ([ $o[] | select(st(.) != "skipped") ] | length | tostring),
           pick("running"), pick("stale"), pick("error"),
           ([ $o[] | select(st(.) as $x | $x == "pending" or $x == "stale" or $x == "absent") ] | first // ""),
-          ((.currentStage // "") | tostring) ] | join("|")' "$f" 2>/dev/null || true
+          ((.currentStage // "") | tostring),
+          ([ $o[] | select(st(.) == "skipped") ] | join(" ")) ] | join("|")' "$f" 2>/dev/null || true
     return 0
   fi
   sdd_has_node || return 0
@@ -375,8 +380,9 @@ sdd_stage_summary() {
       const st = (k) => (s[k] === undefined || s[k] === null) ? "absent" : (obj(s[k]).status || "pending");
       const pick = (v) => all.filter((k) => st(k) === v).join(" ");
       const next = o.find((k) => ["pending", "stale", "absent"].includes(st(k))) || "";
-      process.stdout.write([o.filter((k) => st(k) === "done").length, o.length, pick("running"), pick("stale"),
-        pick("error"), next, String(j.currentStage || "")].join("|") + "\n");
+      process.stdout.write([o.filter((k) => st(k) === "done").length, o.filter((k) => st(k) !== "skipped").length,
+        pick("running"), pick("stale"), pick("error"), next, String(j.currentStage || ""),
+        o.filter((k) => st(k) === "skipped").join(" ")].join("|") + "\n");
     } catch (e) {}' 2>/dev/null || true
   return 0
 }
@@ -385,7 +391,9 @@ sdd_stage_summary() {
 #   MODE=write (defecto; H3, escrituras bajo el directorio de una etapa): solo pending/stale/ausente →
 #     running. Nunca toca done, error ni running: req-change que escribe requirements/ no reabre
 #     requirements-engineer, y un stage done no queda en running para siempre.
-#   MODE=skill (H3 en PreToolUse Skill / UserPromptExpansion: la skill de la etapa arranca): además done → running (re-ejecución).
+#   MODE=skill (H3 en PreToolUse Skill / UserPromptExpansion: la skill de la etapa arranca): además done → running
+#     (re-ejecución) y skipped → running (alguien ejecuta a propósito una etapa que la ruta adaptativa saltó; el
+#     modo write nunca la reabre, porque la ruta no se deshace sola). Al arrancarla se borra skipReason.
 # No crea FILE (lo crea sdd-setup): sin él, no hace nada. Conserva `summary` y el resto de campos.
 # Siempre devuelve 0.
 sdd_mark_running() {
@@ -400,8 +408,9 @@ sdd_mark_running() {
       | .stages[$s] = ((.stages[$s] // { status: "pending", outputHash: null, lastRun: null, staleReason: null })
                        | if type == "object" then . else { status: "pending" } end)
       | (.stages[$s].status // "pending") as $st
-      | if $st == "pending" or $st == "stale" or ($mode == "skill" and $st == "done") then
+      | if $st == "pending" or $st == "stale" or ($mode == "skill" and ($st == "done" or $st == "skipped")) then
           .stages[$s].status = "running" | .stages[$s].lastRun = $now | .stages[$s].staleReason = null
+          | del(.stages[$s].skipReason)
           | .currentStage = $s | .lastUpdated = $now
         else .lastUpdated = $now end' "$f" > "$tmp" 2>/dev/null; then
       mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp"
@@ -417,8 +426,8 @@ sdd_mark_running() {
         let g = j.stages[E.SDD_MR_STAGE];
         if (!g || typeof g !== "object") g = j.stages[E.SDD_MR_STAGE] = { status: "pending", outputHash: null, lastRun: null, staleReason: null };
         const st = g.status || "pending";
-        if (st === "pending" || st === "stale" || (E.SDD_MR_MODE === "skill" && st === "done")) {
-          g.status = "running"; g.lastRun = E.SDD_MR_NOW; g.staleReason = null; j.currentStage = E.SDD_MR_STAGE;
+        if (st === "pending" || st === "stale" || (E.SDD_MR_MODE === "skill" && (st === "done" || st === "skipped"))) {
+          g.status = "running"; g.lastRun = E.SDD_MR_NOW; g.staleReason = null; delete g.skipReason; j.currentStage = E.SDD_MR_STAGE;
         }
         j.lastUpdated = E.SDD_MR_NOW;
         fs.writeFileSync(E.SDD_MR_TMP, JSON.stringify(j, null, 2) + "\n");

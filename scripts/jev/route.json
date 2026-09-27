@@ -1,0 +1,65 @@
+{
+  "description": "Adaptive route (`sdd route`, scripts/lib/route.mjs): ONE item per project, state = {project: {name}, needs: [{id, quote, who}] (in-scope customer needs only), requirements: [{id, type (F|NF|C), priority, statement}] (active requirements, statements only, no acceptance criteria)}. Seven narrow Nouls, one per project factor; the code applies the thresholds below (p >= yes → yes, p <= no → no, in between → doubt, which is treated as yes and named to the human) and combines the answers with counted facts in the per-stage rules of scripts/lib/route-rules.mjs. Jev is never asked whether the project needs the full pipeline: that is a multi-step decision the rules make. Without Jev, the LLM answers the same seven questions in a JSON file ({\"factors\": {name: probability}}) and passes it with --answers.",
+  "thresholds": {
+    "yes": 0.65,
+    "no": 0.35
+  },
+  "questions": {
+    "external_customer": {
+      "type": "noul",
+      "instructions": "Read `needs` (each with `who` said it) and `requirements`. Is the person who asks for this software someone other than the people who build it, so that this person or organization has to review and accept what is delivered (a client, a product owner in another team, a paying customer)?",
+      "criteria": {
+        "true": "A client, customer, product owner or stakeholder distinct from the builders requested the software and will judge the delivery",
+        "false": "The builders are building it for themselves (a personal tool, a hobby project, an internal script they will use), and nobody else must accept it"
+      }
+    },
+    "sensitive_data": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Does the software store, process or transmit sensitive data: personal data about people (names with contact details, addresses, health, identity documents), passwords or other credentials, payment or card data, money, or data covered by a regulation (GDPR, HIPAA, PCI)?",
+      "criteria": {
+        "true": "At least one need or requirement involves personal data about people, login credentials, payments, money or regulated information",
+        "false": "The data is only the user's own non-personal content (tasks, notes, settings) or public data; no accounts, credentials, payments or personal records of other people"
+      }
+    },
+    "multi_actor": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Are there two or more kinds of users with different permissions or different things they are allowed to do (for example admin and regular user, seller and buyer, teacher and student)?",
+      "criteria": {
+        "true": "The text names at least two user roles or kinds of users whose permissions or capabilities differ",
+        "false": "There is a single kind of user, or all users can do exactly the same things"
+      }
+    },
+    "integrations": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Does the software depend on an external system or service it does not own to do its job: a third-party API, a payment provider, an email or SMS service, an identity provider, another company system, or a remote service reached over the network?",
+      "criteria": {
+        "true": "At least one need or requirement depends on calling or receiving data from a system outside this software",
+        "false": "Everything runs inside this software with local files or its own storage; no external API, provider or remote system is involved"
+      }
+    },
+    "ui_flows": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Does the software have a graphical user interface with screens, pages or forms that a person navigates (a web app, a mobile app, a desktop window)? A command-line tool that prints text in a terminal does not count.",
+      "criteria": {
+        "true": "The user interacts through screens, pages, forms or views of a web, mobile or desktop interface",
+        "false": "The user interacts through a terminal command line, an API or no interface at all; there are no screens or pages"
+      }
+    },
+    "long_lived": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Is this software expected to be maintained and extended over many months by a team or for real users, rather than being a one-off, a prototype, an exercise or a small personal tool?",
+      "criteria": {
+        "true": "The text signals ongoing evolution: real users or customers depending on it, future versions, a roadmap, several teams, or a business that runs on it",
+        "false": "The text describes a small, self-contained tool, a prototype, a demo or an exercise with no sign of long-term evolution"
+      }
+    },
+    "complex_state": {
+      "type": "noul",
+      "instructions": "Read `needs` and `requirements`. Does the software have hard coordination problems: several users or processes changing the same data at the same time, long-running or background processes, entities with many states and transitions (an order that goes through many steps), or data that must stay consistent across several systems?",
+      "criteria": {
+        "true": "At least one need or requirement involves concurrency, background or long-running jobs, a workflow with many states, or consistency across systems",
+        "false": "One user at a time performs simple create, read, update and delete operations; each record has at most a couple of states"
+      }
+    }
+  }
+}

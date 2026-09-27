@@ -44,8 +44,8 @@ for f in install-git-hooks.sh sdd-up.sh migrate-hooks-v3.sh; do check "bash -n $
 
 # ── 2. Plantillas ────────────────────────────────────────────────────────────
 sed -e "s/__SDD_VERSION__/9.9.9/" -e "s/__NOW__/2026-01-01T00:00:00Z/" "$ROOT/templates/pipeline-state.template.json" > "$tmp/ps.json"
-check "template pipeline-state: sddVersion, hooksVersion 3, 7 stages pending" \
-  jq -e '.sddVersion == "9.9.9" and .hooksVersion == 3 and .currentStage == "requirements-engineer" and .lastUpdated == "2026-01-01T00:00:00Z" and (.stages | length) == 7 and ([.stages[] | .status] | all(. == "pending"))' "$tmp/ps.json"
+check "template pipeline-state: sddVersion, hooksVersion 3, 7 stages pending, route null" \
+  jq -e '.sddVersion == "9.9.9" and .hooksVersion == 3 and .currentStage == "requirements-engineer" and .lastUpdated == "2026-01-01T00:00:00Z" and (.stages | length) == 7 and ([.stages[] | .status] | all(. == "pending")) and has("route") and .route == null' "$tmp/ps.json"
 check "template gitignore.sdd: marcadores" sh -c "grep -q '^# sdd-begin' '$ROOT/templates/gitignore.sdd' && grep -q '^# sdd-end' '$ROOT/templates/gitignore.sdd'"
 
 # ── 3. Repo temporal ─────────────────────────────────────────────────────────

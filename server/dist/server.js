@@ -31122,6 +31122,8 @@ function readResource(uri, graph, index) {
     const current = stages.find((s) => s.name === currentStage);
     const staleStages = stages.filter((s) => s.status === "stale");
     const doneStages = stages.filter((s) => s.status === "done");
+    const skippedStages = stages.filter((s) => s.status === "skipped");
+    const activeStages = stages.length - skippedStages.length;
     let nextAction = "Run /sdd-requirements-engineer to start the pipeline";
     const pendingStage = stages.find((s) => s.status === "pending" || s.status === "running");
     if (pendingStage) {
@@ -31139,8 +31141,9 @@ function readResource(uri, graph, index) {
             currentStage,
             currentStatus: current?.status ?? "unknown",
             lastRun: current?.lastRun ?? null,
-            progress: `${doneStages.length}/${stages.length} stages complete`,
+            progress: `${doneStages.length}/${activeStages} stages complete` + (skippedStages.length ? `, ${skippedStages.length} skipped` : ""),
             staleStages: staleStages.map((s) => s.name),
+            skippedStages: skippedStages.map((s) => ({ name: s.name, reason: s.skipReason ?? null })),
             nextAction,
             generatedAt: graph.generatedAt
           })

@@ -239,6 +239,8 @@ def aggregate_group_status(statuses):
 
     Se prioriza lo que el usuario necesita ver primero: si algo esta corriendo,
     el grupo esta corriendo; si hay mezcla de hecho y pendiente, es parcial.
+    Una etapa `skipped` (la ruta adaptativa la dejo fuera) cuenta como satisfecha:
+    no convierte el grupo en parcial; un grupo con todas sus etapas saltadas es `skipped`.
     """
     present = [s for s in statuses if s]
     if not present:
@@ -248,6 +250,9 @@ def aggregate_group_status(statuses):
     known = [s for s in present if s != "unknown"]
     if not known:
         return "unknown"
+    if all(s == "skipped" for s in known):
+        return "skipped"
+    known = [s for s in known if s != "skipped"]
     if all(s == "done" for s in known):
         return "done"
     if all(s in ("pending", "unknown") for s in known):
@@ -2125,6 +2130,8 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         }
         if sd.get("summary"):
             stage_entry["summary"] = sd["summary"]
+        if status == "skipped":
+            stage_entry["skipReason"] = sd.get("skipReason")
         pipeline_stages.append(stage_entry)
     pipeline_data["stages"] = pipeline_stages
 
@@ -2147,6 +2154,8 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             }
             if ld.get("summary"):
                 lateral_entry["summary"] = ld["summary"]
+            if lateral_entry["status"] == "skipped":
+                lateral_entry["skipReason"] = ld.get("skipReason")
             lateral_stages.append(lateral_entry)
     if lateral_stages:
         pipeline_data["lateralStages"] = lateral_stages

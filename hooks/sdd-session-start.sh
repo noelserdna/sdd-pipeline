@@ -78,13 +78,20 @@ if [ ! -f "$PIPELINE_STATE" ]; then
   emit "SDD Pipeline: No pipeline-state.json found. Fresh pipeline — all stages pending. Run /sdd-setup to initialize automation."
 fi
 
-# Progreso sobre las 7 etapas lineales (las laterales no cuentan en N/7); listas en orden de pipeline.
+# Progreso sobre las etapas lineales no saltadas (las laterales no cuentan; las `skipped` por la ruta adaptativa
+# salen del total y se nombran aparte: "N/M done, K skipped"); listas en orden de pipeline.
 build_context() {
-  local sum done_n total running stale errors next current msg
+  local sum done_n total running stale errors next current skipped msg k
   sum=$(sdd_stage_summary "$PIPELINE_STATE") || sum=""
   [ -n "$sum" ] || return 0
-  IFS='|' read -r done_n total running stale errors next current <<< "$sum"
+  IFS='|' read -r done_n total running stale errors next current skipped <<< "$sum"
   msg="SDD Pipeline [${current:-unknown}]: ${done_n}/${total} done"
+  if [ -n "$skipped" ]; then
+    # shellcheck disable=SC2086  # contar palabras de la lista
+    set -- $skipped
+    k=$#
+    msg="$msg, $k skipped (${skipped// /, })"
+  fi
   [ -n "$stale" ] && msg="$msg. STALE: ${stale// /, }"
   [ -n "$running" ] && msg="$msg. RUNNING: ${running// /, }"
   [ -n "$errors" ] && msg="$msg. ERROR: ${errors// /, }"

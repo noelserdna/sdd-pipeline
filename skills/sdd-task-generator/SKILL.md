@@ -17,7 +17,7 @@ Reads `plan/` (from `sdd-plan-architect`) and writes only `task/`. Code is writt
 3. **Human reviewable.** Specific acceptance criteria and checks a reviewer can run.
 4. **Traceable.** Every task cites its FASE and the spec IDs it implements (UC, API, INV, ADR, REQ); commits carry `Refs:` and `Task:` trailers.
 5. **Plan and specs are the source.** Derive tasks from what the plan and FASE specify; do not invent content or contradict ADRs. Missing plan content becomes a `[PLAN GAP]` task (Handling Plan Gaps). Never write to `spec/`, `plan/` or `audits/`.
-6. **Ubiquitous language.** Use only the terms in `spec/domain/01-GLOSSARY.md`.
+6. **Ubiquitous language.** Use only the terms in `spec/domain/01-GLOSSARY.md`. When the route skipped the specifications (no `spec/`), use the terms of `requirements/REQUIREMENTS.md`, and tasks cite REQ ids in `Refs:` and `REQ-X-NNN ACn` criteria in their Acceptance, as the FASE's `Escenarios` do.
 
 ## Task IDs and Markers
 

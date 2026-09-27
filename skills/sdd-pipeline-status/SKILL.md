@@ -39,15 +39,21 @@ the current directory.
    `git log -1 --format=%cI -- <input dirs>` newer than `lastRun` (inputs per stage: CLAUDE.md "Stage I/O
    mapping"). Uncommitted edits do not show up this way; mention `git status` if the user expects them to count.
 4. **Errors.** Stages with `status: "error"`, with `staleReason` if present.
+4b. **Route.** When pipeline-state has a `route` block (`sdd route --write`, `docs/ruta.md`), show who confirmed it
+   (`confirmedBy`, or "not confirmed" when null), `decidedAt`, and the `doubts`. List each stage with
+   `status: "skipped"` and its `skipReason`. A skipped stage counts as satisfied: it is neither pending nor next, the
+   stages after it may run, and it has no artifacts to verify. When `route.reqHash` no longer matches the current
+   requirements, say that the route was decided on an earlier version and recommend re-evaluating it
+   (`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" route --json`); `sdd-req-change` does this after every approved ADD or MODIFY.
 5. **Acceptance.** Read `$STATE_ROOT/.sdd/acceptance.json` (written by `sdd accept`, `sdd gate` and `sdd loop next`;
    git-ignored) when it exists: `summary.must_verified`/`must_total`, `must_waived` (`waived_musts`), `by_verdict`
    (FAILING, MISSING), `stale_evidence`, `goal`, plus `evaluated_sha` and `generatedAt`. It answers "is each
    requirement delivered, with what evidence", which stage statuses cannot. If `evaluated_sha` differs from
    `git rev-parse HEAD`, say the summary predates the last commit. Do not run `sdd accept` yourself: this skill only
    reads.
-6. **Report** (template below). Next action: the first stage that is stale, errored or pending, in pipeline order
+6. **Report** (template below). Next action: the first stage that is stale, errored or pending (never a skipped one), in pipeline order
    (requirements → specifications → spec-auditor → test-planner → plan-architect → task-generator →
-   task-implementer). When all of them are done: no `acceptance.json` → `/sdd-acceptance --check`; open Musts
+   task-implementer). When all of them are done or skipped: no `acceptance.json` → `/sdd-acceptance --check`; open Musts
    (goal false: some Must FAILING or MISSING) → `/sdd-acceptance --loop`; stale evidence only → `/sdd-acceptance
    --check` to re-capture the tests; goal met → `/sdd-acceptance --sign-off`.
 
@@ -58,6 +64,10 @@ the current directory.
 |---|-------|--------|----------|-----------|-------|
 | 1 | requirements-engineer | done | 2026-01-15 | OK | — |
 | 3 | spec-auditor | stale | 2026-01-14 | OK | spec/ changed after the audit |
+| 4 | test-planner | skipped | — | — | route: 6 REQ-F, no UI flows, no external customer |
+
+### Route              (only with a `route` block)
+- Confirmed by Laura (product owner) on 2026-01-15 · skipped: specifications-engineer, spec-auditor, test-planner · doubts: long_lived
 
 ### Last Change          (only with a `lastChange` block)
 - Change Report: CHG-2026-01-20-001 · Changed: requirements/, spec/ · Invalidated: plan-architect, task-generator · Cascade: manual

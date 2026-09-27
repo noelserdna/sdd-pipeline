@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests de `sdd lint --plan` (scripts/lib/plan-lint.mjs, sin modelo): planes verticales de tests/fixtures/plan-vertical
-# (todo-app y web) que pasan, una mutación por cada fallo (P-HEADER, P-AC, V8, V9, P-SIZE, V-20), plan horizontal
+# (todo-app, todo-app planificado desde los requisitos sin spec/, y web) que pasan, una mutación por cada fallo (P-HEADER, P-AC, V8, V9, P-SIZE, V-20), plan horizontal
 # (legado) y mixto, más los contratos de las skills que leen la marca `Plan-Style: vertical` y la validez de
 # scripts/jev/feedback-route.json. Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere node ≥ 18.
 set -euo pipefail
@@ -23,10 +23,10 @@ tmp="$(cd "$tmp" && pwd -P)"
 trap 'rm -rf "$tmp"' EXIT
 unset SDD_ROLE SDD_STATE_ROOT SDD_PLUGIN_ROOT CLAUDE_PROJECT_DIR CLAUDE_PLUGIN_ROOT || true
 
-# fresh NAME SRC → copia limpia del fixture en $tmp/NAME (todo: con los requisitos de examples/todo-app)
+# fresh NAME SRC → copia limpia del fixture en $tmp/NAME (todo, todo-reqonly: con los requisitos de examples/todo-app)
 fresh() {
   rm -rf "${tmp:?}/$1"; mkdir -p "$tmp/$1"; cp -R "$FIX/$2/." "$tmp/$1/"
-  if [ "$2" = todo ]; then mkdir -p "$tmp/$1/requirements"; cp "$ROOT/examples/todo-app/requirements/"*.md "$tmp/$1/requirements/"; fi
+  if [ "$2" = todo ] || [ "$2" = todo-reqonly ]; then mkdir -p "$tmp/$1/requirements"; cp "$ROOT/examples/todo-app/requirements/"*.md "$tmp/$1/requirements/"; fi
   P="$tmp/$1"
 }
 # sub FILE PERL-EXPR → edita en sitio (perl: igual en macOS y Linux)
@@ -45,6 +45,20 @@ run lint --plan --repo "$P" --json
 expect "todo --json: FASE-0 = skeleton add+list+persistencia+cobertura" "$(js 'j.fases[0].requirements.join(",")')" "REQ-F-001,REQ-F-002,REQ-F-006,REQ-NF-002"
 expect "todo --json: FASE-0 con 2 UCs, 6 pasos de demo y 5 tareas" "$(js '[j.fases[0].useCases.length,j.fases[0].demoSteps,j.fases[0].tasks].join(" ")')" "2 6 5"
 expect "todo --json: FASE-3 HARDENING escenario REQ-NF-001 AC1" "$(js 'j.fases[3].scenarios')" 1
+# Plan desde los requisitos (la ruta saltó las specs): sin spec/, Escenarios y Demo con `REQ-X-NNN ACn`.
+fresh reqonly todo-reqonly
+[ ! -e "$P/spec" ] && pass "todo-reqonly: sin spec/" || bad "todo-reqonly: el fixture tiene spec/"
+run lint --plan --repo "$P"; expect "todo-reqonly: lint --plan sale 0" "$rc" 0
+has "todo-reqonly: 3 FASEs sin errores ni avisos" "vertical, 3 FASE(s), 0 error(s), 0 warning(s)"
+has "todo-reqonly: nota sin spec/tests" "spec/tests/ not found"
+run lint --plan --repo "$P" --json
+expect "todo-reqonly --json: FASE-0 con 9 criterios REQ ACn y 0 UCs" "$(js '[j.fases[0].scenarios,j.fases[0].useCases.length].join(" ")')" "9 0"
+fresh reqonly-m1 todo-reqonly; sub "$P/plan/fases/FASE-1-LIFECYCLE.md" 's/REQ-F-004 AC2, REQ-F-005 AC1/REQ-F-004 AC7, REQ-F-005 AC1/'
+run lint --plan --repo "$P"; expect "todo-reqonly: criterio inexistente → 1" "$rc" 1
+has "todo-reqonly: P-AC REQ-F-004 AC7" "REQ-F-004 has no acceptance criterion 7"
+fresh reqonly-m2 todo-reqonly; sub "$P/plan/fases/FASE-1-LIFECYCLE.md" 's/REQ-F-003, REQ-F-004, REQ-F-005/REQ-F-003, REQ-F-005/'
+run lint --plan --repo "$P"; expect "todo-reqonly: Must sin FASE → 1" "$rc" 1
+has "todo-reqonly: V9 REQ-F-004" "REQ-F-004"
 fresh web web
 run lint --plan --repo "$P"; expect "web: lint --plan sale 0" "$rc" 0
 has "web: 6 FASEs sin errores" "vertical, 6 FASE(s), 0 error(s), 0 warning(s)"
@@ -123,6 +137,11 @@ done
 grepf skills/sdd-plan-architect/SKILL.md "V8: Backed increments" "plan-architect: V8 en Phase 6"
 grepf skills/sdd-plan-architect/SKILL.md "V9: Must assigned" "plan-architect: V9 en Phase 6"
 grepf skills/sdd-plan-architect/SKILL.md "FASE-0-SKELETON.md" "plan-architect: FASE-0-SKELETON"
+grepf skills/sdd-plan-architect/SKILL.md "### Requirements-only mode (the route skipped the specifications)" "plan-architect: modo sólo requisitos"
+grepf skills/sdd-plan-architect/SKILL.md 'stages["specifications-engineer"].status == "skipped"` → Requirements-only mode' "plan-architect: G1 depende de la ruta"
+grepf skills/sdd-plan-architect/SKILL.md 'N/A — specifications skipped by the route' "plan-architect: V2-V4/V7 N/A sin specs"
+grepf skills/sdd-plan-architect/references/phase-assignment-rules.md "the requirements that serve one customer need" "phase-assignment-rules: R3 por necesidad sin UCs"
+grepf skills/sdd-task-implementer/references/tdd-workflow.md "REQ-F-003 AC2 rejects an empty title" "tdd-workflow: nombres REQ ACn sin spec/"
 grepf skills/sdd-task-generator/SKILL.md "Plan-Style" "task-generator lee la marca"
 grepf skills/sdd-task-generator/SKILL.md "### UC-NNN" "task-generator: Slices por caso de uso"
 grepf skills/sdd-task-generator/SKILL.md "| V-20 |" "task-generator: V-20"
@@ -135,6 +154,11 @@ grepf skills/sdd-test-planner/references/e2e-template.md 'E2E-WF-001-01 AC-001-0
 grepf skills/sdd-orchestrator/SKILL.md "references/fase-gate.md" "orquestador: puerta de FASE"
 grepf skills/sdd-lead/SKILL.md "skills/sdd-orchestrator/references/fase-gate.md" "lead: puerta de FASE (espejo)"
 grepf skills/sdd-orchestrator/SKILL.md "sdd-acceptance --loop" "orquestador: sdd-acceptance --loop"
+grepf skills/sdd-orchestrator/SKILL.md '| 1b | Route |' "orquestador: etapa 1b Ruta"
+grepf skills/sdd-lead/SKILL.md '| 1b Route |' "lead: fase 1b Ruta (espejo)"
+for f in skills/sdd-orchestrator/SKILL.md skills/sdd-lead/SKILL.md; do
+  grepf "$f" 'route --write --confirm "<name> (<role>)"' "$f: confirma la ruta con route --write --confirm"
+done
 grepf skills/sdd-orchestrator/SKILL.md "sdd-acceptance --sign-off" "orquestador: sdd-acceptance --sign-off"
 grepf skills/sdd-orchestrator/references/fase-gate.md "scripts/jev/feedback-route.json" "fase-gate usa feedback-route.json"
 for f in skills/sdd-orchestrator/SKILL.md skills/sdd-lead/SKILL.md; do

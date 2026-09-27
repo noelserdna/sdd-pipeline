@@ -17,7 +17,7 @@ customer needs; the increments and the verdicts appear as the plan and the tests
 | `acceptance/decisions.jsonl` via the report | FASE acceptances (who, when), demo records |
 | `requirements/CUSTOMER-NEEDS.md` | needs covered per increment |
 | `sdd issue` / `sdd pr-body` (when `tracker` is set) | links to the FASE and change issues and open PRs |
-| `pipeline-state.json` stages (`lastRun`, `summary.highlights`, `summary.metrics`) and `git tag -l --format='%(refname:short) %(creatordate:iso)'` | the journey: one entry per stage or gate, in order, with time, duration, outcome and tags |
+| `pipeline-state.json` stages (`lastRun`, `summary.highlights`, `summary.metrics`, `skipReason`), the `route` block and `git tag -l --format='%(refname:short) %(creatordate:iso)'` | the journey: one entry per stage or gate, in order, with time, duration, outcome and tags |
 
 The page shows titles, verdicts, dates and links. It never includes code, secrets, file contents, emails of third
 parties or anything from `.env`-like files.
@@ -27,7 +27,9 @@ parties or anything from `.env`-like files.
 1. Header: project name, `evaluated_sha` (short) and date, and one sentence on the goal ("7 of 9 Must requirements
    verified; 1 waived; next: FASE-2 demo"). When any human record was signed by a test proxy, say so above the fold.
 2. Journey: the stages and gates so far, oldest first — time, duration, what the step left (numbers from its
-   metrics, the tags it created) and what went wrong in it; the step in progress is marked as such.
+   metrics, the tags it created) and what went wrong in it; the step in progress is marked as such. Stages the
+   confirmed route left out (`status: "skipped"`) appear in their place, marked as skipped, with their `skipReason`
+   and who confirmed the route (`route.confirmedBy`), so a reader sees that a stage was decided out, not forgotten.
 3. Four tiles: Must verified · failing · missing · waived (waived Musts always visible, with their follow-up issue).
 4. Increments: one row per FASE — increment, status (planned / in progress / verified / accepted / rejected),
    acceptance date and approver role, link to its issue.

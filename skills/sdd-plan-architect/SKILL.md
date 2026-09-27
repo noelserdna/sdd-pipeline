@@ -8,7 +8,7 @@ description: "Generates implementation plans from specs: FASEs, architecture, pe
 > Specs are the source of truth (WHAT). A FASE is the order of work (WHEN). The plan is how it gets built (HOW).
 > FASE files are derived navigation indices: they point at specs and can be regenerated from them.
 
-Runs after `sdd-test-planner` (which runs after `sdd-spec-auditor`) and before `sdd-task-generator`. Reads `spec/`, `requirements/`, `audits/`, `test/`, and `design/` / `ux/` when present. Writes `plan/`, plus `design/OPERATION-MAPPING.md` only when it is missing and a contract needs it (Phase 4b).
+Runs after `sdd-test-planner` (which runs after `sdd-spec-auditor`) and before `sdd-task-generator`. Reads `spec/`, `requirements/`, `audits/`, `test/`, and `design/` / `ux/` when present. Writes `plan/`, plus `design/OPERATION-MAPPING.md` only when it is missing and a contract needs it (Phase 4b). When the confirmed route skipped the specifications (`pipeline-state.json` → `stages["specifications-engineer"].status == "skipped"`, `docs/ruta.md`), it plans from `requirements/` alone: see Requirements-only mode under Phase 1.
 
 ## Principles
 
@@ -104,14 +104,26 @@ Build the spec manifest (ids, titles, dependencies, decisions, invariants) and l
 
 | Gate | Check | If it fails |
 |------|-------|-------------|
-| G1: Specs exist | `spec/` has `domain/`, `use-cases/`, `contracts/` | STOP: "Run sdd-specifications-engineer" |
-| G2: Audit gate | `pipeline-state.json` → `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL} | WARN: "Spec audit gate is {value or missing} — run sdd-spec-auditor (Mode Fix)"; continue with reduced confidence |
+| G1: Specs exist | `spec/` has `domain/`, `use-cases/`, `contracts/` | `stages["specifications-engineer"].status == "skipped"` → Requirements-only mode, no stop. Otherwise STOP: "Run sdd-specifications-engineer" |
+| G2: Audit gate | `pipeline-state.json` → `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL} | `stages["spec-auditor"].status == "skipped"` → n/a, no audit gate. Otherwise WARN: "Spec audit gate is {value or missing} — run sdd-spec-auditor (Mode Fix)"; continue with reduced confidence |
 | G3: FASE files exist | `plan/fases/FASE-*.md` | AUTO: run Phase 1B |
-| G4: Requirements exist | `requirements/REQUIREMENTS.md` | WARN: "Run sdd-requirements-engineer, recommended" |
-| G5: Security audit | `audits/SECURITY-AUDIT-BASELINE.md` | WARN: "Run sdd-security-auditor, recommended" |
-| G6: Test plan | `test/TEST-PLAN.md` | WARN: "Run sdd-test-planner first (it precedes planning)" |
+| G4: Requirements exist | `requirements/REQUIREMENTS.md` | WARN: "Run sdd-requirements-engineer, recommended". In Requirements-only mode: STOP, since the requirements are the only source |
+| G5: Security audit | `audits/SECURITY-AUDIT-BASELINE.md` | `stages["security-auditor"].status == "skipped"` → n/a. Otherwise WARN: "Run sdd-security-auditor, recommended" |
+| G6: Test plan | `test/TEST-PLAN.md` | `stages["test-planner"].status == "skipped"` → n/a. Otherwise WARN: "Run sdd-test-planner first (it precedes planning)" |
 
 Show a readiness table (gate · status · evidence) to the user; it is not persisted.
+
+### Requirements-only mode (the route skipped the specifications)
+
+The route judged that formal specs add little to this project (few functional requirements, one kind of user, no integrations, no sensitive data), so the requirements and their numbered acceptance criteria are the contract. The rest of the process still applies, with these substitutions:
+
+- **Inventory** — `requirements/REQUIREMENTS.md` (every REQ with priority, needs, dependencies and its acceptance criteria, numbered AC1, AC2… in order) and `requirements/CUSTOMER-NEEDS.md` (needs, examples, out of scope); plus `CLAUDE.md`, `design/` and `ux/` when present. The Reading Strategy index already covers `requirements/`.
+- **Journeys** — grouped by customer need, or by a cluster of requirements that a user sees working together, in place of use cases (`references/phase-assignment-rules.md` R3, R8). FASE-0 is the write → observe → persist path of the central requirement.
+- **Scenarios** — `Escenarios` and each Demo step cite `REQ-X-NNN ACn` (`REQ-F-003 AC2`), and Criterios de Éxito end with the same ids; `sdd lint --plan` checks that the requirement has criterion n. "Specs a Leer" lists the `REQUIREMENTS.md` sections instead of spec files; "Invariantes Aplicables" lists the REQ-C constraints that apply, or says none; "Contratos Resultantes" are the operations the plan derives, each recorded as a `D-PA-NNN` decision.
+- **Behaviour** — Principle 2 still holds: plan only what the requirements say. An ambiguity is asked in Phase 2 or goes to "Spec Gaps Detected" as a requirement gap recommending `sdd-req-change`.
+- **Architecture** — `ARCHITECTURE.md` is still written, minimal: context, containers, components and data views drawn from the requirements, the Stack Profile and the Phase 2 decisions (`D-PA-NNN`, or `ADR-DRAFT-*` from `design/`). Phase 4b has no contracts to map.
+- **Validation** — V2, V3, V4 and V7 are N/A (no `spec/adr`, `spec/nfr`, invariants or contracts): list them in the Validation Report with the status `N/A — specifications skipped by the route`. V1 reads "every requirement group of the FASE files has guidance in a plan"; V8 checks scenarios against the requirement criteria; V9 is unchanged. REQ-NF targets still get a strategy in PLAN.md §Cross-FASE.
+- **Header** — PLAN.md and ARCHITECTURE.md carry `Inputs: requirements v{N} (specifications skipped by the route) · design/ {yes|no} · ux/ {yes|no}`.
 
 ### Phase 1B: FASE Generation
 
@@ -120,14 +132,14 @@ Generates the FASE files: vertical increments, each one a user journey the custo
 Rules for every FASE file:
 - **Vertical** — cut by user journey, never by technical layer: every FASE crosses the layers its journey needs.
 - **Backed** — every FASE lists the requirements it completes (`Requisitos`), the scenarios it makes pass (`Escenarios`) and a `## Demo` whose steps cite them; every Must REQ-F/REQ-NF is in some FASE.
-- **100 % coverage** — every spec file appears in at least one FASE file.
+- **100 % coverage** — every spec file appears in at least one FASE file (Requirements-only mode: every active requirement).
 - **Pointers, not copies** — reference specs by path + section; only "Contenido Específico" may hold formulas/diagrams that exist nowhere else.
 - **DAG** — dependencies between phases have no cycles.
-- **Ubiquitous language** — only terms from `domain/01-GLOSSARY.md`.
+- **Ubiquitous language** — only terms from `domain/01-GLOSSARY.md` (Requirements-only mode: the terms of `REQUIREMENTS.md` and `CUSTOMER-NEEDS.md`).
 
 Steps:
 
-1. **Inventory** — every `.md` under `spec/` (excluding `temp_files/`, `CHANGELOG.md`) with its ids (UC, ADR, INV, WF, RN, API) and type; per REQ its priority, needs and dependencies; per UC its scenarios (`AC-NNN-NN`) and the REQ criteria they tag; the use-case groups of `test/TEST-PLAN.md` §5.
+1. **Inventory** — every `.md` under `spec/` (excluding `temp_files/`, `CHANGELOG.md`) with its ids (UC, ADR, INV, WF, RN, API) and type; per REQ its priority, needs and dependencies; per UC its scenarios (`AC-NNN-NN`) and the REQ criteria they tag; the use-case groups of `test/TEST-PLAN.md` §5. In Requirements-only mode: per REQ its priority, needs, dependencies and numbered criteria, grouped by customer need.
 2. **Assignment** — read `references/phase-assignment-rules.md` and apply R1-R10: the central use case's write → observe → persist path is FASE-0 (the walking skeleton), then one journey per FASE ordered by dependencies and MoSCoW, whole requirements, auth with the first exposed resource, HARDENING only for measured NFRs. When the Vision Gate finds a web/mobile/desktop channel, every FASE with user-facing UCs carries its UI deliverables (pages, routes, components — `references/fase-template.md` §7B). A spec with no FASE → ask the user.
 3. **Dependency analysis** — build the graph and topologically sort it. A cycle → STOP and report it.
 4. **Generate FASE files** with `references/fase-template.md` within budget: header (title, estado, `Incremento`, `Requisitos`, `Escenarios`, `Necesidades`, dependencias); Objetivo; Criterios de Éxito (one line ≤ 140 chars each, grouped by use case, ending with the REQ/scenario ids verified); Specs a Leer (path · section/ids · purpose ≤ 100 chars, by type); Invariantes Aplicables (id + where enforced); **Módulos y Conjuntos de Escritura** (required: one row per block with its write-set — `sdd-task-generator` derives the work Streams from it, so parallel write-sets must be disjoint; a vertical FASE is usually one block); Contenido Específico (optional, ≤ 30 lines); Contratos Resultantes (operation ids + one-line signature; events); Entregables de UI (web/mobile: pages/routes → UC); Verificación (≤ 10 commands with the expected result as a comment); **Demo** (≤ 10 steps from a clean checkout, each citing its scenario and needs; seed data when needed; consumer calls for an API); Alcance (Incluye/Excluye).
@@ -272,7 +284,7 @@ Budget ≤ 12 000 chars: technical-context rows are `aspect · decision · ADR i
 | V8: Backed increments | every FASE header has `Requisitos` and `Escenarios`, its criteria cite REQ/scenario ids, and its `## Demo` has 1-10 steps each citing a scenario that exists in `spec/tests/BDD-*.md` | `plan/fases/` ↔ `spec/tests/` |
 | V9: Must assigned | every active Must REQ-F/REQ-NF is on some FASE `Requisitos` line | `requirements/REQUIREMENTS.md` ↔ `plan/fases/` |
 
-V8 and V9 are mechanical: run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --plan` and fix the lines it prints (it also warns about FASEs over 3 use cases or 15 tasks). Fix V1-V5 and V7-V9 gaps in the artifacts; flag V6 unused decisions. Append the Validation Report (check · status · coverage · gaps, then `Plan validation: PASS|FAIL`) to the PLAN.md footer.
+V8 and V9 are mechanical: run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --plan` and fix the lines it prints (it also warns about FASEs over 3 use cases or 15 tasks). Fix V1-V5 and V7-V9 gaps in the artifacts; flag V6 unused decisions. In Requirements-only mode V2-V4 and V7 are reported as N/A, not as gaps. Append the Validation Report (check · status · coverage · gaps, then `Plan validation: PASS|FAIL`) to the PLAN.md footer.
 
 ---
 

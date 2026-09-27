@@ -8,7 +8,7 @@ A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json
 
 - 21 skills: 7 pipeline, 4 lateral, 3 brownfield, 7 utility (including acceptance, the interactive orchestrator and the multi-session lead)
 - 5 hook scripts (7 event registrations) plus the git `commit-msg` hook
-- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, acceptance ledger and gate)
+- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, adaptive route, acceptance ledger and gate)
 - an MCP server for live traceability queries
 - an optional TypeSafe Jev integration for bulk judgments
 
@@ -33,6 +33,8 @@ sdd-acceptance               →  acceptance/ACCEPTANCE-REPORT.md, decisions.jso
 
 FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → persist of the central use case), then one user journey per FASE with a `## Demo` of at most 10 steps. The FASE gate is the customer's acceptance of that increment.
 
+**Adaptive route** (`docs/ruta.md`): after gate 1, `sdd route` proposes which optional stages this project needs (specifications, spec audit, test plan, the laterals, gap-detector), from counted facts of the requirements and seven narrow factor judgments (Jev, or the session's LLM through `--answers` when Jev is off; a doubt counts as yes). The rules and their reasons live in `scripts/lib/route-rules.mjs`. A person confirms it in one question (orchestrator/lead stage 1b), and `route --write --confirm` stores the `route` block and marks the stages it leaves out `skipped` with a `skipReason`. Without specifications, plan-architect plans from the requirements (journeys by customer need, `Escenarios` as `REQ-X-NNN ACn`), tests carry `REQ-X-NNN ACn`, and req-change edits only `requirements/`, cascades from plan-architect and re-evaluates the route after every approved ADD/MODIFY. It recommends the stages that escalate and never lowers the rigor by itself.
+
 **Lateral** (any time):
 - `sdd-tech-designer` → `design/`, including `OPERATION-MAPPING.md`, which plan-architect writes itself when tech-designer was not run.
 - `sdd-ux-designer` → `ux/`, read by plan-architect and test-planner.
@@ -56,7 +58,7 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
 hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
-scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint, tracker), sdd-task-lint.mjs (alias),
+scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint, tracker, route, route-rules), sdd-task-lint.mjs (alias),
                        sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
                        install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
 server/                src/{index,server,graph-loader,acceptance,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
@@ -64,7 +66,7 @@ templates/             pipeline-state template, gitignore policy, sessions examp
 references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md
 .claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
 examples/todo-app/     toy project (customer needs + requirements) used by the pipeline auditor
-tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, tracker, e2e, fixtures
+tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, tracker, route, e2e, fixtures
 docs/                  guides (Spanish), git, acceptance, stacks, multisession, jev, measurements, design/
 ```
 
@@ -75,7 +77,7 @@ The same commands CI runs:
 ```bash
 node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
 bash tests/e2e/00-validate.sh
-for t in hooks setup tasks graph jev bench git plan acceptance tracker; do bash tests/$t/run.sh || break; done
+for t in hooks setup tasks graph jev bench git plan acceptance tracker route; do bash tests/$t/run.sh || break; done
 shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
 cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
@@ -110,13 +112,14 @@ This is the foundational principle, and the last article of `references/sdd-cons
 `pipeline-state.json` lives at the project root (the main checkout when worktrees are used). The authoritative schema is `skills/sdd-req-change/references/cascade-patterns.md` §9, and the template is `templates/pipeline-state.template.json`.
 
 - Top-level fields: `sddVersion`, `hooksVersion` (3), `currentStage`, `lastUpdated`, `stages`.
-- Each stage has `status` (pending | running | done | stale | error), `lastRun`, `outputHash`, `staleReason` and, on completion, `summary` (artifacts, metrics, highlights, nextStep, generatedAt).
+- Each stage has `status` (pending | running | done | stale | error | skipped), `lastRun`, `outputHash`, `staleReason`, `skipReason` (with skipped) and, on completion, `summary` (artifacts, metrics, highlights, nextStep, generatedAt).
+- `route` (written by `sdd route --write`): `decidedAt`, `factors`, `facts`, `stages` ({run, reason} per stage), `doubts`, `confirmedBy`, `reqHash`. A `skipped` stage counts as satisfied (gates, lead dispatch, next step), is never marked stale, and runs again only when a person puts it back on the route; a done or running stage is never switched to skipped.
 - Lateral skills and `acceptance` add their own keys. `acceptance` is never marked stale by a cascade: `sdd accept` recomputes freshness itself (evidence against `evaluated_sha`, human decisions against the requirement's text hash).
 - Only `sdd-setup` creates the file; hooks never create it.
 - The state hook moves a stage pending/stale/done → running when its skill starts, and pending/stale → running on writes under its directory.
 - Skills set done/stale/error, preferably with `bash "$SDD_PLUGIN_ROOT/scripts/sdd-state.sh" set <stage> <status>`, which takes the same lock as the hooks.
-- Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer, `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
-- Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}.
+- Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer (from plan-architect when the route skipped the specifications), `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
+- Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}; a skipped spec-auditor makes them n/a.
 - `.sdd/acceptance.json` (git-ignored) holds the last ledger; `acceptance/` (versioned) holds the report and human decisions.
 
 ## Automation
@@ -125,7 +128,7 @@ Hooks are declared in `hooks/hooks.json` and run from `${CLAUDE_PLUGIN_ROOT}`. N
 
 | Hook | Event (matcher) | Purpose |
 |------|-----------------|---------|
-| `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/7 done`, stale stages, next step, session role and the acceptance summary |
+| `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/M done, K skipped`, stale stages, next step, session role and the acceptance summary |
 | `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts; denies hand edits of `acceptance/decisions.jsonl` and the acceptance report |
 | `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools; asks before `sdd accept record` and `fase-N-accepted`/`requirements-vN` tags |
 | `sdd-augment-hook.js` | PreToolUse (Read/Edit/Write) | Adds up to 2 traceability lines for the file from the graph |

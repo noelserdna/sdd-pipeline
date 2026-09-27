@@ -5,7 +5,7 @@ description: "Requirement changes (req-change): ADD, MODIFY, DEPRECATE propagate
 
 # sdd-req-change — Requirements Change Manager & Pipeline Cascade Trigger
 
-Lateral skill, usable any time after `spec/` exists. It is the single entry point for changing requirements once specs exist: it takes a change request, classifies it (ADD / MODIFY / DEPRECATE, ISO 14764 category), analyses its impact along REQ → UC → WF → API → BDD → INV → ADR → RN, asks every open question, applies the approved change to `requirements/` and `spec/`, audits the alignment, writes a Change Report and marks (or runs) the downstream stages that must be redone.
+Lateral skill, usable any time after `spec/` exists, or after the requirements were approved when the confirmed route skipped the specifications (Requirements-only mode below). It is the single entry point for changing approved requirements: it takes a change request, classifies it (ADD / MODIFY / DEPRECATE, ISO 14764 category), analyses its impact along REQ → UC → WF → API → BDD → INV → ADR → RN, asks every open question, applies the approved change to `requirements/` and `spec/`, audits the alignment, writes a Change Report and marks (or runs) the downstream stages that must be redone.
 
 Complementary to `sdd-spec-auditor` Mode Fix: Mode Fix repairs specs from audit findings; this skill changes what the system must do, starting from the requirement.
 
@@ -52,10 +52,12 @@ Templates for every phase: `references/phase-templates.md`.
 
 | Gate | Check | If it fails |
 |---|---|---|
-| G1 | `spec/domain/`, `spec/use-cases/`, `spec/contracts/` exist | Stop: run `sdd-specifications-engineer` first |
+| G1 | `spec/domain/`, `spec/use-cases/`, `spec/contracts/` exist | `stages["specifications-engineer"].status == "skipped"` → Requirements-only mode, no stop. Otherwise stop: run `sdd-specifications-engineer` first |
 | G2 | `requirements/REQUIREMENTS.md` exists | Stop: run `sdd-requirements-engineer` first |
-| G3 | `spec/domain/01-GLOSSARY.md` exists | Stop: the ubiquitous language is needed to write specs |
-| G4 | `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL} | Warn and ask whether to proceed (changes may interact with open findings) or run `/sdd-spec-auditor --fix` first; note the decision in the Change Report |
+| G3 | `spec/domain/01-GLOSSARY.md` exists | Requirements-only mode → n/a. Otherwise stop: the ubiquitous language is needed to write specs |
+| G4 | `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL} | `stages["spec-auditor"].status == "skipped"` → n/a. Otherwise warn and ask whether to proceed (changes may interact with open findings) or run `/sdd-spec-auditor --fix` first; note the decision in the Change Report |
+
+**Requirements-only mode.** The confirmed route left the specifications out (`docs/ruta.md`), so the requirements and their numbered criteria are the contract and there is no `spec/` to propagate into. The phases run as written, narrowed to what exists: Phase 2 follows REQ → FASE → task → commit (no UC/WF/API links); the deltas of Phase 4 and the edits of Phase 6 touch only `requirements/REQUIREMENTS.md` (and `CUSTOMER-NEEDS.md` for a new need), committed as `docs(requirements): {add|modify|deprecate} REQ-… {summary}` with the same `Change:` and `Refs:` trailers; Phase 7 runs the checklist items that apply to `REQUIREMENTS.md`; Phase 9 starts the cascade at `plan-architect` (`references/cascade-patterns.md` §2) after re-evaluating the route.
 
 Print the inventory summary (`phase-templates.md` §1).
 
@@ -169,7 +171,8 @@ Read `references/change-report-template.md` and write `changes/CHANGE-REPORT-{CH
 
 Rules, invalidation table, execution order, FASE targeting, failure handling and the Cascade Report format: `references/cascade-patterns.md` §2-7.
 
-1. **Scope.** Because this skill already propagated the requirement into `spec/`, the change counts as a `spec/` change: stale from `spec-auditor` onward — `spec-auditor`, `test-planner`, `plan-architect`, `task-generator`, `task-implementer` (only stages that exist and are not `pending`) — plus the laterals `tech-designer` / `ux-designer` when their outputs exist, and `security-auditor` when a security requirement or `spec/nfr/SECURITY.md` changed. Affected FASEs come from Change Report §7.1 and only narrow *which FASEs* are regenerated, never which stages.
+0. **Route re-evaluation** (after at least one approved ADD or MODIFY, when `pipeline-state.json` has a `route` block): a new requirement can change what the project needs, for example payments appearing in a CLI. Run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" route --json` (exit 3, Jev off: answer the seven factors yourself into `.sdd/route-answers.json`, as the orchestrator's stage 1b does, and pass `--answers`). Report its `escalations`, the stages the new route runs that are `skipped` now, each with its reason, and recommend running them. On the user's yes: `route --write --set <stage>=run --confirm "<name> (<role>)"`, then those stages join the scope below and run first (an escalated `specifications-engineer` means the change is also written into the new `spec/`, and the cascade continues as with specs). Never lower the rigor: a stage the new route would skip but that already ran stays on the route. In `--batch`, report the escalations in the Change Report and leave the decision to a person.
+1. **Scope.** Requirements-only mode: stale from `plan-architect` onward — `plan-architect`, `task-generator`, `task-implementer` (stages that exist and are not `pending` or `skipped`), plus `tech-designer` / `ux-designer` / `security-auditor` under the same conditions as below. Otherwise: because this skill already propagated the requirement into `spec/`, the change counts as a `spec/` change: stale from `spec-auditor` onward — `spec-auditor`, `test-planner`, `plan-architect`, `task-generator`, `task-implementer` (only stages that exist and are not `pending`) — plus the laterals `tech-designer` / `ux-designer` when their outputs exist, and `security-auditor` when a security requirement or `spec/nfr/SECURITY.md` changed. Affected FASEs come from Change Report §7.1 and only narrow *which FASEs* are regenerated, never which stages.
 2. **Mark stale** (every mode except `dry-run`): `status: "stale"`, `staleReason: "{CHG-ID}"` on those stages, and the `lastChange` block (`cascade-patterns.md` §1). Summaries are kept.
 3. **Run by mode:**
    - `manual` — print the commands below, in order.
@@ -177,8 +180,8 @@ Rules, invalidation table, execution order, FASE targeting, failure handling and
    - `plan-only` / `auto` — run the commands in order (auto includes the implementer step), updating `pipeline-state.json` after each; on the first failure stop, set the failed stage to `error`, leave the rest `stale`, and write recovery steps. Then write `changes/CASCADE-REPORT-{CHG-ID}.md`.
 
 ```
-/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md
-/sdd-test-planner          # Mode 4 (Audit Test Coverage) over the changed UCs/NFRs
+/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md   # not when skipped
+/sdd-test-planner          # Mode 4 (Audit Test Coverage) over the changed UCs/NFRs; not when skipped
 /sdd-plan-architect --regenerate-fases --affected={N,M}
 /sdd-task-generator --fase={N} --incremental          # once per affected FASE
 /sdd-task-implementer --fase {N} --new-tasks-only     # once per affected FASE; auto mode only

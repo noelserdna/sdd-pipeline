@@ -86,3 +86,4 @@ jobs:
       - run: bash tests/acceptance/run.sh
       - run: bash tests/plan/run.sh
       - run: bash tests/tracker/run.sh
+      - run: bash tests/route/run.sh

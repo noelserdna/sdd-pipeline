@@ -16,8 +16,10 @@ export interface StageSummary {
 
 export interface PipelineStage {
   name: string;
-  /** `unknown`: no pipeline-state.json or unreadable; `partial`: aggregated group status. */
-  status: "done" | "stale" | "running" | "error" | "pending" | "unknown" | "partial";
+  /** `unknown`: no pipeline-state.json or unreadable; `partial`: aggregated group status; `skipped`: left out by
+   * the adaptive route (`sdd route --write`), with its reason in `skipReason`. */
+  status: "done" | "stale" | "running" | "error" | "pending" | "unknown" | "partial" | "skipped";
+  skipReason?: string | null;
   lastRun: string | null;
   artifactCount: number;
   stageLabel?: string;

@@ -328,6 +328,25 @@ run loop next --state .sdd/loop-e.json
 expect "loop: goal" "$(loopq 'j.cycle + "/" + j.stop')" 2/goal
 run gate; expect "gate: all Musts verified (F-005 AC2 via REQ ACn test name) → 0" "$rc" 0
 
+# ---------------------------------------------------------------- 9b. loop without spec/ (route skipped the specifications)
+# No spec/tests: the requirement criteria are the contract, so a criterion with neither scenario nor test is work for
+# the implementer (a test named `REQ-X-NNN ACn`), not a spec gap. With spec/tests (section 9) it stays spec-gap.
+saved_repo="$repo"
+repo="$tmp/nospec"
+cp -R "$FIX/todo" "$repo"; rm -rf "$repo/spec"
+git init -q "$repo"
+commit "init without spec"
+junit .sdd/junit/unit.xml "REQ-F-001 AC1 adds=pass" "REQ-F-005 AC1 rm keeps ids=pass"
+run loop next --state .sdd/loop-nospec.json
+expect "no spec/: loop exits 0" "$rc" 0
+expect "no spec/: criterion without test → implement-or-test" "$(loopq 'j.targets.find(t=>t.req==="REQ-F-005").criteria.find(c=>c.n===2).route_hint')" implement-or-test
+expect "no spec/: requirement route → implement-or-test" "$(loopq 'j.targets.find(t=>t.req==="REQ-F-005").route_hint')" implement-or-test
+expect "no spec/: open test criteria are not needs-human" "$(loopq 'j.stop')" null
+run accept --json --no-out
+expect "no spec/: ledger says spec_tests false" "$(js 'j.spec_tests')" false
+expect "no spec/: REQ ACn test binds (F-005 AC1 passes)" "$(js 'j.requirements.find(r=>r.id==="REQ-F-005").criteria.find(c=>c.n===1).state')" pass
+repo="$saved_repo"
+
 # ---------------------------------------------------------------- 10. JUnit inputs: directory, glob, errors
 run accept --junit .sdd/junit --json --no-out; expect "--junit DIR" "$(js 'j.junit.length')" 1
 run accept --junit '.sdd/junit/*.xml' --json --no-out; expect "--junit glob" "$(js 'j.junit.length')" 1

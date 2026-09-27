@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # B3 — smoke del pipeline sobre examples/todo-app con el plugin cargado por --plugin-dir (usa el modelo: cuesta tokens y minutos).
-# Uso: tests/e2e/20-smoke.sh [--until <stage>] [--from <stage>] [--dir <proyecto>] [--keep]
-#   stages en orden: setup | specs | audit | test | plan | tasks | impl
+# Uso: tests/e2e/20-smoke.sh [--until <stage>] [--from <stage>] [--dir <proyecto>] [--keep] [--route auto|full]
+#   stages en orden: setup | route | specs | audit | test | plan | tasks | impl
+#   --route  auto (por defecto): la ruta adaptativa decide qué etapas opcionales se ejecutan (`sdd route`, docs/ruta.md);
+#            full: pipeline completo (`route --write --full`). Las etapas specs/audit/test saltadas por la ruta no se
+#            ejecutan. Factores: Jev si TYPESAFE_API_KEY está definida; si no, tests/fixtures/route/todo-answers.json.
 #   --until  última etapa a ejecutar (por defecto impl = FASE-0)
 #   --from   primera etapa a ejecutar (por defecto setup); útil con --dir para continuar un proyecto ya generado
 #   --dir    reutiliza un proyecto existente en vez de copiar examples/todo-app a un temporal (implica --keep)
 # Requiere sesión de Claude Code autenticada (usa el CLAUDE_CONFIG_DIR del usuario; el plugin NO se instala, solo --plugin-dir).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-UNTIL="impl"; FROM="setup"; DIR=""; KEEP=""
+UNTIL="impl"; FROM="setup"; DIR=""; KEEP=""; ROUTE="auto"
 while [ $# -gt 0 ]; do case "$1" in
-  --until) UNTIL="$2"; shift 2;; --from) FROM="$2"; shift 2;; --dir) DIR="$2"; KEEP=1; shift 2;; --keep) KEEP=1; shift;; *) shift;; esac; done
+  --until) UNTIL="$2"; shift 2;; --from) FROM="$2"; shift 2;; --dir) DIR="$2"; KEEP=1; shift 2;; --keep) KEEP=1; shift;;
+  --route) ROUTE="$2"; shift 2;; *) shift;; esac; done
+case "$ROUTE" in auto|full) ;; *) echo "--route debe ser auto o full"; exit 2;; esac
 command -v claude >/dev/null || { echo "claude CLI no disponible"; exit 2; }
 
-STAGES=(setup specs audit test plan tasks impl)
+STAGES=(setup route specs audit test plan tasks impl)
 idx() { local i=0; for s in "${STAGES[@]}"; do [ "$s" = "$1" ] && { echo "$i"; return; }; i=$((i+1)); done; echo 99; }
 FROM_I=$(idx "$FROM"); UNTIL_I=$(idx "$UNTIL")
 active() { local i; i=$(idx "$1"); [ "$i" -ge "$FROM_I" ] && [ "$i" -le "$UNTIL_I" ]; }
@@ -27,7 +32,7 @@ else
   git init -q -b main . && git config user.email e2e@example.com && git config user.name e2e && git add -A && git commit -qm "chore: toy project"
   [ -n "$KEEP" ] || trap 'rm -rf "$(dirname "$WORK")"' EXIT
 fi
-echo "proyecto: $WORK (from=$FROM until=$UNTIL)"
+echo "proyecto: $WORK (from=$FROM until=$UNTIL route=$ROUTE)"
 fail=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; fail=1; }
 t0=$(date +%s); lap() { local now; now=$(date +%s); echo "     [$1: $(( (now - t0) / 60 )) min]"; t0=$now; }
 # Las sesiones hijas cargan SOLO el plugin de este checkout: si hay una versión instalada, se desactiva para ellas
@@ -45,6 +50,10 @@ run() {
 committed() { local d; for d in "$@"; do [ -n "$(git ls-files -- "$d" | head -1)" ] && [ -z "$(git status --porcelain -- "$d")" ] || return 1; done; }
 check_committed() { if committed "$@"; then ok "$* commiteado"; else bad "$* sin commitear"; git status --porcelain -- "$@" | head -5; fi; }
 ignored() { local p; for p in "$@"; do git check-ignore -q --no-index "$p" || return 1; done; }
+# skipped KEY → la ruta confirmada saltó esa etapa (status skipped en pipeline-state.json)
+skipped() { jq -e --arg k "$1" '.stages[$k].status == "skipped"' pipeline-state.json >/dev/null 2>&1; }
+skip_note() { echo; echo "== $1: saltada por la ruta ($(jq -r --arg k "$2" '.stages[$k].skipReason // "sin motivo"' pipeline-state.json))"
+  jq -e --arg k "$2" '(.stages[$k].skipReason // "") | length > 0' pipeline-state.json >/dev/null && ok "$2 skipped con skipReason" || bad "$2 skipped sin skipReason"; }
 stop_if_done() { finished_before "$1" && { echo; echo "B3 (hasta $UNTIL): $([ $fail -eq 0 ] && echo todo ok || echo hay fallos)"; exit $fail; }; true; }
 
 if active setup; then
@@ -57,14 +66,47 @@ if active setup; then
   # requisitos ya escritos y aprobados: marcar la etapa como done sin ejecutar la skill
   tmp=$(mktemp); jq '.stages["requirements-engineer"].status="done" | .stages["requirements-engineer"].lastRun=(now|todate) | .currentStage="specifications-engineer"' pipeline-state.json > "$tmp" && mv "$tmp" pipeline-state.json
 fi
+stop_if_done route
+if active route; then
+  echo; echo "== route ($ROUTE)"
+  SDD_CLI="$ROOT/scripts/sdd.mjs"
+  answers=()
+  if [ -n "${TYPESAFE_API_KEY:-}" ]; then judge=jev; else judge=fixture; answers=(--answers "$ROOT/tests/fixtures/route/todo-answers.json"); fi
+  rrc=0; route_json=$(node "$SDD_CLI" route --json ${answers[@]+"${answers[@]}"} 2>&1) || rrc=$?
+  if [ "$rrc" -eq 0 ]; then ok "sdd route --json ($judge)"; else bad "sdd route --json ($judge) exit $rrc: $(printf '%s' "$route_json" | head -3 | tr '\n' ' ')"; fi
+  if [ "$rrc" -eq 0 ]; then
+    printf '%s' "$route_json" | jq -r '.stages | to_entries[] | "     \(.key): \(if .value.run then "run" else "skip" end) — \(.value.reason)"' 2>/dev/null || true
+    printf '%s' "$route_json" | jq -r '"     dudas: \((.doubts // []) | join(", ")) · ahorro estimado: \(.saved_minutes_estimate // "?") min"' 2>/dev/null || true
+    # con Jev, la segunda llamada reutiliza sus factores como respuestas (misma ruta, sin volver a llamar a Jev)
+    if [ "$judge" = jev ]; then
+      mkdir -p .sdd; answers_file=".sdd/route-answers.json"; printf '%s' "$route_json" | jq '{factors: (.factors | map_values(.p))}' > "$answers_file"
+      answers=(--answers "$answers_file")
+    fi
+    full=(); [ "$ROUTE" = full ] && full=(--full)
+    wrc=0; wout=$(node "$SDD_CLI" route ${answers[@]+"${answers[@]}"} --write --confirm "e2e-proxy (test harness)" ${full[@]+"${full[@]}"} 2>&1) || wrc=$?
+    if [ "$wrc" -eq 0 ]; then ok "sdd route --write --confirm"; else bad "sdd route --write exit $wrc: $(printf '%s' "$wout" | head -3 | tr '\n' ' ')"; fi
+    jq -e '.route.confirmedBy == "e2e-proxy (test harness)"' pipeline-state.json >/dev/null && ok "route.confirmedBy registrado" || bad "route.confirmedBy"
+    if [ "$ROUTE" = full ]; then
+      skipped specifications-engineer && bad "--route full y specifications-engineer skipped" || ok "--route full: specs en la ruta"
+    elif skipped specifications-engineer; then
+      ok "ruta ligera: specs saltadas ($judge)"
+      # auditoría y plan de tests dependen de que haya specs (scripts/lib/route-rules.mjs)
+      if skipped spec-auditor && skipped test-planner; then ok "auditoría y plan de tests saltados con las specs"; else bad "specs saltadas pero spec-auditor/test-planner no"; fi
+    elif [ "$judge" = fixture ]; then bad "ruta con las respuestas del fixture: se esperaba specifications-engineer skipped"
+    else echo "WARN Jev puso las specs en la ruta del todo-app (revisar factores)"; fi
+  fi
+  lap route
+fi
 stop_if_done specs
-if active specs; then
+if active specs && skipped specifications-engineer; then skip_note specs specifications-engineer
+elif active specs; then
   run specs "/sdd-specifications-engineer --fanout — launching the requirement lanes is requested explicitly. requirements/REQUIREMENTS.md is approved. Generate spec/ completely without asking questions; take the recommended option for any clarification and record it in spec/CLARIFICATIONS.md."
   [ -d spec/use-cases ] && ok "spec/use-cases" || bad "spec/use-cases"
   check_committed spec
 fi
 stop_if_done audit
-if active audit; then
+if active audit && skipped spec-auditor; then skip_note audit spec-auditor
+elif active audit; then
   run audit "/sdd-spec-auditor --fanout — audit spec/ and apply Mode Fix for P0/P1 without asking; write audits/AUDIT-BASELINE.md. Launching the four dimension auditors is requested explicitly: they are part of this skill's contract."
   [ -f audits/AUDIT-BASELINE.md ] && ok "AUDIT-BASELINE.md" || bad "AUDIT-BASELINE.md"
   check_committed audits spec
@@ -74,7 +116,8 @@ if active audit; then
   if [ "$amode" = fanout ]; then ok "auditoría en fan-out (mode=$amode)"; else echo "WARN auditoría secuencial (mode=$amode): el fan-out no se activó; ver docs/medidas.md"; fi
 fi
 stop_if_done test
-if active test; then
+if active test && skipped test-planner; then skip_note test test-planner
+elif active test; then
   run test "/sdd-test-planner --fanout — launching the matrix and E2E subagents is requested explicitly. generate test/ from spec/ without asking questions."
   [ -f test/TEST-PLAN.md ] && ok "TEST-PLAN.md" || bad "TEST-PLAN.md"
   check_committed test
@@ -84,13 +127,21 @@ if active test; then
 fi
 stop_if_done plan
 if active plan; then
-  run plan "/sdd-plan-architect --skip-clarify — generate plan/ without asking questions; take the recommended option for every decision."
+  plan_extra=""
+  skipped specifications-engineer && plan_extra=" The route skipped the specifications: plan from requirements/ (Requirements-only mode), Escenarios cite REQ-X-NNN ACn."
+  run plan "/sdd-plan-architect --skip-clarify — generate plan/ without asking questions; take the recommended option for every decision.$plan_extra"
   [ -f plan/ARCHITECTURE.md ] && ok "ARCHITECTURE.md" || bad "ARCHITECTURE.md"
   ls plan/fases/FASE-*.md >/dev/null 2>&1 && ok "plan/fases" || bad "plan/fases"
   check_committed plan
   # FASEs verticales (phase-assignment-rules.md): marca, esqueleto y lint mecánico V8/V9
   grep -qiE 'Plan-Style:?\**:? *vertical' plan/PLAN.md && ok "PLAN.md con Plan-Style: vertical" || bad "PLAN.md sin Plan-Style: vertical"
   if compgen -G 'plan/fases/FASE-0-[Ss][Kk][Ee][Ll][Ee][Tt][Oo][Nn]*.md' >/dev/null; then ok "FASE-0 es el esqueleto"; else echo "WARN FASE-0 no se llama *-SKELETON"; fi
+  if skipped specifications-engineer; then
+    # plan desde los requisitos: sin spec/, los escenarios son criterios `REQ-X-NNN ACn` (el lint comprueba que existen)
+    [ ! -d spec ] && ok "sin spec/ (specs saltadas)" || bad "spec/ creado aunque la ruta saltó las specs"
+    grep -qE 'Escenarios:.*REQ-[A-Z]+-[0-9]+ AC[0-9]+' plan/fases/FASE-0-*.md 2>/dev/null && ok "FASE-0 Escenarios con REQ ACn" || bad "FASE-0 Escenarios sin REQ ACn"
+    grep -qE 'N/A' plan/PLAN.md && ok "Validation Report con V2-V4/V7 N/A" || echo "WARN PLAN.md no marca V2-V4/V7 como N/A"
+  fi
   if lint_out=$(node "$ROOT/scripts/sdd.mjs" lint --plan 2>&1); then ok "sdd lint --plan limpio ($(printf '%s\n' "$lint_out" | tail -1))"; else bad "sdd lint --plan: $(printf '%s\n' "$lint_out" | grep -v '^note' | head -5 | tr '\n' ' ')"; fi
   pc=$(jq -r '.stages["plan-architect"].summary.metrics.plan_chars // 0' pipeline-state.json 2>/dev/null)
   pb=$(jq -r '.stages["plan-architect"].summary.metrics.plan_budget_chars // 0' pipeline-state.json 2>/dev/null)

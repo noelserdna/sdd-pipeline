@@ -66,6 +66,8 @@ Todo artefacto es trazable de extremo a extremo: `N → REQ → UC → WF → AP
 
 **Las FASEs son verticales.** FASE-0 es un esqueleto andante: el camino mínimo escribir → observar → persistir del caso de uso central (en el ejemplo todo: `todo add`, `todo list` y el fichero JSON), más solo la infraestructura que ese camino necesita. Cada FASE posterior es un recorrido de usuario con una `## Demo` de 10 pasos como máximo. Al terminar una FASE el cliente ve la demo y la acepta, la acepta con observaciones o la rechaza con feedback, que se clasifica como defecto, petición de cambio o pregunta.
 
+**La ruta se adapta al proyecto.** Justo después de aprobar los requisitos, `sdd route` propone qué etapas opcionales necesita este proyecto, a partir de hechos contados y siete juicios estrechos sobre las necesidades (cliente externo, datos sensibles, varios roles, integraciones, pantallas, vida larga, estado complejo). Una CLI pequeña se salta las specs formales, la auditoría de specs y el plan de tests, y se planifica directamente desde los criterios de aceptación de los requisitos. Una persona confirma la ruta con una sola pregunta, las etapas saltadas quedan registradas con su motivo y `sdd-req-change` vuelve a evaluar la ruta tras cada cambio: sube el rigor cuando hace falta y nunca lo baja solo. Ver [docs/ruta.md](docs/ruta.md).
+
 El estado vive en `pipeline-state.json` (un único fichero, fuente de verdad); los cambios avanzan a través de `sdd-req-change`, que marca como `stale` las etapas posteriores y reabre la aceptación del requisito modificado.
 
 ## Skills
@@ -220,6 +222,7 @@ El CI ejecuta lint (shellcheck), validación, las suites de scripts (`tests/{hoo
 - [docs/guia-completa-extendida.md](docs/guia-completa-extendida.md) — guía extendida
 - [docs/git.md](docs/git.md) — commits, trailers, ramas, merges, tags y `sdd trace`
 - [docs/aceptacion.md](docs/aceptacion.md) — aceptación por requisito, la puerta, el bucle hasta el objetivo y la firma
+- [docs/ruta.md](docs/ruta.md) — ruta adaptativa: qué etapas necesita cada proyecto, confirmación y reevaluación
 - [docs/stacks.md](docs/stacks.md) — SDD Stack Profile y kits por stack (Rails, Next.js + Prisma)
 - [docs/migracion.md](docs/migracion.md) — migrar desde plugins anteriores, hooks copiados y 4.x
 - [docs/multisesion.md](docs/multisesion.md) — protocolo multi-sesión

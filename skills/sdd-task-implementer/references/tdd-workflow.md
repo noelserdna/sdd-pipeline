@@ -13,6 +13,9 @@ scenario of `spec/tests/BDD-UC-NNN.md`), or `REQ-X-NNN ACn` for a requirement cr
 NFR, constraint check). `sdd accept` reads the JUnit report (Stack Profile `test_report`) and binds each result to a
 criterion only through that id; file-level `Refs:` comments never count, since they would mark every criterion of the
 file as verified. The id may sit in the test name or its enclosing `describe`/class; `-` or `_` both work.
+When the route skipped the specifications there is no `spec/` and no `AC-NNN-NN`: every test that verifies a
+criterion carries `REQ-X-NNN ACn` (`REQ-F-003 AC2 rejects an empty title`), the ids the FASE's `Escenarios` and the
+task's Acceptance cite.
 
 | Stack | Example |
 |-------|---------|

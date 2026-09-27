@@ -618,6 +618,33 @@ jq '.stages["security-auditor"] = {status: "done"} | .stages["req-change"] = {st
   "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
 out=$(h1 "" "$b2")
 contains "$out" "5/7 done. STALE: plan-architect. RUNNING: task-implementer, req-change. Next: plan-architect" && pass "BUG-6 H1: stale/running en orden de pipeline y Next" || bad "BUG-6 H1 orden: $out"
+# Ruta adaptativa: las etapas skipped salen del total ("N/M done, K skipped") y nunca son la siguiente
+skip_state='{"sddVersion":"t","hooksVersion":3,"currentStage":"requirements-engineer","stages":{"requirements-engineer":{"status":"done"},"specifications-engineer":{"status":"skipped","skipReason":"6 REQ-F"},"spec-auditor":{"status":"skipped"},"test-planner":{"status":"skipped"},"plan-architect":{"status":"pending"},"task-generator":{"status":"pending"},"task-implementer":{"status":"pending"}}}'
+printf '%s' "$skip_state" > "$b2/pipeline-state.json"
+out=$(h1 "" "$b2")
+contains "$out" "1/4 done, 3 skipped (specifications-engineer, spec-auditor, test-planner). Next: plan-architect" && pass "skipped H1: N/M done, K skipped y Next ignora las saltadas" || bad "skipped H1: $out"
+[ "$(bash -c '. "$1"; sdd_stage_summary "$2"' _ "$LIB" "$b2/pipeline-state.json")" = "1|4||||plan-architect|requirements-engineer|specifications-engineer spec-auditor test-planner" ] \
+  && pass "skipped sdd_stage_summary: total sin saltadas y lista de saltadas (jq)" || bad "skipped sdd_stage_summary jq"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  [ "$(PATH="$bin" bash -c '. "$1"; sdd_stage_summary "$2"' _ "$LIB" "$b2/pipeline-state.json")" = "1|4||||plan-architect|requirements-engineer|specifications-engineer spec-auditor test-planner" ] \
+    && pass "skipped sdd_stage_summary: igual con el fallback node" || bad "skipped sdd_stage_summary node"
+fi
+jq '.stages["plan-architect"].status = "done" | .stages["task-generator"].status = "done" | .stages["task-implementer"].status = "done"' "$b2/pipeline-state.json" > "$b2/ps.tmp" && mv "$b2/ps.tmp" "$b2/pipeline-state.json"
+out=$(h1 "" "$b2")
+contains "$out" "4/4 done, 3 skipped" && contains "$out" "Next: all complete" && pass "skipped H1: todo hecho salvo las saltadas → all complete" || bad "skipped H1 completo: $out"
+printf '%s' "$skip_state" > "$b2/pipeline-state.json"
+h3 "" "$b2" "$b2/spec/domain/01-glossary.md"
+[ "$(status_of specifications-engineer "$b2/pipeline-state.json")" = skipped ] && pass "skipped H3 write: escribir spec/ no reabre una etapa saltada" || bad "skipped H3 write reabrió la saltada"
+bash -c '. "$1"; sdd_mark_running "$2" spec-auditor skill' _ "$LIB" "$b2/pipeline-state.json"
+[ "$(status_of spec-auditor "$b2/pipeline-state.json")" = running ] && [ "$(jq -r '.stages["spec-auditor"] | has("skipReason")' "$b2/pipeline-state.json")" = false ] \
+  && pass "skipped sdd_mark_running skill: la ejecución explícita arranca la saltada" || bad "skipped sdd_mark_running skill"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  PATH="$bin" bash -c '. "$1"; sdd_mark_running "$2" specifications-engineer skill' _ "$LIB" "$b2/pipeline-state.json"
+  [ "$(status_of specifications-engineer "$b2/pipeline-state.json")" = running ] && [ "$(jq -r '.stages["specifications-engineer"] | has("skipReason")' "$b2/pipeline-state.json")" = false ] \
+    && pass "skipped sdd_mark_running skill: igual con el fallback node" || bad "skipped sdd_mark_running skill node"
+fi
+check "skipped sin .lock tras sdd_mark_running" no_lock "$b2/pipeline-state.json"
+
 sdir="$tmp/sddonly"; git init -q "$sdir"; mkdir -p "$sdir/.sdd"
 out=$(h1 "" "$sdir")
 contains "$out" "No pipeline-state.json" && pass "BUG-6 H1 con .sdd/ y sin estado: sugiere /sdd-setup" || bad "BUG-6 H1 .sdd/: $out"
@@ -733,6 +760,19 @@ cp "$FIX/pipeline-state.impl-running.json" "$b2/pipeline-state.json"
 ( cd "$b2" && bash "$STATE_SH" set req-change running ) && [ "$(jq -r .currentStage "$b2/pipeline-state.json")" = req-change ] && pass "sdd-state.sh set running: crea la clave y fija currentStage" || bad "sdd-state.sh set running"
 ( cd "$b2" && bash "$STATE_SH" set x bogus ) >/dev/null 2>&1 && bad "sdd-state.sh acepta un status inválido" || pass "sdd-state.sh rechaza status inválido"
 ( cd "$plain" && bash "$STATE_SH" set x "done" ) >/dev/null 2>&1 && bad "sdd-state.sh crea estado en repo sin SDD" || pass "sdd-state.sh sin pipeline-state.json: exit 1, no crea nada"
+( cd "$b2" && bash "$STATE_SH" set spec-auditor skipped --reason "spec skipped, 6 REQ-F" ) \
+  && [ "$(jq -r '.stages["spec-auditor"].status + "|" + .stages["spec-auditor"].skipReason' "$b2/pipeline-state.json")" = "skipped|spec skipped, 6 REQ-F" ] \
+  && pass "sdd-state.sh set skipped --reason: guarda skipReason" || bad "sdd-state.sh set skipped --reason"
+( cd "$b2" && bash "$STATE_SH" set spec-auditor pending ) && [ "$(jq -r '.stages["spec-auditor"] | has("skipReason")' "$b2/pipeline-state.json")" = false ] \
+  && pass "sdd-state.sh: otro status borra skipReason" || bad "sdd-state.sh no borra skipReason"
+( cd "$b2" && bash "$STATE_SH" set spec-auditor "done" --reason x ) >/dev/null 2>&1 && bad "sdd-state.sh acepta --reason sin skipped" || pass "sdd-state.sh: --reason solo con skipped"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  ( cd "$b2" && PATH="$bin" bash "$STATE_SH" set test-planner skipped --reason "no UI" ) \
+    && [ "$(jq -r '.stages["test-planner"].status + "|" + .stages["test-planner"].skipReason' "$b2/pipeline-state.json")" = "skipped|no UI" ] \
+    && pass "sdd-state.sh set skipped --reason: igual sin jq (node)" || bad "sdd-state.sh skipped sin jq"
+fi
+[ "$(cd "$b2" && bash "$STATE_SH" path)" = "$(cd "$b2" && pwd -P)/pipeline-state.json" ] && pass "sdd-state.sh path: imprime el fichero de estado" || bad "sdd-state.sh path ($(cd "$b2" && bash "$STATE_SH" path))"
+( cd "$plain" && bash "$STATE_SH" path ) >/dev/null 2>&1 && bad "sdd-state.sh path sin estado → exit 0" || pass "sdd-state.sh path sin estado: exit 1"
 check "sdd-state.sh sin estado no crea pipeline-state.json" test ! -e "$plain/pipeline-state.json"
 check "sdd-state.sh no deja .lock" no_lock "$b2/pipeline-state.json"
 
