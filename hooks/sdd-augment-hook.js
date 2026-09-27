@@ -7,7 +7,7 @@
  * context as additionalContext. Pattern adapted from GitNexus.
  *
  * Input (stdin): JSON with { hook_event_name, tool_name, tool_input, cwd }
- * Output (stdout): JSON with { hookSpecificOutput: { additionalContext: string } }
+ * Output (stdout): JSON with { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: string } }
  *
  * Behavior:
  *  - Silently no-ops on any error (never breaks the tool call)
@@ -81,12 +81,6 @@ function projectKey(p) {
   return k;
 }
 
-function sameProjectFile(a, b) {
-  if (!profileCtx.appDir) return false;
-  const ka = projectKey(a);
-  return !!ka && !ka.startsWith("/") && ka === projectKey(b);
-}
-
 function findGraphFile(startDir) {
   let dir = startDir;
   for (let i = 0; i < 6; i++) {
@@ -117,14 +111,19 @@ function loadGraph(cwd) {
 
     for (const art of graph.artifacts || []) {
       byId.set(art.id, art);
+      if (!art || typeof art !== "object" || !art.id) continue;
       for (const cr of art.codeRefs || []) {
-        const norm = cr.file.replace(/\\/g, "/");
+        // codeRefs without a usable `file` (older/partial graphs) are skipped, not fatal
+        if (!cr || typeof cr.file !== "string") continue;
+        const norm = cr.file.replace(/\\/g, "/").replace(/^\.\//, "").trim();
+        if (!norm) continue;
         if (!codeRefsByFile.has(norm)) codeRefsByFile.set(norm, []);
         codeRefsByFile.get(norm).push({ artifact: art, ref: cr });
       }
     }
 
     for (const rel of graph.relationships || []) {
+      if (!rel || !rel.source || !rel.target) continue;
       if (!relBySource.has(rel.source)) relBySource.set(rel.source, []);
       relBySource.get(rel.source).push(rel);
       if (!relByTarget.has(rel.target)) relByTarget.set(rel.target, []);
@@ -229,6 +228,23 @@ function getCoverageStatus(art, index) {
 // Match file path against graph
 // ---------------------------------------------------------------------------
 
+// Does the tool path/pattern `norm` refer to the graph code ref `file` (repo-relative)?
+// Whole path segments only: a basename-only ref (`index.ts`) matches just the file at the repo root,
+// never every `index.ts`; a pattern naming a directory (`src/auth`) matches the refs below it.
+function pathMatches(norm, file) {
+  if (!norm || !file) return false;
+  const key = projectKey(norm).replace(/\/+$/, "");
+  const fk = projectKey(file);
+  if (!fk) return false;
+  if (key === fk) return true;
+  if (!key.startsWith("/")) {
+    // Relative to the project (or an absolute path under its root): exact file or a directory above it
+    return key.includes("/") && !/[*?[\]{}]/.test(key) && fk.startsWith(key + "/");
+  }
+  // Absolute path outside the known root (no graph root match): whole trailing segments only
+  return fk.includes("/") && key.endsWith("/" + fk);
+}
+
 function matchByFile(filePath, index) {
   if (!filePath) return [];
 
@@ -237,7 +253,7 @@ function matchByFile(filePath, index) {
 
   // Direct code ref match
   for (const [file, refs] of index.codeRefsByFile) {
-    if (norm.includes(file) || file.includes(norm.replace(/^.*?src\//, "src/")) || sameProjectFile(norm, file)) {
+    if (pathMatches(norm, file)) {
       for (const { artifact, ref } of refs) {
         results.push({ artifact, ref, matchType: "codeRef" });
       }
@@ -285,10 +301,7 @@ function findSymbolsForFile(filePath, codeIntel) {
   if (!codeIntel || !codeIntel.symbols) return [];
   const norm = filePath.replace(/\\/g, "/");
   return codeIntel.symbols.filter(
-    (s) =>
-      norm.includes(s.filePath) ||
-      s.filePath.includes(norm.replace(/^.*?src\//, "src/")) ||
-      sameProjectFile(norm, s.filePath)
+    (s) => s && typeof s.filePath === "string" && pathMatches(norm, s.filePath.replace(/\\/g, "/"))
   );
 }
 
@@ -315,14 +328,22 @@ function findProcessesForArtifact(artifactId, codeIntel) {
 function formatContext(matches, index, codeIntel) {
   if (matches.length === 0) return null;
 
-  // Deduplicate by artifact ID
+  // Deduplicate by artifact ID; at most MAX_PER_FILE artifacts per code file (a hot file linked to
+  // dozens of requirements must not flood the context of every Read/Edit)
+  const MAX_PER_FILE = 2;
   const seen = new Set();
+  const perFile = new Map();
   const unique = [];
+  let dropped = 0;
   for (const m of matches) {
-    if (!seen.has(m.artifact.id)) {
-      seen.add(m.artifact.id);
-      unique.push(m);
+    if (seen.has(m.artifact.id)) continue;
+    seen.add(m.artifact.id);
+    if (m.ref) {
+      const n = perFile.get(m.ref.file) || 0;
+      if (n >= MAX_PER_FILE) { dropped++; continue; }
+      perFile.set(m.ref.file, n + 1);
     }
+    unique.push(m);
   }
 
   const lines = ["SDD Traceability Context:"];
@@ -333,11 +354,10 @@ function formatContext(matches, index, codeIntel) {
     const coverage = getCoverageStatus(art, index);
 
     if (m.ref) {
-      lines.push(
-        `  ${m.ref.file}:${m.ref.symbol}() implements ${art.id} (${art.title})`
-      );
+      const sym = m.ref.symbol ? `:${m.ref.symbol}()` : "";
+      lines.push(`  ${m.ref.file}${sym} implements ${art.id} (${art.title || ""})`);
     } else {
-      lines.push(`  ${art.id}: ${art.title}`);
+      lines.push(`  ${art.id}: ${art.title || ""}`);
     }
     lines.push(`  Chain: ${chain}`);
     lines.push(`  Coverage: ${coverage}`);
@@ -345,7 +365,9 @@ function formatContext(matches, index, codeIntel) {
     // Last commit
     if (art.commitRefs && art.commitRefs.length > 0) {
       const last = art.commitRefs[art.commitRefs.length - 1];
-      lines.push(`  Last commit: ${last.sha} (${last.date ? last.date.split("T")[0] : "unknown"})`);
+      if (last && last.sha) {
+        lines.push(`  Last commit: ${last.sha} (${last.date ? String(last.date).split("T")[0] : "unknown"})`);
+      }
     }
 
     // Code Intelligence (when codeIntelligence block is available)
@@ -393,8 +415,9 @@ function formatContext(matches, index, codeIntel) {
     }
   }
 
-  if (unique.length > 5) {
-    lines.push(`  ... and ${unique.length - 5} more artifacts`);
+  const more = Math.max(unique.length - 5, 0) + dropped;
+  if (more > 0) {
+    lines.push(`  ... and ${more} more artifacts`);
   }
 
   return lines.join("\n");
@@ -445,6 +468,7 @@ async function main() {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
+          hookEventName: "PreToolUse",
           additionalContext: context,
         },
       })

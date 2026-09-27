@@ -85,10 +85,10 @@ while IFS=$'\t' read -r root project skill elapsed agents age state; do
   [ "$agents" = "-" ] && agents=0
   [ "$state" = "-" ] && state=""
   line="SDD ▸ $project"
-  counts=$(sdd_stage_counts "$root/pipeline-state.json") || counts=""
-  if [ -n "$counts" ]; then
-    done_n=${counts%%$'\t'*}; total_n=${counts#*$'\t'}
-    [ -n "$total_n" ] && [ "$total_n" != 0 ] && line="$line $done_n/$total_n"
+  sum=$(sdd_stage_summary "$root/pipeline-state.json") || sum=""
+  if [ -n "$sum" ]; then
+    IFS='|' read -r done_n total_n _ <<< "$sum"
+    line="$line $done_n/$total_n"
   fi
   if [ -n "$skill" ]; then
     line="$line · $skill"

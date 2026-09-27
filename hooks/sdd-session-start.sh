@@ -5,6 +5,7 @@
 # worktrees) e inyecta el contexto del pipeline. Lee dashboard/traceability-graph.json
 # (si existe) para la cobertura. Con rol (SDD_ROLE o registro de sesiones) añade
 # "Rol: … | Pares vivos: …" y exporta SDD_STATE_ROOT / SDD_PLUGIN_ROOT vía CLAUDE_ENV_FILE.
+# Sin pipeline-state.json, sin .sdd/ y sin rol (repositorio que no usa SDD) no emite nada.
 
 set -euo pipefail
 
@@ -40,6 +41,14 @@ write_env_file() {
     fi
   } >> "$f" 2>/dev/null || true
 }
+# Proyectos sin SDD (ni pipeline-state.json ni .sdd/ ni rol): silencio total, sin variables.
+# Los hooks del plugin son globales; no hay que pedir /sdd-setup en cada repositorio.
+if [ ! -f "$PIPELINE_STATE" ] && [ ! -d "$STATE_ROOT/.sdd" ] && [ -z "$ROLE" ]; then
+  exit 0
+fi
+
+# SDD_STATE_ROOT se exporta para las skills (worktrees); si se hereda a otro repositorio,
+# sdd_roots la ignora (solo vale dentro del mismo git-common-dir).
 write_env_file
 
 # --- Contexto de rol (solo si hay rol) ---
@@ -69,48 +78,23 @@ if [ ! -f "$PIPELINE_STATE" ]; then
   emit "SDD Pipeline: No pipeline-state.json found. Fresh pipeline — all stages pending. Run /sdd-setup to initialize automation."
 fi
 
-# Try jq first, fall back to node
-parse_with_jq() {
-  jq -r '
-    "SDD Pipeline [" + (.currentStage // "unknown") + "]: " +
-    ([.stages | to_entries[] | select(.value.status == "done") | .key] | length | tostring) + "/7 done" +
-    (if ([.stages | to_entries[] | select(.value.status == "stale")] | length) > 0
-     then ". STALE: " + ([.stages | to_entries[] | select(.value.status == "stale") | .key] | join(", "))
-     else "" end) +
-    (if ([.stages | to_entries[] | select(.value.status == "running")] | length) > 0
-     then ". RUNNING: " + ([.stages | to_entries[] | select(.value.status == "running") | .key] | join(", "))
-     else "" end) +
-    (if ([.stages | to_entries[] | select(.value.status == "error")] | length) > 0
-     then ". ERROR: " + ([.stages | to_entries[] | select(.value.status == "error") | .key] | join(", "))
-     else "" end) +
-    ". Next: " + ([.stages | to_entries[] | select(.value.status == "pending" or .value.status == "stale") | .key] | first // "all complete")
-  ' "$PIPELINE_STATE" 2>/dev/null
+# Progreso sobre las 7 etapas lineales (las laterales no cuentan en N/7); listas en orden de pipeline.
+build_context() {
+  local sum done_n total running stale errors next current msg
+  sum=$(sdd_stage_summary "$PIPELINE_STATE") || sum=""
+  [ -n "$sum" ] || return 0
+  IFS='|' read -r done_n total running stale errors next current <<< "$sum"
+  msg="SDD Pipeline [${current:-unknown}]: ${done_n}/${total} done"
+  [ -n "$stale" ] && msg="$msg. STALE: ${stale// /, }"
+  [ -n "$running" ] && msg="$msg. RUNNING: ${running// /, }"
+  [ -n "$errors" ] && msg="$msg. ERROR: ${errors// /, }"
+  if [ -n "$next" ]; then msg="$msg. Next: $next"
+  elif [ "$done_n" = "$total" ]; then msg="$msg. Next: all complete"
+  fi
+  printf '%s\n' "$msg"
 }
 
-parse_with_node() {
-  SDD_STATE_FILE="$PIPELINE_STATE" node -e "
-    const fs = require('fs');
-    try {
-      const state = JSON.parse(fs.readFileSync(process.env.SDD_STATE_FILE, 'utf8'));
-      const entries = Object.entries(state.stages || {});
-      const done = entries.filter(([,v]) => v.status === 'done').length;
-      const stale = entries.filter(([,v]) => v.status === 'stale').map(([k]) => k);
-      const running = entries.filter(([,v]) => v.status === 'running').map(([k]) => k);
-      const errors = entries.filter(([,v]) => v.status === 'error').map(([k]) => k);
-      const next = entries.find(([,v]) => v.status === 'pending' || v.status === 'stale');
-      let msg = 'SDD Pipeline [' + (state.currentStage || 'unknown') + ']: ' + done + '/7 done';
-      if (stale.length) msg += '. STALE: ' + stale.join(', ');
-      if (running.length) msg += '. RUNNING: ' + running.join(', ');
-      if (errors.length) msg += '. ERROR: ' + errors.join(', ');
-      msg += '. Next: ' + (next ? next[0] : 'all complete');
-      console.log(msg);
-    } catch(e) {
-      console.log('SDD Pipeline: could not parse pipeline-state.json');
-    }
-  " 2>/dev/null
-}
-
-CONTEXT=$(parse_with_jq) || CONTEXT=$(parse_with_node) || CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
+CONTEXT=$(build_context) || CONTEXT=""
 
 [ -z "$CONTEXT" ] && CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
 

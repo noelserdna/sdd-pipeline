@@ -79,7 +79,7 @@ check "templates/sdd-sessions.example.json es sdd-sessions-v1" jq -e '."$schema"
 # ---------------------------------------------------------------- 2. sin pipeline (directorio sin git)
 nogit="$tmp/nogit"; mkdir -p "$nogit"
 out=$(h1 "" "$nogit")
-if printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("No pipeline-state.json")' >/dev/null 2>&1; then pass "H1 sin pipeline: Fresh pipeline en JSON"; else bad "H1 sin pipeline: $out"; fi
+[ -z "$out" ] && pass "H1 sin pipeline, sin .sdd/ y sin rol: silencio" || bad "H1 sin pipeline: $out"
 [ "$(guard "" "$nogit" Write "$nogit/spec/x.md")" = allow ] && pass "H2 sin pipeline-state permite" || bad "H2 sin pipeline-state deniega"
 start=$(date +%s)
 if printf '{"session_id":"t","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"%s/a.md"}}' "$nogit" "$nogit" | CLAUDE_PROJECT_DIR="$nogit" node "$HOOKS/sdd-augment-hook.js" >/dev/null 2>&1; then pass "H5 sin grafo (exit 0, $(( $(date +%s) - start ))s)"; else bad "H5 sin grafo falla"; fi
@@ -197,7 +197,7 @@ if contains "$out" "Rol sdd-spec no posee"; then pass "rol por registro de sesio
 cp "$repo/.claude/sdd-sessions.json" "$tmp/reg.bak"; printf '{not json' > "$repo/.claude/sdd-sessions.json"
 [ "$(guard "SDD_ROLE=sdd-spec" "$repo" Write "$repo/src/x.ts")" = allow ] && pass "registro corrupto → sin rol, exit 0" || bad "registro corrupto rompe H2"
 cp "$tmp/reg.bak" "$repo/.claude/sdd-sessions.json"
-[ "$(guard "SDD_ROLE=sdd-spec SDD_STATE_ROOT=$tmp/nogit" "$repo" Write "$repo/src/x.ts")" = allow ] && pass "SDD_STATE_ROOT sin registro ni estado → allow" || bad "SDD_STATE_ROOT sin registro deniega"
+[ "$(guard "SDD_ROLE=sdd-spec SDD_STATE_ROOT=$tmp/nogit" "$repo" Write "$repo/src/x.ts")" = deny ] && pass "SDD_STATE_ROOT fuera del repositorio se ignora (registro del repo → deny 'no posee')" || bad "SDD_STATE_ROOT ajeno sigue mandando"
 
 # ---------------------------------------------------------------- 9. env -u SDD_ROLE -u CLAUDE_PID ≡ sin rol
 rm -f "$HOME"/.claude/sessions/*.json
@@ -716,5 +716,126 @@ printf '{not json' | bash "$TOOL_GUARD" >/dev/null 2>&1 && pass "H12 JSON roto �
 if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
   [ "$(tg "PATH=$bin" "$rroot" 'PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 npx prisma migrate reset')" = deny ] && pass "sin jq: H12 deniega (fallback node)" || bad "sin jq: H12 no deniega"
 fi
+
+# ---------------------------------------------------------------- 21. regresiones de la revisión (BUG-1..9)
+# BUG-1: H3 no crea pipeline-state.json en un repo sin SDD; el guard sigue permitiendo spec/**/*_spec.rb
+plain="$tmp/plain"; git init -q "$plain" && git -C "$plain" commit -q --allow-empty -m init
+h3 "" "$plain" "$plain/spec/models/user_spec.rb" || true
+[ ! -e "$plain/pipeline-state.json" ] && pass "BUG-1 H3 no crea pipeline-state.json en un repo sin SDD" || bad "BUG-1 H3 creó pipeline-state.json"
+[ "$(guard "" "$plain" Write "$plain/spec/models/user_spec.rb")" = allow ] && pass "BUG-1 repo sin SDD: el guard permite spec/**/*_spec.rb" || bad "BUG-1 guard deniega en repo sin SDD"
+[ ! -d "$plain/.sdd" ] && pass "BUG-1 repo sin SDD: sin .sdd/" || bad "BUG-1 creó .sdd/"
+
+# BUG-2: el stage que aplica es el más downstream; req-change running escribe requirements/ y spec/
+b2="$tmp/b2"; git init -q "$b2" && git -C "$b2" commit -q --allow-empty -m init
+jq '.stages["requirements-engineer"].status = "running"' "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+[ "$(guard "" "$b2" Write "$b2/spec/x.md")" = deny ] && pass "BUG-2a upstream stuck running + impl running: spec/ sigue denegado" || bad "BUG-2a un stage upstream running desactiva la protección"
+out=$(guard_out "" "$b2" Write "$b2/plan/p.md")
+contains "$out" "Stage 'task-implementer'" && pass "BUG-2a el deny nombra el stage más downstream" || bad "BUG-2a deny: $out"
+jq '.stages["req-change"] = {status: "running"}' "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+[ "$(guard "" "$b2" Write "$b2/requirements/REQUIREMENTS.md")" = allow ] && pass "BUG-2b req-change + impl running: requirements/ permitido" || bad "BUG-2b req-change denegado en requirements/"
+[ "$(guard "" "$b2" Edit "$b2/spec/use-cases/UC-001.md")" = allow ] && pass "BUG-2b req-change + impl running: spec/ permitido" || bad "BUG-2b req-change denegado en spec/"
+[ "$(guard "" "$b2" Write "$b2/plan/p.md")" = deny ] && pass "BUG-2b req-change no abre plan/ con impl running" || bad "BUG-2b plan/ permitido"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  jq '.stages["requirements-engineer"].status = "running"' "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+  [ "$(guard "PATH=$bin" "$b2" Write "$b2/spec/x.md")" = deny ] && pass "BUG-2a sin jq: stage más downstream (fallback node)" || bad "BUG-2a sin jq"
+fi
+
+# BUG-3: H3 no reabre un stage done; pending/stale → running; la skill explícita sí reabre done
+cp "$FIX/pipeline-state.impl-running.json" "$b2/pipeline-state.json"
+h3 "" "$b2" "$b2/requirements/REQUIREMENTS.md"
+[ "$(status_of requirements-engineer "$b2/pipeline-state.json")" = "done" ] && pass "BUG-3 H3: escribir requirements/ no reabre requirements-engineer done" || bad "BUG-3 H3 reabrió un stage done"
+[ "$(jq -r '.stages["requirements-engineer"].summary.handoff.to' "$b2/pipeline-state.json")" = example-lead ] && pass "BUG-3 H3 conserva summary" || bad "BUG-3 H3 alteró summary"
+jq '.stages["plan-architect"].status = "stale"' "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+h3 "" "$b2" "$b2/plan/PLAN.md"
+[ "$(status_of plan-architect "$b2/pipeline-state.json")" = running ] && pass "BUG-3 H3: stale → running" || bad "BUG-3 H3 no marcó stale → running"
+jq '.stages["test-planner"].status = "error"' "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+h3 "" "$b2" "$b2/test/TEST-PLAN.md"
+[ "$(status_of test-planner "$b2/pipeline-state.json")" = error ] && pass "BUG-3 H3: error no se toca" || bad "BUG-3 H3 cambió error"
+cp "$FIX/pipeline-state.impl-running.json" "$b2/pipeline-state.json"
+bash -c '. "$1"; sdd_mark_running "$2" req-change skill' _ "$LIB" "$b2/pipeline-state.json"
+[ "$(status_of req-change "$b2/pipeline-state.json")" = running ] && pass "BUG-3 sdd_mark_running skill: crea el stage lateral y lo marca" || bad "BUG-3 sdd_mark_running skill"
+bash -c '. "$1"; sdd_mark_running "$2" spec-auditor skill' _ "$LIB" "$b2/pipeline-state.json"
+[ "$(status_of spec-auditor "$b2/pipeline-state.json")" = running ] && pass "BUG-3 sdd_mark_running skill: done → running (re-ejecución explícita)" || bad "BUG-3 skill no reabre done"
+check "BUG-3 sin .lock tras sdd_mark_running" no_lock "$b2/pipeline-state.json"
+
+# BUG-4: SDD_STATE_ROOT heredado de otro repositorio se ignora; el del mismo repo (worktree) se respeta
+cp "$FIX/pipeline-state.impl-running.json" "$b2/pipeline-state.json"
+[ "$(guard "SDD_STATE_ROOT=$b2" "$plain" Write "$plain/spec/x.md")" = allow ] && pass "BUG-4 SDD_STATE_ROOT de otro repo no aplica su estado" || bad "BUG-4 SDD_STATE_ROOT ajeno deniega"
+h3 "SDD_STATE_ROOT=$b2" "$plain" "$plain/src/a.ts" || true
+[ "$(jq -r .lastUpdated "$b2/pipeline-state.json")" = "$(jq -r .lastUpdated "$FIX/pipeline-state.impl-running.json")" ] && pass "BUG-4 H3 no escribe en el estado de otro repo" || bad "BUG-4 H3 tocó el estado ajeno"
+reset_state pipeline-state.impl-running.json
+[ "$(guard "SDD_STATE_ROOT=$repo" "$wt" Write "$wt/spec/x.md")" = deny ] && pass "BUG-4 SDD_STATE_ROOT del mismo repo (worktree) se respeta" || bad "BUG-4 SDD_STATE_ROOT del mismo repo ignorado"
+out=$(h1 "" "$plain")
+[ -z "$out" ] && pass "BUG-6 H1 en repo git sin SDD: silencio" || bad "BUG-6 H1 repo sin SDD: $out"
+
+# BUG-5: STATE_ROOT sale del directorio del fichero (directorios de trabajo adicionales)
+[ "$(guard "" "$plain" Write "$b2/spec/x.md")" = deny ] && pass "BUG-5 cwd sin SDD, fichero en repo con impl running → deny" || bad "BUG-5 usa el estado del cwd"
+[ "$(guard "" "$b2" Write "$plain/spec/x.md")" = allow ] && pass "BUG-5 cwd con impl running, fichero en repo sin SDD → allow" || bad "BUG-5 aplica el estado del cwd a otro repo"
+
+# BUG-6: N/7 cuenta solo las 7 etapas lineales
+jq '.stages["task-implementer"].status = "done" | .stages["security-auditor"] = {status: "done"} | .stages["tech-designer"] = {status: "done"}' \
+  "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+out=$(h1 "" "$b2")
+contains "$out" "7/7 done" && contains "$out" "Next: all complete" && pass "BUG-6 H1: laterales no inflan N/7" || bad "BUG-6 H1: $out"
+jq '.stages["security-auditor"] = {status: "done"} | .stages["req-change"] = {status: "running"} | .stages["plan-architect"].status = "stale"' \
+  "$FIX/pipeline-state.impl-running.json" > "$b2/pipeline-state.json"
+out=$(h1 "" "$b2")
+contains "$out" "5/7 done. STALE: plan-architect. RUNNING: task-implementer, req-change. Next: plan-architect" && pass "BUG-6 H1: stale/running en orden de pipeline y Next" || bad "BUG-6 H1 orden: $out"
+sdir="$tmp/sddonly"; git init -q "$sdir"; mkdir -p "$sdir/.sdd"
+out=$(h1 "" "$sdir")
+contains "$out" "No pipeline-state.json" && pass "BUG-6 H1 con .sdd/ y sin estado: sugiere /sdd-setup" || bad "BUG-6 H1 .sdd/: $out"
+
+# BUG-7: augment hook — hookEventName, refs sin file / basename, tope por fichero
+aug="$tmp/aug"; git init -q "$aug"; mkdir -p "$aug/dashboard"
+cat > "$aug/dashboard/traceability-graph.json" <<'GRAPH'
+{"artifacts":[
+ {"id":"REQ-F-001","type":"REQ","title":"A","codeRefs":[{"symbol":"nofile"},{"file":"","symbol":"empty"},{"file":"src/x.ts","symbol":"a"}]},
+ {"id":"REQ-F-002","type":"REQ","title":"B","codeRefs":[{"file":"src/x.ts","symbol":"b"}]},
+ {"id":"REQ-F-003","type":"REQ","title":"C","codeRefs":[{"file":"src/x.ts","symbol":"c"}]},
+ {"id":"REQ-F-004","type":"REQ","title":"D","codeRefs":[{"file":"src/x.ts","symbol":"d"}]},
+ {"id":"REQ-F-005","type":"REQ","title":"E","codeRefs":[{"file":"index.ts","symbol":"e"}]}],
+ "relationships":[{"source":"REQ-F-001"}]}
+GRAPH
+out=$(pre_json "$aug" Read "$aug/src/x.ts" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' >/dev/null 2>&1 && pass "BUG-7 H5 incluye hookEventName PreToolUse" || bad "BUG-7 H5 sin hookEventName: $out"
+n=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -c ' implements REQ-F-' || true)
+[ "$n" = 2 ] && contains "$out" "and 2 more artifacts" && pass "BUG-7 H5 codeRef sin file no rompe; máximo 2 artefactos por fichero" || bad "BUG-7 H5 tope/robustez ($n): $out"
+out=$(pre_json "$aug" Read "$aug/lib/deep/index.ts" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+contains "$out" "REQ-F-005" && bad "BUG-7 H5 un ref basename casa con cualquier index.ts" || pass "BUG-7 H5 ref basename no casa con otro directorio"
+out=$(pre_json "$aug" Read "$aug/index.ts" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+contains "$out" "REQ-F-005" && pass "BUG-7 H5 ref basename casa con el fichero de la raíz" || bad "BUG-7 H5 basename raíz: $out"
+out=$(pre_json "$aug" Read "$aug/src/other.ts" | node "$HOOKS/sdd-augment-hook.js" 2>/dev/null || true)
+contains "$out" "REQ-F-" && bad "BUG-7 H5 casa un fichero sin refs: $out" || pass "BUG-7 H5 ref vacío no casa con todo"
+
+# BUG-9: commit-msg exime Revert/fixup!/squash!/amend!; lock huérfano roto sin carrera
+CM="$HOOKS/sdd-commit-msg-hook.sh"; cmf="$tmp/cmsg"
+okc=1
+for m in 'Revert "feat(auth): login"' 'fixup! feat: x' 'squash! fix: y' 'amend! feat: z'; do
+  printf '%s\n\nbody\n' "$m" > "$cmf"; bash "$CM" "$cmf" >/dev/null 2>&1 || { okc=0; echo "     rechaza: $m"; }
+done
+[ "$okc" = 1 ] && pass "BUG-9 commit-msg exime Revert/fixup!/squash!/amend!" || bad "BUG-9 commit-msg rechaza commits de git"
+printf 'feat: x\n' > "$cmf"; bash "$CM" "$cmf" >/dev/null 2>&1 && bad "BUG-9 commit-msg acepta feat sin trailers" || pass "BUG-9 commit-msg sigue exigiendo trailers a feat"
+lk="$tmp/lk"; mkdir -p "$lk.lock"
+bash -c '. "$1"; sdd_lock_break "$2.lock"' _ "$LIB" "$lk"
+[ -d "$lk.lock" ] && pass "BUG-9 sdd_lock_break no borra un lock vivo (re-comprueba bajo el mutex)" || bad "BUG-9 sdd_lock_break borró un lock vivo"
+touch -t 202001010000 "$lk.lock"
+bash -c '. "$1"; sdd_lock_break "$2.lock"' _ "$LIB" "$lk"
+[ ! -d "$lk.lock" ] && [ ! -d "$lk.lock.break" ] && pass "BUG-9 sdd_lock_break borra el huérfano y suelta el mutex" || bad "BUG-9 sdd_lock_break huérfano"
+mkdir -p "$lk.lock.break" "$lk.lock"; touch -t 202001010000 "$lk.lock.break" "$lk.lock"
+bash -c '. "$1"; SDD_LOCK_RETRIES=5; sdd_lock "$2" && sdd_unlock "$2"' _ "$LIB" "$lk" && [ ! -d "$lk.lock" ] && [ ! -d "$lk.lock.break" ] \
+  && pass "BUG-9 un mutex .break huérfano también se recupera" || bad "BUG-9 .break huérfano bloquea"
+
+# scripts/sdd-state.sh: set/get bajo el lock de los hooks
+STATE_SH="$ROOT/scripts/sdd-state.sh"
+cp "$FIX/pipeline-state.impl-running.json" "$b2/pipeline-state.json"
+( cd "$b2" && bash "$STATE_SH" set task-implementer "done" ) && [ "$(status_of task-implementer "$b2/pipeline-state.json")" = "done" ] \
+  && [ "$(jq -r '.stages["requirements-engineer"].summary.handoff.to' "$b2/pipeline-state.json")" = example-lead ] \
+  && pass "sdd-state.sh set: cambia el status y conserva summary" || bad "sdd-state.sh set"
+[ "$(cd "$b2" && bash "$STATE_SH" get task-implementer)" = "done" ] && [ "$(cd "$b2" && bash "$STATE_SH" get nope)" = absent ] && pass "sdd-state.sh get" || bad "sdd-state.sh get"
+( cd "$b2" && bash "$STATE_SH" set req-change running ) && [ "$(jq -r .currentStage "$b2/pipeline-state.json")" = req-change ] && pass "sdd-state.sh set running: crea la clave y fija currentStage" || bad "sdd-state.sh set running"
+( cd "$b2" && bash "$STATE_SH" set x bogus ) >/dev/null 2>&1 && bad "sdd-state.sh acepta un status inválido" || pass "sdd-state.sh rechaza status inválido"
+( cd "$plain" && bash "$STATE_SH" set x "done" ) >/dev/null 2>&1 && bad "sdd-state.sh crea estado en repo sin SDD" || pass "sdd-state.sh sin pipeline-state.json: exit 1, no crea nada"
+check "sdd-state.sh sin estado no crea pipeline-state.json" test ! -e "$plain/pipeline-state.json"
+check "sdd-state.sh no deja .lock" no_lock "$b2/pipeline-state.json"
 
 [ "$fail" -eq 0 ] && echo "tests/hooks: todo ok" || { echo "tests/hooks: hay fallos"; exit 1; }

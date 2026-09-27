@@ -10,6 +10,7 @@
 #
 # Allowed without trailers:
 #   - Merge commits (start with "Merge ")
+#   - Revert commits (`Revert "..."`) and autosquash commits (`fixup! `, `squash! `, `amend! `)
 #   - docs, chore, ci, style, build commit types
 #   - refactor commits require at least Task: trailer
 
@@ -31,9 +32,11 @@ fi
 COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
 FIRST_LINE=$(head -n 1 "$COMMIT_MSG_FILE")
 
-# ── Merge commits: always allowed ─────────────────────────────────────────────
+# ── Merge, revert and autosquash commits: always allowed ──────────────────────
+# `git revert` writes `Revert "<subject>"`; `git commit --fixup/--squash` write `fixup!`/`squash!`/
+# `amend!` subjects that disappear on `rebase --autosquash` (the original commit keeps its trailers).
 case "$FIRST_LINE" in
-  Merge\ *)
+  Merge\ *|Revert\ \"*|fixup!\ *|squash!\ *|amend!\ *)
     exit 0
     ;;
 esac

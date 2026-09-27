@@ -93,11 +93,13 @@ if command -v jq &>/dev/null; then
     ([$order[] as $s | (.stages[$s].status // "pending") | select(. == "done")] | length) as $done |
     ($order | length) as $total |
 
-    # Find running stage: first running (pipeline order), or first running within the role stages
+    # Find running stage: first running in pipeline order (linear stages, then laterals), restricted
+    # to the role stages when there is a role
     (if $rolestages == [] then
        ([$order[] as $s | select(.stages[$s].status == "running") | $s] | first // null)
      else
-       ([(.stages // {}) | to_entries[] | select(.value.status == "running" and ((.key as $k | $rolestages | index($k)) != null)) | .key] | first // null)
+       ([($order + (((.stages // {}) | keys_unsorted) - $order))[] as $s
+         | select(.stages[$s].status == "running" and (($rolestages | index($s)) != null)) | $s] | first // null)
      end) as $running |
 
     # Count stale and error
@@ -163,7 +165,9 @@ elif command -v node &>/dev/null; then
         if (st === 'pending' && !next) next = s;
       }
       if (roleStages.length) {
-        for (const [k, v] of Object.entries(state.stages || {})) {
+        const all = order.concat(Object.keys(state.stages || {}).filter((k) => !order.includes(k)));
+        for (const k of all) {
+          const v = (state.stages || {})[k];
           if (v && v.status === 'running' && roleStages.includes(k)) { running = k; break; }
         }
       }

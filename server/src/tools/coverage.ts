@@ -65,6 +65,8 @@ export function executeCoverage(
   > = {};
   const uncovered: CoverageDetail[] = [];
   const topGaps: CoverageDetail[] = [];
+  let reqsWithDirectCode = 0;
+  let reqsWithInferredCodeOnly = 0;
 
   for (const req of reqs) {
     const domainKey =
@@ -93,8 +95,10 @@ export function executeCoverage(
     });
     const hasCode = (req.codeRefs?.length ?? 0) > 0;
     const hasDirectCode = req.codeRefs?.some((cr) => (cr.origin ?? "direct") === "direct") ?? false;
-    const hasInferredCode = req.codeRefs?.some((cr) => cr.origin === "commit-inferred" || cr.origin === "task-inferred") ?? false;
+    const hasInferredCode = req.codeRefs?.some((cr) => (cr.origin ?? "direct") !== "direct") ?? false;
     const hasTests = (req.testRefs?.length ?? 0) > 0;
+    if (hasDirectCode) reqsWithDirectCode++;
+    else if (hasInferredCode) reqsWithInferredCodeOnly++;
 
     const missing: string[] = [];
     if (!hasUC) missing.push("UC");
@@ -155,6 +159,14 @@ export function executeCoverage(
     taskInferred: allCodeRefs.filter((cr) => cr.origin === "task-inferred").length,
     manualOverrides: allCodeRefs.filter((cr) => cr.origin === "manual-override").length,
     codeIndex: allCodeRefs.filter((cr) => cr.origin === "code-index").length,
+    blameInferred: allCodeRefs.filter((cr) => cr.origin === "blame-inferred").length,
+    propagated: allCodeRefs.filter((cr) => cr.origin === "propagated").length,
+    hookCaptured: allCodeRefs.filter((cr) => cr.origin === "hook-captured").length,
+    llmVerified: allCodeRefs.filter((cr) => cr.origin === "llm-verified").length,
+    /** Every ref whose origin is not `direct` (the sum of the inferred kinds above and any new ones). */
+    inferredTotal: allCodeRefs.filter((cr) => (cr.origin ?? "direct") !== "direct").length,
+    reqsWithDirectCode,
+    reqsWithInferredCodeOnly,
   };
 
   const output = {

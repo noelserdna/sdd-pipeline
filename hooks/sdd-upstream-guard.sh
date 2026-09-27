@@ -16,7 +16,9 @@
 #                       test/* is allowed when it is implementation code declared in the SDD Stack
 #                       Profile of CLAUDE.md (code_paths/test_paths, e.g. Rails Minitest `test` at
 #                       repo root); top-level test/*.md (TEST-PLAN.md, TEST-MATRIX-*...) stays denied
-#   - req-change: requirements/ and spec/ are allowed (lateral skill)
+#   - req-change running: requirements/ and spec/ are allowed (lateral skill), even when a
+#     downstream stage is also running
+#   - Several stages running: the most downstream linear stage applies (pipeline order)
 #   - Always allowed (infrastructure, not pipeline artifacts): pipeline-state.json, .sdd/*,
 #     changes/*, feedback/*, .claude/hooks/*, .claude/settings*.json, .claude/agents/*,
 #     .claude/sdd/*, .claude/sdd-sessions.json
@@ -28,7 +30,7 @@
 #
 # Con rol (SDD_ROLE o registro de sesiones) presente en .claude/sdd-sessions.json:
 #   (a) REL_PATH fuera de `owns` del rol → deny, haya o no stage running.
-#   (b) el stage running que aplica es el primero de `stages` del rol (no el primero global).
+#   (b) el stage running que aplica es el más downstream de los `stages` del rol.
 #   (c) el resto de reglas de inmutabilidad se aplica igual.
 # Sin rol o sin registro → comportamiento anterior.
 
@@ -90,31 +92,30 @@ if [ ! -f "$PIPELINE_STATE" ]; then
   exit 0
 fi
 
-# Running stages, one per line, in file order
-get_running_stages() {
-  jq -r '.stages // {} | to_entries[] | select(.value.status == "running") | .key' "$PIPELINE_STATE" 2>/dev/null
-}
+# Running stages: linear stages in pipeline order (upstream → downstream), then lateral ones.
+SUMMARY=$(sdd_stage_summary "$PIPELINE_STATE") || SUMMARY=""
+RUNNING_ALL=""
+[ -n "$SUMMARY" ] && IFS='|' read -r _ _ RUNNING_ALL _ <<< "$SUMMARY"
 
-get_running_stages_node() {
-  SDD_STATE_FILE="$PIPELINE_STATE" node -e "
-    const fs = require('fs');
-    try {
-      const state = JSON.parse(fs.readFileSync(process.env.SDD_STATE_FILE, 'utf8'));
-      for (const [k, v] of Object.entries(state.stages || {})) if (v && v.status === 'running') console.log(k);
-    } catch(e) {}
-  " 2>/dev/null
-}
-
-RUNNING_ALL=$(get_running_stages) || RUNNING_ALL=$(get_running_stages_node) || RUNNING_ALL=""
-
+# The stage that applies is the MOST DOWNSTREAM running linear stage (within the role's stages when
+# there is a role): an upstream stage left in "running" must not switch protection off.
 RUNNING_STAGE=""
+REQ_CHANGE_RUNNING=0
 for s in $RUNNING_ALL; do
   if [ -n "$ROLE" ]; then
     sdd_list_has "$ROLE_STAGES" "$s" || continue
   fi
-  RUNNING_STAGE="$s"
-  break
+  if [ "$s" = req-change ]; then REQ_CHANGE_RUNNING=1; continue; fi
+  sdd_list_has "$SDD_STAGE_ORDER" "$s" && RUNNING_STAGE="$s"
 done
+
+# req-change is the controlled way to modify requirements/ and spec/: while it runs, those writes are
+# its own (Art. 4 exception), even if a downstream stage is also marked running.
+if [ "$REQ_CHANGE_RUNNING" = 1 ]; then
+  case "$REL_PATH" in
+    requirements/*|spec/*) exit 0 ;;
+  esac
+fi
 
 # No running stage = permissive mode
 if [ -z "$RUNNING_STAGE" ]; then

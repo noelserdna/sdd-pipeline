@@ -15,7 +15,7 @@
 #   .sdd/current-task.json vive en PROJECT_DIR (uno por worktree).
 #
 # Variables de entorno opcionales (no documentadas por Claude Code, degradables):
-#   SDD_STATE_ROOT  fija STATE_ROOT.  SDD_ROLE  fija el rol.  CLAUDE_PID  pid de la sesión.
+#   SDD_STATE_ROOT  fija STATE_ROOT (solo dentro del mismo repositorio).  SDD_ROLE  fija el rol.  CLAUDE_PID  pid de la sesión.
 
 SDD_LOCKS_HELD="${SDD_LOCKS_HELD:-}"
 SDD_NAP="${SDD_NAP:-}"
@@ -124,10 +124,15 @@ sdd_git_common_dir() {
 # ---------------------------------------------------------------- raíces
 # sdd_roots INPUT [FILE_PATH] → exporta CWD, PROJECT_DIR, STATE_ROOT, REL_PATH.
 #   PROJECT_DIR = toplevel git del fichero, si no del cwd, si no ${CLAUDE_PROJECT_DIR:-$PWD}.
-#   STATE_ROOT  = ${SDD_STATE_ROOT:-dirname(git-common-dir del cwd)}, fallback PROJECT_DIR.
+#   STATE_ROOT  = dirname(git-common-dir del directorio del FICHERO; sin fichero o fuera de git, del
+#                 cwd), fallback PROJECT_DIR. Así una edición en un directorio de trabajo adicional
+#                 usa el estado de SU proyecto, no el del cwd.
+#                 SDD_STATE_ROOT lo fija solo si pertenece al mismo repositorio (mismo git-common-dir)
+#                 o si el destino no está en git: la variable se hereda (CLAUDE_ENV_FILE, `claude -p`
+#                 hijos, tmux) y no debe arrastrar el estado de un proyecto a otro.
 #   REL_PATH    = FILE_PATH relativo a PROJECT_DIR (igual a FILE_PATH si no está debajo).
 sdd_roots() {
-  local input="${1:-}" file_path="${2:-}" fdir
+  local input="${1:-}" file_path="${2:-}" fdir="" common="" forced
   CWD=""
   if [ -n "$input" ]; then
     CWD=$(printf '%s' "$input" | sdd_json_get - '.cwd // .workspace.current_dir // empty') || CWD=""
@@ -144,6 +149,7 @@ sdd_roots() {
     fdir=$(dirname "$file_path")
     while [ ! -d "$fdir" ] && [ "$fdir" != "/" ] && [ "$fdir" != "." ]; do fdir=$(dirname "$fdir"); done
     PROJECT_DIR=$(git -C "$fdir" rev-parse --show-toplevel 2>/dev/null) || PROJECT_DIR=""
+    [ -n "$PROJECT_DIR" ] && { common=$(sdd_git_common_dir "$fdir") || common=""; }
   fi
   if [ -z "$PROJECT_DIR" ] && [ -d "$CWD" ]; then
     PROJECT_DIR=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || PROJECT_DIR=""
@@ -151,12 +157,15 @@ sdd_roots() {
   [ -n "$PROJECT_DIR" ] || PROJECT_DIR=$(sdd_physical "$(sdd_norm "${CLAUDE_PROJECT_DIR:-$PWD}")")
   PROJECT_DIR=$(sdd_norm "$PROJECT_DIR")
 
-  STATE_ROOT=$(sdd_norm "${SDD_STATE_ROOT:-}")
-  if [ -z "$STATE_ROOT" ]; then
-    local common
-    common=$(sdd_git_common_dir "$CWD") || common=""
-    [ -n "$common" ] && STATE_ROOT=$(dirname "$common")
+  [ -n "$common" ] || { common=$(sdd_git_common_dir "$CWD") || common=""; }
+  STATE_ROOT=""
+  forced=$(sdd_norm "${SDD_STATE_ROOT:-}")
+  if [ -n "$forced" ]; then
+    if [ -z "$common" ] || [ "$(sdd_git_common_dir "$forced" 2>/dev/null || true)" = "$common" ]; then
+      STATE_ROOT="$forced"
+    fi
   fi
+  if [ -z "$STATE_ROOT" ] && [ -n "$common" ]; then STATE_ROOT=$(dirname "$common"); fi
   [ -n "$STATE_ROOT" ] || STATE_ROOT="$PROJECT_DIR"
 
   REL_PATH=""
@@ -288,6 +297,20 @@ sdd_unlock_all() {
   SDD_LOCKS_HELD=""
 }
 
+# Romper un lock huérfano bajo el mutex FILE.lock.break: quien lo consigue vuelve a comprobar que
+# el lock sigue siendo huérfano antes de borrarlo, así un proceso que llegó tarde no borra el lock
+# recién creado por el ganador. Un .break con más de 60 s (proceso muerto dentro) también se rompe.
+sdd_lock_break() {
+  local lockdir="$1" brk="$1.break"
+  if ! mkdir "$brk" 2>/dev/null; then
+    sdd_lock_stale "$brk" && rmdir "$brk" 2>/dev/null
+    return 0
+  fi
+  if sdd_lock_stale "$lockdir"; then rmdir "$lockdir" 2>/dev/null || true; fi
+  rmdir "$brk" 2>/dev/null || true
+  return 0
+}
+
 sdd_lock() {
   local target="$1" lockdir tries=0 max="${SDD_LOCK_RETRIES:-50}"
   lockdir="$target.lock"
@@ -295,7 +318,7 @@ sdd_lock() {
     tries=$((tries + 1))
     [ "$tries" -le "$max" ] || return 1
     if sdd_lock_stale "$lockdir"; then
-      rmdir "$lockdir" 2>/dev/null || true
+      sdd_lock_break "$lockdir"
       continue
     fi
     sdd_nap
@@ -319,26 +342,97 @@ sdd_unlock() {
 # scripts/sdd-status-line-global.sh NO usa estos helpers a propósito: se copia fuera del plugin.
 sdd_runs_file() { printf '%s\n' "${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/sdd/active-runs.json"; }
 
-# sdd_stage_counts FILE → "hechas<TAB>totales" de pipeline-state.json (vacío si no se puede leer).
-# El total son las etapas REALES del fichero (las laterales las añaden los hooks), no 7 fijo.
-sdd_stage_counts() {
+# ---------------------------------------------------------------- estado de las etapas
+# Orden canónico de las 7 etapas lineales. Las laterales (req-change, security-auditor, tech-designer,
+# ux-designer, gap-detector…) no cuentan para el progreso N/7.
+SDD_STAGE_ORDER="requirements-engineer specifications-engineer spec-auditor test-planner plan-architect task-generator task-implementer"
+
+# sdd_stage_summary FILE → UNA línea `done|7|running|stale|error|next|current` (vacío si no se puede leer).
+#   done     etapas lineales con status done (0..7)
+#   running  stale  error   listas separadas por espacios: primero las lineales en orden de pipeline
+#                           (de arriba abajo), luego las laterales en el orden del fichero
+#   next     primera etapa lineal pending/stale (o ausente); vacío si no queda ninguna
+#   current  .currentStage
+# Separador `|` (no tab): `read` colapsa tabs consecutivos cuando un campo está vacío.
+sdd_stage_summary() {
   local f="$1"
   [ -f "$f" ] || return 0
   if sdd_has_jq; then
-    jq -r '(.stages // {}) | (if type == "object" then . else {} end) as $s
-           | [ ([ $s[] | select(type == "object" and .status == "done") ] | length), ($s | length) ] | @tsv' "$f" 2>/dev/null || true
+    jq -r --arg order "$SDD_STAGE_ORDER" '
+      def obj: if type == "object" then . else {} end;
+      ($order | split(" ")) as $o
+      | (.stages | obj) as $s
+      | ($o + (($s | keys_unsorted) - $o)) as $all
+      | def st($k): ($s[$k] | obj | .status // (if $s[$k] == null then "absent" else "pending" end));
+        def pick($v): [ $all[] | select(st(.) == $v) ] | join(" ");
+        [ ([ $o[] | select(st(.) == "done") ] | length | tostring), ($o | length | tostring),
+          pick("running"), pick("stale"), pick("error"),
+          ([ $o[] | select(st(.) as $x | $x == "pending" or $x == "stale" or $x == "absent") ] | first // ""),
+          ((.currentStage // "") | tostring) ] | join("|")' "$f" 2>/dev/null || true
     return 0
   fi
   sdd_has_node || return 0
-  SDD_SC_FILE="$f" node -e '
+  SDD_SS_FILE="$f" SDD_SS_ORDER="$SDD_STAGE_ORDER" node -e '
     const fs = require("fs");
     try {
-      const st = JSON.parse(fs.readFileSync(process.env.SDD_SC_FILE, "utf8"));
-      const s = (st && typeof st.stages === "object" && st.stages) || {};
-      const keys = Object.keys(s);
-      const done = keys.filter((k) => s[k] && typeof s[k] === "object" && s[k].status === "done").length;
-      process.stdout.write(done + "\t" + keys.length + "\n");
+      const obj = (v) => (v && typeof v === "object" && !Array.isArray(v)) ? v : {};
+      const j = obj(JSON.parse(fs.readFileSync(process.env.SDD_SS_FILE, "utf8")));
+      const s = obj(j.stages), o = process.env.SDD_SS_ORDER.split(" ");
+      const all = o.concat(Object.keys(s).filter((k) => !o.includes(k)));
+      const st = (k) => (s[k] === undefined || s[k] === null) ? "absent" : (obj(s[k]).status || "pending");
+      const pick = (v) => all.filter((k) => st(k) === v).join(" ");
+      const next = o.find((k) => ["pending", "stale", "absent"].includes(st(k))) || "";
+      process.stdout.write([o.filter((k) => st(k) === "done").length, o.length, pick("running"), pick("stale"),
+        pick("error"), next, String(j.currentStage || "")].join("|") + "\n");
     } catch (e) {}' 2>/dev/null || true
+  return 0
+}
+
+# sdd_mark_running FILE STAGE [MODE] → marca STAGE como running en pipeline-state.json, bajo sdd_lock.
+#   MODE=write (defecto; H3, escrituras bajo el directorio de una etapa): solo pending/stale/ausente →
+#     running. Nunca toca done, error ni running: req-change que escribe requirements/ no reabre
+#     requirements-engineer, y un stage done no queda en running para siempre.
+#   MODE=skill (H10, la skill de la etapa arranca explícitamente): además done → running (re-ejecución).
+# No crea FILE (lo crea sdd-setup): sin él, no hace nada. Conserva `summary` y el resto de campos.
+# Siempre devuelve 0.
+sdd_mark_running() {
+  local f="$1" stage="$2" mode="${3:-write}" now tmp
+  [ -f "$f" ] && [ -n "$stage" ] || return 0
+  sdd_lock "$f" || return 0
+  now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  tmp="$f.tmp.$$"
+  if sdd_has_jq; then
+    if jq --arg s "$stage" --arg now "$now" --arg mode "$mode" '
+      .stages = ((.stages // {}) | if type == "object" then . else {} end)
+      | .stages[$s] = ((.stages[$s] // { status: "pending", outputHash: null, lastRun: null, staleReason: null })
+                       | if type == "object" then . else { status: "pending" } end)
+      | (.stages[$s].status // "pending") as $st
+      | if $st == "pending" or $st == "stale" or ($mode == "skill" and $st == "done") then
+          .stages[$s].status = "running" | .stages[$s].lastRun = $now | .stages[$s].staleReason = null
+          | .currentStage = $s | .lastUpdated = $now
+        else .lastUpdated = $now end' "$f" > "$tmp" 2>/dev/null; then
+      mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp"
+    else
+      rm -f "$tmp"
+    fi
+  elif sdd_has_node; then
+    SDD_MR_FILE="$f" SDD_MR_STAGE="$stage" SDD_MR_NOW="$now" SDD_MR_MODE="$mode" SDD_MR_TMP="$tmp" node -e '
+      const fs = require("fs"), E = process.env;
+      try {
+        const j = JSON.parse(fs.readFileSync(E.SDD_MR_FILE, "utf8"));
+        if (!j.stages || typeof j.stages !== "object" || Array.isArray(j.stages)) j.stages = {};
+        let g = j.stages[E.SDD_MR_STAGE];
+        if (!g || typeof g !== "object") g = j.stages[E.SDD_MR_STAGE] = { status: "pending", outputHash: null, lastRun: null, staleReason: null };
+        const st = g.status || "pending";
+        if (st === "pending" || st === "stale" || (E.SDD_MR_MODE === "skill" && st === "done")) {
+          g.status = "running"; g.lastRun = E.SDD_MR_NOW; g.staleReason = null; j.currentStage = E.SDD_MR_STAGE;
+        }
+        j.lastUpdated = E.SDD_MR_NOW;
+        fs.writeFileSync(E.SDD_MR_TMP, JSON.stringify(j, null, 2) + "\n");
+        fs.renameSync(E.SDD_MR_TMP, E.SDD_MR_FILE);
+      } catch (e) { try { fs.unlinkSync(E.SDD_MR_TMP); } catch (_) {} }' 2>/dev/null || rm -f "$tmp"
+  fi
+  sdd_unlock "$f"
   return 0
 }
 

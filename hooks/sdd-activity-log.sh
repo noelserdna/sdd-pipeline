@@ -419,31 +419,6 @@ case "$SKILL_NAME" in
   sdd-req-change)              STAGE=req-change ;;
   *) exit 0 ;;
 esac
-PIPELINE_STATE="$STATE_ROOT/pipeline-state.json"
-[ -f "$PIPELINE_STATE" ] || exit 0
-NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-sdd_lock "$PIPELINE_STATE" || exit 0
-TMP_STATE="$PIPELINE_STATE.sdd-act.$$"
-if command -v jq >/dev/null 2>&1; then
-  jq --arg s "$STAGE" --arg now "$NOW_TS" '
-    .stages //= {} |
-    .stages[$s] //= {status: "pending", outputHash: null, lastRun: null, staleReason: null} |
-    (if (.stages[$s].status // "") == "error" then . else .stages[$s].status = "running" end) |
-    .currentStage = $s | .lastUpdated = $now
-  ' "$PIPELINE_STATE" > "$TMP_STATE" 2>/dev/null && mv -f "$TMP_STATE" "$PIPELINE_STATE" 2>/dev/null || rm -f "$TMP_STATE"
-elif command -v node >/dev/null 2>&1; then
-  SDD_STATE_FILE="$PIPELINE_STATE" SDD_STAGE="$STAGE" SDD_NOW="$NOW_TS" SDD_TMP="$TMP_STATE" node -e '
-    const fs = require("fs"), f = process.env.SDD_STATE_FILE, s = process.env.SDD_STAGE;
-    try {
-      const j = JSON.parse(fs.readFileSync(f, "utf8"));
-      j.stages = j.stages || {};
-      j.stages[s] = j.stages[s] || { status: "pending", outputHash: null, lastRun: null, staleReason: null };
-      if (j.stages[s].status !== "error") j.stages[s].status = "running";
-      j.currentStage = s; j.lastUpdated = process.env.SDD_NOW;
-      fs.writeFileSync(process.env.SDD_TMP, JSON.stringify(j, null, 2) + "\n");
-      fs.renameSync(process.env.SDD_TMP, f);
-    } catch (e) { try { fs.unlinkSync(process.env.SDD_TMP); } catch (_) {} }
-  ' 2>/dev/null || rm -f "$TMP_STATE"
-fi
-sdd_unlock "$PIPELINE_STATE"
+# Una skill arrancada explícitamente sí reabre su etapa done (re-ejecución); error no se toca.
+sdd_mark_running "$STATE_ROOT/pipeline-state.json" "$STAGE" skill
 exit 0

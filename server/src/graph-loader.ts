@@ -2,7 +2,8 @@ import { readFileSync, existsSync, watchFile, unwatchFile } from "node:fs";
 import { join, dirname } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Types mirroring traceability-graph-v3 schema
+// Types mirroring the traceability-graph-v6 schema emitted by skills/sdd-dashboard/generate.py
+// (skills/sdd-dashboard/references/graph-schema.md). Older v3-v5 graphs are a subset.
 // ---------------------------------------------------------------------------
 
 export interface StageSummary {
@@ -15,7 +16,8 @@ export interface StageSummary {
 
 export interface PipelineStage {
   name: string;
-  status: "done" | "stale" | "running" | "error" | "pending";
+  /** `unknown`: no pipeline-state.json or unreadable; `partial`: aggregated group status. */
+  status: "done" | "stale" | "running" | "error" | "pending" | "unknown" | "partial";
   lastRun: string | null;
   artifactCount: number;
   stageLabel?: string;
@@ -34,14 +36,31 @@ export interface Classification {
   functionalCategory: string;
 }
 
+export type CodeRefOrigin =
+  | "direct"
+  | "commit-inferred"
+  | "task-inferred"
+  | "blame-inferred"
+  | "propagated"
+  | "hook-captured"
+  | "llm-verified"
+  | "code-index"
+  | "manual-override"
+  | "gap-detected";
+
 export interface CodeRef {
   file: string;
   line: number;
   symbol: string;
   symbolType: string;
   refIds: string[];
-  origin?: "direct" | "commit-inferred" | "task-inferred" | "manual-override" | "code-index";
+  /** Absent means `direct`. Every value other than `direct` counts as inferred coverage. */
+  origin?: CodeRefOrigin;
   inferredFrom?: { commitSha: string; taskId?: string; trailerRefs?: string[] } | null;
+  /** 0.0-1.0; 1.0 for direct refs (graph-schema.md). */
+  confidence?: number;
+  /** Artifact ID the ref was copied from when origin is `propagated`. */
+  propagatedFrom?: string;
 }
 
 export interface TestRef {
