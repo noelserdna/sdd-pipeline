@@ -20,9 +20,9 @@ A subagent cannot ask the customer: it reports the sign-off as pending with the 
 ## 2. Record
 
 ```bash
-$SDD accept record fase-acceptance --fase N --result accepted|observations|rejected \
+node "$SDD" accept record fase-acceptance --fase N --result accepted|observations|rejected \
   --channel "demo call 2026-09-27" [--demo DEMO-3] --by "Ana Pérez" --role "Product owner"
-$SDD accept --report acceptance/ACCEPTANCE-REPORT.md --fase N
+node "$SDD" accept --report acceptance/ACCEPTANCE-REPORT.md --fase N
 git add acceptance/decisions.jsonl acceptance/ACCEPTANCE-REPORT.md
 git commit -m "docs(acceptance): accept FASE-N" --trailer "Refs: FASE-N, REQ-F-001, REQ-F-002"
 ```
@@ -58,5 +58,5 @@ fase-N-accepted`) only when the user agrees.
 A release has no tag kind of its own and no `fase-acceptance` record (that record is per FASE). Use the tag or
 platform release the project already uses (`v1.4.0`, a GitHub or GitLab release), created only after the approver's
 explicit Accept, and make its annotated message (or release notes) the record: the approver lines of §3 (Accepted-by,
-Approver-role, Channel, Demo, Commit) followed by the output of `$SDD gate --md`. When the release closes FASEs that
+Approver-role, Channel, Demo, Commit) followed by the output of `node "$SDD" gate --md`. When the release closes FASEs that
 were never accepted one by one, record their `fase-acceptance` first (§2).

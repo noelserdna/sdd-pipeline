@@ -494,11 +494,14 @@ while IFS= read -r c; do
 done <<'EOF'
 node "$SDD" accept --fase 1 --report acceptance/ACCEPTANCE-REPORT.md
 $SDD gate --fase 1 --md
+node "$SDD" accept measure --req REQ-NF-002 --ac 1 --metric statements --command "npx c8 report" --extract 'All files[^|]*\|\s*([0-9.]+)' --op ge --threshold 90
+node "${SDD}" accept --remeasure --fase 1 --report acceptance/ACCEPTANCE-REPORT.md
 echo "$SDD_PLUGIN_ROOT accept record"
 git tag -l "fase-$N-accepted"
 git rev-parse -q --verify "refs/tags/requirements-v$V"
 EOF
-[ "$oka" = 1 ] && pass "H12 permite \$SDD accept/gate, \$SDD_PLUGIN_ROOT y consultar tags con variable" || bad "H12 pregunta de más con variables"
+[ "$oka" = 1 ] && pass "H12 permite \$SDD accept/gate, accept measure y --remeasure (medición por comando), \$SDD_PLUGIN_ROOT y consultar tags con variable" || bad "H12 pregunta de más con variables"
+[ "$(tg "" "$rroot" 'node "$SDD" accept record measurement --req REQ-NF-002 --metric statements --observed 91 --op ge --threshold 90 --by Ana --role QA')" = ask ] && pass "H12 sigue preguntando ante accept record measurement (medición humana)" || bad "H12 no pregunta ante accept record measurement"
 # F7: el texto entre comillas solo MENCIONA el registro (resúmenes persistidos, echo): no pregunta
 oka=1
 while IFS= read -r c; do

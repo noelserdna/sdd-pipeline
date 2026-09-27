@@ -1,12 +1,15 @@
-// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd gate`, `sdd loop next`.
+// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd gate`,
+// `sdd loop next`.
 // Node >= 18, no dependencies. Called from scripts/sdd.mjs; returns an exit code (never calls process.exit).
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { git, stackProfile } from "./git-log.mjs";
 import { readJUnit } from "./junit.mjs";
 import {
   SCHEMA, RECORD_TYPES, DECISIONS_FILE, ROUTES, evaluate, gitContext, loadScenarios, readDecisions,
   validateRecord, reqHash, faseScope, renderReport, renderPrBlock, routeHint, criterionHint, unchangedSince, acNumber,
+  compareMeasurement,
 } from "./acceptance.mjs";
 import { parseRequirements, parseNeeds, checkNeedCoverage } from "../sdd-jev.mjs";
 
@@ -19,9 +22,9 @@ const die = (msg) => { console.error(`${PROG}: ${msg}`); throw new Exit(2); };
 // Options that take a value; those in MULTI also swallow the following non-option words (`--junit a.xml b.xml`).
 const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "mode", "ledger", "state", "max-cycles",
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
-  "result", "channel", "demo", "requirements", "decisions"]);
+  "result", "channel", "demo", "requirements", "decisions", "command", "extract"]);
 const MULTI = new Set(["junit", "paths"]);
-const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help"]);
+const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure"]);
 
 function parse(argv) {
   const o = { _: [], junit: [], paths: [] };
@@ -142,14 +145,16 @@ function printLedger(ledger) {
 
 function cmdAccept(o) {
   if (o._[0] === "record") { o._.shift(); return cmdRecord(o); }
+  if (o._[0] === "measure") { o._.shift(); return cmdMeasure(o); }
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  const failed = o.remeasure ? remeasure(o) : 0;
   const { root, ledger } = buildLedger(o);
   const outFile = o["no-out"] ? null : (o.out || ".sdd/acceptance.json");
   if (outFile && outFile !== "-") writeJson(root, outFile, ledger);
   if (o.report) writeText(root, o.report, renderReport(ledger));
   if (o.json || outFile === "-") out(JSON.stringify(ledger, null, 2));
   else printLedger(ledger);
-  return 0;
+  return failed ? 1 : 0;
 }
 
 // ------------------------------------------------------------------ record
@@ -187,15 +192,95 @@ function cmdRecord(o) {
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
-  const file = path.resolve(root, o.decisions || DECISIONS_FILE);
+  const { file, n } = appendRecord(root, o, rec);
+  if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
+  else out(`recorded ${type} ${rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
+  return 0;
+}
+
+function decisionsPath(root, o) { return path.resolve(root, o.decisions || DECISIONS_FILE); }
+function appendRecord(root, o, rec) {
+  const file = decisionsPath(root, o);
   mkdirSync(path.dirname(file), { recursive: true });
   const prev = existsSync(file) ? readFileSync(file, "utf8") : "";
-  const line = JSON.stringify(rec);
-  appendFileSync(file, (prev && !prev.endsWith("\n") ? "\n" : "") + line + "\n");
-  const n = (prev ? prev.replace(/\n$/, "").split("\n").length : 0) + 1;
-  if (o.json) out(JSON.stringify({ file: path.relative(root, file), line: n, record: rec }, null, 2));
-  else out(`recorded ${type} ${rec.req || `FASE ${rec.fase}`} at ${path.relative(root, file)}:${n}`);
+  appendFileSync(file, (prev && !prev.endsWith("\n") ? "\n" : "") + JSON.stringify(rec) + "\n");
+  return { file: path.relative(root, file), n: (prev ? prev.replace(/\n$/, "").split("\n").length : 0) + 1 };
+}
+
+// ------------------------------------------------------------------ measure (machine measurement)
+// A measurement produced by a deterministic command (coverage, a latency benchmark): the command runs from the repo
+// root through the shell, the first match of --extract (one capture group) in stdout + stderr is the observed number.
+// The record says by "command", role "automated" and keeps command + extract, so `sdd accept --remeasure` can re-run
+// it when the code paths change. A measurement a person must confirm stays `accept record measurement`.
+const MEASURE_OUTPUT_MAX = 64 * 1024 * 1024;
+
+/** Run spec.command, extract the number, build and validate the record. Returns { rec, note } or { error, code }. */
+function machineMeasurement(root, reqs, spec) {
+  let re;
+  try { re = new RegExp(spec.extract, "m"); } catch (e) { return { error: `--extract is not a valid regular expression: ${e.message}`, code: 2 }; }
+  if (new RegExp(`${spec.extract}|`).exec("").length !== 2) return { error: "--extract needs exactly one capture group, e.g. 'All files[^|]*\\|\\s*([0-9.]+)'", code: 2 };
+  const g = gitContext(root);
+  const r = spawnSync(spec.command, { cwd: root, shell: true, encoding: "utf8", maxBuffer: MEASURE_OUTPUT_MAX });
+  if (r.error) return { error: `could not run the command: ${r.error.message}`, code: 1 };
+  const text = `${r.stdout || ""}\n${r.stderr || ""}`;
+  const m = re.exec(text);
+  const observed = m ? Number(String(m[1]).trim()) : NaN;
+  if (!Number.isFinite(observed)) {
+    const tail = text.trim().split("\n").slice(-8).join("\n");
+    return { error: `no number matched --extract in the output of \`${spec.command}\` (exit ${r.status})${tail ? `; last lines:\n${tail}` : ""}`, code: 1 };
+  }
+  const rec = { type: "measurement", at: new Date().toISOString(), by: "command", role: "automated", head: g.head, req: spec.req };
+  const req = reqs.find((x) => x.id === spec.req);
+  if (req) rec.reqHash = reqHash(req);
+  if (spec.ac !== undefined && spec.ac !== null) { const n = acNumber(spec.ac); rec.ac = Number.isNaN(n) ? spec.ac : n; }
+  if (spec.paths?.length) rec.paths = spec.paths;
+  Object.assign(rec, { metric: spec.metric, observed, op: spec.op, threshold: spec.threshold === undefined ? "" : Number(spec.threshold),
+    command: spec.command, extract: spec.extract });
+  if (r.status !== 0) rec.exitCode = r.status;
+  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
+  const errors = validateRecord(rec, reqs);
+  if (errors.length) return { error: errors.join("; "), code: 2 };
+  const note = g.codeDirty ? `note: uncommitted changes in ${g.codeDirtyPaths.slice(0, 3).join(", ")}: the value reflects the worktree, and the record goes stale once they are committed` : null;
+  return { rec, note };
+}
+
+function cmdMeasure(o) {
+  if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  if (o.by || o.role) usage("accept measure records by \"command\", role \"automated\"; a measurement a person confirms is `accept record measurement --by NAME --role ROLE`");
+  for (const k of ["req", "metric", "command", "extract", "op", "threshold"]) if (o[k] === undefined || o[k] === "") usage(`accept measure needs --${k}`);
+  const root = rootOf(o);
+  const reqs = readReqs(root, o);
+  const res = machineMeasurement(root, reqs, { req: o.req, ac: o.ac, paths: o.paths, metric: o.metric, op: o.op, threshold: o.threshold, command: o.command, extract: o.extract });
+  if (res.error) { console.error(`${PROG}: accept measure: ${res.error}`); return res.code; }
+  const { file, n } = appendRecord(root, o, res.rec);
+  const r = res.rec;
+  if (o.json) out(JSON.stringify({ file, line: n, record: r }, null, 2));
+  else {
+    out(`measured ${r.req}${r.ac ? ` AC${r.ac}` : ""} ${r.metric} = ${r.observed} (${r.op} ${r.threshold}: ${compareMeasurement(r) ? "pass" : "fail"}) at ${file}:${n}`);
+    if (r.exitCode !== undefined) out(`note: the command exited ${r.exitCode}; the value was recorded anyway`);
+    if (res.note) out(res.note);
+  }
   return 0;
+}
+
+/** `sdd accept --remeasure`: re-run each stale in-scope measurement whose latest record has a command. Returns failures. */
+function remeasure(o) {
+  const { root, ledger } = buildLedger({ ...o, "no-out": true });
+  const reqs = readReqs(root, o);
+  const { records } = readDecisions(decisionsPath(root, o));
+  const lines = new Set();
+  for (const r of ledger.requirements.filter((x) => x.in_scope && x.verification === "measurement" && x.verdict !== "WAIVED"))
+    for (const c of r.criteria) if (c.state === "stale") for (const l of c.records) lines.add(l);
+  let failed = 0;
+  for (const l of [...lines].sort((a, b) => a - b)) {
+    const prev = records.find((x) => x.line === l);
+    if (!prev || !prev.command || !prev.extract) continue;
+    const res = machineMeasurement(root, reqs, prev);
+    if (res.error) { failed++; console.error(`${PROG}: remeasure ${prev.req} (${DECISIONS_FILE}:${l}): ${res.error}`); continue; }
+    const { file, n } = appendRecord(root, o, res.rec);
+    if (!o.json) out(`remeasured ${prev.req}${res.rec.ac ? ` AC${res.rec.ac}` : ""} ${res.rec.metric} = ${res.rec.observed} (was ${prev.observed}) at ${file}:${n}`);
+  }
+  return failed;
 }
 
 // ------------------------------------------------------------------ gate

@@ -9,21 +9,27 @@
 //   acceptance/decisions.jsonl     human records: waiver, demo, measurement, inspection, fase-acceptance
 //
 // Verdict per requirement (first match): DEPRECATED · WAIVED · FAILING · MISSING · VERIFIED.
-// Freshness (evidence older than the code does not count):
-//   - JUnit: with `junitSha`, fresh when the worktree equals that commit outside acceptance/**; otherwise fresh when
-//     the XML file's mtime is ≥ the time of the last commit that changed files outside acceptance/**. Either way
-//     tracked files must be clean outside acceptance/** (untracked files are ignored). The mtime rule is a heuristic:
-//     a report written after the last code commit on a clean tree was produced from that tree, unless someone ran the
-//     tests on another checkout and copied the XML; CI passes --junit-sha to assert it.
+// Freshness (evidence older than the code does not count). "Code" is the Stack Profile's `code_paths` + `test_paths`
+// (defaults `src`, `tests`; only those that exist): a docs, feedback or spec commit does not make evidence stale. When
+// none of those paths exists, code means every file outside acceptance/** and .sdd/ (the conservative fallback).
+// Build and test configuration outside those paths (package.json, vitest.config.*) is not watched: list it in
+// `code_paths` when a change there should invalidate evidence.
+//   - JUnit: with `junitSha`, fresh when the worktree equals that commit on the code paths; otherwise fresh when the
+//     XML file's mtime is >= the time of the last commit that changed the code paths. Either way tracked files under
+//     the code paths must be clean (untracked files are ignored). The mtime rule is a heuristic: a report written after
+//     the last code commit on a clean tree was produced from that tree, unless someone ran the tests on another
+//     checkout and copied the XML; CI passes --junit-sha to assert it.
 //   - demo / measurement / inspection records: fresh when `git diff --quiet <record.head> -- <paths>` holds (worktree
-//     vs the record's commit); a record without paths must match everything outside acceptance/**.
+//     vs the record's commit); a record without paths uses the code paths.
+//   - a measurement record with a `command` (from `sdd accept measure`) is re-run by `sdd accept --remeasure` when it
+//     is stale; the new record becomes the latest.
 //   - waivers, inspections, demos, measurements and fase acceptances carry `reqHash` (sha256 of the requirement's
 //     statement + criteria). A different hash means the text changed (a MODIFY): the record is stale, reported and
 //     not applied.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { git, isRepo } from "./git-log.mjs";
+import { git, isRepo, stackProfile } from "./git-log.mjs";
 import { VERIFICATION_METHODS } from "../sdd-jev.mjs";
 
 export const SCHEMA = "sdd-acceptance-v1";
@@ -38,6 +44,7 @@ export const ROUTES = {
   specGap: "spec-gap (human, req-change)",
   human: "needs-human",
   rerun: "rerun-tests",
+  remeasure: "remeasure",
 };
 
 // ------------------------------------------------------------------ requirements
@@ -179,21 +186,41 @@ export function validateRecord(rec, reqs) {
 }
 
 // ------------------------------------------------------------------ git context
+const WHOLE_TREE = [".", ":(exclude)acceptance", ":(exclude).sdd"];
+const profileList = (v) => String(v || "").split(",").map((s) => s.trim().replace(/^\.\//, "").replace(/\/+$/, "")).filter(Boolean);
+
+/** Paths whose change makes evidence stale: the profile's code_paths + test_paths (default src, tests) that exist; null = whole tree. */
+export function evidencePaths(root) {
+  const prof = stackProfile(root);
+  const code = profileList(prof.code_paths), tests = profileList(prof.test_paths);
+  const all = [...new Set([...(code.length ? code : ["src"]), ...(tests.length ? tests : ["tests"])])];
+  const present = all.filter((p) => existsSync(path.join(root, p)));
+  return present.length ? present : null;
+}
+
+const under = (p, dirs) => dirs.some((d) => p === d || p.startsWith(d + "/"));
+
 export function gitContext(root, { exclude = [] } = {}) {
-  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [] };
+  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [], codePaths: null, codeTime: null, codeDirty: null, codeDirtyPaths: [] };
   const h = git(root, ["rev-parse", "-q", "--verify", "HEAD"]);
   const head = h.status === 0 ? h.stdout.trim() : null;
-  // Time of the last commit that changed something outside acceptance/**: committing decisions keeps reports fresh.
-  let headTime = null;
+  const codePaths = evidencePaths(root);
+  // Time of the last commit that changed something outside acceptance/** (headTime) and under the code paths (codeTime).
+  let headTime = null, codeTime = null;
   if (head) {
-    const t = git(root, ["log", "-1", "--format=%ct", "HEAD", "--", ".", ":(exclude)acceptance", ":(exclude).sdd"]).stdout.trim();
-    headTime = Number(t || git(root, ["show", "-s", "--format=%ct", "HEAD"]).stdout.trim());
+    const headOnly = () => Number(git(root, ["show", "-s", "--format=%ct", "HEAD"]).stdout.trim());
+    const t = git(root, ["log", "-1", "--format=%ct", "HEAD", "--", ...WHOLE_TREE]).stdout.trim();
+    headTime = t ? Number(t) : headOnly();
+    const c = codePaths ? git(root, ["log", "-1", "--format=%ct", "HEAD", "--", ...codePaths]).stdout.trim() : t;
+    codeTime = c ? Number(c) : headOnly();
   }
   const st = git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout;
   const skip = ["acceptance/", ".sdd/", ...exclude];
   const dirtyPaths = st.split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "").split(" -> ").pop())
     .filter((p) => !skip.some((s) => p === s || p.startsWith(s.endsWith("/") ? s : s + "/") || p === s.replace(/\/$/, "")));
-  return { repo: true, head, headTime, dirty: dirtyPaths.length > 0, dirtyPaths };
+  const codeDirtyPaths = codePaths ? dirtyPaths.filter((p) => under(p, codePaths)) : dirtyPaths;
+  return { repo: true, head, headTime, dirty: dirtyPaths.length > 0, dirtyPaths,
+    codePaths, codeTime, codeDirty: codeDirtyPaths.length > 0, codeDirtyPaths };
 }
 
 /** True when the worktree equals `sha` on `paths` (all paths outside acceptance/** when empty). */
@@ -202,10 +229,7 @@ export function unchangedSince(root, sha, paths = [], cache = new Map()) {
   if (cache.has(key)) return cache.get(key);
   let ok;
   if (git(root, ["rev-parse", "-q", "--verify", `${sha}^{commit}`]).status !== 0) ok = false;
-  else {
-    const spec = paths.length ? paths : [".", ":(exclude)acceptance", ":(exclude).sdd"];
-    ok = git(root, ["diff", "--quiet", sha, "--", ...spec]).status === 0;
-  }
+  else ok = git(root, ["diff", "--quiet", sha, "--", ...(paths.length ? paths : WHOLE_TREE)]).status === 0;
   cache.set(key, ok);
   return ok;
 }
@@ -236,17 +260,23 @@ function latest(list) { return list.length ? list[list.length - 1] : null; }
 export function evaluate(opts) {
   const { root, reqs, scenarios, junit, junitSha = null, decisions = { records: [], errors: [] }, scope = null, fase = null } = opts;
   const g = opts.git || { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [] };
+  // Code paths (profile code_paths + test_paths); a git context without them falls back to the whole tree.
+  const codePaths = g.codePaths || [];
+  const codeTime = g.codeTime ?? g.headTime;
+  const codeDirty = g.codeDirty ?? g.dirty;
+  const codeDirtyPaths = g.codeDirtyPaths || g.dirtyPaths || [];
+  const where = codePaths.length ? ` in ${codePaths.join(", ")}` : "";
   const cache = new Map();
-  const fresh = (sha, paths) => (!g.repo ? true : sha ? unchangedSince(root, sha, paths || [], cache) : false);
+  const fresh = (sha, paths) => (!g.repo ? true : sha ? unchangedSince(root, sha, paths?.length ? paths : codePaths, cache) : false);
 
   // JUnit freshness per file.
   const junitFresh = new Map();
   for (const f of junit?.files || []) {
     let ok = true, why = null;
     if (g.repo && g.head) {
-      if (g.dirty) { ok = false; why = `tracked files changed since HEAD: ${g.dirtyPaths.slice(0, 3).join(", ")}`; }
-      else if (junitSha) { ok = fresh(junitSha); if (!ok) why = `code changed since ${junitSha.slice(0, 7)}`; }
-      else if (f.mtimeMs < g.headTime * 1000) { ok = false; why = "report older than the last code commit"; }
+      if (codeDirty) { ok = false; why = `tracked files changed since HEAD: ${codeDirtyPaths.slice(0, 3).join(", ")}`; }
+      else if (junitSha) { ok = fresh(junitSha); if (!ok) why = `code changed since ${junitSha.slice(0, 7)}${where}`; }
+      else if (f.mtimeMs < codeTime * 1000) { ok = false; why = `report older than the last code commit${where}`; }
     }
     junitFresh.set(f.path, { ok, why });
   }
@@ -319,7 +349,7 @@ export function evaluate(opts) {
       if (!inspection) inspectionState = { state: "missing", evidence: [] };
       else {
         const ok = fresh(inspection.head, inspection.paths);
-        if (!ok) staleDecisions.push({ line: inspection.line, type: "inspection", req: req.id, reason: `files changed since ${String(inspection.head || "?").slice(0, 7)}${inspection.paths?.length ? ` in ${inspection.paths.join(", ")}` : ""}` });
+        if (!ok) staleDecisions.push({ line: inspection.line, type: "inspection", req: req.id, reason: `files changed since ${String(inspection.head || "?").slice(0, 7)}${inspection.paths?.length ? ` in ${inspection.paths.join(", ")}` : where}` });
         inspectionState = { state: !ok ? "stale" : inspection.pass === false ? "fail" : "pass",
           evidence: [{ kind: "inspection", ref: `${DECISIONS_FILE}:${inspection.line}`, by: inspection.by, role: inspection.role, note: inspection.note, fresh: ok }] };
       }
@@ -340,11 +370,12 @@ export function evaluate(opts) {
         if (r) {
           const ok = fresh(r.head, r.paths);
           const pass = method === "demo" ? r.pass === true : compareMeasurement(r);
-          if (!ok) staleDecisions.push({ line: r.line, type: method, req: req.id, ac: i, reason: `files changed since ${String(r.head || "?").slice(0, 7)}${r.paths?.length ? ` in ${r.paths.join(", ")}` : ""}` });
+          if (!ok) staleDecisions.push({ line: r.line, type: method, req: req.id, ac: i, reason: `files changed since ${String(r.head || "?").slice(0, 7)}${r.paths?.length ? ` in ${r.paths.join(", ")}` : where}` });
           c.state = !ok ? "stale" : pass === true ? "pass" : "fail";
           c.records.push(r.line);
           c.evidence = [{ kind: method, ref: `${DECISIONS_FILE}:${r.line}`, fresh: ok, pass: pass === true,
-            ...(method === "measurement" ? { metric: r.metric, observed: Number(r.observed), op: r.op, threshold: Number(r.threshold) } : { observed: r.observed }) }];
+            ...(method === "measurement" ? { metric: r.metric, observed: Number(r.observed), op: r.op, threshold: Number(r.threshold),
+              by: r.by, ...(r.command ? { command: r.command } : {}) } : { observed: r.observed }) }];
         }
       } else if (method === "inspection") {
         c.state = inspectionState.state;
@@ -427,12 +458,16 @@ export function summarize(list) {
 }
 
 // ------------------------------------------------------------------ loop routing
+/** A stale measurement whose latest record has a command: `sdd accept --remeasure` re-runs it, no person needed. */
+const remeasurable = (c) => c.state === "stale" && c.evidence.some((e) => e.kind === "measurement" && e.command);
+
 /** Deterministic route hint for a requirement that is not VERIFIED / WAIVED / DEPRECATED. */
 export function routeHint(r) {
   if (r.verdict === "FAILING") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
-  if (r.verification !== "test") return ROUTES.human;
   const open = r.criteria.filter((c) => c.state !== "pass");
+  if (r.verification === "measurement" && open.length && open.every(remeasurable)) return ROUTES.remeasure;
+  if (r.verification !== "test") return ROUTES.human;
   if (open.some((c) => !c.scenarios.length && !c.tests.length)) return ROUTES.specGap;
   if (open.every((c) => c.state === "stale")) return ROUTES.rerun;
   return ROUTES.implement;
@@ -441,6 +476,7 @@ export function criterionHint(r, c) {
   if (c.state === "pass") return null;
   if (c.state === "fail") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
+  if (r.verification === "measurement" && remeasurable(c)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
   if (!c.scenarios.length && !c.tests.length) return ROUTES.specGap;
   if (c.state === "stale") return ROUTES.rerun;

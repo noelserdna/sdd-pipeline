@@ -4,7 +4,8 @@
 # copied into a temporary git repo; JUnit dialect samples: tests/fixtures/acceptance/junit.
 # Covers the verdicts (VERIFIED, FAILING, MISSING, WAIVED, DEPRECATED), NF/C methods (measurement computed in code,
 # demo, inspection freshness by paths), waivers voided by a MODIFY, gate exit codes 0/1/2/3 and modes, stale JUnit,
-# report rows, --fase scoping, loop stops, JUnit dialects. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
+# report rows, --fase scoping, loop stops, JUnit dialects, freshness scoped to code_paths/test_paths (a docs or
+# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure). bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SDD="$ROOT/scripts/sdd.mjs"
@@ -209,7 +210,25 @@ junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC
 run accept
 expect "inspection with paths survives a change elsewhere" "$(ledger 'v("REQ-C-001")')" VERIFIED
 expect "measurement with paths survives a change elsewhere" "$(ledger 'v("REQ-NF-002")')" VERIFIED
-expect "demo without paths goes stale on any code change" "$(ledger 'v("REQ-F-006")')" MISSING
+expect "demo without paths survives a docs commit (outside code_paths/test_paths)" "$(ledger 'v("REQ-F-006")')" VERIFIED
+# F12: only the Stack Profile's code_paths + test_paths (default src, tests) make evidence stale.
+sha_cap=$(cd "$repo" && git rev-parse HEAD)
+touch -t "2026010100$(printf %02d "$n").30" "$repo/.sdd/junit/unit.xml"   # captured after the last commit
+mkdir -p "$repo/feedback"; printf '# FASE-1 feedback\n' > "$repo/feedback/IMPL-FEEDBACK-FASE-1.md"; commit "docs(feedback): FASE-1"
+run accept
+expect "JUnit captured before a feedback/ commit stays fresh (mtime rule)" "$(ledger 'L.junit[0].fresh')" true
+expect "demo without paths stays fresh after a feedback/ commit" "$(ledger 'v("REQ-F-006")')" VERIFIED
+run accept --junit-sha "$sha_cap" --json --no-out
+expect "--junit-sha before a docs-only commit stays fresh" "$(js 'j.junit[0].fresh')" true
+printf '# docs\n' > "$repo/NOTES.md"
+run accept --json --no-out
+expect "an uncommitted docs change does not make JUnit stale" "$(js 'j.junit[0].fresh + "/" + j.dirty')" true/true
+( cd "$repo" && git checkout -q -- NOTES.md )
+printf 'export const add = (t) => t.toUpperCase();\n' > "$repo/src/api.js"
+run accept --json --no-out
+expect "an uncommitted src/ change makes JUnit stale" "$(js 'j.junit[0].fresh')" false
+expect "an uncommitted src/ change makes a demo without paths stale" "$(js 'j.requirements.find(r=>r.id==="REQ-F-006").verdict')" MISSING
+( cd "$repo" && git checkout -q -- src/api.js )
 printf '{\n  "name": "todo",\n  "private": true,\n  "dependencies": { "left-pad": "1.0.0" }\n}\n' > "$repo/package.json"; commit "chore: add dep"
 junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass" \
   "test_ac_002_03_filter=pass" "AC-002-04 rm keeps ids=pass"
@@ -227,7 +246,7 @@ run gate; expect "gate: stale evidence → 2" "$rc" 2
 has "gate explains stale evidence" "stale evidence"
 run gate --junit-sha HEAD; expect "--junit-sha HEAD asserts the report matches HEAD → 3" "$rc" 3
 run gate --junit-sha HEAD~1; expect "--junit-sha of a commit that differs only in acceptance/** → 3" "$rc" 3
-run gate --junit-sha HEAD~2; expect "--junit-sha of an older code commit → 2" "$rc" 2
+run gate --junit-sha HEAD~2; expect "--junit-sha of a commit that differs only outside src/tests (package.json) → 3" "$rc" 3
 junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass" \
   "test_ac_002_03_filter=pass" "AC-002-04 rm keeps ids=pass"
 printf 'export const add = (t) => t.trim();\n' > "$repo/src/api.js"
@@ -249,6 +268,10 @@ run gate; expect "gate after MODIFY → 1" "$rc" 1
 run gate --ledger .sdd/acceptance.json; expect "gate --ledger fresh ledger → 1" "$rc" 1
 printf 'export const add = (t) => String(t);\n' > "$repo/src/api.js"; commit "fix: api"
 run gate --ledger .sdd/acceptance.json; expect "gate --ledger on a ledger older than the code → 2" "$rc" 2
+touch -t "2026010100$(printf %02d $((n - 1))).30" "$repo/.sdd/junit/unit.xml"   # captured before the src/ commit
+run accept --json --no-out
+expect "a src/ commit after the capture makes JUnit stale (mtime rule)" "$(js 'j.junit[0].fresh')" false
+run gate --junit-sha HEAD~1; expect "--junit-sha before a src/ commit → 2" "$rc" 2
 
 # ---------------------------------------------------------------- 8. fase acceptance
 run accept record fase-acceptance --fase 1 --result accepted --channel "demo meeting 2026-09-27" --by Laura --role "product owner" --demo DEMO-1
@@ -317,6 +340,61 @@ rm -f "$repo/.sdd/junit/rspec.xml"
 run accept bogus; expect "accept unexpected argument → 2" "$rc" 2
 run accept record nope; expect "accept record unknown type → 2" "$rc" 2
 run loop; expect "loop without next → 2" "$rc" 2
+
+# ---------------------------------------------------------------- 11. machine measurements: accept measure, --remeasure
+dlines() { wc -l < "$repo/acceptance/decisions.jsonl" | tr -d ' '; }
+lastrec() { tail -1 "$repo/acceptance/decisions.jsonl" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);process.stdout.write(String(eval(process.argv[1])))})' "$1"; }
+printf 'Statements   : 93.4%% ( 120/128 )\n' > "$repo/cov.txt"   # untracked: stands in for a coverage run
+M=(--req REQ-NF-002 --metric statements --command "cat cov.txt" --extract 'Statements\s*:\s*([0-9.]+)%' --op ge --threshold 90)
+run accept measure "${M[@]}"
+expect "accept measure exits 0" "$rc" 0
+has "accept measure prints value and verdict" "statements = 93.4 (ge 90: pass)"
+expect "measure record: by command, role automated" "$(lastrec 'r.by + "/" + r.role')" command/automated
+expect "measure record: observed extracted, command and regex stored" "$(lastrec 'r.observed + "|" + r.command + "|" + r.extract')" '93.4|cat cov.txt|Statements\s*:\s*([0-9.]+)%'
+expect "measure record carries reqHash" "$(lastrec '/^sha256:/.test(r.reqHash)')" true
+expect "measure record head = HEAD" "$(lastrec 'r.head')" "$(cd "$repo" && git rev-parse HEAD)"
+before=$(dlines)
+run accept measure --req REQ-NF-002 --metric statements --command "echo no coverage here" --extract 'Statements\s*:\s*([0-9.]+)%' --op ge --threshold 90
+expect "measure: no number matched → 1" "$rc" 1
+has "measure: says nothing matched" "no number matched"
+run accept measure --req REQ-NF-002 --metric statements --command "cat cov.txt" --extract 'Statements [0-9.]+' --op ge --threshold 90
+expect "measure: regex without a capture group → 2" "$rc" 2
+run accept measure "${M[@]}" --by Ana --role "tech lead"
+expect "measure: --by is refused (use accept record measurement) → 2" "$rc" 2
+run accept measure --req REQ-F-001 --metric m --command "cat cov.txt" --extract 'Statements\s*:\s*([0-9.]+)%' --op ge --threshold 90
+expect "measure on a test requirement → 2" "$rc" 2
+expect "failed measures append nothing" "$(dlines)" "$before"
+commit "docs(acceptance): machine measurement"
+all_green
+run accept
+expect "NF-002 VERIFIED by the machine measurement" "$(ledger 'v("REQ-NF-002")')" VERIFIED
+printf 'export const add = (t) => t.trim().toLowerCase();\n' > "$repo/src/api.js"; commit "feat: lowercase"
+all_green
+printf 'Statements   : 95.1%% ( 122/128 )\n' > "$repo/cov.txt"
+before=$(dlines)
+run accept
+expect "src/ commit makes the machine measurement stale → MISSING" "$(ledger 'v("REQ-NF-002") + "/" + R("REQ-NF-002").stale_evidence')" MISSING/true
+expect "accept without --remeasure appends nothing" "$(dlines)" "$before"
+run loop next --state .sdd/loop-f.json --reset
+expect "loop: stale measurement with a command → remeasure" "$(loopq 'j.targets.find(t=>t.req==="REQ-NF-002").route_hint')" remeasure
+run accept --remeasure
+expect "accept --remeasure exits 0" "$rc" 0
+has "--remeasure reports the new value" "remeasured REQ-NF-002 statements = 95.1 (was 93.4)"
+expect "--remeasure appends one record" "$(dlines)" "$((before + 1))"
+expect "NF-002 VERIFIED again after --remeasure" "$(ledger 'v("REQ-NF-002")')" VERIFIED
+expect "re-measured record keeps the command" "$(lastrec 'r.by + "/" + r.command')" "command/cat cov.txt"
+# A human measurement (no command) is never re-run: it stays MISSING and needs a person.
+run accept record measurement --req REQ-NF-002 --metric statements --observed 91 --op ge --threshold 90 --by Ana --role "tech lead"
+commit "record human measurement"
+printf 'export const add = (t) => t.trim();\n' > "$repo/src/api.js"; commit "fix: keep case"
+all_green
+before=$(dlines)
+run accept --remeasure
+expect "stale human measurement: --remeasure leaves it MISSING" "$(ledger 'v("REQ-NF-002")')" MISSING
+expect "stale human measurement: nothing appended" "$(dlines)" "$before"
+run loop next --state .sdd/loop-g.json --reset
+expect "loop: stale measurement without a command → needs-human" "$(loopq 'j.targets.find(t=>t.req==="REQ-NF-002").route_hint')" needs-human
+rm -f "$repo/cov.txt"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

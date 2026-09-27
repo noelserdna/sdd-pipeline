@@ -8,7 +8,7 @@ the owner decides.
 
 | Source | Used for |
 |---|---|
-| `.sdd/acceptance.json` (run `$SDD accept` first if stale) | verdict per requirement, `evaluated_sha`, summary, waived Musts |
+| `.sdd/acceptance.json` (run `node "$SDD" accept` first if stale) | verdict per requirement, `evaluated_sha`, summary, waived Musts |
 | `plan/fases/FASE-*.md` headers + `## Demo` | increments, their requirements and demo steps |
 | `acceptance/decisions.jsonl` via the report | FASE acceptances (who, when), demo records |
 | `requirements/CUSTOMER-NEEDS.md` | needs covered per increment |

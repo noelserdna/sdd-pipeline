@@ -46,7 +46,7 @@ detected/kit/legacy value (§3), then the default below.
 | Key | Used in | Default when absent everywhere |
 |-----|---------|--------------------------------|
 | `app_dir` | every command except `acceptance` runs from it | `.` |
-| `code_paths` / `test_paths` | Output Artifacts, trace scope, coverage scope | `src` / `tests` |
+| `code_paths` / `test_paths` | Output Artifacts, trace scope, coverage scope, acceptance freshness (below) | `src` / `tests` |
 | `install` | Setup tasks, G-08 | `none` |
 | `test` | Foundation checkpoint, Phase 9, Phase 9-S, after each merge of `--integrate` | — (G-08 HALT) |
 | `test_file` | Phase 4 RED, Phase 5 GREEN, Phase 6 per task | `test` without a file filter |
@@ -55,7 +55,7 @@ detected/kit/legacy value (§3), then the default below.
 | `lint_files` | Phase 6 per task (changed files only) | `none` |
 | `lint` | Phase 9 | `none` |
 | `build` | Phase 9 only | `none` |
-| `coverage` | Phase 9 step 4, `--verify` Dimension 4 | `none` |
+| `coverage` | Phase 9 step 4, `--verify` Dimension 4 (its output directory is git-ignored, below) | `none` |
 | `db_reset_safe` | after a schema/migration change when the test runner does not prepare the DB; AI Tool Guardrails | `none` |
 | `server` / `port` | server helper (§8): config tasks without tests, manual smoke | `none` / `3000` |
 | `acceptance` | E2E tasks (`--grep <E2E-ID>`), Phase 9 (once, fail fast) | `none` |
@@ -67,6 +67,15 @@ detected/kit/legacy value (§3), then the default below.
 | `task_state` | Phase 2, Phase 7, Modes 3/6/7, G-11, `--verify`, I-06/I-09 (§6) | `checkbox` |
 | `task_format` | Phase 6 review, Revert (§6) | `full` |
 | `default_branch` | branch rule (G-13, `sdd.mjs branch start`), `--integrate` merge target | `origin/HEAD`, then `init.defaultBranch`, then `main`/`master` |
+
+`code_paths` and `test_paths` also decide when acceptance evidence goes stale: `sdd accept` discards test results and
+records without `--paths` only when files under those paths changed since they were captured, so a docs or feedback
+commit leaves them valid. List a build or test config there (`vitest.config.ts`, `package.json`) when a change to it
+should invalidate evidence.
+
+Coverage output is generated, never versioned: the task that first configures a coverage tool adds its output
+directory (`coverage/`, `.nyc_output/`, `htmlcov/`) to `.gitignore`, below the SDD managed block and in the same task
+commit, so later stage commits do not pick up the reports.
 
 `/sdd-setup` writes `task_state: trailers` for new projects: the commit is the evidence, so nothing has to keep a
 checkbox in sync. `checkbox` stays the default when the key is absent, for projects created before that.

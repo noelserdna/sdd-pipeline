@@ -289,26 +289,31 @@ for (const self of skillNames) {
 // 9. Comandos de un stack concreto en skills/** (deben salir del Stack Profile)
 // Exentos: la referencia del perfil y las líneas marcadas como ejemplo — la línea contiene "e.g.", "example"
 // o "ejemplo", o está dentro de un bloque ``` cuya línea de apertura dice "example" (```bash example) o va
-// precedido de <!-- example -->.
+// precedido de <!-- example -->. Un bloque ``` o una tabla markdown precedidos de <!-- stack-specific … --> también
+// están exentos: son tablas de detección que nombran a propósito el comando de cada stack detectado (sdd-setup).
 const HARDCODED_RE = /npx vitest|npm run |wrangler |npm init playwright/g;
 const EXAMPLE_RE = /e\.g\.|example|ejemplo/i;
+const BLOCK_MARK_RE = /<!--\s*(example|stack-specific)\b[^>]*-->/i;
 const HARDCODED_ALLOW = new Set(["skills/sdd-task-implementer/references/stack-profile.md"]);
 const TEXT_EXT = new Set([".md", ".py", ".js", ".mjs", ".cjs", ".ts", ".sh", ".json", ".yml", ".yaml", ".txt"]);
 for (const file of walk(skillsDir)) {
   const r = rel(file);
   if (HARDCODED_ALLOW.has(r) || !TEXT_EXT.has(path.extname(file))) continue;
   const lines = readFileSync(file, "utf8").split("\n");
-  let fence = false, fenceExample = false, prev = "";
+  let fence = false, fenceExample = false, table = false, tableExempt = false, prev = "";
   const hits = [];
   const tokens = new Map();
   lines.forEach((line, idx) => {
     const f = line.match(/^\s*(```|~~~)(.*)$/);
     if (f) {
-      if (!fence) fenceExample = EXAMPLE_RE.test(f[2]) || /<!--\s*example\s*-->/i.test(prev);
+      if (!fence) fenceExample = EXAMPLE_RE.test(f[2]) || BLOCK_MARK_RE.test(prev);
       fence = !fence;
     } else {
+      const isRow = !fence && /^\s*\|/.test(line);
+      if (isRow && !table) tableExempt = BLOCK_MARK_RE.test(prev);
+      table = isRow;
       const found = line.match(HARDCODED_RE);
-      if (found && !EXAMPLE_RE.test(line) && !(fence && fenceExample)) {
+      if (found && !EXAMPLE_RE.test(line) && !(fence && fenceExample) && !(table && tableExempt)) {
         hits.push(idx + 1);
         for (const t of found) tokens.set(t.trim(), (tokens.get(t.trim()) ?? 0) + 1);
       }

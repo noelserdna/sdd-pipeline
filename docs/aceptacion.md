@@ -15,7 +15,7 @@ Cada requisito declara en `REQUIREMENTS.md` cómo se verifica (`Verification:`),
 |---|---|---|
 | `test` | Un caso JUnit que pasa y cuyo nombre contiene el ID del escenario (`AC-001-03`, o `REQ-X-NNN ACn` para un requisito sin escenario BDD) | El comando `test_report` del Stack Profile escribe JUnit XML en `.sdd/junit/` |
 | `demo` | Salida observada que una persona confirmó | `sdd accept record demo` |
-| `measurement` | Un valor registrado que la CLI compara con su umbral | `sdd accept record measurement` |
+| `measurement` | Un valor registrado que la CLI compara con su umbral | Métricas objetivas (cobertura, un benchmark): `sdd accept measure --command … --extract …`, que ejecuta el comando y se vuelve a medir sola con `sdd accept --remeasure`. Valores que confirma una persona: `sdd accept record measurement` |
 | `inspection` | Una revisión humana registrada | `sdd accept record inspection` |
 
 Por eso los tests llevan en el nombre el ID de su escenario (lo exigen `sdd-test-planner` y el TDD del implementer). Los `Refs:` a nivel de fichero **no** cuentan como evidencia: atan un fichero entero a un requisito y darían VERIFIED falsos. Lectores JUnit probados: vitest, jest, pytest, rspec, playwright, minitest y mocha. La tabla de comandos por runner está en `skills/sdd-acceptance/references/test-report.md`.
@@ -32,8 +32,10 @@ Por eso los tests llevan en el nombre el ID de su escenario (lo exigen `sdd-test
 
 **Frescura.** La evidencia vieja no cuenta:
 
-- Los resultados de tests deben venir del commit actual con el árbol limpio (`--junit-sha` lo afirma; sin él se comparan fechas). Un diff que solo toca `acceptance/**` se considera fresco.
-- Cada registro humano sigue valiendo mientras no cambien los ficheros que nombra (`--paths`) desde su commit.
+- "Código" son los `code_paths` y `test_paths` del Stack Profile (por defecto `src` y `tests`, los que existan; si no existe ninguno, todo salvo `acceptance/` y `.sdd/`). Un commit de documentación, `feedback/`, specs o `acceptance/` no envejece la evidencia. Una configuración de build o de tests fuera de esas rutas (`package.json`, `vitest.config.ts`) solo cuenta si se añade a `code_paths`.
+- Los resultados de tests valen mientras el código no haya cambiado desde que se capturaron, ni en commits ni en cambios sin commitear (`--junit-sha` lo afirma; sin él se comparan fechas).
+- Cada registro sigue valiendo mientras no cambien los ficheros que nombra (`--paths`), o el código si no nombra ninguno, desde su commit.
+- Una medición registrada con `sdd accept measure` guarda su comando: cuando caduca, `sdd accept --remeasure` la vuelve a ejecutar y añade el valor nuevo (nunca sin el flag). Una medición humana caducada vuelve a pedir a una persona.
 - Los registros llevan el hash del enunciado y los criterios del requisito. Un MODIFY de `sdd-req-change` cambia el hash y reabre el requisito ("Decisiones a reconfirmar" en el informe).
 
 ## Salidas
@@ -57,6 +59,8 @@ node "$SDD" loop next [--reset] [--max-cycles 3]
 node "$SDD" accept record waiver --req REQ-F-007 --reason "…" --follow-up '#31' --by "Ana Pérez" --role "Product owner"
 node "$SDD" accept record demo --req REQ-F-002 --ac 1 --observed "…" --pass true --by … --role … [--paths src/cli]
 node "$SDD" accept record measurement --req REQ-NF-001 --metric p95_ms --observed 84 --op le --threshold 100 --by … --role …
+node "$SDD" accept measure --req REQ-NF-002 --metric statements --command "npx vitest run --coverage" --extract 'All files[^|]*\|\s*([0-9.]+)' --op ge --threshold 90
+node "$SDD" accept --remeasure [--fase N]     # vuelve a ejecutar las mediciones por comando caducadas
 node "$SDD" accept record fase-acceptance --fase 1 --result accepted|observations|rejected --channel "demo 2026-09-27" --by … --role …
 ```
 

@@ -33,17 +33,26 @@
 //       1-10 steps each citing a scenario, cited AC ids exist in spec/tests/BDD-*.md, V9 every Must REQ-F/REQ-NF is in
 //       some Requisitos line; warns above 3 use cases or 15 tasks per FASE. Exit 1 on errors (scripts/lib/plan-lint.mjs).
 //   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
-//              [--report acceptance/ACCEPTANCE-REPORT.md] [--json]
+//              [--report acceptance/ACCEPTANCE-REPORT.md] [--remeasure] [--json]
 //       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
 //       named with their scenario id (AC-NNN-NN, or `REQ-X-NNN ACn`), the BDD tags of spec/tests/BDD-*.md and the records
 //       of acceptance/decisions.jsonl. JUnit default: Stack Profile test_report_path, else .sdd/junit/. PATH may be a
-//       file, a directory or a `dir/*.xml` glob. Evidence counts only when fresh (see scripts/lib/acceptance.mjs).
+//       file, a directory or a `dir/*.xml` glob. Evidence counts only when fresh: nothing under the Stack Profile's
+//       code_paths + test_paths (default src, tests) changed since it was captured (see scripts/lib/acceptance.mjs).
+//       --remeasure first re-runs each stale measurement whose latest record came from `accept measure` (exit 1 when
+//       one of them yields no number).
 //   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NAME --role ROLE [fields]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
 //       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
 //       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
 //       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID].
+//   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
+//              --threshold NUM [--paths P...] [--json]
+//       Machine measurement: runs CMD from the repo root, takes the first capture group of REGEX in its output as the
+//       observed number and appends a measurement record with by "command", role "automated", the command and the
+//       regex (re-run later by `sdd accept --remeasure`). Exit 1 when no number matches. For objective metrics only
+//       (coverage, a benchmark); a value a person must confirm goes through `accept record measurement`.
 //   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
 //       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
 //       Musts. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate, else

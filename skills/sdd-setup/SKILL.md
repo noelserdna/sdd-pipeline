@@ -229,6 +229,7 @@ bash "$KIT_SH"                                           # refresh the installed
 
 Then add the test keys when the test runner is evident from the project files, because `sdd-acceptance` needs a JUnit report to turn test results into verdicts (full key list: `docs/stacks.md`):
 
+<!-- stack-specific: one row per detected runner; the commands are what gets written into the profile -->
 | Evidence | Lines to add |
 |---|---|
 | `package.json` script `test` runs `vitest` | `- test: npx vitest run` · `- test_file: npx vitest run {file}` · `- test_report: npx vitest run --reporter=junit --outputFile="$(git rev-parse --show-toplevel)/.sdd/junit/vitest.xml"` |

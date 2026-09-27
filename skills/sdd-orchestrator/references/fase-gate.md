@@ -20,7 +20,9 @@ plain question of the Flow table instead ("FASE-{N} completa. ¿Continuamos con 
 
 A requirement verified by `demo`, `measurement` or `inspection` stays MISSING until a person confirms it, so the
 implementer reports it as "pending at the FASE gate" and the gate cannot pass without this step. For each of them
-(`route_hint` `needs-human` in `node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset --fase {N}`):
+(`route_hint` `needs-human` in `node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset --fase {N}`).
+A measurement routed `remeasure` needs no person: it was recorded by a command (`accept measure`), and
+`node "$SDD" accept --remeasure --fase {N}` runs it again before step 4.
 
 1. Show the criterion and its evidence: for `demo`, the steps and the output observed (run them live when the
    customer wants to watch); for `measurement`, the metric, how it was taken, the value and the threshold; for

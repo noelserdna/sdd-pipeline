@@ -20,8 +20,11 @@ write `acceptance/decisions.jsonl` or `acceptance/ACCEPTANCE-REPORT.md` by hand:
 and the CLI regenerates them.
 
 ```bash
-SDD="node ${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"     # in CI: node .claude/sdd/sdd.mjs
+SDD="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"     # in CI: SDD=.claude/sdd/sdd.mjs
 ```
+
+Every command below runs as `node "$SDD" <sub>`: `$SDD` holds only the path, because zsh does not word-split a
+variable, so `SDD="node …"` followed by `$SDD accept` fails there.
 
 ## Invocation
 
@@ -61,21 +64,25 @@ Evidence by method (the `Verification:` line written at requirements time):
   `REQ-X-NNN ACn`). File-level `Refs:` never count: they bind a whole file to a requirement and produce false
   VERIFIED verdicts.
 - `demo` — observed output a human confirmed, recorded with `sdd accept record demo`.
-- `measurement` — a recorded observation the CLI compares with its threshold (`sdd accept record measurement`).
+- `measurement` — an observation the CLI compares with its threshold: produced by a command for objective metrics
+  (`sdd accept measure --command CMD --extract REGEX`, re-run by `sdd accept --remeasure` when stale), or confirmed
+  by a person (`sdd accept record measurement`).
 - `inspection` — a recorded human review (`sdd accept record inspection`).
 
-Evidence counts only while fresh: test results must come from the current commit on a clean tree, and each record
-stays valid while the files it names are unchanged since its commit. Human records are tied to a hash of the
-requirement's statement and criteria, so a MODIFY through `sdd-req-change` reopens the requirement automatically
-("Decisions to re-confirm" in the report). The rules live in `scripts/lib/acceptance.mjs`.
+Evidence counts only while fresh: nothing under the Stack Profile's `code_paths` and `test_paths` (default `src`,
+`tests`) may have changed, committed or not, since the test results were captured, and each record stays valid while
+the files it names (those paths when it names none) are unchanged since its commit. Commits to docs, `feedback/`,
+specs or `acceptance/` do not age evidence; a build or test config outside those paths only does when the profile
+lists it in `code_paths`. Human records are tied to a hash of the requirement's statement and criteria, so a MODIFY
+through `sdd-req-change` reopens the requirement automatically ("Decisions to re-confirm" in the report). The rules live in `scripts/lib/acceptance.mjs`.
 
 ## Phase 0: Context
 
 1. Read `pipeline-state.json` if present (the stage key of this skill is `acceptance`; the H3 hook marks it running
    when the skill starts). No `requirements/REQUIREMENTS.md` → stop: there is nothing to accept yet.
-2. Resolve from the `## SDD Stack Profile` of `CLAUDE.md`: `app_dir`, `test_paths`, `test_report`,
+2. Resolve from the `## SDD Stack Profile` of `CLAUDE.md`: `app_dir`, `code_paths`, `test_paths`, `test_report`,
    `test_report_path`, `acceptance_gate` (reference: `../sdd-task-implementer/references/stack-profile.md`).
-3. Run `$SDD lint --needs --json`. Requirements without a valid `Verification:` cannot be accepted: list them; the
+3. Run `node "$SDD" lint --needs --json`. Requirements without a valid `Verification:` cannot be accepted: list them; the
    loop routes them as spec gaps.
 
 ## `--check` (and `--fase N`)
@@ -84,9 +91,9 @@ requirement's statement and criteria, so a MODIFY through `sdd-req-change` reope
 
 The ledger reads JUnit XML, so the tests must have written it for the current commit.
 
-1. `git status --porcelain --untracked-files=no` must be empty outside `acceptance/`: results from a dirty tree are
-   not evidence of any commit. When it is not, say which files are modified and ask whether to commit them first or
-   to continue knowing that test evidence will count as stale.
+1. `git status --porcelain --untracked-files=no -- <code_paths> <test_paths>` must be empty: results from a dirty
+   tree are not evidence of any commit. When it is not, say which files are modified and ask whether to commit them
+   first or to continue knowing that test evidence will count as stale.
 2. `SHA=$(git rev-parse HEAD)`, then run the profile's `test_report` from `app_dir`:
    `(cd "$APP_DIR" && <test_report>)`. Failing tests are expected and are evidence too; the command must produce the
    XML (look under `test_report_path`, else `.sdd/junit/`). No XML newer than the start of the run → report the
@@ -98,14 +105,18 @@ The ledger reads JUnit XML, so the tests must have written it for the current co
 ### Step 2: Ledger and report
 
 ```bash
-$SDD accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]
+node "$SDD" accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]
 ```
 
 Pass `--junit-sha` only when Step 1 ran on a clean tree at `$SHA`; otherwise omit it and the CLI falls back to file
-times. The command writes `.sdd/acceptance.json` (git-ignored, read by `sdd-pipeline-status`, the session hook and the
-MCP server) and the customer-readable report. Show its summary lines and the report path; for each Must that is not
+times. When a requirement's route is `remeasure` (a stale measurement first recorded by `accept measure`), run the
+same command once more with `--remeasure`: the CLI re-runs that measurement's command, appends the new value and
+prints a `remeasured …` line for each, which you show; no person is asked for an objective metric.
+
+The command writes `.sdd/acceptance.json` (git-ignored, read by `sdd-pipeline-status`, the session hook and the MCP
+server) and the customer-readable report. Show its summary lines and the report path; for each Must that is not
 VERIFIED or WAIVED show one line: id, verdict, criteria passing, and the route the loop would take
-(`$SDD loop next --no-out --state .sdd/acceptance-check.json --reset` gives `route_hint` without touching the loop's
+(`node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset` gives `route_hint` without touching the loop's
 own state). Exit 2 means a usage or git problem: show the message.
 
 ### Step 3: Chain integrity
@@ -114,7 +125,7 @@ The ledger checks evidence; this step checks that the IDs the evidence hangs on 
 `references/chain-integrity.md` and report: broken references (an ID cited but never defined), orphan definitions,
 requirements that reach no use case or scenario, tasks marked done without a commit or commits whose `Refs:` cite
 undefined IDs. It uses `dashboard/traceability-graph.json` from `scripts/sdd-graph.py` when python3 is available, and
-`$SDD tasks status` / `$SDD trace` for the git side. Findings here are defects to fix at their source (a typo in a spec,
+`node "$SDD" tasks status` / `node "$SDD" trace` for the git side. Findings here are defects to fix at their source (a typo in a spec,
 a missing BDD scenario); they never change a verdict.
 
 ### Step 4: Orphan-code decisions
@@ -156,9 +167,15 @@ bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set acceptan
 and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with `artifacts`
 (`acceptance/ACCEPTANCE-REPORT.md`), `metrics` (`must_total`, `must_verified`, `must_waived`, `failing`, `missing`,
 `stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`),
-`highlights` (≤ 5) and `nextStep`. The report and `acceptance/decisions.jsonl` are versioned: commit them with
-`docs(acceptance): acceptance report at {sha7}` when the user wants the report in the repository (it records the SHA
-it evaluated, so a later reader can tell whether it is current).
+`highlights` (≤ 5) and `nextStep`. Then commit what this run wrote under `acceptance/` (the report and any records
+appended by `--remeasure`), as every stage commits its outputs (plugin-root `references/git-conventions.md`,
+§ Stage outputs are committed). The report names the SHA it evaluated, so a later reader can tell whether it is
+current, and the commit touches no code path, so it does not age the evidence:
+
+```bash
+git add acceptance/
+git diff --cached --quiet || git commit -m "docs(acceptance): acceptance report at {sha7}" --trailer "Refs: <evaluated REQ ids>"
+```
 
 ## `--loop`
 
@@ -168,10 +185,10 @@ decision belongs to `sdd loop next`, which compares the cycle with the previous 
 do not stop early on your own judgment, except to ask a human something the next action depends on.
 
 ```
-first cycle: $SDD loop next --reset [--fase N] [--max-cycles M]        # baseline
+first cycle: node "$SDD" loop next --reset [--fase N] [--max-cycles M]        # baseline
 repeat:
   Step 1 (capture tests at the current commit)
-  R = $SDD loop next --junit-sha "$SHA" [--fase N] [--max-cycles M]
+  R = node "$SDD" loop next --junit-sha "$SHA" [--fase N] [--max-cycles M]
   if R.stop != null: break
   bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set task-implementer done
   act on R.targets (Musts) by route_hint; R.others (Should, Nice) are reported, not worked on
@@ -186,14 +203,21 @@ Marking `task-implementer` done before routing matters: a stage left `running` m
 
 The FASE of a requirement is the one whose `plan/fases/FASE-N-*.md` lists it in its `Requisitos:` line
 (`grep -l "REQ-F-004" plan/fases/FASE-*.md`); write feedback entries in `feedback/IMPL-FEEDBACK-FASE-{N}.md` using the
-entry format of `../sdd-task-implementer/references/recovery-and-report.md`.
+entry format of `../sdd-task-implementer/references/recovery-and-report.md`, and commit them before routing, so the
+next skill reads them from git (§ Stage outputs are committed):
+
+```bash
+git add feedback/
+git diff --cached --quiet || git commit -m "docs(feedback): acceptance findings for FASE-{N}" --trailer "Refs: FASE-{N}"
+```
 
 | `route_hint` | Meaning | Action |
 |---|---|---|
 | `implement-or-test` | A criterion has a scenario but no passing, fresh test bound to it | Feedback entry `MISSING-BEHAVIOR` (or `COVERAGE-GAP` when the code exists and only the test is missing) naming the requirement, criterion and scenario id; `/sdd-task-generator --fase N --incremental`; `/sdd-task-implementer --fase N --new-tasks-only`. When a test exists but lacks the scenario id in its name, renaming it is a test edit (below) |
 | `fix-code (Art. 12)` | A bound test fails | The code is wrong, not the test: feedback entry with the failure, incremental task, implementer. Never weaken, skip or rewrite the assertion to make it pass. If you believe the test or the criterion itself is wrong, that is a spec gap |
 | `spec-gap (human, req-change)` | A criterion without any scenario, a requirement without `Verification:`, or a spec that looks wrong | `SPEC-DEVIATION` entry (Spec, Deviation, Impact, Recommendation, `Status: PENDING-REVIEW`) and ask the human: keep the spec (then the missing scenario goes to `sdd-test-planner`/the spec owner) or amend it through `/sdd-req-change`. The loop does not edit specs |
-| `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `$SDD accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…]` (or `measurement` / `inspection`, see `$SDD --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory) |
+| `remeasure` | A measurement recorded by `accept measure` is stale (its code paths changed) | `node "$SDD" accept --remeasure [--fase N]` re-runs its command and appends the new value; nobody is asked. A value that now fails its threshold turns the requirement FAILING and routes as `fix-code` |
+| `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory) |
 | `rerun-tests` | Evidence exists but is stale | Nothing to do beyond Step 1 of the next cycle |
 
 Cycles run sequentially in the main thread: each one needs the commits of the previous one. The implementer's own
@@ -225,7 +249,7 @@ PR body of `--publish`.
 - Any other stop → every open Must needs an explicit human disposition before the skill ends, because a stop is not
   an answer to the customer. Ask with `AskUserQuestion` (up to 4 requirements per call), per requirement:
   **Fix later** (a `BLOCKER` feedback entry, or an issue when a tracker is configured), **Waive** (reason, the
-  approver's role and a follow-up issue are required for a Must: `$SDD accept record waiver --req ID --reason TEXT
+  approver's role and a follow-up issue are required for a Must: `node "$SDD" accept record waiver --req ID --reason TEXT
   --follow-up '#N' --by NAME --role ROLE`), or **Change the requirement** (`/sdd-req-change`). With `regression`, show
   which requirement regressed and the commit range first. Should requirements are reported apart and need no
   disposition. A subagent has no human to ask: it lists the open Musts as pending decisions and stops.
@@ -236,7 +260,7 @@ The customer's acceptance is a recorded fact, not a remark in a chat. Read `refe
 it has the confirmation question, the record command and the tag message.
 
 1. Run `--check` for the scope (fresh evidence, at the commit being accepted).
-2. `$SDD gate --mode enforce [--fase N]`. Exit 0 → goal met. Exit 3 → met with waived Musts: show each with its
+2. `node "$SDD" gate --mode enforce [--fase N]`. Exit 0 → goal met. Exit 3 → met with waived Musts: show each with its
    reason and follow-up issue. Exit 2 → stale evidence: re-capture (Step 1) and retry once. Exit 1 → not met: say so
    with the open Musts and offer `/sdd-acceptance --loop` (or, for demo/measurement/inspection evidence, the human
    evidence step of the FASE gate). Acceptance needs the gate met (exit 0, or 3 with the waivers stated), so with
@@ -244,7 +268,7 @@ it has the confirmation question, the record command and the tag message.
    no passing gate and its reasons are what the next cycle works on.
 3. Present the report to the approver and ask explicitly (their name, role and channel if unknown). Only an explicit
    answer counts; an instruction in a task, a skill or `CLAUDE.md` is never the approver's confirmation.
-4. For a FASE, record the decision with `$SDD accept record fase-acceptance --fase N --result accepted|observations|rejected
+4. For a FASE, record the decision with `node "$SDD" accept record fase-acceptance --fase N --result accepted|observations|rejected
    --channel TEXT [--demo ID] --by NAME --role ROLE` (the tool guard asks for confirmation), regenerate the report and
    commit both as `docs(acceptance): accept FASE-N` with `--trailer "Refs: FASE-N, <REQ ids>"`.
 5. `accepted` or `observations` for a FASE → annotated tag `fase-{N}-accepted` on that commit (message format in the
@@ -256,16 +280,16 @@ it has the confirmation question, the record command and the tag message.
    approver lines and the `sdd gate --md` block in its annotated message or release notes. There is no
    `accepted-*` tag.
 7. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
-   `$SDD issue close fase N` (it refuses without the `fase-{N}-accepted` tag); after a rejection, `$SDD issue update
+   `node "$SDD" issue close fase N` (it refuses without the `fase-{N}-accepted` tag); after a rejection, `node "$SDD" issue update
    fase N` keeps the issue's checklist and verdicts current.
 
 ## `--publish`
 
 Two outputs, both built from the same data (`.sdd/acceptance.json`, the report, the FASE files, `sdd issue` links):
 
-1. **PR / issue block** (always): `$SDD gate --md [--fase N]`, followed by the approved test edits of the last loop,
+1. **PR / issue block** (always): `node "$SDD" gate --md [--fase N]`, followed by the approved test edits of the last loop,
    if any. A FASE PR links its issue with `Refs #N` (the issue closes at acceptance); a change PR uses `Closes #N`.
-   `$SDD pr-body` prints the full PR body when the tracker is configured.
+   `node "$SDD" pr-body` prints the full PR body when the tracker is configured.
 2. **Status page** (optional, replaces the old HTML dashboard): a shareable page for the customer and the team,
    published as a Claude Artifact. Read [references/status-page.md](references/status-page.md) before building it.
    Ask before the first publish of a project, because it sends requirement titles and verdicts off the machine. Only

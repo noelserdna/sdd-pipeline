@@ -25,8 +25,8 @@ script fails, say "traceability graph not available" and use §3 on the requirem
 ## 2. Git side: tasks and commits
 
 ```bash
-$SDD tasks status --json          # done = a Task: trailer in a non-reverted commit; lists divergences
-$SDD trace commits --json         # commits with their Task / Refs / Change ids (reverts marked)
+node "$SDD" tasks status --json          # done = a Task: trailer in a non-reverted commit; lists divergences
+node "$SDD" trace commits --json         # commits with their Task / Refs / Change ids (reverts marked)
 ```
 
 Report:
@@ -35,7 +35,7 @@ Report:
   `task_state: trailers` the trailer is the state, so only the divergences listed count).
 - **Commits whose `Refs:` cite undefined IDs** — every id in a commit's `Refs` that is neither defined in the graph
   (`artifacts`) nor a structural id (`FASE-N`, `CHG-…`, `CR-N`).
-- **Commits touching code without `Task:`** — `$SDD verify --range <base>..HEAD --json`, entries with `code: true`
+- **Commits touching code without `Task:`** — `node "$SDD" verify --range <base>..HEAD --json`, entries with `code: true`
   and no `Task` (a squash merge shows up this way).
 
 ## 3. Fallback: ID patterns
