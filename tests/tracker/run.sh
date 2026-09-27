@@ -166,7 +166,10 @@ repo="$tmp/gh"
 rc=0; out=$(cd "$repo" && STUB_AUTH_FAIL=1 node "$SDD" issue open fase 1 2>&1) || rc=$?
 expect "not authenticated → exit 2" "$rc" 2
 has "not authenticated → hint" "gh auth login"
-rc=0; out=$(cd "$repo" && PATH="/usr/bin:/bin" "$(command -v node)" "$SDD" issue open fase 1 2>&1) || rc=$?
+# PATH without gh or glab (CI runners ship gh in /usr/bin): only node, git and the basics
+nogh="$tmp/nogh-bin"; mkdir -p "$nogh"
+for b in node git sh bash env dirname uname; do p=$(command -v "$b" 2>/dev/null) && ln -sf "$p" "$nogh/$b"; done
+rc=0; out=$(cd "$repo" && PATH="$nogh" "$nogh/node" "$SDD" issue open fase 1 2>&1) || rc=$?
 expect "gh not installed → exit 2" "$rc" 2
 has "gh not installed → hint" "not installed"
 
