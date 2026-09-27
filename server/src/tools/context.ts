@@ -1,10 +1,12 @@
 import type { GraphIndex, TraceabilityGraph } from "../graph-loader.js";
 import { getNextStepHint } from "../hints.js";
+import { loadAcceptance, acceptanceHeader, criteriaLabel } from "../acceptance.js";
+import type { AcceptanceRequirement } from "../acceptance.js";
 
 export const CONTEXT_TOOL = {
   name: "sdd_context",
   description:
-    "Get a 360-degree view of an artifact: its definition, all upstream/downstream connections, code references, test references, commit references, and coverage gaps. Essential before modifying any artifact.",
+    "Get a 360-degree view of an artifact: its definition, all upstream/downstream connections, code references, test references, commit references, and coverage gaps. For a requirement with .sdd/acceptance.json present, status is its acceptance verdict with per-criterion evidence. Essential before modifying any artifact.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -21,14 +23,55 @@ interface ContextArgs {
   artifact_id: string;
 }
 
+function acceptanceView(r: AcceptanceRequirement) {
+  return {
+    verdict: r.verdict,
+    priority: r.priority,
+    verification: r.verification,
+    needs: r.needs,
+    criteria: criteriaLabel(r),
+    stale_evidence: r.stale_evidence,
+    waiver: r.waiver,
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, scenarios: c.scenarios, evidence: c.evidence })),
+  };
+}
+
+function acceptanceGaps(r: AcceptanceRequirement): string[] {
+  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return [];
+  const gaps: string[] = [];
+  if (!r.verification) gaps.push("NO_VERIFICATION_METHOD: the requirement has no valid Verification line");
+  for (const c of r.criteria) {
+    if (c.state === "fail") gaps.push(`FAILING_AC${c.n}: evidence fails${c.text ? ` — ${c.text}` : ""}`);
+    else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code — re-run the tests or re-record`);
+    else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
+    else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
+  }
+  return gaps;
+}
+
 export function executeContext(
   args: ContextArgs,
   graph: TraceabilityGraph,
-  index: GraphIndex
+  index: GraphIndex,
+  cwd?: string
 ): string {
   const { artifact_id } = args;
 
+  const acc = loadAcceptance(cwd);
+  const accReq = acc?.ledger.requirements.find((r) => r.id === artifact_id) ?? null;
+
   const artifact = index.byId.get(artifact_id);
+  if (!artifact && accReq && acc) {
+    // Requirement known to the ledger but not to the graph (no dashboard graph, or an old one).
+    return JSON.stringify({
+      artifact: { id: accReq.id, type: "REQ", category: accReq.type, title: accReq.title, priority: accReq.priority },
+      coverageStatus: accReq.verdict,
+      acceptance: { ...acceptanceHeader(acc.path, acc.ledger), ...acceptanceView(accReq) },
+      upstream: [],
+      downstream: [],
+      gaps: acceptanceGaps(accReq),
+    }) + getNextStepHint("sdd_context", args);
+  }
   if (!artifact) {
     return JSON.stringify({
       error: `Artifact "${artifact_id}" not found`,
@@ -62,9 +105,9 @@ export function executeContext(
     };
   });
 
-  // Gaps analysis
-  const gaps: string[] = [];
-  if (artifact.type === "REQ") {
+  // Gaps analysis: from the acceptance ledger when it knows this requirement, else from graph links.
+  const gaps: string[] = accReq ? acceptanceGaps(accReq) : [];
+  if (artifact.type === "REQ" && !accReq) {
     if (upstream.length === 0 && downstream.length === 0) {
       gaps.push("ORPHAN: No relationships found — this REQ is isolated");
     }
@@ -90,7 +133,8 @@ export function executeContext(
   const hasBDDLink = downstream.some((d) => d.type === "BDD") || upstream.some((u) => u.type === "BDD");
 
   let coverageStatus: string;
-  if (hasUCLink && hasBDDLink && codeCount > 0 && testCount > 0)
+  if (accReq) coverageStatus = accReq.verdict;
+  else if (hasUCLink && hasBDDLink && codeCount > 0 && testCount > 0)
     coverageStatus = "Complete";
   else if (hasUCLink && (codeCount > 0 || testCount > 0))
     coverageStatus = "In Progress";
@@ -115,6 +159,7 @@ export function executeContext(
       classification: artifact.classification,
     },
     coverageStatus,
+    ...(accReq && acc ? { acceptance: { ...acceptanceHeader(acc.path, acc.ledger), ...acceptanceView(accReq) } } : {}),
     upstream,
     downstream,
     codeRefs: directCodeRefs,

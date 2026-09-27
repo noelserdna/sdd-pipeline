@@ -83,3 +83,4 @@ jobs:
       - run: bash tests/graph/run.sh
       - run: bash tests/jev/run.sh
       - run: bash tests/git/run.sh
+      - run: bash tests/acceptance/run.sh

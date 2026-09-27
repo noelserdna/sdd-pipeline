@@ -24,8 +24,31 @@
 //       On the default branch: `git switch -c <name>` (uncommitted changes carry over). On another branch: stay there.
 //       Detached HEAD: exit 1. Default branch = Stack Profile default_branch → origin/HEAD → init.defaultBranch →
 //       main/master. --issue N prefixes the name with `{N}-`.
+//   sdd lint --needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md] [--json]
+//       Need coverage (same check as sdd-jev.mjs needs --mechanical): every need covered or out-of-scope with a decision,
+//       every REQ-F/REQ-NF traced to a need, a valid Verification per requirement. Exit 1 on errors.
+//   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
+//              [--report acceptance/ACCEPTANCE-REPORT.md] [--json]
+//       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
+//       named with their scenario id (AC-NNN-NN, or `REQ-X-NNN ACn`), the BDD tags of spec/tests/BDD-*.md and the records
+//       of acceptance/decisions.jsonl. JUnit default: Stack Profile test_report_path, else .sdd/junit/. PATH may be a
+//       file, a directory or a `dir/*.xml` glob. Evidence counts only when fresh (see scripts/lib/acceptance.mjs).
+//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NAME --role ROLE [fields]
+//       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
+//       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
+//       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
+//       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
+//       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID].
+//   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
+//       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
+//       Musts. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate, else
+//       enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md. --md prints a PR-body block.
+//   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
+//       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}]}; stop is
+//       null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the baseline; hard cap 5).
 // Commit vocabulary: references/git-conventions.md. Old entry point: scripts/sdd-task-lint.mjs (alias).
 // Exit codes: 0 ok · 1 findings (lint errors, invalid messages, --require-done unmet, nothing traced) · 2 usage or git error.
+// (sdd gate has its own codes, above.)
 //
 // Task line grammar (V-19), one line per task, continuation lines indented two spaces:
 //   ^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$
@@ -36,6 +59,7 @@ import {
   GitError, git, gitOk, isRepo, topLevel, readCommits, effectiveCommits, commitsFor, originIds,
   parseMessage, trailersOf, parseTrailerLines, checkMessage, stackProfile,
 } from "./lib/git-log.mjs";
+import { runAcceptance } from "./lib/acceptance-cli.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -641,9 +665,25 @@ function cmdBranch(o) {
 }
 
 // ------------------------------------------------------------------ main
+/** First positional word of argv (skipping `--repo DIR`): the command. */
+function firstCommand(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--repo") { i++; continue; }
+    if (argv[i].startsWith("-")) continue;
+    return { cmd: argv[i], index: i };
+  }
+  return { cmd: null, index: -1 };
+}
 /** Run the CLI; returns the exit code. `legacy` = the sdd-task-lint.mjs command set (lint|json|status|index). */
 export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = false } = {}) {
   PROG = prog; HELP_URL = helpUrl;
+  if (!legacy) {
+    const first = firstCommand(argv);
+    if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && argv.includes("--needs"))) {
+      if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
+      return runAcceptance(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--needs"), { prog });
+    }
+  }
   try {
     const o = parseArgs(argv);
     const cmd = o.args.shift();

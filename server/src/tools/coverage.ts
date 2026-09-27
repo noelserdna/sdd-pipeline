@@ -1,10 +1,12 @@
 import type { GraphIndex, TraceabilityGraph } from "../graph-loader.js";
 import { getNextStepHint } from "../hints.js";
+import { loadAcceptance, acceptanceHeader, criteriaLabel } from "../acceptance.js";
+import type { AcceptanceLedger, AcceptanceRequirement, Verdict } from "../acceptance.js";
 
 export const COVERAGE_TOOL = {
   name: "sdd_coverage",
   description:
-    "Analyze traceability coverage gaps grouped by business domain and technical layer. Identifies uncovered requirements and top priority gaps. Use to assess pipeline completeness.",
+    "Requirement coverage. With .sdd/acceptance.json (from `sdd accept`): verdict per requirement (VERIFIED, FAILING, MISSING, WAIVED, DEPRECATED), totals by verdict and priority, and whether every Must is verified. Without it: traceability link gaps grouped by business domain and technical layer.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -31,12 +33,76 @@ interface CoverageDetail {
   missingLinks: string[];
 }
 
+/** Coverage from the acceptance ledger: verdicts, not link existence. Domain/layer filters use the graph's classification. */
+function coverageFromAcceptance(
+  args: CoverageArgs,
+  path: string,
+  ledger: AcceptanceLedger,
+  index: GraphIndex
+): Record<string, unknown> {
+  const { domain, layer } = args;
+  let reqs: AcceptanceRequirement[] = ledger.requirements;
+  const filtered = Boolean(domain || layer);
+  if (filtered) {
+    reqs = reqs.filter((r) => {
+      const c = index.byId.get(r.id)?.classification;
+      if (!c) return false;
+      if (domain && !c.businessDomain?.toLowerCase().includes(domain.toLowerCase())) return false;
+      if (layer && !c.technicalLayer?.toLowerCase().includes(layer.toLowerCase())) return false;
+      return true;
+    });
+  }
+  const verdicts: Verdict[] = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
+  const byVerdict = Object.fromEntries(verdicts.map((v) => [v, reqs.filter((r) => r.verdict === v).length]));
+  const byPriority: Record<string, Record<string, number>> = {};
+  for (const r of reqs) {
+    if (r.verdict === "DEPRECATED") continue;
+    const k = r.priority ?? "Unspecified";
+    byPriority[k] ??= { total: 0, VERIFIED: 0, FAILING: 0, MISSING: 0, WAIVED: 0 };
+    byPriority[k].total++;
+    byPriority[k][r.verdict]++;
+  }
+  const musts = reqs.filter((r) => r.priority === "Must" && r.verdict !== "DEPRECATED");
+  const row = (r: AcceptanceRequirement) => ({
+    id: r.id,
+    title: r.title,
+    priority: r.priority,
+    verification: r.verification,
+    verdict: r.verdict,
+    criteria: criteriaLabel(r),
+    ...(r.stale_evidence ? { stale_evidence: true } : {}),
+  });
+  return {
+    ...acceptanceHeader(path, ledger),
+    filters: { domain: domain ?? null, layer: layer ?? null },
+    ...(filtered && index.byId.size === 0 ? { filterNote: "domain/layer filters need dashboard/traceability-graph.json for the classification" } : {}),
+    totalReqs: reqs.filter((r) => r.verdict !== "DEPRECATED").length,
+    byVerdict,
+    byPriority,
+    must: {
+      total: musts.length,
+      verified: musts.filter((r) => r.verdict === "VERIFIED").length,
+      waived: musts.filter((r) => r.verdict === "WAIVED").map((r) => r.id),
+      goal: musts.every((r) => r.verdict === "VERIFIED" || r.verdict === "WAIVED"),
+    },
+    open: reqs.filter((r) => r.verdict === "FAILING" || r.verdict === "MISSING").map(row),
+    requirements: reqs.filter((r) => r.verdict !== "DEPRECATED").map(row),
+    deprecated: reqs.filter((r) => r.verdict === "DEPRECATED").map((r) => r.id),
+  };
+}
+
 export function executeCoverage(
   args: CoverageArgs,
   graph: TraceabilityGraph,
-  index: GraphIndex
+  index: GraphIndex,
+  cwd?: string
 ): string {
   const { domain, layer } = args;
+
+  const acc = loadAcceptance(cwd);
+  if (acc) {
+    return JSON.stringify(coverageFromAcceptance(args, acc.path, acc.ledger, index)) + getNextStepHint("sdd_coverage_acceptance", args);
+  }
 
   // Get all REQs as the base for coverage analysis
   let reqs = index.byType.get("REQ") ?? [];
@@ -142,6 +208,7 @@ export function executeCoverage(
   };
 
   const output = {
+    source: "graph-links",
     filters: { domain: domain ?? null, layer: layer ?? null },
     totalReqs: reqs.length,
     overallCoverage: graph.statistics.traceabilityCoverage,
