@@ -7,7 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Next release: **5.0.0** (the version bump is applied atomically by `scripts/release.sh`; it has not been published yet).
 
 ### v5: customer needs, vertical FASEs, native git and acceptance per requirement
 
