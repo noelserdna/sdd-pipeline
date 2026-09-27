@@ -360,9 +360,9 @@ NFR define p99 latency targets pero no hay estrategia de caching.
 
 | Opción | Descripción |
 |--------|-------------|
-| Cloudflare KV + Cache API (Recomendado) | Edge caching, global distribution |
-| In-memory (Workers) | Request-scoped only, no persistence |
-| External Redis | Full-featured, extra hop |
+| HTTP caching + framework cache store (Recomendado) | Uses the stack's built-in cache, no new service |
+| In-memory per process | Simple, lost on restart, not shared |
+| External Redis / edge KV | Shared, extra service and hop |
 
 **Contexto:** [latency targets], [data access patterns], [platform]
 ```
@@ -380,7 +380,7 @@ Security specifications (encryption, auth, RBAC) without concrete library/patter
 ```
 SCAN FOR:
 - nfr/SECURITY.md specifying controls → check for library selection
-- ADR-002 (encryption) → check for specific library
+- Encryption ADRs → check for specific library
 - Auth specs → check for JWT/session library
 - RBAC specs → check for enforcement mechanism
 - Audit logging → check for storage + format
@@ -393,7 +393,7 @@ SKIP IF:
 ### Context-Aware Checks
 
 1. Read nfr/SECURITY.md for security requirements
-2. Read ADR-002 and related security ADRs
+2. Read the security ADRs (grep `encrypt|auth|session|rbac`)
 3. Read domain/05-INVARIANTS.md for security invariants
 4. Read runbooks/ for operational security procedures
 
@@ -450,9 +450,9 @@ No hay estrategia de deployment definida.
 
 | Opción | Descripción |
 |--------|-------------|
-| Wrangler direct deploy (Recomendado) | Simple, Cloudflare-native |
-| GitHub Actions + Wrangler | Automated CI/CD pipeline |
-| Terraform + Wrangler | Infrastructure as Code |
+| CI pipeline + platform deploy (Recomendado) | Tests gate every deploy, one environment to start |
+| Manual deploy from a script | Simple, no gate |
+| Infrastructure as Code + CI | Reproducible environments, more setup |
 
 **Contexto:** [platform], [environment count], [team size]
 ```

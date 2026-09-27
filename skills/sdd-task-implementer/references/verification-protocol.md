@@ -148,7 +148,7 @@ CHECK-R03: Contract compliance
     - Inputs / request schema match contract
     - Outputs / response schema match contract
     - Error cases match contract
-    Transport, against design/OPERATION-MAPPING.md (fallback: plan/ table | API-op | Transport | Handler | Note |):
+    Transport, against design/OPERATION-MAPPING.md:
     - Idiom, route/action and verb match the mapping row
     - Success, validation-error and no-JS-fallback behaviour match the mapping row
     - Accessible element exists when the mapping names one
@@ -187,8 +187,8 @@ CHECK-R06: Test coverage
 | R01-a | Extracts user from JWT | src/middleware/auth.ts:23 | PASS |
 | R01-b | Returns 401 on invalid token | src/middleware/auth.ts:35 | PASS |
 | R02 | Follows ADR-003 | src/middleware/auth.ts:12 | PASS |
-| R04 | Enforces INV-SYS-003 | src/middleware/auth.ts:8 | PASS |
-| R04 | Enforces INV-SYS-001 | src/middleware/auth.ts:28 | WARN: implicit, not explicit |
+| R04 | Enforces INV-AUTH-001 | src/middleware/auth.ts:8 | PASS |
+| R04 | Enforces INV-TENANT-001 | src/middleware/auth.ts:28 | WARN: implicit, not explicit |
 | R06 | Tests exist | tests/middleware/auth.test.ts | PASS (5 tests) |
 ```
 

@@ -38,7 +38,7 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 | impl-f1a | miseia-impl-f1a | —     | task-implementer (FASE 1 / Stream A)   | running           | —          |
 ```
 
-`Alive` from `ListAgents` (`idle` / `busy` / `—` not running). `Handoff` = `summary.handoff.result` + `sentAt` of the role's last stage. Below the table, list `[OPEN]` questions per role with the file path.
+`Alive` from `ListAgents` (`idle` / `busy` / `waiting` / `—` not running; `waiting` counts as alive). `Handoff` = `summary.handoff.result` + `sentAt` of the role's last stage. Below the table, list `[OPEN]` questions per role with the file path.
 3. Propose the next gate (Gate table). Propose only; never dispatch without the human's answer.
 
 ### Dispatch `<stage>`
@@ -50,7 +50,7 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 5. `SendMessage { to: roles[<role>].name, message: "GO stage=<stage> root=<STATE_ROOT>[ fase=N][ stream=X][ --fanout|--parallel when the stage is above its threshold, see `docs/perfilado.md`]; reread pipeline-state.json\n<at most 2 lines: skill to run, what the gate expects>", notify_when_idle: true }`.
 6. Tell the human what happens next: the station runs the skill and sends a `stage=… status=…` handoff; you get one notice when it goes idle.
 
-### Gate table (copied from `agents/sdd-orchestrator.md`; ask verbatim, then dispatch what follows)
+### Gate table (questions match the phases of `agents/sdd-orchestrator.md`; keep both in sync. Ask verbatim, then dispatch what follows)
 
 | Phase | Ask the human | Then dispatch |
 |---|---|---|
@@ -62,8 +62,8 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 | 5 Test Planning done | "¿Quieres ajustar los escenarios E2E?" | `plan-architect` |
 | 6 Architecture & Planning done | "¿Estás conforme con las FASEs y la arquitectura?" | `task-generator` |
 | 7 Task Generation done | "¿Quieres revisar los tasks antes de empezar a implementar?" | `task-implementer fase=0` |
-| 8 FASE-N done | "FASE-{N} completa. ¿Continuamos con FASE-{N+1}?" | `task-implementer fase=N+1`; one GO per Stream when `TASK-FASE-{N+1}.md` has a Stream Ownership table; Integrate FASE N first when it had Streams |
-| 9 Implementation done | "¿Quieres que escriba y ejecute los tests E2E con la suite E2E existente o una nueva?" | `task-implementer e2e=true` to the implementer owner |
+| 8 FASE-N done | "FASE-{N} completa. ¿Continuamos con FASE-{N+1}?" | Integrate FASE N first when it had Streams. No Stream Ownership table in `TASK-FASE-{N+1}.md` → `task-implementer fase=N+1`. With the table → run `/sdd-task-implementer --fase {N+1} --stream base` here (main checkout; the lead owns it), wait until `git tag -l 'fase-{N+1}-foundation'` shows the tag, then one GO per work Stream (`stream=X`, not `base` or `integración`); a Stream dispatched before the tag HALTs on G-11 |
+| 9 Implementation done | Existing E2E suite (Stack Profile `acceptance`, `acceptance/playwright.config.*`, `e2e/`, `test/system/`) → no question. Otherwise: "¿Quieres que escriba y ejecute los tests E2E (Playwright)?" | `GO stage=task-implementer` to the implementer owner, lines: run `{acceptance}` once; on yes write E2E tests from `test/E2E-SCENARIOS.md` first (never with `e2e_scaffold: never`); failures → fix code, not tests (Art. 12) |
 | 10 Gap Analysis done | Per finding: PROMOTE / REMOVE / ACCEPT / DEFER | `req-change` for PROMOTE; `task-implementer` for REMOVE |
 | 11 Verification | "¿Quieres generar el dashboard visual de trazabilidad?" | `traceability-check`, `dashboard` to the QA owner |
 
@@ -84,7 +84,7 @@ Follow `references/async-questions.md` Section 5: read `$STATE_ROOT/.sdd/questio
 
 ### Integrate `--fase N`
 
-When available (4.0.0-beta): run `/sdd-task-implementer --integrate --fase N` here, in the main checkout, after every Stream of FASE N has sent `status=done` and `git tag -l 'fase-*-verified'` shows the previous FASE. Until then, report the Streams' state and stop.
+Run `/sdd-task-implementer --integrate --fase N` here, in the main checkout, after every Stream of FASE N has sent `status=done` and `git tag -l 'fase-*-verified'` shows the previous FASE. If a Stream is not done yet, report the Streams' state and stop.
 
 ## Safety
 

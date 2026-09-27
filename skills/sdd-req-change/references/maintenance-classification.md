@@ -136,10 +136,10 @@ Before initiating Phase 1, verify:
 
 ## 7. Integration with Change Report
 
-Maintenance classification appears in the Change Report under **Section 7.6**. Each CR processed by sdd-req-change includes its ISO category and urgency:
+Maintenance classification appears in the Change Report under **Section 7.5** (`change-report-template.md`). Each CR processed by sdd-req-change includes its ISO category and urgency:
 
 ```markdown
-### 7.6 Maintenance Classification (ISO 14764)
+### 7.5 Maintenance Classification (ISO 14764)
 
 | CR-ID   | ISO Category | Urgency | Notes                                      |
 |---------|--------------|---------|--------------------------------------------|

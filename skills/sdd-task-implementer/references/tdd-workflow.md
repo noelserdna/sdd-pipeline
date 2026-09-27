@@ -303,7 +303,7 @@ The task document provides acceptance criteria. Each criterion maps to one or mo
     - Extracts user_id, org_id, role from valid JWT
     - Returns 401 with error body when token missing
     - Returns 401 when token expired
-    - Enforces INV-SYS-001 (tenant isolation via org_id)
+    - Enforces INV-TENANT-001 (tenant isolation via org_id)
 ```
 
 **Generated tests:**
@@ -336,8 +336,8 @@ describe('AuthMiddleware', () => {
     expect(res.status).toBe(401);
   });
 
-  // Criterion 4: Enforces INV-SYS-001
-  it('should enforce tenant isolation via org_id (INV-SYS-001)', async () => {
+  // Criterion 4: Enforces INV-TENANT-001
+  it('should enforce tenant isolation via org_id (INV-TENANT-001)', async () => {
     const token = createValidJWT({ user_id: 'u1', org_id: 'o1', role: 'recruiter' });
     const req = createRequest({ authorization: `Bearer ${token}` });
     const ctx = await authMiddleware(req);
@@ -380,8 +380,8 @@ describe('UC-002 Exception Flows', () => {
 Each INV-* referenced in the task becomes a test:
 
 ```typescript
-// INV-SYS-001: Tenant isolation — every query must include org_id
-it('should include org_id filter in all queries (INV-SYS-001)', () => {
+// INV-TENANT-001: Tenant isolation — every query must include org_id
+it('should include org_id filter in all queries (INV-TENANT-001)', () => {
   const query = repository.buildQuery({ user_id: 'u1' });
   expect(query).toContain('org_id');
 });

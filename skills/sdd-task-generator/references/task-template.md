@@ -25,7 +25,7 @@
 ```markdown
 # Tasks: FASE-{N} - {Title}
 
-> **Input:** plan/fases/FASE-{N}-{slug}.md + plan/PLAN-FASE-{N}.md
+> **Input:** plan/fases/FASE-{N}-{slug}.md + plan/fase-plans/PLAN-FASE-{N}.md
 > **Generated:** {YYYY-MM-DD}
 > **Total tasks:** {count}
 > **Parallel capacity:** {number of work Streams from Stream Ownership}
@@ -151,13 +151,10 @@ Files excluded from unit test coverage (from PLAN-FASE §7.4 Exclusions):
 
 ### Task Dependency Graph
 
-```mermaid
-graph TD
-    TASK-F{N}-001 --> TASK-F{N}-002
-    TASK-F{N}-001 --> TASK-F{N}-003
-    TASK-F{N}-002 --> TASK-F{N}-005
-    TASK-F{N}-003 --> TASK-F{N}-005
-    TASK-F{N}-004 --> TASK-F{N}-006
+```text
+TASK-F{N}-001 ──► TASK-F{N}-002 ──► TASK-F{N}-005
+             └──► TASK-F{N}-003 ──┘
+TASK-F{N}-004 ──► TASK-F{N}-006
 ```
 
 ### Critical Path
@@ -249,7 +246,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 | Summary, Traceability | `sdd-task-lint.mjs index` / `json` |
 | Dependency graph, Parallel Execution Plan | `blocked-by` lines + Stream Ownership |
 | Review block | `references/review-checklist.md` |
-| `Revert: SAFE` | absent Revert line = SAFE (V-07) |
+| `Revert: SAFE` | absent Revert line = SAFE (V-07; CLAUDE.md Revert strategies) |
 | `TASK-INDEX.md` | `sdd-task-lint.mjs index` (never templated by hand) |
 
 ### Stream Ownership Rules
@@ -298,3 +295,58 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 | Refs | YES | At least FASE reference |
 | Revert | Full: YES · compact: only when not SAFE | Category + impact (V-07; absent = SAFE in compact) |
 | Review | Full: YES (≥ 2 checks) · compact: omitted | Patterns in `references/review-checklist.md` |
+
+---
+
+## Template: TASK-ORDER.md (full)
+
+Written by the main thread from the FASE JSONs. Diagrams are ASCII (no Mermaid), as in `plan/`.
+
+```markdown
+# Implementation Order
+
+> **Generated:** {YYYY-MM-DD}
+> **Total FASEs:** {count}
+> **Recommended approach:** Incremental delivery per FASE
+
+## FASE Dependency Graph
+
+{ASCII diagram, one line per FASE, e.g. FASE-0 ──► FASE-1 ──► FASE-2}
+
+## Recommended Implementation Sequence
+
+### Wave 1: Foundation
+**FASE-0** (No dependencies — start here)
+- {count} tasks, {parallel count} parallelizable
+- Critical path: {N} sequential tasks
+- Streams: serial
+
+### Wave 2: Core Capabilities
+**FASE-1** (depends on: FASE-0)
+- {count} tasks, {parallel count} parallelizable
+- Critical path: {N} sequential tasks
+- Streams: base(2) → A(2) ∥ B(2) → integración(1) → verificación(1)
+
+## Cross-FASE Dependencies
+
+| From (Stream) | To (Stream) | Reason |
+|---------------|-------------|--------|
+| TASK-F0-005 (base) | TASK-F1-001 (A) | {why F1 needs it} |
+
+## MVP Strategy
+
+**Minimum Viable Product:** FASE-0 + FASE-1
+- {count} total tasks
+- Core capability: {description}
+
+## Incremental Delivery Checkpoints
+
+| Checkpoint | FASEs Complete | Capability |
+|-----------|---------------|------------|
+| CP-1 | FASE-0 | {capability delivered} |
+| CP-2 | FASE-0,1 | {capability delivered} |
+```
+
+**`Streams:` line:** one per FASE inside its Wave entry: `Streams: base(n) → A(n) ∥ B(n) [∥ C(n)…] → integración(n) → verificación(n)`, task count per Stream (empty Stream = `integración(0)`); a FASE with a single work Stream writes exactly `Streams: serial`. In Cross-FASE Dependencies every task carries its Stream in parentheses.
+
+**Compact format:** `TASK-ORDER.md` ≤ 1 500 chars — keep `## FASE Dependency Graph` (one line per FASE), one Wave entry per FASE with its `Critical path:` and `Streams:` lines, and Cross-FASE Dependencies only when non-empty; drop MVP Strategy and Incremental Delivery Checkpoints. V-11 and `--audit` read only what is kept.

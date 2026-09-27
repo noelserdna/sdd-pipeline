@@ -85,7 +85,7 @@ done
 - The message must start with `Merge ` — the SDD `commit-msg` hook lets merge commits through without trailers.
 - NEVER `--squash`, NEVER `--ff-only`, NEVER rebase a pushed Stream branch: each task commit must keep its SHA and
   trailers (`Task:` uniqueness and `sdd-traceability-check` depend on it).
-- After a successful merge: `sdd_bench_event merge "" "$(git rev-parse --short HEAD)"` (Bench Events in SKILL.md) and
+- After a successful merge: `sdd_bench_event merge "" "$(git rev-parse --short HEAD)"` (helper: `references/recovery-and-report.md` → Bench Events) and
   add the Stream to the `merged` list with its merge SHA.
 - Run the full test suite (`{test}`, Stack Profile) after **every** merge, not only at the end; a failure here is a
   `PAUSE: Test regression` whose cause is the merge itself. `{build}` and `{acceptance}` wait for Phase 9.
@@ -130,7 +130,7 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
    tagging (a missing commit means a Stream was integrated incomplete).
 3. **`verificación` Stream**: implement its tasks with Phases 3-7 (they usually run the E2E/acceptance suite and
    commit its evidence).
-4. **Phase 9** as in SKILL.md: tag `fase-N-verified`, Criterios de Exito, full suite, coverage, completion report
+4. **Phase 9** as in SKILL.md: Criterios de Exito, full suite, coverage, tag `fase-N-verified` last and only on PASS, completion report
    (the Commit Log lists task commits in `git log HEAD` order, merges included as `merge` rows).
 
 ## 4. Post-merge checks (all must hold before Persist Summary)

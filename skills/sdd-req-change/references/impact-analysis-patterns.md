@@ -1,16 +1,16 @@
 # Impact Analysis Patterns
 
-> Reference document for Phase 2 (Impact Analysis) of `sdd-req-change`.
+> Reference document for Phase 2 (Impact Analysis) of `sdd-req-change`. Examples (PDF extraction, INV-EXT-001, ADR-001) are illustrative.
 > Maps change types to affected document categories and provides traceability chain patterns.
 
 ---
 
 ## 1. Traceability Chain Reference
 
-The full traceability chain in the ReadPDF spec repository:
+The traceability chain across `requirements/` and `spec/`:
 
 ```
-REQ-{SUB}-{NNN}
+REQ-{F|NF|C}-{NNN}
   ↕ Source/Implements
 UC-{NNN} / WF-{NNN}
   ↕ Implements/Defines
@@ -44,8 +44,8 @@ RN-{NNN} (CLARIFICATIONS.md)
 **Typical impact footprint:**
 
 ```
-NEW REQ-{SUB}-{NNN}
-  → requirements/REQUIREMENTS.md (§4/5/6/7/8 + §9 traceability + §10 coverage)
+NEW REQ-{F|NF|C}-{NNN}
+  → requirements/REQUIREMENTS.md (Functional / Nonfunctional / Constraints section + Traceability table)
   → use-cases/UC-{NNN}.md (new UC or new flow in existing UC)
   → workflows/WF-{NNN}.md (if new async process needed)
   → contracts/API-{module}.md (new endpoint or parameter)
@@ -77,7 +77,7 @@ NEW REQ-{SUB}-{NNN}
 **Typical impact footprint:**
 
 ```
-MODIFIED REQ-{SUB}-{NNN}
+MODIFIED REQ-{F|NF|C}-{NNN}
   → requirements/REQUIREMENTS.md (update REQ + traceability)
   → ALL documents in existing traceability chain of the REQ:
     → UC-{NNN}.md (modify existing flow)
@@ -95,7 +95,7 @@ MODIFIED REQ-{SUB}-{NNN}
 
 | Check | Question | If Yes |
 |-------|----------|--------|
-| Threshold change? | Is a numeric limit/timeout/rate changing? | Update nfr/LIMITS.md, INVs, RNs |
+| Threshold change? | Is a numeric limit/timeout/rate changing? | Update nfr/LIMITS.md, VALUE-REGISTRY.md, INVs, RNs |
 | Behavior change? | Is the system doing something different? | Update UC flow, BDD, API contract |
 | Scope change? | Is the requirement applying to more/fewer cases? | Update UC preconditions, API validation |
 | Actor change? | Is a different role now involved? | Update PERMISSIONS-MATRIX, UC actors |
@@ -106,7 +106,7 @@ MODIFIED REQ-{SUB}-{NNN}
 **Typical impact footprint:**
 
 ```
-MODIFIED REQ-{NFR-SUB}-{NNN}
+MODIFIED REQ-NF-{NNN}
   → requirements/REQUIREMENTS.md (update REQ)
   → nfr/{PERFORMANCE|SECURITY|LIMITS|OBSERVABILITY}.md
   → related INVs enforcing the constraint
@@ -121,8 +121,8 @@ MODIFIED REQ-{NFR-SUB}-{NNN}
 **Typical impact footprint (LARGEST):**
 
 ```
-DEPRECATED REQ-{SUB}-{NNN}
-  → requirements/REQUIREMENTS.md (move to §12 Deprecated + update §3 counts)
+DEPRECATED REQ-{F|NF|C}-{NNN}
+  → requirements/REQUIREMENTS.md (mark `Status: Deprecated` in place + Traceability row)
   → ALL documents in traceability chain:
     → UC-{NNN}.md (remove sections or mark deprecated)
     → WF-{NNN}.md (remove steps)
@@ -258,23 +258,3 @@ CLARIFICATIONS.md ←→ UC-*.md (business rules)
 **Scoring:**
 - Sum all factors
 - Low: 7-10 | Medium: 11-16 | High: 17-22 | Very High: 23+
-
----
-
-## 6. ReadPDF-Specific Impact Maps
-
-### By Subcategory → Typical Documents
-
-| Subcategory | Primary Docs | Secondary Docs |
-|-------------|-------------|----------------|
-| EXT (Extraction) | UC-001, UC-002, UC-003, WF-001, API-pdf-reader, BDD-extraction | ENTITIES (Extraction), LIMITS, INV-EXT-* |
-| CVA (CV Analysis) | UC-004, UC-005, UC-006, WF-002, API-pdf-reader, BDD-cv-analysis | ENTITIES (CVAnalysis), VOs (Dimensions), INV-CVA-* |
-| MAT (Matching) | UC-007, UC-008, UC-009, WF-003, API-matching, BDD-matching | ENTITIES (MatchResult, JobOffer), ADR-011, ADR-013 |
-| GDP (GDPR) | UC-010-014, API-gdpr, BDD-gdpr | SECURITY, ADR-002, ADR-008, INV-PII-* |
-| CAN (Candidate) | UC-015-026, API-candidate, BDD-candidate-dashboard | ENTITIES (Candidate), ADR-018, INV-CAN-* |
-| SEL (Selection) | UC-035-041, API-recruiter, BDD-selection-pipeline | ENTITIES (SelectionProcess), STATES, INV-SEL-* |
-| OFF (Offers) | UC-020-022, API-matching, BDD-offers | ENTITIES (JobOffer), INV-OFF-* |
-| USR (User Mgmt) | UC-027-030, API-admin, API-org | ENTITIES (User), PERMISSIONS-MATRIX, INV-USR-* |
-| DSH (Dashboard) | Contracts (API-admin, API-org, API-recruiter) | BDD-dashboards, BDD-export |
-| SEC (Security) | nfr/SECURITY, PERMISSIONS-MATRIX, ADR-002 | ALL API contracts, INV-ROL-*, runbooks |
-| PERF (Performance) | nfr/PERFORMANCE, nfr/LIMITS | INV-SYS-*, WFs (timeouts) |

@@ -54,7 +54,7 @@ Security-specific checks (handled by sdd-security-auditor)
 **Procedure:**
 1. List all spec sections added or modified
 2. For each section, verify at least one REQ references it in traceability
-3. Check REQUIREMENTS.md §10 (Coverage) includes the document
+3. Check `spec/TRACEABILITY-MATRIX.md` lists the document for the REQ
 
 **Pass criteria:** Every modified spec section is covered by at least one REQ
 **Fail example:** New section in UC-001 "Bulk Upload Flow" has no REQ pointing to it

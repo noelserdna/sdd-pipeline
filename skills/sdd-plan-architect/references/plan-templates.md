@@ -58,7 +58,7 @@ Budget ≤ 12 000 chars. Technology rows are `aspect · decision · reference` (
 
 | Constraint | Value | Source |
 |------------|-------|--------|
-| {e.g., Max PDF size} | {50 MB} | {nfr/LIMITS.md} |
+| {e.g., Max upload size} | {10 MB} | {nfr/LIMITS.md} |
 | {e.g., Extraction timeout} | {360s} | {RN-181} |
 
 ## 3. Component Decomposition
@@ -385,7 +385,7 @@ Budget ≤ 6 000 chars when no question was asked, + ≤ 1 200 per real question
 
 | ID | Category | Decision (≤ 140 chars) | Evidence / ref | Needs ADR |
 |----|----------|-------------------------|----------------|-----------|
-| D-PA-001 | CL-DX | {decision} | ADR-002 §2, TEST-PLAN R-1 | No |
+| D-PA-001 | CL-DX | {decision} | ADR-{NNN} §2, TEST-PLAN R-1 | No |
 | D-PA-002 | CL-TEST | {decision} | RQ-002 (recommended option) | No |
 
 ## Session {YYYY-MM-DD} (only if questions were asked)
@@ -463,9 +463,11 @@ Budget ≤ 9 000 chars. Signatures, not bodies; ids, not assertions. §7.4 Cover
 
 ## 5. API Implementation Notes
 
-| API-op | Transport (see design/OPERATION-MAPPING.md) | Handler | Note (≤ 80 chars) |
-|--------|---------------------------------------------|---------|--------------------|
-| API-{NNN}-{NN} | {idiom · route / action · verb, e.g. `POST /tasks` form → 303} | `{path}#{action}` | {validation, auth, no-JS fallback} |
+Transport (idiom, route/action, verb, statuses, no-JS fallback) lives in `design/OPERATION-MAPPING.md` (`Style: operations`) or in the contract's Method/Path (`Style: http`); do not repeat it here.
+
+| API-op | Handler | Note (≤ 80 chars) |
+|--------|---------|--------------------|
+| API-{NNN}-{NN} | `{path}#{action}` | {what the mapping row and contract do not say: auth, ordering, injection point} |
 
 ## 6. Data Changes
 

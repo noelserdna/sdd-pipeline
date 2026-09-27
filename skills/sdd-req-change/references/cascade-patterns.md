@@ -17,7 +17,7 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
       "status": "done | stale | running | error",
       "outputHash": "sha256:{hash} — hash of output directory/files",
       "lastRun": "ISO 8601 timestamp",
-      "staleReason": "CHG-{id} or null"
+      "staleReason": "CHG-YYYY-MM-DD-NNN or null"
     }
   },
   "lastChange": {
@@ -36,7 +36,7 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 | `status` | enum | Yes | `"done"`, `"stale"`, `"running"`, `"error"` |
 | `outputHash` | string | No | `sha256:{hash}` of output directory/files |
 | `lastRun` | string | No | ISO 8601 timestamp |
-| `staleReason` | string | No | `CHG-{id}` or null |
+| `staleReason` | string | No | `CHG-YYYY-MM-DD-NNN` or null |
 | `summary` | object | No | Stage completion summary (see Section 9) |
 
 ### Stage Names (pipeline order)
@@ -60,44 +60,42 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 
 ## 2. Invalidation Rules
 
-When an artifact changes, all downstream stages that depend on it become **stale** and must be re-executed. The following table defines the invalidation boundaries.
+When an artifact changes, every downstream stage that depends on it becomes **stale**. Boundaries (same as CLAUDE.md "Re-run guidance"):
 
-| Changed Artifact | Invalidated Stages | Scope |
-|---|---|---|
-| `requirements/` | `specifications-engineer` → `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | **All downstream** — requirements are the root of the traceability chain |
-| `spec/domain/` | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | Domain model changes ripple through everything below spec |
-| `spec/use-cases/` | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | Use case changes affect audit, planning, and implementation |
-| `spec/contracts/` | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | API contract changes affect audit, planning, and implementation |
-| `spec/nfr/` only | `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | NFR changes may affect architecture decisions and test strategy |
-| `spec/adr/` only | `plan-architect` → `task-generator` → `task-implementer` | Architecture decision changes affect planning and implementation |
-| `spec/` (any) | `tech-designer` (lateral) | Spec changes may invalidate technical design in `design/` |
-| `spec/` (any) | `ux-designer` (lateral) | Spec changes may invalidate UX design in `ux/` |
-| `spec/tests/` only | `test-planner` → `plan-architect` → `task-generator` → `task-implementer` | Test specification changes affect test planning and downstream |
-| `plan/` | `task-generator` → `task-implementer` | Plan changes affect task breakdown and implementation |
-| `task/` | `task-implementer` | Task changes only affect implementation |
+| Changed Artifact | Invalidated Stages |
+|---|---|
+| `requirements/` (not yet propagated to specs) | `specifications-engineer` → `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer` |
+| `spec/` (any file) | `spec-auditor` → `test-planner` → `plan-architect` → `task-generator` → `task-implementer`; laterals `tech-designer` and `ux-designer` when their outputs exist |
+| security requirement or `spec/nfr/SECURITY.md` | additionally `security-auditor` (lateral) |
+| `plan/` | `task-generator` → `task-implementer` |
+| `task/` | `task-implementer` |
+
+`sdd-req-change` edits `requirements/` and propagates the change into `spec/` in the same run, so its changes count as `spec/` changes: `specifications-engineer` stays `done` (Persist restores it if the H3 hook flipped it) and staleness starts at `spec-auditor`.
 
 ### Key Rules
 
 - Invalidation always propagates **forward** (downstream) — never backward.
-- A stage marked `stale` cannot be skipped; it must be re-executed before any stage after it.
-- If multiple artifacts change simultaneously, take the **union** of all invalidated stages.
-- The `staleReason` field in `pipeline-state.json` records which Change Report caused the invalidation.
+- A `stale` stage is re-executed before any stage after it.
+- Several artifacts changed at once → the **union** of invalidated stages.
+- Affected FASEs (Section 5) narrow which FASEs are regenerated, never which stages are stale.
+- `staleReason` records the Change Report ID (`CHG-YYYY-MM-DD-NNN`) that caused the invalidation.
+- Only `sdd-req-change` Phase 9 writes these stale marks for a change; `--cascade=dry-run` writes nothing.
 
 ---
 
 ## 3. Cascade Execution Order
 
-When a cascade is triggered, skills are invoked in the following strict order. Only stages marked `stale` are executed; `done` stages are skipped.
+Skills run in this order; only `stale` stages run.
 
 | Step | Skill Invocation | Condition |
 |------|-----------------|-----------|
-| 1 | `sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{id}.md` | If any `spec/` artifact changed |
-| 2 | `sdd-test-planner` (Mode 4: Audit) | If `spec/tests/` or `spec/nfr/` changed |
-| 3 | `sdd-plan-architect --regenerate-fases --affected={list}` | Always executed during cascade |
-| 4 | `sdd-task-generator --fase={list} --incremental` | For each affected FASE |
-| 5 | `sdd-task-implementer --fase={N} --new-tasks-only` | Only in `auto` mode |
+| 1 | `sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md` | Always (spec/ changed) |
+| 2 | `sdd-test-planner`, Mode 4 (Audit Test Coverage) over the changed UCs/NFRs | Always |
+| 3 | `sdd-plan-architect --regenerate-fases --affected={N,M}` | Always |
+| 4 | `sdd-task-generator --fase={N} --incremental` | Once per affected FASE |
+| 5 | `sdd-task-implementer --fase {N} --new-tasks-only` | Once per affected FASE; `auto` mode only |
 
-> **Note:** `sdd-security-auditor` runs as a lateral step if any security-related requirement (`NFR-SEC-*`) was modified in the change. It executes in parallel with step 1 and does not block the main cascade.
+> `sdd-security-auditor` runs alongside step 1 when a security requirement changed; it does not block the main cascade.
 
 ---
 
@@ -153,19 +151,20 @@ Not all changes affect all FASEs. The cascade system supports **selective FASE t
 
 4. **Identify indirect impact** — FASEs that have **dependencies** on directly affected FASEs (e.g., FASE-3 depends on services built in FASE-2).
 
-5. **Generate targeted commands:**
+5. **Generate targeted commands** (the task generator and implementer take one FASE per run):
    ```bash
-   sdd-plan-architect --regenerate-fases --affected=FASE-1,FASE-5
-   sdd-task-generator --fase=FASE-1,FASE-5 --incremental
-   sdd-task-implementer --fase=1 --new-tasks-only
-   sdd-task-implementer --fase=5 --new-tasks-only
+   /sdd-plan-architect --regenerate-fases --affected=1,5
+   /sdd-task-generator --fase=1 --incremental
+   /sdd-task-generator --fase=5 --incremental
+   /sdd-task-implementer --fase 1 --new-tasks-only
+   /sdd-task-implementer --fase 5 --new-tasks-only
    ```
 
 ### Dependency Resolution
 
 - If FASE-N is affected and FASE-M depends on FASE-N, then FASE-M is **indirectly affected**.
 - Indirect FASEs are re-planned but only new/changed tasks are generated (via `--incremental`).
-- The `--affected` flag accepts a comma-separated list: `--affected=FASE-1,FASE-3,FASE-5`.
+- `--affected` (plan-architect) takes a comma-separated list of FASE numbers: `--affected=1,3,5`.
 
 ---
 
@@ -189,23 +188,22 @@ When a cascade step fails, the system follows a strict recovery protocol.
 ### Recovery Flow
 
 ```
-1. Read CASCADE-REPORT to understand the failure
-2. Fix the underlying issue (edit spec, resolve dependency, etc.)
+1. Read the CASCADE-REPORT to understand the failure
+2. Fix the underlying issue (edit spec via sdd-req-change, resolve dependency, etc.)
 3. Re-run the failed skill with the same flags
-4. If successful, continue the cascade from the next step
-5. Use: sdd-req-change --resume --from={failed-step}
+4. Run the remaining commands of the report's plan, in order
 ```
 
 ---
 
 ## 7. CASCADE-REPORT Format
 
-Each cascade execution produces a report artifact at `changes/CASCADE-REPORT-{id}.md`.
+Each `auto` or `plan-only` cascade produces `changes/CASCADE-REPORT-{CHG-ID}.md`.
 
 ```markdown
-# Cascade Report — {Change Report ID}
+# Cascade Report — {CHG-ID}
 
-> Triggered by: changes/CHANGE-REPORT-{id}.md
+> Triggered by: changes/CHANGE-REPORT-{CHG-ID}.md
 > Mode: {auto | plan-only}
 > Started: {timestamp}
 > Completed: {timestamp | "INCOMPLETE"}
@@ -216,8 +214,9 @@ Each cascade execution produces a report artifact at `changes/CASCADE-REPORT-{id
 | Step | Skill | Scope | Status | Duration | Notes |
 |------|-------|-------|--------|----------|-------|
 | 1 | sdd-spec-auditor | focused | PASS | 45s | 3 documents audited |
-| 2 | sdd-plan-architect | FASE-1,5 | PASS | 120s | 2 FASEs regenerated |
-| 3 | sdd-task-generator | FASE-1 | FAIL | 60s | Error: missing dependency |
+| 2 | sdd-test-planner (Mode 4) | UC-004, UC-007 | PASS | 40s | 1 coverage gap |
+| 3 | sdd-plan-architect | FASE-1,5 | PASS | 120s | 2 FASEs regenerated |
+| 4 | sdd-task-generator | FASE-1 | FAIL | 60s | Error: missing dependency |
 
 ## Pipeline State After Cascade
 
@@ -231,7 +230,7 @@ Each cascade execution produces a report artifact at `changes/CASCADE-REPORT-{id
 ### Report Conventions
 
 - One CASCADE-REPORT per cascade execution.
-- The `{id}` matches the Change Report ID that triggered the cascade.
+- `{CHG-ID}` is the ID of the Change Report that triggered the cascade.
 - If the same change triggers multiple cascades (e.g., after a fix), append a suffix: `CASCADE-REPORT-CHG-2025-01-15-001-r2.md`.
 - `COMPLETE` status means all planned steps finished successfully.
 - `PARTIAL` status includes the step number where failure occurred.
@@ -319,8 +318,8 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `specifications-engineer` | `use_cases`, `workflows`, `api_contracts`, `bdd_scenarios`, `invariants`, `adrs` |
 | `spec-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `gate_result` |
 | `test-planner` | `bdd_scenarios`, `test_matrices`, `perf_scenarios`, `invariants_mapped`, `test_gaps` |
-| `plan-architect` | `total_fases`, `components`, `adrs_created` |
-| `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert` |
+| `plan-architect` | `total_fases`, `components`, `adrs_created`, `plan_chars`, `plan_budget_chars` |
+| `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert`, `migration_revert`, `config_revert` |
 | `task-implementer` | `tasks_completed`, `tasks_remaining`, `commits`, `tests_passed`, `tests_failed` |
 | `security-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `owasp_coverage` |
 | `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |

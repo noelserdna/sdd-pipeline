@@ -76,6 +76,8 @@ which is what makes it deterministic. Do it whenever the threshold is met, and a
 
 ## Execution Flow
 
+The gate questions below are mirrored in the Gate table of `skills/sdd-lead/SKILL.md` (multi-session); change both together.
+
 ### Phase 0: Understand the Project
 
 1. **Read `pipeline-state.json`** if it exists — determine where to resume

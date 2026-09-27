@@ -77,11 +77,11 @@ Use body for:
 ```
 feat(auth): add rate limiting middleware
 
-Implement token bucket algorithm backed by the cache store (ADR-025).
+Implement token bucket algorithm backed by the cache store (ADR-007).
 Burst: 100 req/min/session, Sustained: 1000 req/h/user.
 Returns 429 with Retry-After header per RN-289.
 
-Refs: FASE-0, ADR-025, INV-SEC-003
+Refs: FASE-0, ADR-007, INV-SEC-003
 Task: TASK-F0-012
 ```
 

@@ -1,22 +1,15 @@
 # Execution Protocol: Index, Budgets, Fan-out by FASE
 
-> Profile that motivated this (`docs/perfilado.md`, `docs/medidas.md`): the 2026-08-27 smoke run generated 58 tasks
-> across 3 FASEs in **14 min** in a single thread. Writing `task/TASK-FASE-{N}.md` is mechanical (decompose a plan
-> into atomic tasks, one commit each) and the files are independent: no FASE file references another FASE file.
-> Target: wall-clock ≈ the slowest FASE + consolidation, main-thread plan context ≤ ~25 k tokens.
+Writing `task/TASK-FASE-{N}.md` is mechanical and the files are independent (no FASE file references another), so
+the work fans out by FASE. Target: wall-clock ≈ the slowest FASE + consolidation, main-thread plan context ≤ ~25 k tokens.
 
 ## 0. Fan-out is part of this skill's contract
 
-Launching one task agent per FASE is **the requested behaviour of `/sdd-task-generator`** above the threshold, not an
-optional expansion of scope: invoking this skill on a plan with several FASEs *is* the explicit request for them. Each
-agent is bounded to one FASE, writes exactly one file (`task/TASK-FASE-{N}.md`, no other agent writes it), reads only
-its own FASE's plan artifacts, does not nest, does not commit, does not touch `spec/`, `plan/` or `pipeline-state.json`.
-They cost less wall-clock than the single-thread generation they replace. **Do not downgrade to sequential out of
-caution.** Downgrade only for one of the reasons in §1, and always record the reason in `metrics.mode` and in
-`summary.highlights`.
-
-The same fix applied to `sdd-spec-auditor` in 4.0.3 (`docs/medidas.md`): the audit that ran sequentially "because the
-session guidance forbids spawning subagents without an explicit request" took 11 min; with fan-out it took 5 min.
+Launching one task agent per FASE is the requested behaviour of `/sdd-task-generator` above the threshold, not an
+optional expansion of scope. Each agent is bounded to one FASE, writes exactly one file (`task/TASK-FASE-{N}.md`, no
+other agent writes it), reads only its own FASE's plan artifacts, does not nest, does not commit, and does not touch
+`spec/`, `plan/` or `pipeline-state.json`. Downgrade to sequential only for a reason in §1, and record it in
+`metrics.mode` and `summary.highlights`.
 
 ## 1. Choose the mode (Phase 0, before opening any plan file)
 
