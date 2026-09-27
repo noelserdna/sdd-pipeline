@@ -1,6 +1,6 @@
 ---
 name: sdd-acceptance
-description: "Acceptance per requirement: captures test results, builds the verdict ledger (VERIFIED, FAILING, MISSING, WAIVED) with its evidence, checks ID-chain integrity, loops until every Must is met, gates the sign-off. Triggers: 'acceptance', 'are all requirements done', 'did we reach the goal', 'sign-off', 'check traceability', 'broken links', 'aceptación', 'verificar requisitos', 'cerrar entrega'."
+description: "Acceptance per requirement: tests to verdicts (VERIFIED, FAILING, MISSING, WAIVED) with evidence, ID-chain integrity (broken or dangling references), loop until every Must is met, customer sign-off, shareable status page. Triggers: 'acceptance', 'did we reach the goal', 'sign-off', 'broken references', 'status page', 'aceptación', 'verificar requisitos', 'página de estado', 'cerrar entrega'."
 hooks:
   Stop:
     - type: prompt

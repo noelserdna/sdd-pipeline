@@ -1,6 +1,6 @@
 ---
 name: sdd-requirements-engineer
-description: "Requirements engineering (SWEBOK v4): capture customer needs verbatim, write EARS requirements with reviewed examples, verification and priority, audit quality, approve with a git tag. Triggers: 'gather requirements', 'customer needs', 'write requirements', 'audit requirements', 'user stories', 'acceptance criteria', 'approve requirements', 'necesidades del cliente', 'aprobar requisitos'."
+description: "Requirements: capture customer needs verbatim, write EARS requirements with reviewed examples, verification and priority, review and audit requirement quality (vague, untestable), approve with a git tag. Triggers: 'gather requirements', 'customer needs', 'review requirements', 'audit requirements', 'acceptance criteria', 'approve requirements', 'revisar requisitos', 'necesidades del cliente'."
 ---
 
 # Requirements Engineer (SWEBOK v4)
