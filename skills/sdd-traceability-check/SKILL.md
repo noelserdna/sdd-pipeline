@@ -29,14 +29,14 @@ Scan the following files using the patterns from `references/traceability-patter
 | ID Type | Source Files | Pattern |
 |---------|-------------|---------|
 | REQ | `requirements/REQUIREMENTS.md` | `REQ-(\d{3,4})` or `REQ-([A-Z]{1,4})-(\d{3,4})` |
-| UC | `spec/use-cases.md` | `UC-(\d{3,4})` |
-| WF | `spec/workflows.md` | `WF-(\d{3,4})` |
-| API | `spec/contracts.md` | `API-(\d{3,4})` or `API-([a-z][a-z0-9-]+)` |
-| BDD | `spec/use-cases.md`, `test/` | `BDD-(\d{3,4})` |
-| INV | `spec/domain-model.md`, `spec/invariants.md` | `INV-(\d{3,4})` or `INV-([A-Z]{2,6})-(\d{3,4})` |
-| ADR | `spec/adr/ADR-*.md` | `ADR-(\d{3,4})` |
-| NFR | `spec/nfr.md` | `NFR-(\d{3,4})` |
-| RN | `spec/release-notes.md` | `RN-(\d{3,4})` |
+| UC | `spec/use-cases/UC-NNN-*.md` | `UC-(\d{3,4})` |
+| WF | `spec/workflows/WF-NNN-*.md` | `WF-(\d{3,4})` |
+| API | `spec/contracts/API-*.md` (file = contract, table rows = operations) | `API-([A-Za-z][A-Za-z0-9-]+)` or `API-(\d{3,4})-(\d{2})` |
+| BDD | `spec/tests/BDD-UC-NNN.md` (scenarios `AC-NNN-NN` inside), `test/` | `BDD-UC-(\d{3,4})` |
+| INV | `spec/domain/05-INVARIANTS.md` | `INV-(\d{3,4})` or `INV-([A-Z]{2,6})-(\d{3,4})` |
+| ADR | `spec/adr/ADR-NNN-*.md` | `ADR-(\d{3,4})` |
+| NFR | `spec/nfr/*.md` | `NFR-(\d{3,4})` |
+| RN (business rule, *regla de negocio*) | `spec/CLARIFICATIONS.md`, `spec/domain/*.md` | `RN-(\d{3,4})` |
 
 Build a set of **defined IDs** per type. Note that IDs may include scoped prefixes (e.g., `INV-SRV-001`, `REQ-EXT-002`).
 
@@ -92,9 +92,11 @@ Verify the TASK → COMMIT link in the extended traceability chain.
 
 2. **Extract commits with `Refs:` and `Task:` trailers** (single call with null-byte delimiters):
    ```bash
-   git log HEAD --name-only --format='%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly)---COMMIT-END---' | head -5000
+   git log HEAD --name-only --format='---SDD-COMMIT---%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly,separator=%x2C)%x00%(trailers:key=Task,valueonly,separator=%x2C)'
    ```
-   Parse by splitting on `---COMMIT-END---`, then split header on `\x00`. Files follow on separate lines after the header.
+   Split on `---SDD-COMMIT---` (it starts each record, because `--name-only` prints a commit's files after its
+   header), then split the first line of each record on `\x00`: SHA, short SHA, subject, author, date, Refs, Task
+   (several trailer values arrive comma-joined). The remaining non-empty lines are that commit's files.
 
 3. **Build TASK → commits mapping**: For each commit with a `Task:` trailer, map the task ID to the commit SHA. A task may have multiple commits (e.g., if amended or reworked).
 
@@ -192,12 +194,12 @@ IF `dashboard/traceability-graph.json` exists AND contains a `codeIntelligence` 
 ### Orphaned Definitions (defined but never referenced)
 | ID | Defined In | Type |
 |----|-----------|------|
-| INV-005 | spec/domain-model.md:42 | Invariant |
+| INV-005 | spec/domain/05-INVARIANTS.md:42 | Invariant |
 
 ### Broken References (referenced but never defined)
 | ID | Referenced In | Type |
 |----|--------------|------|
-| UC-099 | spec/workflows.md:15 | Use Case |
+| UC-099 | spec/workflows/WF-002-checkout.md:15 | Use Case |
 
 ### Commit Traceability
 - Tasks with commits: X/Y (Z%)

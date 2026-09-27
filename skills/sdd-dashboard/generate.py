@@ -18,6 +18,7 @@ import sys
 import argparse
 import subprocess
 import tempfile
+from html import escape as html_escape
 from datetime import datetime, timezone
 from collections import OrderedDict
 
@@ -360,16 +361,17 @@ def normalize_id(id_str):
     return id_str.strip()
 
 
-# Pattern for range references: "REQ-F-007 a REQ-F-019", "UC-001..UC-005", "INV-SEC-001..007"
-# Captures: PREFIX-CAT-START {separator} PREFIX-CAT-END  or  PREFIX-CAT-START..END
-# Note: category segment uses [A-Z0-9]+ to support TASK-F1, TASK-F2, etc.
-_RANGE_PATTERN_FULL = re.compile(
-    r'((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)'  # prefix with optional category (e.g., -SRV-, -F1-, -EXT-)
-    r'(\d{3,4})'                                                     # start number
-    r'\s*(?:\.\.|\ba\b|\bhasta\b|\bal\b|–|—|-\s+)'                  # separator: .., a, hasta, al, en-dash, em-dash
-    r'\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)?'  # optional repeated prefix
-    r'(\d{3,4})',                                                     # end number
-    re.IGNORECASE
+# Range references: "REQ-F-007 a REQ-F-019", "del REQ-F-001 al REQ-F-005", "UC-001 – UC-005", "UC-001..UC-005",
+# "INV-SEC-001..007". Every separator except ".." needs the prefix repeated on the end ID: otherwise prose such as
+# "NFR-001 — 150 ms p95" or "REQ-F-001 - 120 req/s" would expand into 150/120 invented IDs.
+_RANGE_PREFIX = r'(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-'
+_RANGE_DOTDOT = re.compile(
+    r'(?P<p>' + _RANGE_PREFIX + r')(?P<s>\d{3,4})\s*\.\.\s*(?:(?P=p))?(?P<e>\d{3,4})(?![\d])',
+    re.IGNORECASE,
+)
+_RANGE_WORD = re.compile(
+    r'(?P<p>' + _RANGE_PREFIX + r')(?P<s>\d{3,4})\s*(?:\ba\b|\bhasta\b|\bal\b|\bto\b|–|—|-)\s*(?P=p)(?P<e>\d{3,4})(?![\d])',
+    re.IGNORECASE,
 )
 
 
@@ -377,28 +379,160 @@ def expand_ranges(line):
     """Expand range notation in a line to individual IDs.
 
     Supports:
-    - Spanish:  REQ-F-007 a REQ-F-019, del REQ-F-001 al REQ-F-005
-    - Dot-dot:  UC-001..UC-005, INV-SEC-001..007
-    - Dash:     UC-001 – UC-005 (en-dash/em-dash)
+    - Spanish/English: REQ-F-007 a REQ-F-019, del REQ-F-001 al REQ-F-005, UC-001 to UC-005
+    - Dash:            UC-001 – UC-005, UC-001 - UC-005 (end ID must repeat the prefix)
+    - Dot-dot:         UC-001..UC-005, INV-SEC-001..007 (bare end number allowed)
 
     Returns the line with ranges replaced by comma-separated individual IDs.
     """
     def _replace(m):
-        prefix = m.group(1)  # e.g. "REQ-F-" or "UC-"
-        start = int(m.group(2))
-        end = int(m.group(3))
-        if end < start or (end - start) > 200:  # sanity limit
+        prefix = m.group("p")  # e.g. "REQ-F-" or "UC-"
+        start = int(m.group("s"))
+        end = int(m.group("e"))
+        if end <= start or (end - start) > 200:  # sanity limit
             return m.group(0)
-        width = len(m.group(2))  # preserve zero-padding
-        ids = [f"{prefix}{str(i).zfill(width)}" for i in range(start, end + 1)]
-        return ", ".join(ids)
+        width = len(m.group("s"))  # preserve zero-padding
+        return ", ".join(f"{prefix}{str(i).zfill(width)}" for i in range(start, end + 1))
 
-    return _RANGE_PATTERN_FULL.sub(_replace, line)
+    return _RANGE_WORD.sub(_replace, _RANGE_DOTDOT.sub(_replace, line))
+
+
+def is_plausible_ref(rid, defined_ids):
+    """A reference needs a digit (REQ-F-001, API-001-01, BDD-UC-001-01) unless it names a defined artifact.
+
+    Named IDs without digits (API-tasks, BDD-extraction) are valid only when some file defines them;
+    otherwise they are prose ("BDD-style", "API-first") and would show up as broken references.
+    """
+    return any(ch.isdigit() for ch in rid) or rid in defined_ids
 
 
 def _rel_path(filepath, project_dir):
     """Convert an absolute path to a project-relative path with forward slashes."""
     return os.path.relpath(filepath, project_dir).replace("\\", "/")
+
+
+# ──────────────────────────────────────────────────────────
+# SDD Stack Profile (code/test paths)
+# ──────────────────────────────────────────────────────────
+
+# Source extensions scanned for Refs: comments (code and tests).
+SOURCE_EXTENSIONS = {
+    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte",
+    ".py", ".rb", ".go", ".rs", ".java", ".kt", ".kts", ".scala", ".cs", ".php",
+    ".swift", ".ex", ".exs", ".erl", ".c", ".h", ".cc", ".cpp", ".hpp", ".dart", ".lua",
+}
+
+# File names that mark a test file (used when a test path is also a code path, e.g. Next.js src/).
+TEST_FILE_RE = re.compile(
+    r'(?:\.(?:test|spec|e2e|pw)\.[a-z0-9]+$|_test\.[a-z0-9]+$|_spec\.rb$|(?:^|/)test_[^/]+\.py$|(?:^|/)Test[^/]*\.(?:java|kt|cs)$)'
+)
+
+DEFAULT_CODE_PATHS = ["src"]
+DEFAULT_TEST_PATHS = ["tests"]
+
+
+def read_stack_profile(project_dir):
+    """Return the `- key: value` pairs of the `## SDD Stack Profile` section of the root CLAUDE.md.
+
+    Same parsing as skills/sdd-task-implementer/references/stack-profile.md: lines inside code fences do not count,
+    the section ends at the next level-1/level-2 heading, text after whitespace + `#` is a comment.
+    Returns {} when there is no profile.
+    """
+    path = os.path.join(project_dir, "CLAUDE.md")
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    profile = {}
+    in_fence = False
+    in_section = False
+    for line in lines:
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if line.startswith("# ") or line.startswith("## "):
+            in_section = line.rstrip() == "## SDD Stack Profile"
+            continue
+        if not in_section:
+            continue
+        m = re.match(r'^- ([a-z_]+):\s*(.*)$', line)
+        if m:
+            profile[m.group(1)] = re.sub(r'\s+#.*$', '', m.group(2)).strip()
+    return profile
+
+
+def _clean_rel_dir(value):
+    value = value.strip().replace("\\", "/")
+    if not value:
+        return None
+    while value.startswith("./"):
+        value = value[2:]
+    value = value.rstrip("/")
+    if value.startswith("/") or ".." in value.split("/"):
+        return None
+    return value or "."
+
+
+def resolve_scan_paths(project_dir):
+    """Code and test paths from the SDD Stack Profile (`code_paths`/`test_paths`), defaults src / tests.
+
+    Returns (code_paths, test_paths, declared). `declared` is False when CLAUDE.md has no profile paths:
+    the scanners then also look at the legacy locations (test/, */tests/, e2e/) so older projects keep working.
+    """
+    profile = read_stack_profile(project_dir)
+
+    def _paths(key, default):
+        raw = profile.get(key, "")
+        paths = [p for p in (_clean_rel_dir(x) for x in raw.split(",")) if p and "{" not in p]
+        return (paths, True) if paths else (list(default), False)
+
+    code_paths, code_declared = _paths("code_paths", DEFAULT_CODE_PATHS)
+    test_paths, test_declared = _paths("test_paths", DEFAULT_TEST_PATHS)
+    return code_paths, test_paths, (code_declared or test_declared)
+
+
+def _under(rel, base):
+    return base == "." or rel == base or rel.startswith(base + "/")
+
+
+def is_test_path(rel, code_paths, test_paths):
+    """True when a repo-relative file is a test: under a test path, and — when that test path is also
+    covered by a code path (Next.js keeps tests next to code in src/) — named like a test."""
+    for tp in test_paths:
+        if not _under(rel, tp):
+            continue
+        overlaps = any(_under(tp, cp) or _under(cp, tp) for cp in code_paths)
+        if not overlaps or TEST_FILE_RE.search(rel):
+            return True
+    return False
+
+
+def is_code_path(rel, code_paths, test_paths):
+    """True when a repo-relative file is implementation code (under a code path and not a test)."""
+    return any(_under(rel, cp) for cp in code_paths) and not is_test_path(rel, code_paths, test_paths)
+
+
+def _walk_source_files(project_dir, bases):
+    """Yield (abs_path, rel_path) for source files under the given repo-relative directories (no duplicates)."""
+    seen = set()
+    for base in bases:
+        root_dir = project_dir if base == "." else os.path.join(project_dir, base)
+        if not os.path.isdir(root_dir):
+            continue
+        for root, dirs, filenames in os.walk(root_dir):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
+            for fname in filenames:
+                if os.path.splitext(fname)[1].lower() not in SOURCE_EXTENSIONS:
+                    continue
+                fpath = os.path.join(root, fname)
+                frel = _rel_path(fpath, project_dir)
+                if frel in seen:
+                    continue
+                seen.add(frel)
+                yield fpath, frel
 
 
 # ──────────────────────────────────────────────────────────
@@ -485,10 +619,12 @@ def scan_files(project_dir):
         # Scan line by line
         # Track which IDs are defined in this file (for reference context)
         file_context_ids = []
+        current_section = None  # nearest heading without an artifact ID (used to classify REQs)
 
         for line_idx, line in enumerate(lines):
             line_num = line_idx + 1
             line_stripped = line.rstrip()
+            defined_here = False
 
             # 1. Check heading-based definitions
             for dtype, dpat in DEF_PATTERNS:
@@ -512,8 +648,15 @@ def scan_files(project_dir):
                             "priority": priority,
                             "stage": TYPE_TO_STAGE.get(dtype, "unknown"),
                         }
+                        if dtype == "REQ" and current_section:
+                            artifacts[did]["section"] = current_section
                     file_context_ids.append(did)
+                    defined_here = True
                     break  # only match first pattern per line
+            if not defined_here:
+                hm = re.match(r'^#{1,4}\s+(.+?)\s*#*\s*$', line_stripped)
+                if hm:
+                    current_section = hm.group(1)
 
             # 2. Check table-based definitions
             for ttype, tpat in TABLE_DEF_PATTERNS:
@@ -537,6 +680,8 @@ def scan_files(project_dir):
                             "priority": None,
                             "stage": TYPE_TO_STAGE.get(ttype, "unknown"),
                         }
+                        if ttype == "REQ" and current_section:
+                            artifacts[tid]["section"] = current_section
 
             # 3. Extract all references on this line (expand ranges first)
             ref_ids = set()
@@ -595,14 +740,22 @@ SKIP_FILE_PATTERNS = [
 ]
 
 
-def _is_source_file(filepath):
-    """Return True if file is likely a source/test file (not config/utility)."""
+# Legacy source-like directories, used only when the project declares no Stack Profile paths.
+LEGACY_SOURCE_DIRS = ("src", "lib", "app", "tests", "test", "pkg", "cmd", "internal")
+
+
+def _is_source_file(filepath, scan_dirs=None):
+    """Return True if file is a code/test file (not config/utility).
+
+    scan_dirs: repo-relative code+test paths from the SDD Stack Profile; None → legacy directories anywhere
+    in the path.
+    """
     for pat in SKIP_FILE_PATTERNS:
         if pat.search(filepath):
             return False
-    # Must be under a source-like directory
-    src_prefixes = ("src/", "lib/", "app/", "tests/", "test/", "pkg/", "cmd/", "internal/")
-    return any(filepath.startswith(p) or ("/" + p) in filepath for p in src_prefixes)
+    if scan_dirs is not None:
+        return any(_under(filepath, d) for d in scan_dirs)
+    return any(filepath.startswith(p + "/") or ("/" + p + "/") in filepath for p in LEGACY_SOURCE_DIRS)
 
 
 def _parse_validated_refs(raw_refs_str):
@@ -633,15 +786,17 @@ def scan_commits(project_dir):
         print("  Git not available — skipping commit scan.")
         return []
 
-    # Single git log call: null-byte delimiters (Step 0.1), trailer extraction (Step 0.2),
-    # --name-only for file lists (Step 1.1)
-    COMMIT_DELIM = "---COMMIT-END---"
+    # Single git log call. The delimiter goes at the START of each record: with --name-only git prints the files
+    # after the formatted header, so a trailing delimiter would leave each commit's files at the head of the next
+    # chunk. Trailer values are joined with a comma (separator=%x2C) so they never add a newline to the header.
+    COMMIT_DELIM = "---SDD-COMMIT---"
+    fmt = (
+        f"--format={COMMIT_DELIM}%H%x00%h%x00%s%x00%an%x00%aI%x00"
+        "%(trailers:key=Refs,valueonly,separator=%x2C)%x00%(trailers:key=Task,valueonly,separator=%x2C)"
+    )
     try:
         result = subprocess.run(
-            [
-                "git", "log", "--all", "--name-only",
-                f"--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%(trailers:key=Refs,valueonly)%x00%(trailers:key=Task,valueonly){COMMIT_DELIM}"
-            ],
+            ["git", "log", "--all", "--name-only", fmt],
             capture_output=True, text=True, cwd=project_dir, timeout=60
         )
         if result.returncode != 0:
@@ -653,41 +808,20 @@ def scan_commits(project_dir):
 
     commits = []
     for chunk in result.stdout.split(COMMIT_DELIM):
-        chunk = chunk.strip()
-        if not chunk:
+        if not chunk.strip():
             continue
         lines = chunk.split("\n")
-        if not lines or not lines[0]:
+        header = lines[0].split("\x00")
+        if len(header) < 7:
             continue
 
-        header = lines[0].split("\x00", 6)
-        if len(header) < 5:
-            continue
-
-        full_sha = header[0]
-        short_sha = header[1]
-        subject = header[2]
-        author = header[3]
-        date = header[4]
-        trailer_refs = header[5].strip() if len(header) > 5 else ""
-        trailer_task = header[6].strip() if len(header) > 6 else ""
-
-        # Parse and validate ref IDs (Step 0.3)
-        ref_ids = _parse_validated_refs(trailer_refs)
-
-        # Parse Task: trailer — validate format
-        task_id = None
-        if trailer_task:
-            task_match = re.match(r'^(TASK-F\d{1,2}-\d{3,4})\s*$', trailer_task)
-            if task_match:
-                task_id = task_match.group(1)
+        full_sha, short_sha, subject, author, date = header[:5]
+        ref_ids = _parse_validated_refs(header[5])
+        task_id = _first_task_id(header[6])
 
         # Skip commits without any trailer data
         if not ref_ids and not task_id:
             continue
-
-        # Extract changed files from remaining lines
-        files = [f.strip() for f in lines[1:] if f.strip()]
 
         commits.append({
             "sha": short_sha,
@@ -697,7 +831,7 @@ def scan_commits(project_dir):
             "date": date,
             "taskId": task_id,
             "refIds": ref_ids,
-            "files": files,
+            "files": [f.strip() for f in lines[1:] if f.strip()],
         })
 
     # Fallback: if %(trailers:...) found nothing, scan commit body for Refs:/Task: lines.
@@ -711,19 +845,35 @@ def scan_commits(project_dir):
     return commits
 
 
+_TASK_ID_RE = re.compile(r'^TASK-F\d{1,2}-\d{3,4}$')
+
+
+def _first_task_id(raw):
+    """First valid TASK-Fn-NNN in a comma-separated Task: trailer value, or None."""
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if _TASK_ID_RE.match(part):
+            return part
+    return None
+
+
 # Regex for extracting Refs: and Task: from commit body text
-_BODY_REFS_RE = re.compile(r'(?:^|\n)\s*Refs:\s*(.+)', re.MULTILINE)
-_BODY_TASK_RE = re.compile(r'(?:^|\n)\s*Task:\s*(TASK-F\d{1,2}-\d{3,4})\s*$', re.MULTILINE)
+_BODY_REFS_RE = re.compile(r'^\s*Refs:\s*(.+)$', re.MULTILINE)
+_BODY_TASK_RE = re.compile(r'^\s*Task:\s*(TASK-F\d{1,2}-\d{3,4})\s*$', re.MULTILINE)
 
 
 def _scan_commits_body_fallback(project_dir):
-    """Fallback commit scan: search body text for Refs:/Task: patterns via --grep."""
-    COMMIT_DELIM = "---COMMIT-BODY-END---"
+    """Fallback commit scan: search body text for Refs:/Task: patterns via --grep.
+
+    Record layout: DELIM header fields NUL-separated, then the body, then a NUL; the --name-only file list
+    follows the NUL, so body lines are never mistaken for files.
+    """
+    COMMIT_DELIM = "---SDD-COMMIT-BODY---"
     try:
         result = subprocess.run(
             [
-                "git", "log", "--all", "--name-only", "--grep=Refs:",
-                f"--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%b{COMMIT_DELIM}"
+                "git", "log", "--all", "--name-only", "--grep=Refs:", "--grep=Task:",
+                f"--format={COMMIT_DELIM}%H%x00%h%x00%s%x00%an%x00%aI%x00%b%x00"
             ],
             capture_output=True, text=True, cwd=project_dir, timeout=60
         )
@@ -734,130 +884,133 @@ def _scan_commits_body_fallback(project_dir):
 
     commits = []
     for chunk in result.stdout.split(COMMIT_DELIM):
-        chunk = chunk.strip()
-        if not chunk:
+        if not chunk.strip():
             continue
-
-        # Split only on first 5 null bytes — body (%b) is in the 6th field and may contain newlines
-        parts = chunk.split("\x00", 5)
-        if len(parts) < 5:
+        parts = chunk.split("\x00")
+        if len(parts) < 7:
             continue
+        full_sha, short_sha, subject, author, date, body = parts[:6]
+        files_text = "\x00".join(parts[6:])
 
-        full_sha = parts[0].strip()
-        short_sha = parts[1]
-        subject = parts[2]
-        author = parts[3]
-        date = parts[4]
-        body_and_files = parts[5] if len(parts) > 5 else ""
-
-        # Body and files are mixed — split by COMMIT_DELIM remnants then by blank lines
-        # Files come after body, separated by newlines from --name-only
-        body_text = body_and_files
-
-        # Extract Refs: from body
-        refs_match = _BODY_REFS_RE.search(body_text)
+        refs_match = _BODY_REFS_RE.search(body)
         ref_ids = _parse_validated_refs(refs_match.group(1)) if refs_match else []
-
-        # Extract Task: from body
-        task_match = _BODY_TASK_RE.search(body_text)
+        task_match = _BODY_TASK_RE.search(body)
         task_id = task_match.group(1) if task_match else None
-
         if not ref_ids and not task_id:
             continue
 
-        # Extract file paths — lines after the body that look like file paths
-        all_lines = body_and_files.split("\n")
-        files = [f.strip() for f in all_lines if f.strip() and "/" in f.strip() and not f.strip().startswith("Refs:") and not f.strip().startswith("Task:")]
-
         commits.append({
             "sha": short_sha,
-            "fullSha": full_sha,
+            "fullSha": full_sha.strip(),
             "message": subject,
             "author": author,
             "date": date,
             "taskId": task_id,
             "refIds": ref_ids,
-            "files": files,
+            "files": [f.strip() for f in files_text.split("\n") if f.strip()],
         })
 
     print(f"  Body fallback found {len(commits)} commits")
     return commits
 
 
-def _build_rename_map(project_dir, source_files):
-    """Build a mapping from old file paths to their current names using git log --follow.
+def _build_rename_map(project_dir, old_paths):
+    """Map old file paths to their current names, following rename chains.
 
-    For each source file, checks if it was renamed at some point. Returns a dict
-    mapping old_path -> current_path for files that have been renamed.
+    One `git log -M --diff-filter=R` over the whole history instead of a `git log --follow` per file.
+    Only paths in old_paths are resolved. Returns {old_path: current_path}.
     """
-    rename_map = {}  # old_path -> current_path
-    if not source_files:
-        return rename_map
+    if not old_paths:
+        return {}
+    try:
+        result = subprocess.run(
+            ["git", "log", "--all", "-M", "--diff-filter=R", "--name-status", "--format="],
+            capture_output=True, text=True, cwd=project_dir, timeout=60
+        )
+        if result.returncode != 0:
+            return {}
+    except Exception:
+        return {}
 
-    for current_file in source_files:
-        try:
-            result = subprocess.run(
-                [
-                    "git", "log", "--follow", "--diff-filter=R",
-                    "--name-status", "--format=",
-                    "--", current_file,
-                ],
-                capture_output=True, text=True, cwd=project_dir, timeout=10
-            )
-            if result.returncode != 0:
-                continue
-            # Parse rename entries: lines like "R100\told_path\tnew_path"
-            for line in result.stdout.strip().split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split("\t")
-                if len(parts) >= 3 and parts[0].startswith("R"):
-                    old_path = parts[1].replace("\\", "/")
-                    new_path = parts[2].replace("\\", "/")
-                    rename_map[old_path] = new_path
-        except Exception:
-            continue
+    # git log lists newest first; keep the newest rename of each source path.
+    step = {}
+    for line in result.stdout.splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R"):
+            old_path = parts[1].replace("\\", "/")
+            new_path = parts[2].replace("\\", "/")
+            step.setdefault(old_path, new_path)
 
+    rename_map = {}
+    for old_path in old_paths:
+        current, hops = old_path, 0
+        while current in step and hops < 20:
+            current, hops = step[current], hops + 1
+        if current != old_path and os.path.exists(os.path.join(project_dir, current)):
+            rename_map[old_path] = current
     return rename_map
 
 
-def _compute_confidence(commit_rank):
-    """Compute confidence score based on commit recency rank (0-indexed).
+# graph-schema.md: task-inferred refs have a fixed 0.5 confidence; commit/blame-inferred 0.6-0.9 by recency.
+TASK_INFERRED_CONFIDENCE = 0.5
 
-    Most recent commit (rank 0): 0.9
-    Second most recent (rank 1): 0.8
-    Third (rank 2): 0.7
-    Older (rank 3+): 0.6 (floor)
+
+def _compute_confidence(commit_rank, origin="commit-inferred"):
+    """Confidence of an inferred ref.
+
+    task-inferred: 0.5 (only a Task: trailer, resolved through the graph).
+    commit/blame-inferred, by commit recency rank (0-indexed) among the commits touching the file:
+    0 → 0.9, 1 → 0.8, 2 → 0.7, older → 0.6 (floor).
     """
-    if commit_rank == 0:
-        return 0.9
-    elif commit_rank == 1:
-        return 0.8
-    elif commit_rank == 2:
-        return 0.7
-    else:
-        return 0.6
+    if origin == "task-inferred":
+        return TASK_INFERRED_CONFIDENCE
+    return {0: 0.9, 1: 0.8, 2: 0.7}.get(commit_rank, 0.6)
 
 
-def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project_dir=None):
+def _task_related_artifacts(task_id, incoming, outgoing, significant_types):
+    """Artifacts a TASK points at, plus the REQs those artifacts trace to.
+
+    Never walks through a FASE or a sibling TASK, and the second hop only climbs to REQs: a FASE links every
+    UC/API of the phase, and a FASE file that lists "UC-001 y UC-002" on one line links those UCs to each
+    other, so a wider walk would attach the whole phase to every file the task touched.
+    """
+    def _neighbours(node):
+        return sorted(outgoing.get(node, set()) | incoming.get(node, set()))
+
+    found = []
+    seen = {task_id}
+    first_hop = []
+    for n in _neighbours(task_id):
+        n_type = classify_id(n)
+        if n in seen or n_type in ("FASE", "TASK") or n_type not in significant_types:
+            continue
+        seen.add(n)
+        found.append(n)
+        first_hop.append(n)
+    for node in first_hop:
+        if classify_id(node) == "REQ":
+            continue
+        for n in _neighbours(node):
+            if n not in seen and classify_id(n) == "REQ":
+                seen.add(n)
+                found.append(n)
+    return found
+
+
+def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project_dir=None, scan_dirs=None):
     """Infer code references from commits with Refs:/Task: trailers (Step 1.2).
 
-    For each commit that has changed files AND trailer refs:
-    - Files from Refs: trailer → origin "commit-inferred"
-    - Files from Task: trailer (transitive via graph) → origin "task-inferred"
-    - Files tracked across renames via git log --follow → origin "blame-inferred"
+    For each commit that has changed files:
+    - IDs from the Refs: trailer → origin "commit-inferred" (confidence 0.6-0.9 by recency)
+    - IDs reached from the Task: trailer through the graph (not in Refs:) → origin "task-inferred" (0.5)
+    - Refs of files renamed since → origin "blame-inferred" on the current path
 
-    Confidence scoring (per-file, per-artifactId):
-    - Most recent commit touching the file: 0.9
-    - Second most recent: 0.8, Third: 0.7, Older: 0.6 (floor)
-
+    scan_dirs: code+test paths of the SDD Stack Profile (None → legacy source directories).
     Returns list of inferred codeRef dicts.
     """
     SIGNIFICANT_TYPES = {"UC", "INV", "API", "BDD", "REQ", "ADR", "WF"}
 
     # Phase 1: Collect per-file, per-artifactId entries with commit metadata
-    # Key: (file, artifactId) -> list of (commit, origin, task_id) sorted by date later
     file_artifact_commits = {}  # (file, artifactId) -> [(commit, origin, task_id), ...]
 
     for commit in commits:
@@ -867,96 +1020,49 @@ def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project
         ref_ids = list(commit.get("refIds", []))
         task_id = commit.get("taskId")
 
-        # If we have a taskId, BFS from the TASK node to find related artifacts
         task_inferred_ids = []
         if task_id and task_id in artifacts:
-            visited = {task_id}
-            queue = [(task_id, 0)]
-            while queue:
-                current, depth = queue.pop(0)
-                if depth > 2:
-                    continue
-                neighbors = list(outgoing.get(current, set())) + list(incoming.get(current, set()))
-                for n in neighbors:
-                    if n not in visited:
-                        visited.add(n)
-                        n_type = classify_id(n)
-                        if n_type in SIGNIFICANT_TYPES:
-                            task_inferred_ids.append(n)
-                        if depth < 2:
-                            queue.append((n, depth + 1))
+            task_inferred_ids = [
+                a for a in _task_related_artifacts(task_id, incoming, outgoing, SIGNIFICANT_TYPES)
+                if a not in ref_ids
+            ]
 
-        # Determine origin based on what we have
-        if ref_ids:
-            origin = "commit-inferred"
-        elif task_inferred_ids:
-            origin = "task-inferred"
-        else:
+        pairs = [(rid, "commit-inferred") for rid in dict.fromkeys(ref_ids)]
+        pairs += [(rid, "task-inferred") for rid in task_inferred_ids]
+        if not pairs:
             continue
 
-        # Combine all ref IDs (direct trailers + task-inferred)
-        all_ref_ids = list(set(ref_ids + task_inferred_ids))
-        if not all_ref_ids:
-            continue
-
-        # Accumulate per-file, per-artifactId entries
         for filepath in commit["files"]:
             fpath_fwd = filepath.replace("\\", "/")
-            if not _is_source_file(fpath_fwd):
+            if not _is_source_file(fpath_fwd, scan_dirs):
                 continue
-
-            for artifact_id in all_ref_ids:
-                key = (fpath_fwd, artifact_id)
-                file_artifact_commits.setdefault(key, []).append(
+            for artifact_id, origin in pairs:
+                file_artifact_commits.setdefault((fpath_fwd, artifact_id), []).append(
                     (commit, origin, task_id)
                 )
 
-    # Phase 2: Rename tracking — propagate refs from old paths to current paths
-    if project_dir:
-        # Collect all unique source files from commits
-        all_commit_files = set()
-        for commit in commits:
-            for filepath in commit.get("files", []):
-                fpath_fwd = filepath.replace("\\", "/")
-                if _is_source_file(fpath_fwd):
-                    all_commit_files.add(fpath_fwd)
-
-        # Also find currently existing source files to track renames into them
-        current_source_files = set()
-        for search_dir in ["src", "lib", "app", "tests", "test", "pkg", "cmd", "internal"]:
-            d = os.path.join(project_dir, search_dir)
-            if os.path.isdir(d):
-                for root, dirs, filenames in os.walk(d):
-                    dirs[:] = [dd for dd in dirs if dd not in SKIP_DIRS]
-                    for fname in filenames:
-                        frel = _rel_path(os.path.join(root, fname), project_dir)
-                        current_source_files.add(frel)
-
-        rename_map = _build_rename_map(project_dir, current_source_files)
+    # Phase 2: Rename tracking — propagate refs from old paths to current paths (skipped when nothing to track)
+    if project_dir and file_artifact_commits:
+        old_paths = {
+            f for (f, _aid) in file_artifact_commits
+            if not os.path.exists(os.path.join(project_dir, f))
+        }
+        rename_map = _build_rename_map(project_dir, old_paths)
 
         if rename_map:
-            # For each old_path -> new_path rename, propagate refs
             blame_additions = {}
             for old_path, new_path in rename_map.items():
-                # Find all artifact associations for the old path
-                keys_to_propagate = [
-                    (f, aid) for (f, aid) in file_artifact_commits
-                    if f == old_path
-                ]
-                for (_, artifact_id) in keys_to_propagate:
+                for (f, artifact_id) in list(file_artifact_commits):
+                    if f != old_path:
+                        continue
                     new_key = (new_path, artifact_id)
                     if new_key not in file_artifact_commits:
-                        # Propagate with blame-inferred origin
-                        old_entries = file_artifact_commits[(old_path, artifact_id)]
-                        blame_entries = []
-                        for (commit, _origin, task_id) in old_entries:
-                            blame_entries.append((commit, "blame-inferred", task_id))
-                        blame_additions[new_key] = blame_entries
-
-            # Merge blame additions into the main map
+                        blame_additions[new_key] = [
+                            (commit, "blame-inferred", task_id)
+                            for (commit, _origin, task_id) in file_artifact_commits[(old_path, artifact_id)]
+                        ]
             for key, entries in blame_additions.items():
                 file_artifact_commits.setdefault(key, []).extend(entries)
-
             if blame_additions:
                 print(f"  Rename tracking: propagated refs across {len(rename_map)} renames, {len(blame_additions)} new file-artifact pairs")
 
@@ -967,21 +1073,16 @@ def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project
     file_refs = {}  # file -> {artifactId: (confidence, origin, best_commit, task_id)}
 
     for (fpath, artifact_id), entries in file_artifact_commits.items():
-        # Sort entries by commit date descending (most recent first)
+        # Best entry: an explicit Refs: trailer beats a task-inferred link, then the most recent commit
         sorted_entries = sorted(
             entries,
-            key=lambda e: e[0].get("date", ""),
+            key=lambda e: (e[1] != "task-inferred", e[0].get("date", "")),
             reverse=True,
         )
-
-        # Best entry is the most recent
         best_commit, best_origin, best_task_id = sorted_entries[0]
-        rank = 0  # most recent for this (file, artifactId) pair
-        confidence = _compute_confidence(rank)
+        confidence = _compute_confidence(0, best_origin)
 
-        # For multi-commit: use the rank among all commits touching this file+artifact
-        # The rank is 0 for the most recent commit for THIS specific artifact
-        # But we want the rank relative to all commits for this file across all artifacts
+        # Confidence is re-ranked below against all commits touching this file
         file_refs.setdefault(fpath, {})[artifact_id] = (
             confidence, best_origin, best_commit, best_task_id
         )
@@ -1011,7 +1112,7 @@ def infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project
 
         for artifact_id, (_, best_origin, best_commit, best_task_id) in artifact_map.items():
             commit_rank = date_rank.get(best_commit["sha"], 3)
-            confidence = _compute_confidence(commit_rank)
+            confidence = _compute_confidence(commit_rank, best_origin)
 
             # Update the stored confidence
             artifact_map[artifact_id] = (
@@ -1202,472 +1303,483 @@ def apply_overrides(code_refs, overrides_path):
     return code_refs, count
 
 
-def scan_code_refs(project_dir):
-    """Scan src/ for Refs: comments linking to SDD artifacts."""
-    src_dir = os.path.join(project_dir, "src")
-    if not os.path.isdir(src_dir):
-        return [], {"totalFiles": 0, "totalSymbols": 0, "symbolsWithRefs": 0}
+# Refs in comments of any language (// # -- /* * """) and inline IDs after a comment marker
+CODE_REFS_RE = re.compile(r'Refs?:\s*((?:(?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR|FASE|TASK)[-][A-Za-z0-9-]+(?:,\s*)?)+)')
+CODE_INLINE_REF_RE = re.compile(r'(?://|#|--)\s*((?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR)[-][A-Za-z0-9-]*\d[A-Za-z0-9-]*)')
+SYMBOL_RE = re.compile(
+    r'^\s*(?:(?:export|default|async|public|private|protected|static|final|abstract|pub(?:\([a-z]+\))?)\s+)*'
+    r'(?P<kind>function\*?|class|const|let|var|interface|type|enum|def|module|func|fn|struct|trait|record)\s+'
+    r'(?:\([^)]*\)\s*)?(?:self\.)?(?P<name>[A-Za-z_]\w*[?!]?)'
+)
+SYMBOL_KIND_TYPES = {
+    "function": "function", "function*": "function", "def": "function", "func": "function", "fn": "function",
+    "class": "class", "struct": "class", "record": "class", "module": "module", "trait": "interface",
+    "interface": "interface", "type": "type", "enum": "enum", "const": "const", "let": "variable", "var": "variable",
+}
+
+
+def scan_code_refs(project_dir, scan_paths=None):
+    """Scan the code paths of the SDD Stack Profile (default src/) for Refs: comments linking to SDD artifacts.
+
+    scan_paths: (code_paths, test_paths, declared) from resolve_scan_paths(); resolved here when None.
+    Also returns the list of scanned code files as stats["files"] (popped by the caller).
+    """
+    code_paths, test_paths, _declared = scan_paths or resolve_scan_paths(project_dir)
 
     code_refs = []
-    total_files = 0
+    files = []
     total_symbols = 0
     symbols_with_refs = 0
-    extensions = {".ts", ".js", ".tsx", ".jsx"}
 
-    # Pattern for Refs: in JSDoc/inline comments
-    refs_pattern = re.compile(r'Refs?:\s*((?:(?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR|FASE|TASK)[-][A-Za-z0-9-]+(?:,\s*)?)+)')
-    inline_ref_pattern = re.compile(r'//\s*((?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR)[-][A-Za-z0-9-]+)')
-    symbol_pattern = re.compile(r'(?:export\s+)?(?:async\s+)?(?:function|class|const|let|var|interface|type|enum)\s+(\w+)')
+    for fpath, frel in _walk_source_files(project_dir, code_paths):
+        if not is_code_path(frel, code_paths, test_paths):
+            continue
+        files.append(frel)
+        try:
+            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except Exception:
+            continue
 
-    for root, dirs, filenames in os.walk(src_dir):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for fname in filenames:
-            ext = os.path.splitext(fname)[1].lower()
-            if ext not in extensions:
+        file_symbols = []
+        for i, line in enumerate(lines):
+            sm = SYMBOL_RE.search(line)
+            if sm:
+                file_symbols.append((i, sm.group("name"), SYMBOL_KIND_TYPES.get(sm.group("kind"), "variable")))
+                total_symbols += 1
+
+        for i, line in enumerate(lines):
+            ref_ids = []
+            rm = CODE_REFS_RE.search(line)
+            if rm:
+                ref_ids = [r.strip() for r in re.split(r'[,\s]+', rm.group(1)) if r.strip() and classify_id(r.strip())]
+            else:
+                im = CODE_INLINE_REF_RE.search(line)
+                if im:
+                    ref_ids = [im.group(1)]
+            if not ref_ids:
                 continue
-            total_files += 1
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                    lines = f.readlines()
-            except Exception:
-                continue
 
-            frel = _rel_path(fpath, project_dir)
-            # Count symbols in file
-            file_symbols = []
-            for i, line in enumerate(lines):
-                sm = symbol_pattern.search(line)
-                if sm:
-                    file_symbols.append((i, sm.group(1)))
-                    total_symbols += 1
+            # First symbol on the comment line or up to 2 lines below it (doc comment above a definition),
+            # else the nearest one above (comment inside a body)
+            symbol = f"{os.path.basename(fpath)}:{i+1}"
+            symbol_type = "unknown"
+            below = [(sn, stp) for si, sn, stp in file_symbols if i <= si <= i + 2]
+            above = [(sn, stp) for si, sn, stp in file_symbols if si < i]
+            pick = below[0] if below else (above[-1] if above else None)
+            if pick:
+                symbol, symbol_type = pick
+                symbols_with_refs += 1
 
-            # Find Refs: comments
-            for i, line in enumerate(lines):
-                ref_ids = []
-                rm = refs_pattern.search(line)
-                if rm:
-                    raw = rm.group(1)
-                    ref_ids = [r.strip() for r in re.split(r'[,\s]+', raw) if r.strip() and classify_id(r.strip())]
-                else:
-                    im = inline_ref_pattern.search(line)
-                    if im:
-                        ref_ids = [im.group(1)]
+            code_refs.append({
+                "file": frel,
+                "line": i + 1,
+                "symbol": symbol,
+                "symbolType": symbol_type,
+                "refIds": ref_ids,
+                "confidence": 1.0,
+            })
 
-                if ref_ids:
-                    # Find nearest symbol
-                    symbol = f"{os.path.basename(fpath)}:{i+1}"
-                    symbol_type = "unknown"
-                    for si, sname in reversed(file_symbols):
-                        if si <= i + 2:
-                            symbol = sname
-                            # Determine type from the line
-                            sline = lines[si] if si < len(lines) else ""
-                            if "function" in sline or "async function" in sline:
-                                symbol_type = "function"
-                            elif "class " in sline:
-                                symbol_type = "class"
-                            elif "const " in sline:
-                                symbol_type = "const"
-                            elif "interface " in sline:
-                                symbol_type = "interface"
-                            elif "type " in sline:
-                                symbol_type = "type"
-                            elif "enum " in sline:
-                                symbol_type = "enum"
-                            else:
-                                symbol_type = "variable"
-                            symbols_with_refs += 1
-                            break
-
-                    code_refs.append({
-                        "file": frel,
-                        "line": i + 1,
-                        "symbol": symbol,
-                        "symbolType": symbol_type,
-                        "refIds": ref_ids,
-                        "confidence": 1.0,
-                    })
-
-    print(f"  Code: {total_files} files, {total_symbols} symbols, {symbols_with_refs} with refs, {len(code_refs)} ref comments")
+    print(f"  Code ({', '.join(code_paths)}): {len(files)} files, {total_symbols} symbols, {symbols_with_refs} with refs, {len(code_refs)} ref comments")
     return code_refs, {
-        "totalFiles": total_files,
+        "totalFiles": len(files),
         "totalSymbols": total_symbols,
         "symbolsWithRefs": symbols_with_refs,
+        "files": files,
     }
 
 
 def _discover_test_dirs(project_dir):
-    """Discover test directories: tests/, test/, and */tests/ one level deep."""
-    candidates = [
-        os.path.join(project_dir, "tests"),
-        os.path.join(project_dir, "test"),
-    ]
-    # Auto-discover */tests/ and */test/ one level deep (e.g. frontend/tests/)
+    """Legacy test directories (projects without Stack Profile paths): tests/, test/, */tests/, */test/."""
+    candidates = ["tests", "test"]
     try:
-        for entry in os.listdir(project_dir):
+        for entry in sorted(os.listdir(project_dir)):
             if entry.startswith(".") or entry in SKIP_DIRS:
                 continue
-            subdir = os.path.join(project_dir, entry)
-            if os.path.isdir(subdir):
+            if os.path.isdir(os.path.join(project_dir, entry)):
                 for tname in ("tests", "test"):
-                    tpath = os.path.join(subdir, tname)
-                    if os.path.isdir(tpath) and tpath not in candidates:
-                        candidates.append(tpath)
+                    if os.path.isdir(os.path.join(project_dir, entry, tname)):
+                        candidates.append(f"{entry}/{tname}")
     except OSError:
         pass
     return candidates
 
 
+def _discover_e2e_dirs(project_dir):
+    """e2e/, playwright/, cypress/ at the root and one level deep (acceptance suites often live outside test_paths)."""
+    found = []
+    names = ("e2e", "playwright", "cypress")
+    for edir in names:
+        if os.path.isdir(os.path.join(project_dir, edir)):
+            found.append(edir)
+    try:
+        for entry in sorted(os.listdir(project_dir)):
+            if entry.startswith(".") or entry in SKIP_DIRS or not os.path.isdir(os.path.join(project_dir, entry)):
+                continue
+            for edir in names:
+                if os.path.isdir(os.path.join(project_dir, entry, edir)):
+                    found.append(f"{entry}/{edir}")
+    except OSError:
+        pass
+    return found
+
+
 def _is_e2e_test(fpath, frel):
     """Classify a test file as E2E based on path/filename conventions."""
     lower = frel.lower().replace("\\", "/")
-    # Directory-based: e2e/, playwright/, cypress/ anywhere in path
-    if re.search(r'(?:^|/)(?:e2e|playwright|cypress)/', lower):
+    # Directory-based: e2e/, playwright/, cypress/, system/ (Rails system tests) anywhere in path
+    if re.search(r'(?:^|/)(?:e2e|playwright|cypress|system)/', lower):
         return True
-    # Filename-based: *.e2e.ts, *.e2e.js, *.pw.ts, *.spec.e2e.*
+    # Filename-based: *.e2e.ts, *.pw.ts
     base = os.path.basename(lower)
-    if re.search(r'\.e2e\.', base) or re.search(r'\.pw\.', base):
-        return True
-    return False
+    return bool(re.search(r'\.e2e\.', base) or re.search(r'\.pw\.', base))
 
 
-def scan_test_refs(project_dir):
-    """Scan tests/ for Refs: comments and test descriptions referencing SDD artifacts."""
-    test_dirs = _discover_test_dirs(project_dir)
-    # Also discover e2e-specific directories
-    for edir in ("e2e", "playwright", "cypress"):
-        epath = os.path.join(project_dir, edir)
-        if os.path.isdir(epath) and epath not in test_dirs:
-            test_dirs.append(epath)
-    # Also check */e2e/ one level deep
+def _read_quiet(path):
     try:
-        for entry in os.listdir(project_dir):
-            if entry.startswith(".") or entry in SKIP_DIRS:
-                continue
-            subdir = os.path.join(project_dir, entry)
-            if os.path.isdir(subdir):
-                for edir in ("e2e", "playwright", "cypress"):
-                    epath = os.path.join(subdir, edir)
-                    if os.path.isdir(epath) and epath not in test_dirs:
-                        test_dirs.append(epath)
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
     except OSError:
-        pass
+        return ""
+
+
+def detect_test_frameworks(project_dir):
+    """Detect JS unit/E2E frameworks from package.json files (root and the Stack Profile app_dir).
+
+    Returns {"js": <vitest|jest|mocha|None>, "e2e": <playwright|cypress|None>, "ruby": <rspec|minitest|None>}.
+    """
+    profile = read_stack_profile(project_dir)
+    app_dir = _clean_rel_dir(profile.get("app_dir", ".")) or "."
+    roots = [project_dir] if app_dir == "." else [os.path.join(project_dir, app_dir), project_dir]
+
+    deps = set()
+    for root in roots:
+        try:
+            pkg = json.loads(_read_quiet(os.path.join(root, "package.json")) or "{}")
+        except ValueError:
+            pkg = {}
+        for key in ("dependencies", "devDependencies"):
+            if isinstance(pkg.get(key), dict):
+                deps.update(pkg[key].keys())
+        for cfg in ("vitest.config.ts", "vitest.config.js", "vitest.config.mts"):
+            if os.path.exists(os.path.join(root, cfg)):
+                deps.add("vitest")
+        for cfg in ("jest.config.js", "jest.config.ts", "jest.config.cjs"):
+            if os.path.exists(os.path.join(root, cfg)):
+                deps.add("jest")
+        for cfg in ("playwright.config.ts", "playwright.config.js"):
+            if os.path.exists(os.path.join(root, cfg)):
+                deps.add("@playwright/test")
+
+    js = next((fw for fw in ("vitest", "jest", "mocha") if fw in deps), None)
+    e2e = "playwright" if ("@playwright/test" in deps or "playwright" in deps) else ("cypress" if "cypress" in deps else None)
+
+    ruby = None
+    for root in roots:
+        gemfile = _read_quiet(os.path.join(root, "Gemfile"))
+        if os.path.exists(os.path.join(root, ".rspec")) or "rspec" in gemfile:
+            ruby = "rspec"
+            break
+        if re.search(r'gem\s+["\'](?:rails|minitest)["\']', gemfile):
+            ruby = "minitest"
+            break
+    return {"js": js, "e2e": e2e, "ruby": ruby}
+
+
+def _framework_for(frel, is_e2e, frameworks):
+    """Framework of one test file from its extension and the detected frameworks; "unknown" when unsure."""
+    ext = os.path.splitext(frel)[1].lower()
+    lower = frel.lower()
+    if is_e2e:
+        if "playwright/" in lower or ".pw." in lower:
+            return "playwright"
+        if "cypress/" in lower:
+            return "cypress"
+        if ext == ".rb":
+            return "minitest" if frameworks.get("ruby") != "rspec" else "rspec"
+        return frameworks.get("e2e") or "unknown"
+    if ext == ".rb":
+        if lower.endswith("_spec.rb"):
+            return "rspec"
+        if lower.endswith("_test.rb"):
+            return "minitest"
+        return frameworks.get("ruby") or "unknown"
+    if ext == ".py":
+        return "pytest"
+    if ext == ".go":
+        return "go-test"
+    if ext in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
+        return frameworks.get("js") or "unknown"
+    return "unknown"
+
+
+_UNDERSCORE_ID_RE = re.compile(
+    r'(?<![A-Za-z0-9])(REQ|UC|WF|BDD|INV|ADR|NFR|TASK)((?:_[A-Z][A-Z0-9]*)*(?:_\d+)+)(?![A-Za-z0-9])'
+)
+
+
+def _normalize_underscored_ids(text):
+    """test_BDD_UC_001_01_x → test_BDD-UC-001-01_x (Minitest/pytest names cannot contain hyphens)."""
+    return _UNDERSCORE_ID_RE.sub(lambda m: m.group(1) + m.group(2).replace("_", "-"), text)
+
+
+TEST_BLOCK_RES = [
+    re.compile(r'^\s*(?:it|test|specify|scenario)\s*(?:\.\w+\s*)?\(?\s*[\'"`](.*?)[\'"`]'),  # JS it()/test(), RSpec/Minitest it "..." / test "..."
+    re.compile(r'^\s*(?:async\s+)?def\s+(test_?\w*)\s*[(:]?'),                        # Minitest/pytest def test_x
+    re.compile(r'^\s*func\s+(Test\w+)\s*\('),                                       # Go
+]
+DESCRIBE_RE = re.compile(r'(?:describe|context|suite)\s*\(?\s*[\'"`](.*?)[\'"`]|^\s*class\s+(\w+(?:::\w+)*)')
+
+
+def _test_name_on(line):
+    for pat in TEST_BLOCK_RES:
+        m = pat.search(line)
+        if m and m.group(1) not in ("test", "test_"):
+            return m.group(1)
+    return None
+
+
+def scan_test_refs(project_dir, scan_paths=None):
+    """Scan the test paths of the SDD Stack Profile (default tests/) for Refs: comments and test names
+    referencing SDD artifacts. Without declared paths, the legacy locations (test/, */tests/) are scanned too.
+    E2E directories (e2e/, playwright/, cypress/) are always included."""
+    code_paths, test_paths, declared = scan_paths or resolve_scan_paths(project_dir)
+    bases = list(test_paths)
+    if not declared:
+        bases += [d for d in _discover_test_dirs(project_dir) if d not in bases]
+    e2e_dirs = _discover_e2e_dirs(project_dir)
+    bases += [d for d in e2e_dirs if d not in bases]
+    frameworks = detect_test_frameworks(project_dir)
 
     test_refs = []
-    total_test_files = 0
-    total_tests = 0
-    tests_with_refs = 0
-    # Functional vs E2E breakdown
-    functional_files = 0
-    functional_tests = 0
-    functional_with_refs = 0
-    e2e_files = 0
-    e2e_tests = 0
-    e2e_with_refs = 0
-    extensions = {".ts", ".js", ".tsx", ".jsx"}
+    counts = {"files": 0, "tests": 0, "refs": 0,
+              "functionalFiles": 0, "functionalTests": 0, "functionalWithRefs": 0,
+              "e2eFiles": 0, "e2eTests": 0, "e2eWithRefs": 0}
+    declared_tests = list(test_paths) if declared else bases
 
-    refs_pattern = re.compile(r'Refs?:\s*((?:(?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR|FASE|TASK)[-][A-Za-z0-9-]+(?:,\s*)?)+)')
-    test_desc_ref_pattern = re.compile(r'(?:describe|it|test)\(\s*[\'"`](.*?(?:REQ|UC|INV|BDD|WF|API|ADR|NFR)[-][A-Za-z0-9-]+.*?)[\'"`]')
-    test_block_pattern = re.compile(r'(?:it|test)\(\s*[\'"`](.*?)[\'"`]')
-
-    for test_dir in test_dirs:
-        if not os.path.isdir(test_dir):
+    for fpath, frel in _walk_source_files(project_dir, bases):
+        # A test path shared with code (Next.js src/) only yields files named like tests
+        in_e2e_dir = any(_under(frel, d) for d in e2e_dirs)
+        if not in_e2e_dir and not is_test_path(frel, code_paths, declared_tests):
             continue
-        for root, dirs, filenames in os.walk(test_dir):
-            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-            for fname in filenames:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in extensions:
-                    continue
-                total_test_files += 1
-                fpath = os.path.join(root, fname)
-                try:
-                    with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                        lines = f.readlines()
-                except Exception:
-                    continue
-
-                frel = _rel_path(fpath, project_dir)
-                is_e2e = _is_e2e_test(fpath, frel)
-                if is_e2e:
-                    e2e_files += 1
-                else:
-                    functional_files += 1
-                current_describe = ""
-                file_tests = 0
-                file_refs = 0
-
-                for i, line in enumerate(lines):
-                    # Track describe blocks
-                    dm = re.search(r'describe\(\s*[\'"`](.*?)[\'"`]', line)
-                    if dm:
-                        current_describe = dm.group(1)
-
-                    # Count test blocks
-                    tm = test_block_pattern.search(line)
-                    if tm:
-                        total_tests += 1
-                        file_tests += 1
-
-                    # Find refs
-                    ref_ids = []
-                    rm = refs_pattern.search(line)
-                    if rm:
-                        raw = rm.group(1)
-                        ref_ids = [r.strip() for r in re.split(r'[,\s]+', raw) if r.strip() and classify_id(r.strip())]
-
-                    # Find refs in test descriptions
-                    drm = test_desc_ref_pattern.search(line)
-                    if drm:
-                        desc_text = drm.group(1)
-                        for m in REF_PATTERN.finditer(desc_text):
-                            rid = m.group(1)
-                            if rid not in ref_ids:
-                                ref_ids.append(rid)
-
-                    if ref_ids:
-                        test_name = ""
-                        tmatch = test_block_pattern.search(line)
-                        if tmatch:
-                            test_name = tmatch.group(1)
-                            if current_describe:
-                                test_name = f"{current_describe} > {test_name}"
-                        elif current_describe:
-                            test_name = current_describe
-                        else:
-                            test_name = f"{fname}:{i+1}"
-
-                        tests_with_refs += 1
-                        file_refs += 1
-                        test_refs.append({
-                            "file": frel,
-                            "line": i + 1,
-                            "testName": test_name,
-                            "framework": "playwright" if is_e2e else "vitest",
-                            "refIds": ref_ids,
-                            "testType": "e2e" if is_e2e else "functional",
-                        })
-
-                # Accumulate per-type counters
-                if is_e2e:
-                    e2e_tests += file_tests
-                    e2e_with_refs += file_refs
-                else:
-                    functional_tests += file_tests
-                    functional_with_refs += file_refs
-
-    print(f"  Tests: {total_test_files} files, {total_tests} tests, {tests_with_refs} with refs")
-    print(f"    Functional: {functional_files} files, {functional_tests} tests, {functional_with_refs} with refs")
-    print(f"    E2E:        {e2e_files} files, {e2e_tests} tests, {e2e_with_refs} with refs")
-    return test_refs, {
-        "totalTestFiles": total_test_files,
-        "totalTests": total_tests,
-        "testsWithRefs": tests_with_refs,
-        "functionalFiles": functional_files,
-        "functionalTests": functional_tests,
-        "functionalWithRefs": functional_with_refs,
-        "e2eFiles": e2e_files,
-        "e2eTests": e2e_tests,
-        "e2eWithRefs": e2e_with_refs,
-    }
-
-
-def scan_audits(project_dir):
-    """Scan audits/*.md for severity breakdown, 3C gate status, corrections, and progression."""
-    audits_dir = os.path.join(project_dir, "audits")
-    result = {
-        "auditFiles": [],
-        "latestGate": None,
-        "totalFindings": 0,
-        "bySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
-        "corrected": 0,
-        "accepted": 0,
-        "deferred": 0,
-        "progression": [],
-    }
-
-    if not os.path.isdir(audits_dir):
-        return result
-
-    md_files = sorted(
-        [f for f in os.listdir(audits_dir) if f.lower().endswith(".md")]
-    )
-    if not md_files:
-        return result
-
-    result["auditFiles"] = [f"audits/{f}" for f in md_files]
-
-    # Patterns for table rows (pipe-delimited markdown tables)
-    re_total = re.compile(
-        r'\|\s*(?:Findings in audit|Total hallazgos|Total findings)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_critical = re.compile(
-        r'\|\s*(?:Criticos|Critical|Cr[ií]ticos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_high = re.compile(
-        r'\|\s*(?:Altos|High)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_medium = re.compile(
-        r'\|\s*(?:Medios|Medium)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_low = re.compile(
-        r'\|\s*(?:Bajos|Low)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_corrected = re.compile(
-        r'\|\s*(?:Corrections applied|Correcciones aplicadas|Corrected)\s*\|\s*(\d+)\s*/?\s*\d*\s*\|', re.IGNORECASE
-    )
-    re_accepted = re.compile(
-        r'\|\s*(?:Accepted|Aceptados)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_deferred = re.compile(
-        r'\|\s*(?:Deferred|Diferidos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE
-    )
-    re_gate = re.compile(
-        r'\|\s*(?:3C Gate|3C)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE
-    )
-    # Progression table row: | vN.N | N | N | N | N | PASS/FAIL |
-    re_progression = re.compile(
-        r'\|\s*(v[\d.]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE
-    )
-
-    latest_gate = None
-    latest_total = 0
-    latest_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    latest_corrected = 0
-    latest_accepted = 0
-    latest_deferred = 0
-    progression = []
-
-    for fname in md_files:
-        fpath = os.path.join(audits_dir, fname)
         try:
             with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                content = f.read()
+                lines = f.readlines()
         except Exception:
             continue
 
-        # Extract progression table rows (most complete source)
-        prog_rows = re_progression.findall(content)
-        if prog_rows:
-            progression = []
-            for row in prog_rows:
-                progression.append({
-                    "version": row[0],
-                    "findings": int(row[1]),
-                    "fixed": int(row[2]),
-                    "accepted": int(row[3]),
-                    "deferred": int(row[4]),
-                    "gate": row[5].upper(),
-                })
+        is_e2e = _is_e2e_test(fpath, frel)
+        kind = "e2e" if is_e2e else "functional"
+        framework = _framework_for(frel, is_e2e, frameworks)
+        counts["files"] += 1
+        counts[kind + "Files"] += 1
+        current_describe = ""
+        file_tests = 0
+        file_refs = 0
 
-        # Extract summary data (latest file wins)
-        m = re_total.search(content)
-        if m:
-            latest_total = int(m.group(1))
-        m = re_critical.search(content)
-        if m:
-            latest_severity["critical"] = int(m.group(1))
-        m = re_high.search(content)
-        if m:
-            latest_severity["high"] = int(m.group(1))
-        m = re_medium.search(content)
-        if m:
-            latest_severity["medium"] = int(m.group(1))
-        m = re_low.search(content)
-        if m:
-            latest_severity["low"] = int(m.group(1))
-        m = re_corrected.search(content)
-        if m:
-            latest_corrected = int(m.group(1))
-        m = re_accepted.search(content)
-        if m:
-            latest_accepted = int(m.group(1))
-        m = re_deferred.search(content)
-        if m:
-            latest_deferred = int(m.group(1))
-        m = re_gate.search(content)
-        if m:
-            latest_gate = m.group(1).upper()
+        for i, line in enumerate(lines):
+            dm = DESCRIBE_RE.search(line)
+            describe_here = None
+            if dm:
+                describe_here = dm.group(1) or dm.group(2)
+                current_describe = describe_here or current_describe
 
-    result["latestGate"] = latest_gate
-    result["totalFindings"] = latest_total
-    result["bySeverity"] = latest_severity
-    result["corrected"] = latest_corrected
-    result["accepted"] = latest_accepted
-    result["deferred"] = latest_deferred
-    result["progression"] = progression
+            test_name = _test_name_on(line)
+            if test_name is not None:
+                file_tests += 1
 
-    sev_parts = []
-    for sev in ("critical", "high", "medium", "low"):
-        if latest_severity[sev]:
-            sev_parts.append(f"{latest_severity[sev]} {sev}")
-    sev_str = ", ".join(sev_parts) if sev_parts else "none"
-    print(f"  Audits: {len(md_files)} files, {latest_total} findings ({sev_str}), gate={latest_gate or 'N/A'}")
+            ref_ids = []
+            rm = CODE_REFS_RE.search(line)
+            if rm:
+                ref_ids = [r.strip() for r in re.split(r'[,\s]+', rm.group(1)) if r.strip() and classify_id(r.strip())]
+            for label in (test_name, describe_here):
+                if not label:
+                    continue
+                for m in REF_PATTERN.finditer(_normalize_underscored_ids(label)):
+                    if m.group(1) not in ref_ids:
+                        ref_ids.append(m.group(1))
+            if not ref_ids:
+                continue
 
+            if test_name:
+                shown = f"{current_describe} > {test_name}" if current_describe else test_name
+            else:
+                shown = current_describe or f"{os.path.basename(fpath)}:{i+1}"
+            file_refs += 1
+            test_refs.append({
+                "file": frel,
+                "line": i + 1,
+                "testName": shown,
+                "framework": framework,
+                "refIds": ref_ids,
+                "testType": kind,
+            })
+
+        counts["tests"] += file_tests
+        counts["refs"] += file_refs
+        counts[kind + "Tests"] += file_tests
+        counts[kind + "WithRefs"] += file_refs
+
+    print(f"  Tests ({', '.join(bases) or 'none'}): {counts['files']} files, {counts['tests']} tests, {counts['refs']} with refs")
+    print(f"    Functional: {counts['functionalFiles']} files, {counts['functionalTests']} tests, {counts['functionalWithRefs']} with refs")
+    print(f"    E2E:        {counts['e2eFiles']} files, {counts['e2eTests']} tests, {counts['e2eWithRefs']} with refs")
+    return test_refs, {
+        "totalTestFiles": counts["files"],
+        "totalTests": counts["tests"],
+        "testsWithRefs": counts["refs"],
+        "functionalFiles": counts["functionalFiles"],
+        "functionalTests": counts["functionalTests"],
+        "functionalWithRefs": counts["functionalWithRefs"],
+        "e2eFiles": counts["e2eFiles"],
+        "e2eTests": counts["e2eTests"],
+        "e2eWithRefs": counts["e2eWithRefs"],
+    }
+
+
+_AUDIT_ROW_RES = {
+    "total": re.compile(r'\|\s*(?:Findings in audit|Total hallazgos|Total findings)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "critical": re.compile(r'\|\s*(?:Criticos|Critical|Cr[ií]ticos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "high": re.compile(r'\|\s*(?:Altos|High)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "medium": re.compile(r'\|\s*(?:Medios|Medium)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "low": re.compile(r'\|\s*(?:Bajos|Low)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "corrected": re.compile(r'\|\s*(?:Corrections applied|Correcciones aplicadas|Corrected)\s*\|\s*(\d+)\s*/?\s*\d*\s*\|', re.IGNORECASE),
+    "accepted": re.compile(r'\|\s*(?:Accepted|Aceptados)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+    "deferred": re.compile(r'\|\s*(?:Deferred|Diferidos)\s*\|\s*(\d+)\s*\|', re.IGNORECASE),
+}
+_AUDIT_GATE_RE = re.compile(r'\|\s*(?:3C Gate|3C)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE)
+# Progression table row: | vN.N | N | N | N | N | PASS/FAIL |
+_AUDIT_PROGRESSION_RE = re.compile(
+    r'\|\s*(v[\d.]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(PASS|FAIL)\s*\|', re.IGNORECASE
+)
+
+
+def parse_audit_file(content):
+    """Summary numbers of one audit report (first matching row of each kind; None when absent)."""
+    data = {}
+    for key, pat in _AUDIT_ROW_RES.items():
+        m = pat.search(content)
+        data[key] = int(m.group(1)) if m else None
+    m = _AUDIT_GATE_RE.search(content)
+    data["gate"] = m.group(1).upper() if m else None
+    data["progression"] = [
+        {"version": r[0], "findings": int(r[1]), "fixed": int(r[2]), "accepted": int(r[3]),
+         "deferred": int(r[4]), "gate": r[5].upper()}
+        for r in _AUDIT_PROGRESSION_RE.findall(content)
+    ]
+    return data
+
+
+def _audit_summary(parsed):
+    return {
+        "latestGate": parsed["gate"],
+        "totalFindings": parsed["total"] or 0,
+        "bySeverity": {k: parsed[k] or 0 for k in ("critical", "high", "medium", "low")},
+        "corrected": parsed["corrected"] or 0,
+        "accepted": parsed["accepted"] or 0,
+        "deferred": parsed["deferred"] or 0,
+        "progression": parsed["progression"],
+    }
+
+
+def _pick_report(parsed_by_name, preferred):
+    """The report whose numbers are shown: `preferred` if it has data, else the most recently modified one."""
+    with_data = {n: d for n, d in parsed_by_name.items()
+                 if d["parsed"]["total"] is not None or any(d["parsed"][k] is not None for k in ("critical", "high", "medium", "low"))}
+    if not with_data:
+        return None
+    if preferred in with_data:
+        return preferred
+    return max(with_data, key=lambda n: (with_data[n]["mtime"], n))
+
+
+def scan_audits(project_dir):
+    """Scan audits/*.md. Each report is parsed on its own; the spec-audit numbers come only from AUDIT-*.md
+    (AUDIT-BASELINE.md when it has data, else the newest AUDIT-*.md). SECURITY-AUDIT-*.md goes to `security`;
+    other reports (gap reviews, etc.) are only listed in auditFiles."""
+    audits_dir = os.path.join(project_dir, "audits")
+    empty = _audit_summary({"gate": None, "total": None, "critical": None, "high": None, "medium": None,
+                            "low": None, "corrected": None, "accepted": None, "deferred": None, "progression": []})
+    result = dict(empty, auditFiles=[], source=None, security=None)
+
+    if not os.path.isdir(audits_dir):
+        return result
+    md_files = sorted(f for f in os.listdir(audits_dir) if f.lower().endswith(".md"))
+    if not md_files:
+        return result
+    result["auditFiles"] = [f"audits/{f}" for f in md_files]
+
+    spec_reports, security_reports = {}, {}
+    for fname in md_files:
+        upper = fname.upper()
+        if upper.startswith("AUDIT-"):
+            bucket = spec_reports
+        elif upper.startswith("SECURITY-AUDIT"):
+            bucket = security_reports
+        else:
+            continue
+        fpath = os.path.join(audits_dir, fname)
+        content = _read_quiet(fpath)
+        bucket[fname] = {"parsed": parse_audit_file(content), "mtime": os.path.getmtime(fpath)}
+
+    chosen = _pick_report(spec_reports, "AUDIT-BASELINE.md")
+    if chosen:
+        result.update(_audit_summary(spec_reports[chosen]["parsed"]))
+        result["source"] = f"audits/{chosen}"
+    sec = _pick_report(security_reports, "SECURITY-AUDIT-BASELINE.md")
+    if sec:
+        result["security"] = dict(_audit_summary(security_reports[sec]["parsed"]), source=f"audits/{sec}")
+
+    sev = result["bySeverity"]
+    sev_str = ", ".join(f"{sev[k]} {k}" for k in ("critical", "high", "medium", "low") if sev[k]) or "none"
+    print(f"  Audits: {len(md_files)} files, spec audit {result['source'] or 'N/A'}: "
+          f"{result['totalFindings']} findings ({sev_str}), gate={result['latestGate'] or 'N/A'}")
     return result
 
 
-def classify_requirements(artifacts, incoming, outgoing):
-    """Classify REQ artifacts by business domain, technical layer, and functional category."""
-    # Business domain mapping from REQ category prefix
-    domain_map = {
-        # Extraction & Processing
-        "EXT": "Extraction & Processing", "CVA": "Extraction & Processing",
-        "VAL": "Extraction & Processing", "PRO": "Extraction & Processing",
-        "DOC": "Extraction & Processing", "PAR": "Extraction & Processing",
-        "OCR": "Extraction & Processing", "PRM": "Extraction & Processing",
-        "MAT": "Matching & Selection", "OFF": "Matching & Selection",
-        "SEL": "Matching & Selection", "SRC": "Matching & Selection",
-        # Security & Auth
-        "SEC": "Security & Auth", "AUT": "Security & Auth",
-        "PRV": "Security & Auth", "LOG": "Security & Auth",
-        "CRD": "Security & Auth", "TOK": "Security & Auth",
-        "SSO": "Security & Auth",
-        "GDP": "GDPR & Privacy", "GDPR": "GDPR & Privacy",
-        "DPR": "GDPR & Privacy", "RET": "GDPR & Privacy",
-        # Frontend & UI
-        "UI": "Frontend & UI", "UX": "Frontend & UI",
-        "DASH": "Frontend & UI", "NAV": "Frontend & UI",
-        "FORM": "Frontend & UI", "MOD": "Frontend & UI",
-        "VIS": "Frontend & UI", "I18N": "Frontend & UI",
-        "ACC": "Frontend & UI",
-        "CAN": "Candidate Portal", "VPR": "Candidate Portal",
-        "DSH": "Dashboards & Reporting",
-        # Data & Storage
-        "DB": "Data & Storage", "IDX": "Data & Storage",
-        "CAC": "Data & Storage", "MIG": "Data & Storage",
-        "STO": "Data & Storage", "BAK": "Data & Storage",
-        "ARC": "Data & Storage", "CACHE": "Data & Storage",
-        "BLK": "Bulk Operations", "BAT": "Bulk Operations",
-        # Integration & APIs
-        "INT": "Integration & APIs", "WBH": "Integration & APIs",
-        "NOT": "Integration & APIs", "MSG": "Integration & APIs",
-        "EVT": "Integration & APIs", "SYN": "Integration & APIs",
-        "NTF": "Integration & APIs", "INC": "Integration & APIs",
-        # Infrastructure & DevOps
-        "CFG": "Infrastructure & DevOps", "ENV": "Infrastructure & DevOps",
-        "DEP": "Infrastructure & DevOps", "MON": "Infrastructure & DevOps",
-        "INF": "Infrastructure & DevOps", "OPS": "Infrastructure & DevOps",
-        "CI": "Infrastructure & DevOps",
-        "SYS": "Infrastructure & DevOps", "TECH": "Infrastructure & DevOps",
-        "AVAIL": "Infrastructure & DevOps",
-        # Performance & Scalability
-        "PERF": "Performance & Scalability", "SCAL": "Performance & Scalability",
-        "RATE": "Performance & Scalability", "OBS": "Performance & Scalability",
-        # Analytics & Reporting
-        "RPT": "Analytics & Reporting", "ANL": "Analytics & Reporting",
-        "MET": "Analytics & Reporting", "KPI": "Analytics & Reporting",
-        "EXP": "Analytics & Reporting", "AGG": "Analytics & Reporting",
-        # User & Org Management
-        "USR": "User Management", "ROL": "User Management",
-        "PER": "User Management", "ORG": "User Management",
-        "TEN": "User Management",
-        # Derived/Cross-cutting
-        "DER": "Derived Requirements", "MNT": "Infrastructure & DevOps",
-        "REC": "Infrastructure & DevOps",
-    }
+_GENERIC_SECTION_WORDS = re.compile(
+    r'\b(?:requirements?|requisitos?|requerimientos?|functional|funcionales?|non[- ]functional|no[- ]funcionales?|'
+    r'constraints?|restricciones?|specifications?|especificaciones?|and|y|de|del|the|of|list|lista)\b',
+    re.IGNORECASE,
+)
 
+# Layer keywords, matched as whole words (a bare substring match put "require" in Frontend via "ui" and
+# "catalog" in Infrastructure via "log").
+_LAYER_KEYWORD_RULES = [
+    (r'ui|ux|interfaz|interface|pantallas?|screens?|formularios?|forms?|vistas?|views?|frontend|'
+     r'navegaci[oó]n|navigation|responsive|css|widgets?|bot[oó]n|botones|buttons?|modal(?:es)?|men[uú]s?|sidebar',
+     "Frontend"),
+    (r'infraestructura|infrastructure|deploy\w*|despliegues?|ci/cd|docker|kubernetes|terraform|cloud|'
+     r'servidor(?:es)?|servers?|nginx|ssl|dns|hosting|monitor\w*|logs?|logging',
+     "Infrastructure"),
+    (r'integraci[oó]n|integrat\w*|webhooks?|third[- ]party|terceros?|pasarelas?|gateways?|sync\w*|'
+     r'sincroniz\w*|imports?|exports?|migra\w*',
+     "Integration/Deployment"),
+]
+_LAYER_KEYWORD_RES = [(re.compile(r'(?<![\w/])(?:' + kw + r')(?![\w/])', re.IGNORECASE), layer)
+                      for kw, layer in _LAYER_KEYWORD_RULES]
+
+
+def _domain_from_section(section):
+    """Business domain from the requirement's section heading ("### 3.1 Authentication" → "Authentication").
+
+    Returns None for headings that only say "Functional Requirements" and the like.
+    """
+    if not section:
+        return None
+    text = re.sub(r'^[\d.\s)–—-]+', '', section).strip()          # numbering
+    text = re.sub(r'[*_`]+', '', text).strip()
+    text = re.sub(r'\s*\(.*?\)\s*$', '', text).strip()               # trailing "(REQ-F-001..010)"
+    if not text or not re.sub(r'[\W\d_]+', '', _GENERIC_SECTION_WORDS.sub('', text)):
+        return None
+    return text[:60]
+
+
+def classify_requirements(artifacts, incoming, outgoing):
+    """Classify REQ artifacts by business domain, technical layer, and functional category.
+
+    Business domain: the requirement's section heading when it names one, else the ID group of grouped IDs
+    (REQ-AUTH-003 → AUTH), else "General". No project-specific maps.
+    """
     # Find FASE linked to each REQ via TASK chain
     task_to_fase = {}
     for art in artifacts.values():
@@ -1678,72 +1790,11 @@ def classify_requirements(artifacts, incoming, outgoing):
 
     classification_stats = {"byDomain": {}, "byLayer": {}, "byCategory": {}}
 
-    # Title-based domain inference rules: (keywords, domain_name)
-    # Used as fallback when REQ prefix is generic (F, C, NF) or unknown
-    _domain_keyword_rules = [
-        # Customer & User Management
-        (["cliente", "client", "usuario", "user", "alta", "baja", "registro", "registr", "perfil", "profile",
-          "cuenta", "account", "contacto", "suscript", "subscri"], "Customer Management"),
-        # Service & Product Management
-        (["servicio", "service", "pack", "producto", "product", "tarifa", "plan", "oferta", "offer",
-          "catalogo", "catalog", "tipo de servicio", "contratacion", "contrat"], "Service Management"),
-        # Billing & Payments
-        (["factur", "invoice", "billing", "pago", "payment", "cobro", "cargo", "charge", "precio", "price",
-          "descuento", "discount", "impuesto", "tax", "penalizacion", "penal"], "Billing & Payments"),
-        # Provisioning & Activation
-        (["activacion", "activat", "provision", "suspend", "suspens", "reactivac", "reactivat",
-          "desactivac", "deactivat", "permanencia", "portabilidad"], "Provisioning & Lifecycle"),
-        # Incidents & Support
-        (["incidencia", "incident", "ticket", "soporte", "support", "sla", "escalad", "resolucion",
-          "resolut", "averia", "reclam", "claim", "queja", "complaint"], "Incidents & Support"),
-        # Security & Auth
-        (["seguridad", "security", "autenticac", "authenticat", "autorizac", "authorizat", "password",
-          "contrasena", "token", "sesion", "session", "rol", "role", "permiso", "permission",
-          "cifrado", "encrypt", "audit"], "Security & Auth"),
-        # Integration & APIs
-        (["integracion", "integrat", "api", "webhook", "notificacion", "notificat", "email", "sms",
-          "mensaje", "message", "evento", "event", "sincroniz", "sync"], "Integration & APIs"),
-        # Infrastructure & DevOps
-        (["infraestructura", "infrastructure", "deploy", "despliegue", "monitor", "log", "backup",
-          "migracion", "migrat", "config", "entorno", "environment", "ci/cd", "pipeline"], "Infrastructure & DevOps"),
-        # Reporting & Analytics
-        (["reporte", "report", "estadistic", "statistic", "dashboard", "tablero", "metricas",
-          "metrics", "analitic", "analytic", "kpi", "export"], "Analytics & Reporting"),
-        # Frontend & UI
-        (["interfaz", "interface", "ui", "ux", "pantalla", "screen", "formulario", "form",
-          "vista", "view", "navegacion", "navigation", "responsive", "accesibil"], "Frontend & UI"),
-        # Data & Storage
-        (["base de datos", "database", "almacen", "storage", "cache", "indice", "index",
-          "archivo", "file", "import", "export"], "Data & Storage"),
-    ]
-
-    # Title-based layer inference rules: (keywords, layer_name)
-    _layer_keyword_rules = [
-        (["ui", "ux", "interfaz", "interface", "pantalla", "screen", "formulario", "form",
-          "vista", "view", "frontend", "navegacion", "navigation", "responsive", "css",
-          "componente visual", "widget", "boton", "button", "modal", "menu", "sidebar"], "Frontend"),
-        (["infraestructura", "infrastructure", "deploy", "despliegue", "ci/cd", "pipeline",
-          "docker", "kubernetes", "terraform", "cloud", "servidor", "server", "nginx",
-          "ssl", "dns", "dominio", "domain", "hosting", "monitor", "log"], "Infrastructure"),
-        (["integracion", "integrat", "webhook", "api extern", "third.party", "tercero",
-          "pasarela", "gateway", "sync", "sincroniz", "import", "export", "migra"], "Integration/Deployment"),
-    ]
-
-    def _infer_domain_from_title(title):
-        """Infer business domain from REQ title using keyword matching."""
-        t = title.lower()
-        for keywords, domain_name in _domain_keyword_rules:
-            if any(kw in t for kw in keywords):
-                return domain_name
-        return "Other"
-
     def _infer_layer_from_title(title):
-        """Infer technical layer from REQ title using keyword matching. Defaults to Backend."""
-        t = title.lower()
-        for keywords, layer_name in _layer_keyword_rules:
-            if any(kw in t for kw in keywords):
+        """Infer technical layer from REQ title using whole-word keyword matching. Defaults to Backend."""
+        for pat, layer_name in _LAYER_KEYWORD_RES:
+            if pat.search(title or ""):
                 return layer_name
-        # Default to Backend for functional requirements — most common layer
         return "Backend"
 
     # Generic REQ prefixes that don't carry domain information (IEEE 830 style)
@@ -1759,13 +1810,10 @@ def classify_requirements(artifacts, incoming, outgoing):
         cat = art.get("category")
         title = art.get("title", "")
 
-        # Business domain: try prefix map first, fallback to title inference
-        if cat and cat not in generic_cats:
-            domain = domain_map.get(cat, None)
-            if domain is None:
-                domain = _infer_domain_from_title(title)
-        else:
-            domain = _infer_domain_from_title(title)
+        # Business domain: section heading, else ID group (REQ-AUTH-003), else General
+        domain = _domain_from_section(art.get("section"))
+        if not domain:
+            domain = cat if (cat and cat not in generic_cats) else "General"
 
         # Technical layer: follow REQ -> UC -> TASK -> FASE
         fases = set()
@@ -1830,8 +1878,78 @@ def classify_requirements(artifacts, incoming, outgoing):
     return classification_stats
 
 
+def _warn(msg):
+    print(f"  Warning: {msg}", file=sys.stderr)
+
+
+def load_pipeline_state(project_dir):
+    """pipeline-state.json as a dict ({} when absent). A corrupt file is reported on stderr and ignored."""
+    path = os.path.join(project_dir, "pipeline-state.json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        _warn(f"pipeline-state.json is not valid JSON ({e}); stage statuses shown as unknown")
+        return {}
+    if not isinstance(data, dict):
+        _warn("pipeline-state.json is not a JSON object; stage statuses shown as unknown")
+        return {}
+    return data
+
+
+def trace_map_code_refs(trace_map):
+    """Pivot .sdd/trace-map.json into codeRef entries.
+
+    hooks/sdd-trace-map-updater.sh writes one mapping per (file, task):
+    {"file", "taskId", "fase", "refs": [...], "origin": "hook-captured", "firstSeen", "lastModified"}.
+    Each mapping becomes a file-level codeRef for its refs (and its TASK). The older
+    {"artifactId", "codeRefs": [...]} shape is still accepted.
+    """
+    if not isinstance(trace_map, dict):
+        return []
+    mappings = trace_map.get("mappings")
+    if not isinstance(mappings, list):
+        mappings = [{"artifactId": k, "codeRefs": v.get("codeRefs", [])}
+                    for k, v in trace_map.items() if isinstance(v, dict) and "codeRefs" in v]
+    out = []
+    for m in mappings:
+        if not isinstance(m, dict):
+            continue
+        if m.get("file"):
+            ref_ids = [r for r in (m.get("refs") or []) if isinstance(r, str) and classify_id(r)]
+            task_id = m.get("taskId")
+            if isinstance(task_id, str) and classify_id(task_id) == "TASK" and task_id not in ref_ids:
+                ref_ids.append(task_id)
+            if not ref_ids:
+                continue
+            fpath = str(m["file"]).replace("\\", "/")
+            out.append({
+                "file": fpath,
+                "line": 0,
+                "symbol": os.path.basename(fpath),
+                "symbolType": "file",
+                "refIds": ref_ids,
+                "origin": "hook-captured",
+                "confidence": 0.95,
+                "inferredFrom": {"commitSha": None, "taskId": task_id, "trailerRefs": []},
+            })
+        elif m.get("artifactId") and isinstance(m.get("codeRefs"), list):
+            for cr in m["codeRefs"]:
+                if isinstance(cr, dict) and cr.get("file"):
+                    ref = dict(cr)
+                    ref["refIds"] = [m["artifactId"]]
+                    ref.setdefault("line", 0)
+                    ref.setdefault("origin", "hook-captured")
+                    ref.setdefault("confidence", 0.95)
+                    out.append(ref)
+    return out
+
+
 def build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
-                commits=None, code_refs=None, code_stats=None, test_refs=None, test_stats=None):
+                commits=None, code_refs=None, code_stats=None, test_refs=None, test_stats=None,
+                scan_paths=None):
     """Build the traceability graph JSON structure."""
     if commits is None:
         commits = []
@@ -1844,16 +1962,14 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     if test_stats is None:
         test_stats = {"totalTestFiles": 0, "totalTests": 0, "testsWithRefs": 0}
 
+    if scan_paths is None:
+        scan_paths = resolve_scan_paths(project_dir)
+    code_paths, test_paths, paths_declared = scan_paths
+    code_files = code_stats.pop("files", None) or []
+
     # Read pipeline state
-    pipeline_state_file = os.path.join(project_dir, "pipeline-state.json")
-    pipeline_data = {"currentStage": "unknown", "stages": []}
-    if os.path.exists(pipeline_state_file):
-        try:
-            with open(pipeline_state_file, "r", encoding="utf-8") as f:
-                ps = json.load(f)
-            pipeline_data["currentStage"] = ps.get("currentStage", "unknown")
-        except Exception:
-            pass
+    ps = load_pipeline_state(project_dir)
+    pipeline_data = {"currentStage": ps.get("currentStage", "unknown"), "stages": []}
 
     # Count artifacts per stage
     stage_counts = {}
@@ -1876,14 +1992,9 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "e2e-tests",
     ]
 
-    if os.path.exists(pipeline_state_file):
-        try:
-            with open(pipeline_state_file, "r", encoding="utf-8") as f:
-                ps = json.load(f)
-            stages_data = ps.get("stages", {})
-        except Exception:
-            stages_data = {}
-    else:
+    stages_data = ps.get("stages", {})
+    if not isinstance(stages_data, dict):
+        _warn("pipeline-state.json 'stages' is not an object; ignored")
         stages_data = {}
 
     # Count audit files for spec-auditor stage (findings aren't graph artifacts)
@@ -1969,14 +2080,11 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
 
     # Fallback: count src files with broader extensions for task-implementer if still 0 (excludes test dirs)
     if stage_counts.get("task-implementer", 0) == 0:
-        broad_exts = {".ts", ".js", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".rb", ".cs", ".cpp", ".c", ".swift"}
-        impl_fallback = 0
-        for search_dir in ["src", "app", "lib"]:
-            d = os.path.join(project_dir, search_dir)
-            if os.path.isdir(d):
-                for root, dirs, filenames in os.walk(d):
-                    dirs[:] = [dd for dd in dirs if dd not in SKIP_DIRS]
-                    impl_fallback += sum(1 for f in filenames if os.path.splitext(f)[1].lower() in broad_exts)
+        fallback_dirs = code_paths if paths_declared else ["src", "app", "lib"]
+        impl_fallback = sum(
+            1 for _fp, frel in _walk_source_files(project_dir, fallback_dirs)
+            if not is_test_path(frel, code_paths, test_paths)
+        )
         if impl_fallback > 0:
             stage_counts["task-implementer"] = impl_fallback
 
@@ -2070,6 +2178,16 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
             "status": aggregate_group_status([m.get("status") for m in members]),
         })
     pipeline_data["groups"] = pipeline_groups
+
+    # Drop prose that looks like an ID ("BDD-style", "API-first"): digit-less IDs count only when defined
+    defined_ids = set(artifacts.keys())
+    references = [r for r in references
+                  if is_plausible_ref(r[0], defined_ids) and is_plausible_ref(r[1], defined_ids)]
+    for ref_list in (code_refs, test_refs):
+        for ref in ref_list:
+            ref["refIds"] = [rid for rid in ref.get("refIds", []) if is_plausible_ref(rid, defined_ids)]
+    code_refs = [r for r in code_refs if r["refIds"]]
+    test_refs = [r for r in test_refs if r["refIds"]]
 
     # Deduplicate relationships
     seen_rels = set()
@@ -2249,24 +2367,35 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         cr.setdefault("confidence", 1.0)
 
     # 2. Infer code refs from commits (Step 1.2)
-    inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing, project_dir=project_dir)
+    scan_dirs = list(code_paths) + list(test_paths) if paths_declared else None
+    inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing,
+                                                      project_dir=project_dir, scan_dirs=scan_dirs)
 
-    # 3. Deduplicate: if file+refId already has direct ref, skip inferred
-    direct_keys = set()
-    for cr in code_refs:
-        for rid in cr.get("refIds", []):
-            direct_keys.add((cr["file"], rid))
+    # 3. Hook-captured refs from .sdd/trace-map.json (merged here so statistics include them)
+    hook_refs = trace_map_code_refs(load_trace_map(project_dir))
+    if hook_refs:
+        print(f"  Trace map: {len(hook_refs)} hook-captured file mappings")
 
-    deduped_inferred = []
-    for cr in inferred_code_refs:
-        new_ref_ids = [rid for rid in cr["refIds"] if (cr["file"], rid) not in direct_keys]
-        if new_ref_ids:
-            cr["refIds"] = new_ref_ids
-            deduped_inferred.append(cr)
+    # 4. Deduplicate by (file, refId): direct > hook-captured > inferred
+    def _dedup(refs, taken):
+        kept = []
+        for cr in refs:
+            new_ref_ids = [rid for rid in cr["refIds"] if (cr["file"], rid) not in taken]
+            if new_ref_ids:
+                cr["refIds"] = new_ref_ids
+                kept.append(cr)
+        for cr in kept:
+            for rid in cr["refIds"]:
+                taken.add((cr["file"], rid))
+        return kept
 
-    # 4. Apply overrides (Step 1.5)
+    taken = {(cr["file"], rid) for cr in code_refs for rid in cr.get("refIds", [])}
+    deduped_hook = _dedup(hook_refs, taken)
+    deduped_inferred = _dedup(inferred_code_refs, taken)
+
+    # 5. Apply overrides (Step 1.5)
     overrides_path = os.path.join(project_dir, ".sdd", "overrides.json")
-    all_code_refs = code_refs + deduped_inferred
+    all_code_refs = code_refs + deduped_hook + deduped_inferred
     all_code_refs, override_count = apply_overrides(all_code_refs, overrides_path)
 
     # 5. Build artifact_code_refs map from merged refs
@@ -2324,7 +2453,11 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     inferred_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") in ("commit-inferred", "task-inferred", "blame-inferred"))
     code_stats["directRefs"] = direct_refs_count
     code_stats["inferredRefs"] = inferred_refs_count
+    code_stats["hookCapturedRefs"] = sum(1 for cr in all_code_refs if cr.get("origin") == "hook-captured")
     code_stats["manualOverrides"] = override_count
+    # Code files with no reference of any origin: what the dashboard lists as untraced code
+    traced_files = {cr["file"] for cr in all_code_refs if cr.get("refIds")}
+    code_stats["orphanFiles"] = sorted(f for f in code_files if f not in traced_files)
 
     stats = {
         "totalArtifacts": len(artifacts),
@@ -2393,10 +2526,15 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     adoption = {"present": False}
     adoption_stats = None
     if os.path.exists(adoption_file):
-        with open(adoption_file, "r", encoding="utf-8") as f:
-            adoption_data = json.load(f)
-        adoption = adoption_data.get("adoption", {"present": False})
-        adoption_stats = adoption_data.get("adoptionStats", None)
+        try:
+            with open(adoption_file, "r", encoding="utf-8") as f:
+                adoption_data = json.load(f)
+            if not isinstance(adoption_data, dict):
+                raise ValueError("top level is not an object")
+            adoption = adoption_data.get("adoption", {"present": False})
+            adoption_stats = adoption_data.get("adoptionStats", None)
+        except (OSError, ValueError) as e:
+            _warn(f"{adoption_file} is not valid JSON ({e}); adoption data skipped")
 
     stats["adoptionStats"] = adoption_stats
     stats["auditData"] = scan_audits(project_dir)
@@ -2454,6 +2592,7 @@ def _refine_with_code_intelligence(graph):
                     and cr.get("symbolType") == "file"
                     and cr["file"] in file_symbols):
                 # Replace with symbol-level refs
+                refined_any = False
                 for sym in file_symbols[cr["file"]]:
                     sym_ref_ids = list(set(sym.get("artifactRefs", []) + sym.get("inferredRefs", [])))
                     # Only include if there's overlap with the inferred refIds
@@ -2468,8 +2607,9 @@ def _refine_with_code_intelligence(graph):
                             "origin": "code-index",
                             "inferredFrom": cr.get("inferredFrom"),
                         })
-                # If no symbol matched, keep original file-level ref
-                if not any(r for r in refined if r["file"] == cr["file"]):
+                    refined_any = refined_any or bool(overlap)
+                # If no symbol matched this ref, keep the original file-level ref
+                if not refined_any:
                     refined.append(cr)
             else:
                 refined.append(cr)
@@ -2494,12 +2634,15 @@ def generate_html(graph, template_file, html_file):
 
     html = m.group(1)
 
-    # Serialize JSON (compact but readable)
+    # Serialize JSON for an inline <script>: "</" would close the script element early (a title such as
+    # "</script><script>..." in a spec would run as code). "<\/" is the same string in JSON/JS.
     data_json = json.dumps(graph, ensure_ascii=False)
+    data_json = data_json.replace("</", "<\\/").replace("<!--", "<\\u0021--")
+    data_json = data_json.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
-    # Replace placeholders
+    # Replace placeholders (PROJECT_NAME first: DATA_JSON may legitimately contain the placeholder text)
+    html = html.replace("{{PROJECT_NAME}}", html_escape(str(graph.get("projectName") or "SDD Project")))
     html = html.replace("{{DATA_JSON}}", data_json)
-    html = html.replace("{{PROJECT_NAME}}", graph.get("projectName", "SDD Project"))
 
     _safe_write_text(html_file, html)
 
@@ -2547,7 +2690,9 @@ def load_trace_map(project_dir):
 
 
 def _enrich_graph_with_loaders(graph, project_dir):
-    """Enrich graph with optional .sdd/ data files (gap analysis, test results, trace map).
+    """Enrich graph with optional .sdd/ data files (gap analysis, test results).
+
+    .sdd/trace-map.json is merged earlier, in build_graph, so its refs count in the statistics.
 
     This is a post-processing step: if the files exist, they add data to the graph;
     if they don't exist, the graph remains unchanged.
@@ -2603,40 +2748,6 @@ def _enrich_graph_with_loaders(graph, project_dir):
         if bdd_coverage:
             graph.setdefault("statistics", {})["bddCoverage"] = bdd_coverage
 
-    # 3. Trace map → add hook-captured codeRefs to artifacts
-    trace_map = load_trace_map(project_dir)
-    if trace_map is not None:
-        # trace-map.json expected structure: { "mappings": [ { "artifactId": "...", "codeRefs": [...] } ] }
-        mappings = trace_map.get("mappings", [])
-        if not mappings and isinstance(trace_map, dict):
-            # Alternative: flat dict { "UC-001": { "codeRefs": [...] }, ... }
-            mappings = [{"artifactId": k, "codeRefs": v.get("codeRefs", [])}
-                        for k, v in trace_map.items()
-                        if isinstance(v, dict) and "codeRefs" in v]
-
-        # Build artifact lookup by ID
-        art_by_id = {}
-        for art in graph.get("artifacts", []):
-            art_by_id[art.get("id", "")] = art
-
-        trace_count = 0
-        for mapping in mappings:
-            art_id = mapping.get("artifactId", "")
-            new_refs = mapping.get("codeRefs", [])
-            if art_id in art_by_id and new_refs:
-                existing = art_by_id[art_id].setdefault("codeRefs", [])
-                # Deduplicate by (file, line) to avoid overwriting existing refs
-                existing_keys = {(cr.get("file"), cr.get("line")) for cr in existing}
-                for cr in new_refs:
-                    key = (cr.get("file"), cr.get("line"))
-                    if key not in existing_keys:
-                        cr.setdefault("origin", "hook-captured")
-                        existing.append(cr)
-                        trace_count += 1
-
-        if trace_count > 0:
-            print(f"  Enriched: trace-map.json added {trace_count} code refs to artifacts")
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -2673,17 +2784,20 @@ def main():
 
     # Extract artifacts and references
     artifacts, references, all_ref_ids = scan_files(project_dir)
+    scan_paths = resolve_scan_paths(project_dir)
+    print(f"Code paths: {', '.join(scan_paths[0])} · test paths: {', '.join(scan_paths[1])}"
+          f" ({'SDD Stack Profile' if scan_paths[2] else 'defaults'})")
 
     print(f"\nExtracted {len(artifacts)} artifact definitions")
     print(f"Extracted {len(references)} raw references")
 
     # Scan source code
     print("\nScanning source code...")
-    code_refs, code_stats = scan_code_refs(project_dir)
+    code_refs, code_stats = scan_code_refs(project_dir, scan_paths)
 
     # Scan tests
     print("\nScanning tests...")
-    test_refs, test_stats = scan_test_refs(project_dir)
+    test_refs, test_stats = scan_test_refs(project_dir, scan_paths)
 
     # Scan commits
     print("\nScanning git commits...")
@@ -2691,7 +2805,7 @@ def main():
 
     # Build graph
     graph = build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
-                        commits, code_refs, code_stats, test_refs, test_stats)
+                        commits, code_refs, code_stats, test_refs, test_stats, scan_paths)
 
     # Enrich with optional .sdd/ data files (gap analysis, test results, trace map)
     print("\nLoading optional enrichment data...")

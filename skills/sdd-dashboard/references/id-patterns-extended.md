@@ -49,17 +49,17 @@ Some documents use range notation. The dashboard must expand these:
 | Pattern | Example | Expansion |
 |---------|---------|-----------|
 | `{ID}..{END}` | `INV-SEC-001..007` | INV-SEC-001 through INV-SEC-007 |
-| `{ID}..{END}` (TASK) | `TASK-F1-003..008` | TASK-F1-003 through TASK-F1-008 |
-| `{ID} a {ID}` (Spanish) | `REQ-F-007 a REQ-F-019` | REQ-F-007 through REQ-F-019 |
-| `{ID}-{ID}` in lists | `REQ-001-005` | REQ-001 through REQ-005 (only when in range context) |
+| `{ID}..{ID}` | `UC-001..UC-005` | UC-001 through UC-005 |
+| `{ID} a/al/hasta/to {ID}` | `REQ-F-007 a REQ-F-019` | REQ-F-007 through REQ-F-019 |
+| `{ID} – {ID}` (dash, en/em dash) | `UC-001 – UC-005` | UC-001 through UC-005 |
 | `{ID}, {ID}, {ID}` | `UC-001, UC-003, UC-005` | Three separate references |
 
-**Regex** (used in `generate.py`):
-```regex
-((?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)(\d{3,4})\s*(?:\.\.|a|hasta|al|–|—|-\s+)\s*(?:(?:REQ|UC|WF|BDD|INV|ADR|NFR|RN|FASE|TASK)(?:-[A-Z][A-Z0-9]*)?-)?(\d{3,4})
-```
+Only `..` accepts a bare end number. Every other separator needs the same prefix repeated on the end ID, so prose such
+as `NFR-001 — 150 ms p95` or `REQ-F-001 - 120 req/s` is left alone. Ranges wider than 200 IDs are not expanded.
+The category segment uses `[A-Z][A-Z0-9]*` to support `TASK-F1-`, `TASK-F10-`.
 
-Note: The category segment uses `[A-Z][A-Z0-9]*` (not `[A-Z]+`) to support alphanumeric segments like `F1`, `F2`, `F10` in TASK IDs.
+**Digit rule**: a referenced ID needs a digit (`REQ-F-001`, `API-001-01`) unless some file defines it (named
+contracts such as `API-auth`); otherwise it is prose ("BDD-style", "API-first") and not a broken reference.
 
 ## Type-to-Stage Mapping
 
@@ -214,35 +214,27 @@ If the test is inside a `describe` block, prepend the describe name: `"PDF Valid
 
 ### Framework Detection
 
-Detect test framework from project configuration:
+Per test file, from its extension and the project configuration (root and the Stack Profile `app_dir`):
 
 | Indicator | Framework |
 |-----------|-----------|
-| `vitest.config.*` or `import { describe } from 'vitest'` | vitest |
-| `jest.config.*` or `import '@jest/globals'` | jest |
-| `pytest.ini` or `conftest.py` | pytest |
-| `*.spec.ts` + `@angular` in package.json | jasmine/karma |
+| `vitest` dependency or `vitest.config.*` | vitest |
+| `jest` dependency or `jest.config.*` | jest |
+| `*_spec.rb`, or `.rspec`/`rspec` in the Gemfile | rspec |
+| `*_test.rb`, or `rails`/`minitest` in the Gemfile | minitest |
+| `*.py` | pytest |
+| `*_test.go` | go-test |
+| E2E paths with `@playwright/test` / `cypress` | playwright / cypress |
 | Fallback | unknown |
 
 ## Classification Taxonomy
 
-### Business Domain (auto-inferred from REQ prefix)
+### Business Domain
 
-Map REQ category prefixes to business domains:
-
-| Prefixes | Business Domain |
-|----------|----------------|
-| EXT, CVA, VAL, PRO, DOC, PAR, OCR | Extraction & Processing |
-| SEC, AUT, PRV, LOG, CRD, TOK, SSO | Security & Auth |
-| UI, UX, DASH, NAV, FORM, MOD, VIS | Frontend & UI |
-| DB, IDX, CAC, MIG, STO, BAK, ARC | Data & Storage |
-| INT, API, WBH, NOT, MSG, EVT, SYN | Integration & APIs |
-| CFG, ENV, DEP, MON, INF, OPS, CI | Infrastructure & DevOps |
-| RPT, ANL, MET, KPI, EXP, AGG | Analytics & Reporting |
-| USR, ROL, PER, ORG, TEN, ACC | User Management |
-| *(no match)* | Other |
-
-**Matching rule**: Use the REQ category segment (e.g., `EXT` in `REQ-EXT-001`). If no category segment exists (e.g., `REQ-001`), classify as "Other".
+1. The requirement's section heading ("### 3.1 Authentication" → `Authentication`), numbering stripped. Headings that
+   only say "Functional Requirements", "Requisitos no funcionales" and the like do not count.
+2. Else the ID group of grouped IDs (`REQ-AUTH-003` → `AUTH`); the IEEE-style groups F, NF, C carry no domain.
+3. Else `General`.
 
 ### Technical Layer (auto-inferred from FASE)
 
@@ -254,7 +246,7 @@ Map FASE numbers to technical layers:
 | FASE-1 through FASE-6 | Backend |
 | FASE-7 through FASE-8 | Frontend |
 | FASE-9+ | Integration/Deployment |
-| *(no FASE link)* | Unknown |
+| *(no FASE link)* | From title keywords matched as whole words (ui, form, screen → Frontend; deploy, logs, server → Infrastructure; webhook, import, sync → Integration/Deployment), else Backend |
 
 **Inference rule**: For each REQ, follow the traceability chain REQ → UC → TASK → FASE. Use the FASE number to determine the layer. If a REQ maps to multiple FASEs across layers, use the primary (most frequent) layer.
 

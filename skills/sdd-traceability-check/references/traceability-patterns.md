@@ -10,16 +10,16 @@ These patterns identify where an ID is **defined** (first occurrence as a headin
 |------|-------------------|--------------|
 | REQ (simple) | `^#+\s*REQ-(\d{3,4})` or `\|\s*REQ-(\d{3,4})\s*\|` | `requirements/REQUIREMENTS.md` |
 | REQ (categorized) | `^#+\s*REQ-([A-Z]{1,4})-(\d{3,4})` | `requirements/REQUIREMENTS.md` |
-| UC | `^#+\s*UC-(\d{3,4})` or `##\s+UC-(\d{3,4})` | `spec/use-cases.md` |
-| WF | `^#+\s*WF-(\d{3,4})` or `##\s+WF-(\d{3,4})` | `spec/workflows.md` |
-| API (numeric) | `^#+\s*API-(\d{3,4})` or `##\s+API-(\d{3,4})` | `spec/contracts.md` |
-| API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` | `spec/contracts.md` |
-| BDD | `^#+\s*BDD-(\d{3,4})` or `Scenario:\s*BDD-(\d{3,4})` | `spec/use-cases.md`, `test/` |
-| INV (simple) | `^#+\s*INV-(\d{3,4})` or `\|\s*INV-(\d{3,4})\s*\|` | `spec/domain-model.md`, `spec/invariants.md` |
-| INV (scoped) | `^#+\s*INV-([A-Z]{2,6})-(\d{3,4})` or `\|\s*INV-([A-Z]{2,6})-(\d{3,4})\s*\|` | `spec/domain-model.md`, `spec/invariants.md` |
-| ADR | `^#+\s*ADR-(\d{3,4})` or filename `ADR-(\d{3,4})` | `spec/adr/ADR-*.md` |
-| NFR | `^#+\s*NFR-(\d{3,4})` or `\|\s*NFR-(\d{3,4})\s*\|` | `spec/nfr.md` |
-| RN | `^#+\s*RN-(\d{3,4})` or `\|\s*RN-(\d{3,4})\s*\|` | `spec/release-notes.md` |
+| UC | `^#+\s*UC-(\d{3,4})` or filename `UC-(\d{3,4})` | `spec/use-cases/UC-NNN-*.md` |
+| WF | `^#+\s*WF-(\d{3,4})` or filename `WF-(\d{3,4})` | `spec/workflows/WF-NNN-*.md` |
+| API (operation) | `\|\s*API-(\d{3,4})-(\d{2})\s*\|` | `spec/contracts/API-*.md` (operation table rows) |
+| API (contract) | filename `API-([A-Za-z][A-Za-z0-9-]+)\.md` or `^#+\s*API-([A-Za-z][A-Za-z0-9-]+)` | `spec/contracts/API-{module}.md` |
+| BDD | filename `BDD-UC-(\d{3,4})` (scenarios `Scenario:\s*AC-(\d{3})-(\d{2})` inside) | `spec/tests/BDD-UC-NNN.md`, `test/` |
+| INV (simple) | `^#+\s*INV-(\d{3,4})` or `\|\s*INV-(\d{3,4})\s*\|` | `spec/domain/05-INVARIANTS.md` |
+| INV (scoped) | `^#+\s*INV-([A-Z]{2,6})-(\d{3,4})` or `\|\s*INV-([A-Z]{2,6})-(\d{3,4})\s*\|` | `spec/domain/05-INVARIANTS.md` |
+| ADR | `^#+\s*ADR-(\d{3,4})` or filename `ADR-(\d{3,4})` | `spec/adr/ADR-NNN-*.md` |
+| NFR | `^#+\s*NFR-(\d{3,4})` or `\|\s*NFR-(\d{3,4})\s*\|` | `spec/nfr/*.md` |
+| RN (business rule, *regla de negocio*) | `^#+\s*RN-(\d{3,4})` or `\|\s*RN-(\d{3,4})\s*\|` | `spec/CLARIFICATIONS.md`, `spec/domain/*.md` |
 | TASK | `^#+\s*TASK-F(\d{1,2})-(\d{3,4})` or `\|\s*TASK-F(\d{1,2})-(\d{3,4})\s*\|` or `- \[.\]\s*.*TASK-F(\d{1,2})-(\d{3,4})` | `task/TASK-FASE-{N}.md` |
 
 ## ID Reference Pattern (Universal)

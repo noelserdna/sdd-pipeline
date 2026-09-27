@@ -392,7 +392,7 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `symbol` | string | Yes | Nearest symbol name (function, class, const, etc.) or `"filename:line"` fallback |
 | `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the Ref comment (e.g., `["UC-001", "INV-EXT-005"]`) |
-| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (from git blame analysis of code authorship), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (verified by LLM analysis of code semantics), `"gap-detected"` (detected as missing coverage by gap analysis) |
+| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (commit-inferred refs carried to the current path of a renamed file), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (verified by LLM analysis of code semantics), `"gap-detected"` (detected as missing coverage by gap analysis) |
 | `confidence` | number | No | Confidence score 0.0-1.0 for this reference. `1.0` for `origin: "direct"` (`// Refs:` comments), `0.95` for `"hook-captured"`, varies for `"llm-verified"`, `0.6-0.9` for `"blame-inferred"` and `"commit-inferred"` (based on commit recency), `0.5` for `"task-inferred"`. Default: `1.0` |
 | `inferredFrom` | object or null | No | Inference provenance when origin is not `"direct"`: `{ "commitSha": "abc1234", "taskId": "TASK-F1-003", "trailerRefs": ["UC-001"] }`. Default: `null` |
 
@@ -421,7 +421,7 @@ When a symbol has multiple codeRefs with different origins, the highest-confiden
 | `file` | string | Yes | Relative path to test file (forward slashes) |
 | `line` | number | Yes | Line number of the test definition or Ref comment |
 | `testName` | string | Yes | Test description (e.g., `"validates size per INV-EXT-005"`) |
-| `framework` | string | Yes | Test framework: `"vitest"`, `"jest"`, `"pytest"`, `"jasmine"`, `"unknown"` |
+| `framework` | string | Yes | Test framework detected from the file and project config: `"vitest"`, `"jest"`, `"mocha"`, `"playwright"`, `"cypress"`, `"minitest"`, `"rspec"`, `"pytest"`, `"go-test"`, `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the test (e.g., `["UC-001", "INV-EXT-005"]`) |
 | `lastRunStatus` | string or null | No | Last test execution result: `"pass"`, `"fail"`, `"skip"`, `"never-run"`, or `null` (unknown). Default: `null` |
 | `lastRunDate` | string or null | No | ISO-8601 timestamp of last test execution. Default: `null` |
@@ -511,12 +511,14 @@ Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `totalFiles` | number | Total source files scanned in `src/` |
+| `totalFiles` | number | Code files scanned under the Stack Profile `code_paths` (default `src/`), tests excluded |
 | `totalSymbols` | number | Total exported symbols found across all files |
 | `symbolsWithRefs` | number | Symbols that have at least one SDD artifact reference |
 | `directRefs` | number | Total code refs from `// Refs:` comments (origin: direct) |
-| `inferredRefs` | number | Total code refs inferred from commits (origin: commit-inferred or task-inferred) |
+| `inferredRefs` | number | Total code refs inferred from commits (origin: commit-inferred, task-inferred or blame-inferred) |
+| `hookCapturedRefs` | number | File-level refs merged from `.sdd/trace-map.json` (origin: hook-captured) |
 | `manualOverrides` | number | Total overrides applied from `.sdd/overrides.json` |
+| `orphanFiles` | string[] | Code files without a reference of any origin |
 
 ### testStats
 

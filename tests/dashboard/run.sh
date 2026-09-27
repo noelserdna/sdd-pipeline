@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests del parser de resultados del dashboard (skills/sdd-dashboard/test-result-parser.py):
+# Tests del dashboard: generate.py (commits, trace map, rangos, refs, Stack Profile, clasificador, auditorías,
+# escape HTML) y el parser de resultados (skills/sdd-dashboard/test-result-parser.py):
 # detección de runner (vitest, minitest, rspec; app_dir del SDD Stack Profile), parsers de Minitest verbose,
 # RSpec JSON y Vitest JSON, normalización de IDs con guiones bajos y la CLI de punta a punta.
 # Solo python3 (stdlib). Fixtures en tests/fixtures/test-results/. Compatible con bash 3.2.
@@ -192,6 +193,293 @@ check("cli: --runner desconocido rechazado por argparse", rc != 0)
 sys.exit(1 if fails else 0)
 PY
 then
+  parser_ok=1
+else
+  parser_ok=0
+fi
+
+# ── generate.py ──────────────────────────────────────────────────────────────
+GEN="$ROOT/skills/sdd-dashboard/generate.py"
+if PYTHONDONTWRITEBYTECODE=1 python3 - "$GEN" "$tmp" <<'PY2'
+import importlib.util
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+from contextlib import redirect_stdout, redirect_stderr
+
+gen_path, tmp = sys.argv[1:3]
+spec = importlib.util.spec_from_file_location("sdd_generate", gen_path)
+gen = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gen)
+
+fails = 0
+
+
+def check(desc, cond, detail=""):
+    global fails
+    if cond:
+        print("ok   " + desc)
+    else:
+        fails += 1
+        print("FAIL " + desc + (f" ({detail})" if detail else ""))
+
+
+def write(root, files):
+    for rel, content in files.items():
+        p = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(content)
+
+
+def git(root, *args):
+    env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=tmp, GIT_AUTHOR_DATE="", GIT_COMMITTER_DATE="")
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null",
+                           "-c", "commit.gpgsign=false"] + list(args),
+                          cwd=root, capture_output=True, text=True, env=env, check=True).stdout
+
+
+def quiet(fn, *a, **kw):
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        r = fn(*a, **kw)
+    return r, out.getvalue(), err.getvalue()
+
+
+def new_repo(name):
+    root = os.path.join(tmp, name)
+    os.makedirs(root)
+    git(root, "init", "-q")
+    return root
+
+
+def commit(root, files, subject, body, date):
+    write(root, files)
+    git(root, "add", "-A")
+    env_date = f"{date} +0000"
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null",
+                    "-c", "commit.gpgsign=false", "commit", "-q", "-m", subject, "-m", body],
+                   cwd=root, check=True, capture_output=True,
+                   env=dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=tmp,
+                            GIT_AUTHOR_DATE=env_date, GIT_COMMITTER_DATE=env_date))
+
+
+# ── 1. commit parser: 3 commits, files belong to their own commit ───────────
+repo = new_repo("commits")
+for i in (1, 2, 3):
+    commit(repo, {f"src/f{i}.ts": f"export const f{i} = {i}\n"}, f"feat: step {i}",
+           f"Refs: UC-00{i}, REQ-F-00{i}\nTask: TASK-F1-00{i}", f"2026-01-0{i}T10:00:00")
+commits, _, _ = quiet(gen.scan_commits, repo)
+by_task = {c["taskId"]: c for c in commits}
+check("commits: los 3 commits se parsean", len(commits) == 3, [c.get("taskId") for c in commits])
+check("commits: cada commit lleva solo sus ficheros",
+      all(by_task.get(f"TASK-F1-00{i}", {}).get("files") == [f"src/f{i}.ts"] for i in (1, 2, 3)),
+      {k: v["files"] for k, v in by_task.items()})
+check("commits: refIds del trailer Refs",
+      by_task.get("TASK-F1-002", {}).get("refIds") == ["UC-002", "REQ-F-002"], by_task.get("TASK-F1-002"))
+check("commits: fullSha de 40 hex y el Task no aparece como fichero",
+      all(re.fullmatch(r"[0-9a-f]{40}", c["fullSha"]) for c in commits)
+      and not any("TASK-" in f for c in commits for f in c["files"]), [c["fullSha"] for c in commits])
+
+# body fallback: Refs:/Task: that are not formal trailers (text after them)
+repo_b = new_repo("commits-body")
+for i in (1, 2):
+    commit(repo_b, {f"lib/g{i}.rb": "x\n"}, f"feat: g{i}",
+           f"Refs: UC-01{i}\nTask: TASK-F2-00{i}\n\nMore prose after the trailers.", f"2026-02-0{i}T10:00:00")
+fb, _, _ = quiet(gen._scan_commits_body_fallback, repo_b)
+fbt = {c["taskId"]: c for c in fb}
+check("commits body fallback: ficheros y refs por commit",
+      len(fb) == 2 and fbt.get("TASK-F2-001", {}).get("files") == ["lib/g1.rb"]
+      and fbt.get("TASK-F2-002", {}).get("refIds") == ["UC-012"], fb)
+
+# ── 3. expand_ranges ────────────────────────────────────────────────────────
+er = gen.expand_ranges
+check("ranges: 'NFR-001 — 150 ms p95' no inventa IDs", er("NFR-001 — 150 ms p95") == "NFR-001 — 150 ms p95")
+check("ranges: 'REQ-F-001 - 120 req/s' no inventa IDs", er("REQ-F-001 - 120 req/s") == "REQ-F-001 - 120 req/s")
+check("ranges: 'REQ-F-007 a REQ-F-009' se expande", er("REQ-F-007 a REQ-F-009") == "REQ-F-007, REQ-F-008, REQ-F-009", er("REQ-F-007 a REQ-F-009"))
+check("ranges: 'UC-001 – UC-003' se expande", er("UC-001 – UC-003") == "UC-001, UC-002, UC-003")
+check("ranges: 'INV-SEC-001..003' (fin sin prefijo) se expande", er("INV-SEC-001..003") == "INV-SEC-001, INV-SEC-002, INV-SEC-003")
+check("ranges: 'UC-001 a 005' (sin prefijo repetido) no se expande", er("UC-001 a 005") == "UC-001 a 005")
+
+# ── Full project fixture ─────────────────────────────────────────────────────
+proj = new_repo("proj")
+write(proj, {
+    "CLAUDE.md": "# P\n\n## SDD Stack Profile\n<!-- sdd-stack-profile v1 kit=rails -->\n- stack: rails\n- app_dir: web\n"
+                 "- code_paths: web/app, web/lib   # code\n- test_paths: web/test\n",
+    "web/Gemfile": 'gem "rails"\n',
+    "requirements/REQUIREMENTS.md": (
+        "# Requirements\n\n## 3. Functional Requirements\n\n### 3.1 Authentication\n\n"
+        "### REQ-F-001: The system shall require a login\n\n"
+        "## Functional Requirements\n\n### REQ-F-002: Catalog performance requirement\n"
+        "Latency NFR-001 — 150 ms p95. Uses a BDD-style approach and is API-first.\n"),
+    "spec/use-cases/UC-001-login.md": "# UC-001: Login\n\nRefs: REQ-F-001\nContract: API-auth\n",
+    "spec/use-cases/UC-002-browse.md": "# UC-002: Browse\n\nRefs: REQ-F-002\n",
+    "spec/contracts/API-auth.md": "# API-auth\n\n| API-001-01 | Login | UC-001 |\n",
+    "spec/nfr/PERFORMANCE.md": "| NFR-001 | p95 |\n",
+    "plan/fases/FASE-1.md": "# FASE-1: Core\n\nIncluye UC-001 y UC-002.\n",
+    "task/TASK-FASE-1.md": "# Tasks\n\n### TASK-F1-001: Login\n\nFASE-1 · UC-001\n\n### TASK-F1-002: Browse\n\nFASE-1 · UC-002\n",
+    "web/app/models/user.rb": "# Refs: UC-001\nclass User\n  def login?\n  end\nend\n",
+    "web/app/models/session.rb": "class Session\nend\n",
+    "web/app/models/untraced.rb": "class Untraced\nend\n",
+    "web/test/models/user_test.rb": "class UserTest < ActiveSupport::TestCase\n  test \"UC-001 logs in\" do\n  end\n  def test_BDD_UC_001_01_rejects\n  end\nend\n",
+    "src/ignored.ts": "// Refs: UC-002\nexport const x = 1\n",
+    "audits/AUDIT-BASELINE.md": "| Total findings | 5 |\n| High | 2 |\n| 3C Gate | PASS |\n",
+    "audits/SECURITY-AUDIT-BASELINE.md": "| Total findings | 9 |\n| High | 4 |\n| Critical | 3 |\n",
+    "audits/GAP-ANALYSIS-REVIEW.md": "| Total findings | 40 |\n| High | 7 |\n| Critical | 8 |\n",
+    "pipeline-state.json": "{ not json",
+    "dashboard/adoption-data.json": "{ broken",
+    ".sdd/trace-map.json": json.dumps({"$schema": "sdd-trace-map-v1", "mappings": [
+        {"file": "web/app/models/session.rb", "taskId": "TASK-F1-002", "fase": 1, "refs": ["UC-002", "REQ-F-002"],
+         "origin": "hook-captured", "firstSeen": "x", "lastModified": "x"}]}),
+})
+git(proj, "add", "-A")
+commit(proj, {}, "chore: base", "no trailers", "2026-03-01T10:00:00")
+# Task-only commit: TASK-F1-001 → UC-001 (through its own link), never UC-002 (through FASE-1)
+commit(proj, {"web/app/models/user.rb": "# Refs: UC-001\nclass User\n  def login?\n  end\n  def logout\n  end\nend\n"},
+       "feat: logout", "Task: TASK-F1-001", "2026-03-02T10:00:00")
+# Renamed file: refs of the old path follow it
+commit(proj, {"web/lib/old_name.rb": "module OldName\nend\n"}, "feat: helper", "Refs: UC-002\nTask: TASK-F1-002",
+       "2026-03-03T10:00:00")
+git(proj, "mv", "web/lib/old_name.rb", "web/lib/new_name.rb")
+commit(proj, {}, "refactor: rename", "no trailers", "2026-03-04T10:00:00")
+
+# ── 6. Stack Profile paths ───────────────────────────────────────────────────
+sp = gen.resolve_scan_paths(proj)
+check("stack profile: code_paths/test_paths del CLAUDE.md (comentario fuera)",
+      sp == (["web/app", "web/lib"], ["web/test"], True), sp)
+code_refs, code_stats = quiet(gen.scan_code_refs, proj, sp)[0]
+check("stack profile: escanea .rb de web/app y no src/",
+      {c["file"] for c in code_refs} == {"web/app/models/user.rb"} and "src/ignored.ts" not in code_stats["files"],
+      (code_refs, code_stats))
+check("stack profile: símbolo Ruby (class User)", code_refs and code_refs[0]["symbol"] == "User", code_refs[:1])
+test_refs, test_stats = quiet(gen.scan_test_refs, proj, sp)[0]
+check("tests: minitest (framework detectado, no 'vitest'), test \"...\" y def test_ con IDs normalizados",
+      test_stats["totalTests"] == 2 and {t["framework"] for t in test_refs} == {"minitest"}
+      and sorted(r for t in test_refs for r in t["refIds"]) == ["BDD-UC-001-01", "UC-001"], (test_refs, test_stats))
+nx = os.path.join(tmp, "next")
+write(nx, {"CLAUDE.md": "## SDD Stack Profile\n- code_paths: src\n- test_paths: src, tests\n",
+           "package.json": '{"devDependencies": {"vitest": "3"}}',
+           "src/a.ts": "// Refs: UC-001\nexport function a() {}\n",
+           "src/a.test.ts": "// Refs: UC-001\nit('a works', () => {})\n"})
+nsp = gen.resolve_scan_paths(nx)
+ncode, nstats = quiet(gen.scan_code_refs, nx, nsp)[0]
+ntests, ntstats = quiet(gen.scan_test_refs, nx, nsp)[0]
+check("stack profile solapado (Next.js src/): a.ts es código, a.test.ts es test (vitest)",
+      nstats["files"] == ["src/a.ts"] and [t["file"] for t in ntests] == ["src/a.test.ts"]
+      and ntests[0]["framework"] == "vitest", (nstats, ntests))
+plain = os.path.join(tmp, "plain")
+write(plain, {"README.md": "x"})
+check("stack profile: sin perfil → src / tests", gen.resolve_scan_paths(plain) == (["src"], ["tests"], False))
+check("framework: sin config → unknown", gen._framework_for("tests/x.test.ts", False, gen.detect_test_frameworks(plain)) == "unknown")
+
+# ── Build the graph ──────────────────────────────────────────────────────────
+artifacts, references, all_ids = quiet(gen.scan_files, proj)[0]
+commits = quiet(gen.scan_commits, proj)[0]
+out_dir = os.path.join(proj, "dashboard")
+graph, _, err = quiet(gen.build_graph, proj, out_dir, "<b>P</b>", artifacts, references, all_ids,
+                      commits, code_refs, code_stats, test_refs, test_stats, sp)
+arts = {a["id"]: a for a in graph["artifacts"]}
+st = graph["statistics"]
+
+# 10. corrupt JSON inputs
+check("pipeline-state.json corrupto: aviso en stderr y sigue", "pipeline-state.json" in err and graph["pipeline"]["currentStage"] == "unknown", err)
+check("adoption-data.json corrupto: aviso en stderr y sigue", "adoption-data.json" in err and graph["adoption"] == {"present": False}, err)
+
+# 4. prose IDs
+broken = {b["ref"] for b in st["brokenReferences"]}
+check("refs: 'BDD-style' y 'API-first' no son referencias rotas", not ({"BDD-style", "API-first"} & broken), broken)
+check("refs: API-auth (definido, sin dígitos) sigue enlazado",
+      any(r["source"] == "UC-001" and r["target"] == "API-auth" or r["source"] == "API-auth" and r["target"] == "UC-001"
+          for r in graph["relationships"]))
+check("ranges en el grafo: ningún NFR inventado", sorted(i for i in arts if i.startswith("NFR")) == ["NFR-001"]
+      and not any(b.startswith("NFR-") for b in broken), broken)
+
+# 2. trace map merged before statistics
+uc2 = [c for c in arts["UC-002"]["codeRefs"] if c.get("origin") == "hook-captured"]
+check("trace map: mapping {file, taskId, refs} → codeRef hook-captured en UC-002",
+      [c["file"] for c in uc2] == ["web/app/models/session.rb"] and uc2[0]["confidence"] == 0.95, arts["UC-002"]["codeRefs"])
+check("trace map: cuenta en las estadísticas (REQ-F-002 con código, hookCapturedRefs)",
+      st["traceabilityCoverage"]["reqsWithCode"]["count"] == 2 and st["codeStats"]["hookCapturedRefs"] == 1,
+      (st["traceabilityCoverage"]["reqsWithCode"], st["codeStats"]))
+check("orphanFiles: solo el fichero sin ninguna referencia", st["codeStats"]["orphanFiles"] == ["web/app/models/untraced.rb"],
+      st["codeStats"]["orphanFiles"])
+
+# 5. task-inferred BFS + confidence
+task_refs = [c for a in graph["artifacts"] for c in a["codeRefs"] if c.get("origin") == "task-inferred"]
+task_ids = {r for c in task_refs for r in c["refIds"]}
+check("task-inferred: no atraviesa FASE-1 (UC-002 no se adjunta a user.rb)",
+      "UC-002" not in {r for c in task_refs if c["file"] == "web/app/models/user.rb" for r in c["refIds"]} and "REQ-F-001" in task_ids,
+      task_refs)
+check("task-inferred: confianza 0.5 (graph-schema.md)", task_refs and all(c["confidence"] == 0.5 for c in task_refs), task_refs)
+blame = [c for a in graph["artifacts"] for c in a["codeRefs"] if c.get("origin") == "blame-inferred"]
+check("rename: las refs de web/lib/old_name.rb pasan a web/lib/new_name.rb (blame-inferred)",
+      any(c["file"] == "web/lib/new_name.rb" and "UC-002" in c["refIds"] for c in blame), blame)
+
+# 12. rename lookup skipped when nothing to infer
+calls = []
+orig = gen._build_rename_map
+gen._build_rename_map = lambda *a, **k: calls.append(a) or {}
+quiet(gen.infer_code_refs_from_commits, [], artifacts, {}, {}, project_dir=proj)
+gen._build_rename_map = orig
+check("rename: sin refs inferidas no se consulta git", calls == [], calls)
+
+# 7. classifier
+c1 = arts["REQ-F-001"]["classification"]
+c2 = arts["REQ-F-002"]["classification"]
+check("classifier: dominio del encabezado de sección (3.1 Authentication)", c1["businessDomain"] == "Authentication", c1)
+check("classifier: encabezado genérico → General", c2["businessDomain"] == "General", c2)
+check("classifier: 'require'/'catalog'/'performance' no activan ui/log/form (Backend)", c2["technicalLayer"] == "Backend", c2)
+lay = gen._LAYER_KEYWORD_RES
+def layer(t):
+    return next((l for p, l in lay if p.search(t)), "Backend")
+check("classifier: palabras completas ('Login form' → Frontend, 'require catalog' → Backend)",
+      layer("Login form") == "Frontend" and layer("require catalog performance") == "Backend" and layer("Audit logs") == "Infrastructure")
+check("classifier: sin mapas de un proyecto antiguo", "Candidate Portal" not in open(gen_path, encoding="utf-8").read())
+
+# 8. audits
+ad = st["auditData"]
+check("audits: cifras del spec audit solo de AUDIT-*.md",
+      ad["totalFindings"] == 5 and ad["bySeverity"] == {"critical": 0, "high": 2, "medium": 0, "low": 0}
+      and ad["latestGate"] == "PASS" and ad["source"] == "audits/AUDIT-BASELINE.md", ad)
+check("audits: SECURITY-AUDIT aparte", ad["security"] and ad["security"]["totalFindings"] == 9 and ad["security"]["bySeverity"]["critical"] == 3, ad.get("security"))
+
+# 9. HTML escaping
+graph["artifacts"][0]["title"] = "</script><script>alert(1)</script>"
+html_out = os.path.join(tmp, "out.html")
+quiet(gen.generate_html, graph, gen.resolve_template(proj), html_out)
+html = open(html_out, encoding="utf-8").read()
+check("html: '</' escapado dentro del <script> de datos", "</script><script>alert(1)" not in html and "<\\/script><script>alert(1)" in html)
+check("html: PROJECT_NAME escapado", "<title>SDD Dashboard — &lt;b&gt;P&lt;/b&gt;</title>" in html)
+m = re.search(r"var DATA = (.*?);\n", html)
+check("html: DATA sigue siendo JSON válido", m is not None and json.loads(m.group(1))["artifacts"][0]["title"].startswith("</script>"))
+
+# 11. code intelligence refinement keeps unmatched file-level inferred refs
+g = {"codeIntelligence": {"indexed": True, "symbols": [{"filePath": "a.ts", "name": "fa", "artifactRefs": ["UC-009"]}]},
+     "artifacts": [{"id": "UC-001", "codeRefs": [
+         {"file": "a.ts", "line": 3, "symbolType": "function", "refIds": ["UC-001"], "origin": "direct"},
+         {"file": "a.ts", "line": 0, "symbolType": "file", "refIds": ["UC-001"], "origin": "commit-inferred"}]}]}
+gen._refine_with_code_intelligence(g)
+check("code-index: la ref inferida a nivel de fichero no se pierde si otra ref del mismo fichero existe",
+      [c["origin"] for c in g["artifacts"][0]["codeRefs"]] == ["direct", "commit-inferred"], g["artifacts"][0]["codeRefs"])
+
+# End to end CLI
+r = subprocess.run([sys.executable, gen_path, "--project", proj], capture_output=True, text=True)
+check("cli: exit 0 con entradas corruptas y escribe grafo + html",
+      r.returncode == 0 and os.path.exists(os.path.join(out_dir, "traceability-graph.json"))
+      and os.path.exists(os.path.join(out_dir, "index.html")), (r.stdout[-300:], r.stderr[-300:]))
+
+sys.exit(1 if fails else 0)
+PY2
+then
+  gen_ok=1
+else
+  gen_ok=0
+fi
+
+if [ "$parser_ok" = 1 ] && [ "$gen_ok" = 1 ]; then
   echo "tests/dashboard: todo ok"
 else
   echo "tests/dashboard: hay fallos"

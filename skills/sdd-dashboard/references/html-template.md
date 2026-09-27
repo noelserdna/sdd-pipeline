@@ -774,26 +774,11 @@ tr.expand-row td{padding:0;border-bottom:1px solid var(--border)}
   }
 
   // --- Code Orphans Section ---
+  // codeStats.orphanFiles: code files with no reference of any origin (direct, hook-captured,
+  // commit/task/blame-inferred, manual-override, code-index), computed by generate.py.
   function renderOrphans() {
     var codeStats = st.codeStats || {};
-    var orphanFiles = codeStats.orphanFiles || [];
-
-    // Also check for code refs with origin "uncovered" across all artifacts
-    var uncoveredFiles = {};
-    (DATA.artifacts || []).forEach(function(a){
-      (a.codeRefs || []).forEach(function(cr){
-        if (cr.origin === "uncovered") {
-          uncoveredFiles[cr.file || cr.path] = true;
-        }
-      });
-    });
-
-    // Merge orphan sources
-    var allOrphans = {};
-    orphanFiles.forEach(function(f){ allOrphans[f] = true });
-    Object.keys(uncoveredFiles).forEach(function(f){ if (f) allOrphans[f] = true });
-
-    var orphanArr = Object.keys(allOrphans).sort();
+    var orphanArr = (codeStats.orphanFiles || []).slice().sort();
 
     if (orphanArr.length === 0) return;
 
@@ -845,7 +830,7 @@ The template expects these fields in `DATA_JSON`:
   "type": "REQ",
   "title": "User registration",
   "priority": "Must Have",
-  "codeRefs": [{ "file": "src/auth/register.ts", "confidence": 0.9, "origin": "linked" }],
+  "codeRefs": [{ "file": "src/auth/register.ts", "confidence": 0.9, "origin": "commit-inferred" }],
   "testRefs": [{ "file": "tests/auth/register.test.ts" }]
 }
 ```
@@ -855,7 +840,7 @@ The template expects these fields in `DATA_JSON`:
 {
   "totalArtifacts": 120,
   "orphans": ["WF-099"],
-  "brokenReferences": [{ "source": "UC-001", "target": "API-999" }],
+  "brokenReferences": [{ "ref": "API-999", "referencedIn": "spec/use-cases/UC-001-login.md", "line": 12 }],
   "traceabilityCoverage": {
     "reqsWithCode": { "percentage": 65, "functionalPercentage": 72, "count": 18, "total": 25, "functionalCount": 18, "functionalTotal": 25 },
     "reqsWithTests": { "percentage": 55, "functionalPercentage": 60, "count": 15, "total": 25, "functionalCount": 15, "functionalTotal": 25 }
@@ -865,3 +850,7 @@ The template expects these fields in `DATA_JSON`:
   }
 }
 ```
+
+`codeRefs[].origin` is one of `direct`, `hook-captured`, `commit-inferred`, `blame-inferred`, `task-inferred`,
+`manual-override`, `code-index` (see `graph-schema.md`). `codeStats.orphanFiles` lists code files (Stack Profile
+`code_paths`) without a reference of any origin.
