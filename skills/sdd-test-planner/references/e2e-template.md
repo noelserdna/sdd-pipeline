@@ -21,7 +21,7 @@ viewport matrix, no locators and no axe-core rows. Smoke and Critical tiers in f
 | Selector strategy | getByRole > getByLabel > getByText > getByTestId (fallback) |
 | Auth strategy | storageState reuse (1 login test, others reuse state) |
 | Data strategy | {transaction-rollback | snapshot-restore | unique-per-test} |
-| Accessibility | axe-core scan at each navigation (WCAG 2.1 AA) |
+| Accessibility | axe-core scan at each navigation (WCAG 2.2 AA) |
 | Parallelism | {runner sharding across N workers} |
 
 ### Tiered Execution
@@ -43,7 +43,7 @@ viewport matrix, no locators and no axe-core rows. Smoke and Critical tiers in f
 
 ## Field Inventory: WF-{NNN}
 
-> Cross-referenced from: UC-{NNN} inputs, API-{NNN}-{NN} operation input, WIREFRAMES §{screen}
+> Cross-referenced from: UC-{NNN} inputs, API-{NNN}-{NN} operation input, WIREFRAMES §SCR-{NNN}
 
 | Field | UC input | Operation input | Wireframe element | Required | Type | Validation rules | Conditional? |
 |-------|----------|-----------------|-------------------|----------|------|-----------------|--------------|
@@ -78,8 +78,8 @@ viewport matrix, no locators and no axe-core rows. Smoke and Critical tiers in f
 
 | Element | Locator hint | Source |
 |---------|-------------|--------|
-| {name} | getByRole("{role}", { name: /{pattern}/i }) | WIREFRAMES §{screen} |
-| {name} | getByLabel("{label}") | WIREFRAMES §{screen} |
+| {name} | getByRole("{role}", { name: /{pattern}/i }) | WIREFRAMES §SCR-{NNN} |
+| {name} | getByLabel("{label}") | WIREFRAMES §SCR-{NNN} |
 
 #### Steps
 

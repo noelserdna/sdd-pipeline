@@ -306,6 +306,7 @@ The following architecture decisions were identified during design and should be
 
 **When:** mandatory when any `spec/contracts/API-*.md` declares `Style: operations`; optional with `Style: http` (to record handler idioms).
 **Seed:** the installed stack kit (`templates/stacks/<kit>/conventions.md`) and the project CLAUDE.md sections `## Stack Conventions` / `## SDD Stack Profile` (canonical description: `skills/sdd-task-implementer/references/stack-profile.md`). Accepted ADRs win over kit defaults; a divergence from the kit goes to *Deviations*.
+**Owner:** `sdd-tech-designer`; when it did not run, `sdd-plan-architect` (Phase 4b) writes the file with this template and adds `· Written by: sdd-plan-architect` to the header line.
 **Consumers:** `sdd-plan-architect`, `sdd-task-generator` (review checklist), `sdd-task-implementer`, `sdd-gap-detector` (API-op ↔ mapping ↔ routes/actions), `sdd-test-planner` (never as a test oracle).
 
 ```markdown

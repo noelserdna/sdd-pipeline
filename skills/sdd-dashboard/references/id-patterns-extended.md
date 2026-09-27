@@ -11,8 +11,9 @@ Extended regex patterns for extracting artifact IDs from real SDD projects. Supe
 | REQ (table) | `\|\s*REQ-([A-Z]{0,4}-?\d{3,4})\s*\|` | table cells | `requirements/`, `spec/` |
 | UC | `^#+\s*UC-(\d{3,4})` | UC-001, UC-041 | `spec/use-cases/` |
 | WF | `^#+\s*WF-(\d{3,4})` | WF-001, WF-015 | `spec/workflows/` |
-| API (numeric) | `^#+\s*API-(\d{3,4})` | API-001, API-020 | `spec/contracts/` |
-| API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` | API-pdf-reader, API-auth-login | `spec/contracts/` |
+| API (operation, canonical) | `^#+\s*API-(\d{3,4}-\d{2})` or table row `^\|\s*API-(\d{3,4}-\d{2})\s*\|` | API-001-01, API-002-03 | `spec/contracts/API-{module}.md` (Templates 12/12b) |
+| API (numeric, legacy) | `^#+\s*API-(\d{3,4})` | API-001, API-020 | `spec/contracts/` |
+| API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` or filename `API-{module}.md` | API-tasks, API-auth | `spec/contracts/` (contract file / module) |
 | BDD (numeric) | `^#+\s*BDD-(\d{3,4})` or `Scenario:\s*BDD-(\d{3,4})` | BDD-001, BDD-042 | `spec/tests/`, `test/` |
 | BDD (named) | `Scenario:\s*BDD-([a-z][a-z0-9-]+)` | BDD-extraction, BDD-login-flow | `spec/tests/`, `test/` |
 | INV (simple) | `^#+\s*INV-(\d{3,4})` | INV-001, INV-015 | `spec/domain/` |
@@ -29,7 +30,7 @@ Extended regex patterns for extracting artifact IDs from real SDD projects. Supe
 Single regex to match **any** ID reference in running text:
 
 ```regex
-(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN|FASE|TASK)[-‑](?:[A-Z]{0,6}[-‑])?(?:[a-z][a-z0-9-]*|\d{1,4})(?:[-‑]\d{3,4})?
+(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN|FASE|TASK)[-‑](?:[A-Z]{0,6}[-‑])?(?:[a-z][a-z0-9-]*|\d{1,4})(?:[-‑]\d{2,4})?
 ```
 
 ### Breakdown

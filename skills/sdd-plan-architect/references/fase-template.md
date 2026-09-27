@@ -2,7 +2,7 @@
 
 Canonical template for all FASE files. Every FASE file MUST follow this structure. FASE files are navigation indices: they point to specs by id and section and never copy spec content. Budget: ≤ 8 000 chars per FASE (a FASE with three parallel blocks and a state machine may reach 10 000).
 
-Section headers stay in Spanish — `sdd-task-generator` parses them (Criterios de Éxito, Specs a Leer, Invariantes Aplicables, Contratos Resultantes, Alcance, Dependencias, Módulos y Conjuntos de Escritura). Descriptive text follows the project language.
+Section headers stay in Spanish — `sdd-task-generator` parses them (Criterios de Éxito, Specs a Leer, Invariantes Aplicables, Contratos Resultantes, Alcance, Dependencias, Módulos y Conjuntos de Escritura). Descriptive text follows the user's language.
 
 ---
 
@@ -172,7 +172,7 @@ One line per endpoint/function delivered by the FASE; domain events with their t
 
 | Ruta | Componente | UC | Wireframe | Descripción |
 |------|------------|----|-----------|-------------|
-| `/{path}` | `+page.svelte` | UC-{NNN} | WIREFRAMES §{id} | {≤ 80 chars} |
+| `/{path}` | `+page.svelte` | UC-{NNN} | WIREFRAMES §SCR-{NNN} | {≤ 80 chars} |
 
 ### Componentes Compartidos
 

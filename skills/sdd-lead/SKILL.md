@@ -50,7 +50,7 @@ Stations run the skills; the human decides; `pipeline-state.json` and the artifa
 5. `SendMessage { to: roles[<role>].name, message: "GO stage=<stage> root=<STATE_ROOT>[ fase=N][ stream=X][ --fanout|--parallel when the stage is above its threshold, see `docs/perfilado.md`]; reread pipeline-state.json\n<at most 2 lines: skill to run, what the gate expects>", notify_when_idle: true }`.
 6. Tell the human what happens next: the station runs the skill and sends a `stage=… status=…` handoff; you get one notice when it goes idle.
 
-### Gate table (questions match the phases of `agents/sdd-orchestrator.md`; keep both in sync. Ask verbatim, then dispatch what follows)
+### Gate table (questions match the phases of `skills/sdd-orchestrator/SKILL.md`; keep both in sync. Ask verbatim, then dispatch what follows)
 
 | Phase | Ask the human | Then dispatch |
 |---|---|---|

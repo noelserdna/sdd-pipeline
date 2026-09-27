@@ -16,7 +16,7 @@ You are the **SDD Dashboard Generator**. Your job is to scan all SDD pipeline ar
 
 ## How it runs
 
-`generate.py` (next to this file) does all the scanning, graph building and HTML rendering. Your part is Step 1 (adoption data, only when onboarding reports exist), running the script, and reporting.
+`generate.py` (next to this file) does all the scanning, graph building and HTML rendering. Your part is Step 1 (adoption data, only when adoption reports exist), running the script, and reporting.
 
 ```
 python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/sdd-dashboard/generate.py" [--project DIR] [--output DIR]
@@ -31,7 +31,7 @@ What the script does:
 
 1. Extracts artifact definitions (headings, table rows, file names such as `UC-001-*.md`, `API-{module}.md`) and cross-references, expanding ranges (`UC-001..UC-005`, `REQ-F-007 a REQ-F-009`; a dash or "a" range needs the prefix repeated on the end ID). Digit-less IDs (`API-auth`) count only when some file defines them, so prose like "BDD-style" is not a broken reference. Patterns: `references/id-patterns-extended.md`.
 2. Scans code under `code_paths` and tests under `test_paths` (plus `e2e/`, `playwright/`, `cypress/`) in any common language for `Refs:` comments and IDs in test names; the test framework comes from the files and project config, otherwise `unknown`.
-3. Reads git history (`Refs:`/`Task:` trailers) and infers code references (below), merges hook-captured mappings from `.sdd/trace-map.json`, applies `.sdd/overrides.json`.
+3. Reads git history (`Refs:`/`Task:` trailers) and infers code references (below), merges hook-captured mappings from `.sdd/trace-map.json` and llm-verified requirement refs from `.sdd/gap-analysis.json`, applies `.sdd/overrides.json`.
 4. Classifies REQs (business domain from the requirement's section heading or ID group, else `General`; technical layer; functional category), computes coverage statistics and audit numbers (spec audit from `audits/AUDIT-*.md`, security audit from `audits/SECURITY-AUDIT-*.md`, each report parsed on its own).
 5. Writes `dashboard/traceability-graph.json` (schema: `references/graph-schema.md`) and `dashboard/index.html` from `references/html-template.md`.
 
@@ -43,6 +43,7 @@ What the script does:
 | `hook-captured` | `.sdd/trace-map.json`, written by the trace-map hook while a task is implemented | 0.95 |
 | `commit-inferred` | Files of a commit whose `Refs:` trailer names the artifact | 0.6-0.9 by recency |
 | `blame-inferred` | Same, carried to the file's current path after a rename | 0.6-0.9 |
+| `llm-verified` | `covered` verdicts in `.sdd/gap-analysis.json` → `semantic.requirements[]` (`/sdd-gap-detector --semantic`) with `path:start-end` evidence; never replaces a direct or hook-captured ref | from the entry (e.g. 0.93) |
 | `task-inferred` | Only a `Task:` trailer: the artifacts the TASK points at and their REQs (never through the FASE) | 0.5 |
 | `manual-override` | `pin` entries in `.sdd/overrides.json` (`suppress` removes inferred refs) | 1.0 |
 | `code-index` | File-level inferred refs refined to symbols when `codeIntelligence` exists (`/sdd-code-index`) | — |
@@ -55,42 +56,33 @@ Code files with no reference of any origin are listed in `statistics.codeStats.o
 |------|---------|
 | `dashboard/traceability-graph.json` | Structured graph of artifacts and relationships (also read by the MCP server) |
 | `dashboard/index.html` | Self-contained HTML dashboard (CSS+JS inline) |
-| `dashboard/adoption-data.json` | Adoption data from Step 1 (only when onboarding reports exist) |
+| `dashboard/adoption-data.json` | Adoption data from Step 1 (only when adoption reports exist) |
 
 ## Process
 
-### Step 1: Write adoption-data.json (only when onboarding reports exist)
+### Step 1: Write adoption-data.json (only when adoption reports exist)
 
-`generate.py` cannot read free-form onboarding reports, so this is the one step you do yourself. Parse each report that exists and write `dashboard/adoption-data.json` as `{"adoption": {...}, "adoptionStats": {...}}` (shape in `references/graph-schema.md`). Skip the file entirely when none of these reports exist.
+`generate.py` cannot read the free-form adoption reports (reverse-engineer, reconcile, import), so this is the one step you do yourself. Parse each report that exists and write `dashboard/adoption-data.json` as `{"adoption": {...}, "adoptionStats": {...}}` (shape in `references/graph-schema.md`). Skip the file entirely when none of these reports exist.
 
-1. **`onboarding/ONBOARDING-REPORT.md`** → Extract:
-   - `scenario`: scenario identifier from "Scenario Classification" section
-   - `scenarioName`: human-readable name
-   - `confidence`: classification confidence value
-   - `healthScore`: overall health score from "Health Score" section
-   - `dimensions`: per-dimension scores (requirements, specs, tests, architecture, traceability, codeQuality, pipelineState)
-   - `actionPlan`: array of steps from "Action Plan" section (step number, skill name, description, effort level)
-   - `signals`: detection signals from "Signals Detected" section
-
-2. **`findings/FINDINGS-REPORT.md`** → Extract:
+1. **`findings/FINDINGS-REPORT.md`** → Extract:
    - `findings.total`: total findings count
    - `findings.bySeverity`: count by severity (critical, high, medium, low)
    - `findings.byCategory`: count by category (DEAD-CODE, TECH-DEBT, WORKAROUND, INFRASTRUCTURE, ORPHAN, INFERRED, IMPLICIT-RULE)
    - `findings.topFindings`: first 5 critical/high findings with id, severity, category, description
 
-3. **`reverse-engineering/INVENTORY.md`** → Extract:
+2. **`reverse-engineering/INVENTORY.md`** → Extract:
    - `inventory.totalFiles`: total files analyzed
    - `inventory.totalLOC`: total lines of code
    - `inventory.byLayer`: file count by layer (Backend, Frontend, Infrastructure)
 
-4. **`reconciliation/RECONCILIATION-REPORT.md`** → Extract:
+3. **`reconciliation/RECONCILIATION-REPORT.md`** → Extract:
    - `alignmentPercentage`: spec-code alignment percentage
    - `divergences.total`: total divergences found
    - `divergences.byType`: count by type (NEW_FUNCTIONALITY, REMOVED_FEATURE, BEHAVIORAL_CHANGE, REFACTORING, BUG_OR_DEFECT, AMBIGUOUS)
    - `divergences.resolved` / `divergences.pending`: counts
    - `delta`: specs/reqs added/modified counts
 
-5. **`import/IMPORT-REPORT.md`** → Extract:
+4. **`import/IMPORT-REPORT.md`** → Extract:
    - `sources`: array of { format, file, itemCount, mappedCount }
    - `totals`: { itemsProcessed, itemsMapped, itemsSkipped }
    - `quality`: { completeness, duplicatesFound, conflictsFound }
@@ -98,8 +90,8 @@ Code files with no reference of any origin are listed in `statistics.codeStats.o
 
 **If a report does not exist**: set `present: false` for that sub-block.
 
-**Compute adoptionStats**: If any onboarding data exists:
-- `overallAdoptionScore`: use onboarding healthScore if present, otherwise estimate from available data
+**Compute adoptionStats**: If any adoption data exists:
+- `overallAdoptionScore`: estimate 0-100 from the available data (alignment percentage, findings severity, import completeness)
 - `overallAdoptionGrade`: A (≥90), B (≥75), C (≥60), D (≥40), F (<40)
 - `criticalFindingsCount` / `highFindingsCount`: from findings data (0 if no findings)
 - `alignmentPercentage`: from reconciliation data (null if no reconciliation)

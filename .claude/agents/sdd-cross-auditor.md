@@ -1,6 +1,6 @@
 ---
 name: sdd-cross-auditor
-description: "Cross-references all 24 SDD skill definitions, the stack kits and the SDD Stack Profile contract for I/O contract mismatches, version inconsistencies, and stale cross-references. Use after modifying any SKILL.md or kit."
+description: "Cross-references all SDD skill definitions (skills/*/SKILL.md), the stack kits and the SDD Stack Profile contract for I/O contract mismatches, version inconsistencies, and stale cross-references. Use after modifying any SKILL.md or kit."
 tools: Read, Grep, Glob
 model: sonnet
 memory: project
@@ -20,7 +20,7 @@ skills/sdd-dashboard/SKILL.md
 skills/sdd-gap-detector/SKILL.md
 skills/sdd-import/SKILL.md
 skills/sdd-lead/SKILL.md
-skills/sdd-onboarding/SKILL.md
+skills/sdd-orchestrator/SKILL.md
 skills/sdd-pipeline-status/SKILL.md
 skills/sdd-plan-architect/SKILL.md
 skills/sdd-reconcile/SKILL.md
@@ -38,7 +38,7 @@ skills/sdd-tech-designer/SKILL.md
 skills/sdd-test-planner/SKILL.md
 skills/sdd-traceability-check/SKILL.md
 skills/sdd-ux-designer/SKILL.md
-skills/sdd-verify-coverage/SKILL.md
+scripts/sdd-jev.mjs and scripts/jev/*.json
 templates/stacks/*/{kit.json,profile.md,conventions.md,rules/*.md}
 skills/sdd-task-implementer/references/stack-profile.md
 skills/sdd-task-generator/references/task-template.md

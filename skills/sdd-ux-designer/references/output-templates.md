@@ -224,13 +224,13 @@
 
 ## Screen Index
 
-| # | Screen | Use Case | Priority | Breakpoints |
-|---|--------|----------|----------|-------------|
-| 1 | {screen name} | {UC-NNN} | {HIGH/MED/LOW} | {desktop, mobile} |
+| ID | Screen | Use Case | Priority | Breakpoints |
+|----|--------|----------|----------|-------------|
+| SCR-001 | {screen name} | {UC-NNN} | {HIGH/MED/LOW} | {desktop, mobile} |
 
 ---
 
-## WF-{NNN}: {Screen Name}
+## SCR-{NNN}: {Screen Name}
 
 ### Purpose
 {What this screen does and when users encounter it}
@@ -281,8 +281,10 @@
 
 ### Related Specs
 - {UC-NNN}: {title}
-- {WF-NNN}: {title}
+- {WF-NNN}: {title} (spec workflow this screen takes part in)
 ```
+
+Screen ids are `SCR-NNN` so they never collide with the spec workflow ids `WF-NNN` in the traceability graph. Consumers cite a screen as `WIREFRAMES §SCR-NNN`.
 
 ### ASCII Wireframe Conventions
 

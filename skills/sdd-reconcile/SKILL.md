@@ -8,7 +8,7 @@ description: "Detects drift between SDD artifacts and code, classifies each dive
 > **Version:** 1.1.0
 > **Pipeline position:** Lateral — requires both SDD artifacts and code
 > **Reads from:** `requirements/`, `spec/`, code and test paths from the SDD Stack Profile (`code_paths`/`test_paths`; defaults `src/`, `tests/`), `.sdd/gap-analysis.json` (optional)
-> **Invoked by:** `sdd-onboarding` (scenario 3: SDD drift)
+> **Recommended by:** `sdd-pipeline-status --diagnose` (SDD drift, Partial SDD, Brownfield with docs)
 
 ## 1. Scope
 
@@ -120,7 +120,7 @@ Each divergence is applied independently; a failure in one does not block the ot
 
 | Skill | Relationship |
 |-------|-------------|
-| `sdd-onboarding` | Recommends reconcile for SDD drift (scenario 3) |
+| `sdd-pipeline-status --diagnose` | Recommends reconcile for SDD drift |
 | `sdd-reverse-engineer` | Use instead when no SDD artifacts exist |
 | `sdd-gap-detector` | Its `.sdd/gap-analysis.json` seeds Phases 2-3 |
 | `sdd-req-change` | Owns the CR format; option C hands CRs to it |

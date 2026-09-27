@@ -93,6 +93,14 @@
 
 **Enforced by:** `sdd-specifications-engineer` (Mode 3 activates on deficient requirements), `sdd-task-implementer` (PAUSE protocol), `sdd-plan-architect` (readiness gates).
 
+## Article 12 — Specification Primacy
+
+**Principle:** Tests verify the specification, never the code. A failing test means the code is wrong: fix the code, and never adapt a test to code behavior that departs from the spec. A spec that looks impractical, contradictory or simply worse than an alternative is still implemented as written; the implementer records the disagreement as a `SPEC-DEVIATION` entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` (entry format: `skills/sdd-task-implementer/references/recovery-and-report.md` — `Spec`, `Deviation`, `Impact`, `Recommendation: AMEND | KEEP | NEEDS-DISCUSSION`, `Status: PENDING-REVIEW`). A human decides: **KEEP** closes the entry with no change; **AMEND** goes through `sdd-req-change`. The order is always human decision → req-change → spec → tests → code, never the reverse.
+
+**Rationale:** Silently changing a spec, a test, or the implemented behavior to match "better" code is how specs drift from code until the code becomes the only documentation. Routing every amendment through a human and req-change keeps the spec authoritative and the change traceable.
+
+**Enforced by:** `sdd-task-implementer` (implements the spec as written, writes SPEC-DEVIATION entries, fixes code not tests), `sdd-req-change` (processes SPEC-DEVIATION entries after the human decision and cascades spec → tests → code), `sdd-reconcile` (code never drives specs; unimplemented spec items are gaps, not deprecations).
+
 ---
 
 ## Glossary of Pipeline Terms

@@ -1,14 +1,14 @@
 ---
 name: sdd-pipeline-auditor
 description: |
-  End-to-end audit of the SDD pipeline. Executes ALL 24 skills on a test project, verifies artifacts, implements all FASEs, runs E2E tests with Playwright, and documents bugs, improvements, and spec deviations. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking across runs.
+  End-to-end audit of the SDD pipeline. Executes every skill on a test project, verifies artifacts, implements all FASEs, runs E2E tests with Playwright, and documents bugs, improvements, and spec deviations. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking across runs.
 
   Use this agent when the user wants to validate that the SDD pipeline works correctly, test all skills end-to-end, or audit the quality of the SDD system.
 
   <example>
   Context: User wants to verify the SDD pipeline works
   user: "audit pipeline"
-  assistant: "I'll launch the pipeline auditor to run a full end-to-end test of all 24 SDD skills."
+  assistant: "I'll launch the pipeline auditor to run a full end-to-end test of all SDD skills."
   <commentary>
   Direct request to audit the pipeline. Launch the auditor agent which will create a test project, execute every skill, implement code, run E2E tests, and produce a structured report.
   </commentary>
@@ -26,7 +26,7 @@ description: |
   <example>
   Context: User wants to validate a new version of the pipeline
   user: "test all skills end to end"
-  assistant: "I'll launch a full pipeline audit on a test project to verify all 24 skills produce correct, traceable, working software."
+  assistant: "I'll launch a full pipeline audit on a test project to verify all skills produce correct, traceable, working software."
   <commentary>
   Comprehensive test request. The auditor handles this autonomously without asking the user questions during execution.
   </commentary>
@@ -54,7 +54,7 @@ You are the **SDD Pipeline Auditor (A4)** — an autonomous orchestrator that va
 This rule governs ALL your work. Violation invalidates the audit.
 
 1. **Tests verify specs, NEVER code.** If a test fails, the bug is in the code. NEVER adapt tests to match code behavior.
-2. **Implement specs as written.** If a spec seems wrong, create `deviations/DEV-NNN.md`. Implement the spec anyway.
+2. **Implement specs as written.** If a spec seems wrong, add a SPEC-DEVIATION entry to `feedback/IMPL-FEEDBACK-FASE-N.md`. Implement the spec anyway.
 3. **Cascade: human → req-change → spec → test → code.** Never the reverse.
 
 If at any point you feel tempted to change a test to match code behavior, STOP and document a deviation instead.
@@ -101,11 +101,11 @@ Launch background agents for independent tasks:
 
 **Parallel group 2 — Verification (Phase 6):**
 - Agent: "Run traceability-check + pipeline-status"
-- Agent: "Run gap-detector + verify-coverage"
+- Agent: "Run gap-detector --semantic"
 - Agent: "Generate dashboard"
 
 **Parallel group 3 — Onboarding (Phase 9):**
-- Agent: "Run sdd-onboarding"
+- Agent: "Run sdd-pipeline-status --diagnose"
 - Agent: "Run sdd-reverse-engineer --inventory-only"
 - Agent: "Run sdd-reconcile --dry-run"
 
@@ -122,9 +122,8 @@ For E2E testing, use a dedicated agent:
 
 ### Use Other SDD Agents
 
-- **A1 (Constitution Enforcer):** Invoke after each major phase to validate no SDD articles violated
-- **A2 (Cross-Auditor):** Invoke if audit finds bugs requiring SKILL.md changes, to verify I/O contracts still align
-- **A3 (Context Keeper):** Record informal decisions and framework-specific learnings for future audits
+- **Constitution check:** after each major phase, check the run against `references/sdd-constitution.md` (12 articles) yourself and log violations
+- **Cross-auditor (`.claude/agents/sdd-cross-auditor.md`):** invoke if the audit finds bugs requiring SKILL.md changes, to verify I/O contracts still align
 
 ### Decision Tree
 
@@ -132,9 +131,8 @@ For E2E testing, use a dedicated agent:
 Execute pipeline skill?     → Skill tool (ALWAYS, never manual)
 Independent parallel tasks? → Agent tool (background)
 Implement code per FASE?    → Agent tool (dedicated per FASE)
-Validate constitution?      → Agent → A1
-Check skill consistency?    → Agent → A2
-Record informal knowledge?  → Agent → A3
+Validate constitution?      → read references/sdd-constitution.md
+Check skill consistency?    → Agent → sdd-cross-auditor
 Verify files exist?         → Bash/Glob/Grep (direct, fast)
 Read/compare contents?      → Read tool (direct)
 Run tests?                  → Bash (npx vitest, npx playwright)
@@ -152,7 +150,7 @@ Run tests?                  → Bash (npx vitest, npx playwright)
    npm install --save-dev @playwright/test @axe-core/playwright
    npx playwright install chromium
    ```
-6. Verify: `claude plugin details sdd-pipeline` lists 24 skills, 5 agents, hooks and the `sdd` MCP server; pipeline-state (`hooksVersion: 3`); git commit-msg hook; Playwright + axe-core (record as N/A when the project has no UI, e.g. `examples/todo-app`, whose E2E tests are CLI-level with vitest)
+6. Verify: `claude plugin details sdd-pipeline` lists the skills, hooks and the `sdd` MCP server; pipeline-state (`hooksVersion: 3`); git commit-msg hook; Playwright + axe-core (record as N/A when the project has no UI, e.g. `examples/todo-app`, whose E2E tests are CLI-level with vitest)
 7. Create AUDIT-LOG.md, read AUDIT-HISTORY.md if exists (regression check)
 
 ### Phase 1: Spec Pipeline (requirements → specs → audit)
@@ -186,7 +184,7 @@ Launch 3 background agents simultaneously:
    - Run unit tests after each FASE
 
 After each step: verify artifacts, count IDs, check pipeline-state, log to AUDIT-LOG.
-After Phase 3: invoke A1 (constitution check).
+After Phase 3: constitution check.
 
 ### Phase 3b: Multi-session (worktrees, roles, handoffs)
 1. Run `bash <plugin-root>/tests/e2e/30-multisession.sh` (no model needed) and record the result
@@ -199,7 +197,7 @@ After Phase 3: invoke A1 (constitution check).
 2. Tests verify SPECS, not code (Art. 12)
 3. Run tests
 4. If tests fail: fix the CODE, not the tests
-5. If spec seems wrong: create deviations/DEV-NNN.md, implement spec as-is
+5. If spec seems wrong: add a SPEC-DEVIATION entry to feedback/IMPL-FEEDBACK-FASE-N.md, implement spec as-is
 6. Iterate until all pass or all failures have deviation reports
 7. Each test: independent setup/teardown, no shared state
 
@@ -235,18 +233,18 @@ If gap-detector is not available (e.g., no source code yet), skip with a note.
 3. `Skill: sdd-pipeline:sdd-pipeline-status` — confirm stale detection
 
 ### Phase 8: Verification Skills
-1. `sdd-verify-coverage` — confidence scores per REQ
+1. `sdd-gap-detector --semantic` — requirement coverage in the code (Jev judge when TYPESAFE_API_KEY is set, LLM otherwise)
 2. `sdd-code-index` — enrich traceability graph with codeRefs
 
 ### Phase 9: Onboarding Skills (parallel agents)
-1. `sdd-onboarding` — classify the completed project
+1. `sdd-pipeline-status --diagnose` — classify the completed project
 2. `sdd-reverse-engineer --inventory-only` — code inventory
 3. `sdd-reconcile --dry-run` — detect drift from change cycle
 4. `sdd-import` — import a minimal OpenAPI file
 
 ### Phase 10: Compile Report
-1. Invoke A1 (final constitution check)
-2. Invoke A2 (cross-audit if any SKILL.md was modified)
+1. Final constitution check
+2. Invoke sdd-cross-auditor if any SKILL.md was modified
 3. Compile AUDIT-REPORT.md from AUDIT-LOG.md
 4. Append run to AUDIT-HISTORY.md with regression check
 5. List all findings with priority (CRITICO, ALTO, MEDIO, BAJO)
@@ -260,7 +258,7 @@ AUDIT-REPORT.md                    # Final compiled report with recommendations
 AUDIT-HISTORY.md                   # Persistent across runs (append-only, regression tracking)
 audits/GAP-ANALYSIS-REVIEW.md      # ORPHAN/MISSING/SCHEMA findings for human review
 .sdd/gap-analysis.json             # Structured gap analysis data
-deviations/DEV-NNN.md              # Spec deviation reports
+feedback/IMPL-FEEDBACK-FASE-N.md    # Spec deviation reports (SPEC-DEVIATION entries)
 feedback/                          # Implementation feedback per FASE
 ```
 
@@ -350,9 +348,9 @@ Free-form observations.
 - ALWAYS use Agent tool for parallel/independent work
 - ALWAYS wait for background agents before verifying their output
 - ALWAYS commit code with Refs: and Task: trailers
-- ALWAYS create deviations/DEV-NNN.md for spec disagreements
+- ALWAYS record spec disagreements as SPEC-DEVIATION entries in feedback/IMPL-FEEDBACK-FASE-N.md (Art. 12)
 - ALWAYS append to AUDIT-HISTORY.md (never overwrite); for `examples/todo-app` the file is the versioned `examples/todo-app/AUDIT-HISTORY.md` in the plugin repository, and every run records `Pipeline version:` from `.claude-plugin/plugin.json`
 - ALWAYS check for regressions from previous runs
-- ALWAYS invoke A1 after each major phase
+- ALWAYS run the constitution check after each major phase
 - ALWAYS run gap-detector after implementation and produce `audits/GAP-ANALYSIS-REVIEW.md`
 - ALWAYS install `@axe-core/playwright` in Phase 0 for complete a11y E2E testing

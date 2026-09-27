@@ -465,6 +465,51 @@ gen._refine_with_code_intelligence(g)
 check("code-index: la ref inferida a nivel de fichero no se pierde si otra ref del mismo fichero existe",
       [c["origin"] for c in g["artifacts"][0]["codeRefs"]] == ["direct", "commit-inferred"], g["artifacts"][0]["codeRefs"])
 
+# 13. llm-verified refs from .sdd/gap-analysis.json (sdd-gap-detector --semantic) + API-NNN-NN headings
+lp = new_repo("llm")
+write(lp, {
+    "requirements/REQUIREMENTS.md": "# R\n\n### REQ-F-001: A\n\n### REQ-F-002: B\n\n### REQ-F-003: C\n\n"
+                                    "### REQ-F-004: D\n\n### REQ-F-005: E\n",
+    "spec/contracts/API-tasks.md": "# API-tasks\n\n## API-001-01 — createTask\n\nRefs: REQ-F-001\n",
+    "src/a.ts": "// Refs: REQ-F-001\nexport function a() {}\n",
+    "src/b.ts": "export function b() {}\n",
+    ".sdd/gap-analysis.json": json.dumps({"$schema": "sdd-gap-analysis-v1", "semantic": {"judge": "jev", "requirements": [
+        {"id": "REQ-F-001", "status": "covered", "decidedBy": "jev", "origin": "llm-verified", "confidence": 0.9, "evidence": "src/a.ts:1-2"},
+        {"id": "REQ-F-002", "status": "covered", "decidedBy": "jev", "origin": "llm-verified", "confidence": 0.93, "evidence": "./src/b.ts:3-9"},
+        {"id": "REQ-F-003", "status": "partial", "decidedBy": "llm", "evidence": "src/b.ts:1-2 handles part"},
+        {"id": "REQ-F-004", "status": "covered", "decidedBy": "search", "evidence": "src/b.ts:1-2"},
+        {"id": "REQ-F-005", "status": "covered", "decidedBy": "llm", "confidence": 0.88, "evidence": "somewhere in src/b.ts"}]}}),
+})
+lsp = gen.resolve_scan_paths(lp)
+l_arts, l_refs, l_ids = quiet(gen.scan_files, lp)[0]
+check("api: el encabezado '## API-001-01 — createTask' define API-001-01 (no API-001)",
+      "API-001-01" in l_arts and "API-001" not in l_arts, sorted(i for i in l_arts if i.startswith("API")))
+l_code, l_cstats = quiet(gen.scan_code_refs, lp, lsp)[0]
+l_tests, l_tstats = quiet(gen.scan_test_refs, lp, lsp)[0]
+lg, _, lerr = quiet(gen.build_graph, lp, os.path.join(lp, "dashboard"), "llm", l_arts, l_refs, l_ids,
+                    [], l_code, l_cstats, l_tests, l_tstats, lsp)
+la = {a["id"]: a for a in lg["artifacts"]}
+llm2 = [c for c in la["REQ-F-002"]["codeRefs"] if c.get("origin") == "llm-verified"]
+check("llm-verified: REQ covered (jev) con evidencia path:start-end → codeRef {file, confidence, lines}",
+      len(llm2) == 1 and llm2[0]["file"] == "src/b.ts" and llm2[0]["lines"] == [3, 9] and llm2[0]["confidence"] == 0.93, la["REQ-F-002"]["codeRefs"])
+check("llm-verified: no pisa la ref directa del mismo fichero",
+      [c["origin"] for c in la["REQ-F-001"]["codeRefs"] if c["file"] == "src/a.ts"] == ["direct"], la["REQ-F-001"]["codeRefs"])
+check("llm-verified: partial, decidedBy search y evidencia en prosa se ignoran",
+      not any(c.get("origin") == "llm-verified" for r in ("REQ-F-003", "REQ-F-004", "REQ-F-005") for c in la[r]["codeRefs"]),
+      {r: la[r]["codeRefs"] for r in ("REQ-F-003", "REQ-F-004", "REQ-F-005")})
+check("llm-verified: cuenta en estadísticas (llmVerifiedRefs, reqsWithCode) sin avisos",
+      lg["statistics"]["codeStats"]["llmVerifiedRefs"] == 1 and lg["statistics"]["traceabilityCoverage"]["reqsWithCode"]["count"] == 2
+      and "gap-analysis" not in lerr, (lg["statistics"]["codeStats"], lg["statistics"]["traceabilityCoverage"]["reqsWithCode"], lerr))
+write(lp, {".sdd/gap-analysis.json": "{ broken"})
+lg2, _, lerr2 = quiet(gen.build_graph, lp, os.path.join(lp, "dashboard"), "llm", l_arts, l_refs, l_ids,
+                      [], l_code, l_cstats, l_tests, l_tstats, lsp)
+check("llm-verified: gap-analysis.json corrupto → aviso y sigue sin refs llm-verified",
+      "gap-analysis.json" in lerr2 and lg2["statistics"]["codeStats"]["llmVerifiedRefs"] == 0, lerr2)
+os.remove(os.path.join(lp, ".sdd", "gap-analysis.json"))
+lg3, _, lerr3 = quiet(gen.build_graph, lp, os.path.join(lp, "dashboard"), "llm", l_arts, l_refs, l_ids,
+                      [], l_code, l_cstats, l_tests, l_tstats, lsp)
+check("llm-verified: sin gap-analysis.json → silencio", "gap-analysis" not in lerr3 and lg3["statistics"]["codeStats"]["llmVerifiedRefs"] == 0, lerr3)
+
 # End to end CLI
 r = subprocess.run([sys.executable, gen_path, "--project", proj], capture_output=True, text=True)
 check("cli: exit 0 con entradas corruptas y escribe grafo + html",

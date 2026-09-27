@@ -395,7 +395,7 @@ Use for end-to-end acceptance scenarios that validate complete user journeys, tr
 
 3. **UX artifacts** (WEB-APP with `ux/`): `WIREFRAMES.md` (component inventory, interactive elements per screen), `INTERACTION-MODEL.md` (states, loading and error states, conditional visibility), `ACCESSIBILITY-SPEC.md` (keyboard matrix, ARIA mappings).
 
-4. **Field inventory per workflow** (required). For each WF with E2E scenarios, list every field from three sources and cross-reference them — UC input (`UC-003.2`), operation input (`API-001-01.title`), wireframe element — with required, type, validation rules and whether it is conditional (table shape in the template).
+4. **Field inventory per workflow** (required). For each WF with E2E scenarios, list every field from three sources and cross-reference them — UC input (`UC-003.2`), operation input (`API-001-01.title`), wireframe element (`SCR-002.title`) — with required, type, validation rules and whether it is conditional (table shape in the template).
 
    Cross-validation:
    - `V-FIELD-01` (ERROR): every required input of the operation appears in the inventory with a UC input source.

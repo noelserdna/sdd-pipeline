@@ -12,7 +12,7 @@ These patterns identify where an ID is **defined** (first occurrence as a headin
 | REQ (categorized) | `^#+\s*REQ-([A-Z]{1,4})-(\d{3,4})` | `requirements/REQUIREMENTS.md` |
 | UC | `^#+\s*UC-(\d{3,4})` or filename `UC-(\d{3,4})` | `spec/use-cases/UC-NNN-*.md` |
 | WF | `^#+\s*WF-(\d{3,4})` or filename `WF-(\d{3,4})` | `spec/workflows/WF-NNN-*.md` |
-| API (operation) | `\|\s*API-(\d{3,4})-(\d{2})\s*\|` | `spec/contracts/API-*.md` (operation table rows) |
+| API (operation) | `\|\s*API-(\d{3,4})-(\d{2})\s*\|` or `^#+\s*API-(\d{3,4})-(\d{2})` | `spec/contracts/API-*.md` (operation table rows) |
 | API (contract) | filename `API-([A-Za-z][A-Za-z0-9-]+)\.md` or `^#+\s*API-([A-Za-z][A-Za-z0-9-]+)` | `spec/contracts/API-{module}.md` |
 | BDD | filename `BDD-UC-(\d{3,4})` (scenarios `Scenario:\s*AC-(\d{3})-(\d{2})` inside) | `spec/tests/BDD-UC-NNN.md`, `test/` |
 | INV (simple) | `^#+\s*INV-(\d{3,4})` or `\|\s*INV-(\d{3,4})\s*\|` | `spec/domain/05-INVARIANTS.md` |
@@ -27,10 +27,10 @@ These patterns identify where an ID is **defined** (first occurrence as a headin
 To find **references** to any ID type across all files:
 
 ```regex
-(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN)[-‑](?:[A-Z]{0,6}[-‑])?\d{3,4}
+(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN)[-‑](?:[A-Z]{0,6}[-‑])?\d{3,4}(?:[-‑]\d{2})?
 ```
 
-This matches both simple IDs (`INV-001`) and scoped IDs (`INV-SRV-001`, `REQ-EXT-002`).
+This matches simple IDs (`INV-001`), scoped IDs (`INV-SRV-001`, `REQ-F-002`) and operation IDs (`API-001-01`).
 
 For TASK IDs (compound format):
 ```regex

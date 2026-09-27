@@ -51,7 +51,7 @@
 | Spec Reference | Task Coverage |
 |---------------|---------------|
 | {UC-XXX} | {TASK-F{N}-XXX, ...} |
-| {API-XXX-XX} | {TASK-F{N}-XXX, ...} |
+| {API-NNN-NN} | {TASK-F{N}-XXX, ...} |
 | {ADR-XXX} | {TASK-F{N}-XXX, ...} |
 | {INV-XXX-XXX} | {TASK-F{N}-XXX, ...} |
 | {REQ-XXX-XXX} | {TASK-F{N}-XXX, ...} |

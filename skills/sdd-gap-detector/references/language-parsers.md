@@ -361,9 +361,9 @@ After finding a header, extract data rows:
 ### API ID Extraction
 
 API identifiers may appear:
-- In the table: `| API-005 | POST | /api/users | ... |`
-- As section headers: `### API-005: Create User`
-- Inline references: `Endpoint API-005`
+- In the table: `| API-001-05 | POST | /api/users | ... |`
+- As section headers: `## API-001-05 — createUser`
+- Inline references: `Endpoint API-001-05`
 
 Pattern (SDD operation ids are `API-NNN-NN`; the bare module prefix `API-NNN` also occurs):
 ```regex
@@ -431,7 +431,7 @@ Groups: API-op, Idiom, Route / action, Verb. From **every cell** of the row coll
 
 Code matching: Rails by `handler` first (`tasks#update`), then verb + normalized path; the `PUT` twin of a mapped `PATCH` update and a `root` route whose handler is mapped are not orphans. Next.js Server Actions by action name (§4b); pages by path. A route cited in any cell of a row (e.g. the `edit` form page in *Validation error*) counts as mapped. Worked example: end of `fixtures/rails-routes-expanded.txt`.
 
-**No mapping file:** compare operation names with handler / action names only, mark every endpoint result `confidence: "low"` and add the highlight "design/OPERATION-MAPPING.md missing — run /sdd-tech-designer".
+**No mapping file:** compare operation names with handler / action names only, mark every endpoint result `confidence: "low"` and add the highlight "design/OPERATION-MAPPING.md missing — run /sdd-plan-architect (Phase 4b writes it) or /sdd-tech-designer".
 
 **JSON** stays `sdd-gap-analysis-v1`: in `endpoints.*[]`, `id` = API-op, `method` = the mapping Verb (`ACTION` for Server Actions), `path` = route or `action:<name>`, plus `"style": "operations"`.
 

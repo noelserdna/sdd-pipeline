@@ -7,7 +7,7 @@ description: "Bootstraps SDD from existing code and tests: generates requirement
 
 > **Pipeline position:** Lateral — bootstrap entry point (not a linear stage)
 > **Feeds into:** `sdd-spec-auditor` (next), then `sdd-test-planner`, `sdd-plan-architect`
-> **Invoked by:** `sdd-onboarding` (scenarios 2, 5, 6, 8)
+> **Recommended by:** `sdd-pipeline-status --diagnose` (Brownfield bare/with docs, Tests-as-spec, Multi-team, Fork/migration)
 
 ## 1. Scope
 
@@ -36,9 +36,8 @@ Out of scope: security analysis (`sdd-security-auditor`), drift between existing
    - Only `requirements/REQUIREMENTS.md` (and optionally `spec/`) whose items are marked `[IMPORTED]` / `[IMPORTED-REPLACED]` (written by `sdd-import`) → **seed mode**: imported items are the starting point and are merged, not overwritten (see Phase 5 and 6).
    - Artifacts that were not produced by `sdd-import` → stop and recommend `sdd-reconcile` (drift scenario); continue only if the user explicitly asks to regenerate, and then back up the existing directories first.
 2. Read `pipeline-state.json`. If it does not exist, create it from the plugin template, as `sdd-setup` Step 1 does (`templates/pipeline-state.template.json`, substituting `__SDD_VERSION__` and `__NOW__`).
-3. Read `onboarding/ONBOARDING-REPORT.md` if present (scenario and leverage hints).
-4. Detect languages, frameworks, package manager, and resolve code/test paths (Stack Profile, else detection).
-5. Create `reverse-engineering/` for intermediate outputs.
+3. Detect languages, frameworks, package manager, and resolve code/test paths (Stack Profile, else detection).
+4. Create `reverse-engineering/` for intermediate outputs.
 
 **Gate:** stop if no source directory is found.
 
@@ -147,7 +146,7 @@ Read [references/retroactive-task-template.md](references/retroactive-task-templ
 | `findings/` | `FINDINGS-REPORT.md` | 10 |
 | root | `pipeline-state.json` (Phase 10 rule) | 1, 10 |
 
-Reads: code and test paths, package/CI/config files, git history, `pipeline-state.json`, `onboarding/ONBOARDING-REPORT.md`.
+Reads: code and test paths, package/CI/config files, git history, `pipeline-state.json`.
 
 ## 6. Related Skills
 

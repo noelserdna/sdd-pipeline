@@ -83,8 +83,8 @@ DEF_PATTERNS = [
     ("WF", re.compile(r'^(#{1,6})\s+(WF-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # API named: ## API-pdf-reader or # API-matching
     ("API", re.compile(r'^(#{1,6})\s+(API-[a-zA-Z][a-zA-Z0-9-]*)\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
-    # API numeric: ## API-001
-    ("API", re.compile(r'^(#{1,6})\s+(API-\d{3,4})\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
+    # API numeric: ## API-001-01 — createTask (operation, canonical) or legacy ## API-001
+    ("API", re.compile(r'^(#{1,6})\s+(API-\d{3,4}(?:-\d{2})?)\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # BDD heading: ## BDD-extraction or Scenario: BDD-xxx
     ("BDD", re.compile(r'^(#{1,6})\s+(BDD-[a-zA-Z0-9][a-zA-Z0-9-]*)\s*[:\—\u2013\u2014–-]?\s*(.*)', re.IGNORECASE)),
     # INV with scope: ### INV-EXT-001: title
@@ -2376,7 +2376,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     if hook_refs:
         print(f"  Trace map: {len(hook_refs)} hook-captured file mappings")
 
-    # 4. Deduplicate by (file, refId): direct > hook-captured > inferred
+    # 4. Deduplicate by (file, refId): direct > hook-captured > llm-verified > inferred
     def _dedup(refs, taken):
         kept = []
         for cr in refs:
@@ -2389,13 +2389,19 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
                 taken.add((cr["file"], rid))
         return kept
 
+    # 3b. llm-verified refs from sdd-gap-detector --semantic (.sdd/gap-analysis.json → semantic.requirements[])
+    llm_refs = semantic_code_refs(load_gap_analysis(project_dir, warn=True))
+    if llm_refs:
+        print(f"  Gap analysis: {len(llm_refs)} llm-verified requirement refs")
+
     taken = {(cr["file"], rid) for cr in code_refs for rid in cr.get("refIds", [])}
     deduped_hook = _dedup(hook_refs, taken)
+    deduped_llm = _dedup(llm_refs, taken)
     deduped_inferred = _dedup(inferred_code_refs, taken)
 
     # 5. Apply overrides (Step 1.5)
     overrides_path = os.path.join(project_dir, ".sdd", "overrides.json")
-    all_code_refs = code_refs + deduped_hook + deduped_inferred
+    all_code_refs = code_refs + deduped_hook + deduped_llm + deduped_inferred
     all_code_refs, override_count = apply_overrides(all_code_refs, overrides_path)
 
     # 5. Build artifact_code_refs map from merged refs
@@ -2454,6 +2460,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     code_stats["directRefs"] = direct_refs_count
     code_stats["inferredRefs"] = inferred_refs_count
     code_stats["hookCapturedRefs"] = sum(1 for cr in all_code_refs if cr.get("origin") == "hook-captured")
+    code_stats["llmVerifiedRefs"] = sum(1 for cr in all_code_refs if cr.get("origin") == "llm-verified")
     code_stats["manualOverrides"] = override_count
     # Code files with no reference of any origin: what the dashboard lists as untraced code
     traced_files = {cr["file"] for cr in all_code_refs if cr.get("refIds")}
@@ -2653,16 +2660,71 @@ def generate_html(graph, template_file, html_file):
 # Optional Data Loaders (.sdd/ enrichment files)
 # ──────────────────────────────────────────────────────────
 
-def load_gap_analysis(project_dir):
-    """Load .sdd/gap-analysis.json if it exists. Returns parsed dict or None."""
+def load_gap_analysis(project_dir, warn=False):
+    """Load .sdd/gap-analysis.json if it exists. Returns parsed dict or None (warns on bad JSON when warn=True)."""
     gap_path = os.path.join(project_dir, ".sdd", "gap-analysis.json")
     if not os.path.isfile(gap_path):
         return None
     try:
         with open(gap_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        if warn:
+            _warn(f"{gap_path} is not valid JSON ({e}); llm-verified refs and gap analysis skipped")
         return None
+    return data if isinstance(data, dict) else None
+
+
+_EVIDENCE_RE = re.compile(r'^\s*([^\s:][^:]*?):(\d+)(?:-(\d+))?\s*$')
+
+
+def semantic_code_refs(gap_analysis):
+    """Turn .sdd/gap-analysis.json semantic.requirements[] (sdd-gap-detector --semantic) into codeRefs.
+
+    Only entries with status "covered", decidedBy jev|llm and evidence "path:start-end" (or "path:line")
+    become refs, with origin "llm-verified". Anything else, or a missing section, yields nothing.
+    """
+    if not isinstance(gap_analysis, dict):
+        return []
+    semantic = gap_analysis.get("semantic")
+    reqs = semantic.get("requirements") if isinstance(semantic, dict) else None
+    if not isinstance(reqs, list):
+        return []
+    out = []
+    for entry in reqs:
+        if not isinstance(entry, dict):
+            continue
+        rid = entry.get("id")
+        if not isinstance(rid, str) or classify_id(rid) != "REQ":
+            continue
+        if entry.get("status") != "covered" or entry.get("decidedBy") not in ("jev", "llm"):
+            continue
+        m = _EVIDENCE_RE.match(str(entry.get("evidence") or ""))
+        if not m:
+            continue
+        fpath = m.group(1).replace("\\", "/")
+        if fpath.startswith("./"):
+            fpath = fpath[2:]
+        start = int(m.group(2))
+        end = int(m.group(3)) if m.group(3) else start
+        conf = entry.get("confidence")
+        try:
+            conf = round(float(conf), 2)
+        except (TypeError, ValueError):
+            conf = 0.85
+        out.append({
+            "file": fpath,
+            "line": start,
+            "lines": [start, end],
+            "symbol": f"{os.path.basename(fpath)}:{start}-{end}",
+            "symbolType": "range",
+            "refIds": [rid],
+            "origin": "llm-verified",
+            "confidence": conf,
+            "inferredFrom": None,
+            "judge": entry.get("decidedBy"),
+        })
+    return out
 
 
 def load_test_results(project_dir):

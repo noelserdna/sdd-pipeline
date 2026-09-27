@@ -218,7 +218,7 @@ Runs Phase 0 (context), Phase 3 (wireframes and components) and only step 2 of P
    - Identify entry points, main screens, critical flows, error states
    - Prioritize by user frequency and business value
 
-2. **For each key screen, generate:**
+2. **For each key screen, generate** (screen id `SCR-NNN`; `WF-NNN` already names spec workflows):
 
    a. **ASCII wireframe** (desktop and, when mobile is a channel, mobile), using the symbol conventions in `references/output-templates.md`.
 

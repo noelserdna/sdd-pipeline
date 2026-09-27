@@ -248,7 +248,7 @@ Third stage: after `sdd-specifications-engineer`; next stage `sdd-test-planner` 
 |------|-------|--------|
 | Audit (default) | `spec/` + previous `audits/AUDIT-BASELINE.md` | `audits/AUDIT-BASELINE.md` (report + Baseline/History) |
 | Fix (`--fix`) | `audits/AUDIT-BASELINE.md` + answers | corrected `spec/`, `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md`, baseline update, upstream impact |
-| Focused (`--focused`) | Change Report + affected `spec/` subset | `audits/AUDIT-FOCUSED-{id}.md` |
+| Focused (`--focused`) | Change Report + affected `spec/` subset | `audits/AUDIT-FOCUSED-{CHG-ID}.md` |
 
 ### Invocation
 
@@ -257,12 +257,12 @@ Third stage: after `sdd-specifications-engineer`; next stage `sdd-test-planner` 
 /sdd-spec-auditor --sequential                                       # Force one thread
 /sdd-spec-auditor --fanout                                           # Force the four dimension auditors
 /sdd-spec-auditor --fix                                              # Apply corrections from a triaged audit
-/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{id}.md   # Audit only the changed documents (sdd-req-change cascade)
+/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{CHG-ID}.md   # Audit only the changed documents (sdd-req-change cascade)
 ```
 
 ### Mode Focused
 
-With `--focused --scope=<Change Report>`: audit only the documents in the report's "Documents Modified" section (others are read as context, not audited); check them against each other and their immediate neighbours in the traceability chain instead of a full Phase 1–6 sweep; run the 3C checks scoped to the change set; write `audits/AUDIT-FOCUSED-{change-report-id}.md` with the compact template minus `Baseline` and `History`. Sequential unless the change set exceeds the fan-out threshold. Usually triggered by `sdd-req-change` Phase 9. P0/P1 findings → recommend a full audit.
+With `--focused --scope=<Change Report>`: audit only the documents in the report's "Documents Modified" section (others are read as context, not audited); check them against each other and their immediate neighbours in the traceability chain instead of a full Phase 1–6 sweep; run the 3C checks scoped to the change set; write `audits/AUDIT-FOCUSED-{CHG-ID}.md` (the `CHG-YYYY-MM-DD-NNN` id of the Change Report) with the compact template minus `Baseline` and `History`. Sequential unless the change set exceeds the fan-out threshold. Usually triggered by `sdd-req-change` Phase 9. P0/P1 findings → recommend a full audit.
 
 ## Persist Summary
 

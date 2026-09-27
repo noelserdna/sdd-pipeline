@@ -44,11 +44,11 @@ Answer:
 |---|---|
 | `sdd-task-implementer` (PAUSE) | Mark the task `[!]` in `task/TASK-FASE-N.md`, write the feedback entry when spec-level (Implementation Feedback Protocol), skip to the next task that does not depend on it. A build failure or an unexpected test regression blocks everything: hand off immediately. |
 | `sdd-specifications-engineer` (Tier-1 STOP) | Register the artifact as `[PENDING REQ]` in `spec/DERIVED-SPECS.md` and keep generating; the question asks whether a REQ must be created via `sdd-req-change`. |
-| `sdd-spec-auditor` (Step 4.5) | Do not choose Option 1/2/3. Write the Upstream Impact table, leave Tier 1 items as `[PENDING REQ]`, finish the report; the gate result is reported as computed. |
+| `sdd-spec-auditor` (Mode Fix, Step 4.5 in `skills/sdd-spec-auditor/references/mode-fix.md`) | Do not choose Option 1/2/3. Write the Upstream Impact table, leave Tier 1 items as `[PENDING REQ]`, finish the report; the gate result is reported as computed. |
 | `sdd-req-change` (Phase 5 approval) | Not covered: a change is approved synchronously. Run it in the lead session, or with `--batch`. |
 | others (plan-architect clarifications, requirements elicitation) | Prefer the skill's non-interactive flag when it has one (`--skip-clarify`, `--batch`); otherwise apply Section 1. |
 
-4.0.0 wires `sdd-task-implementer` PAUSE and `sdd-spec-auditor` Step 4.5; the other rows are the target behaviour for 4.0.x.
+4.0.0 wires `sdd-task-implementer` PAUSE and `sdd-spec-auditor` Mode Fix Step 4.5 (`skills/sdd-spec-auditor/references/mode-fix.md`); the other rows are the target behaviour for 4.0.x.
 
 ## 4. When no unblocked work remains
 

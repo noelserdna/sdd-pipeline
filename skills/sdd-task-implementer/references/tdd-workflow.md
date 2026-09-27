@@ -108,7 +108,7 @@ Location: tests/contract/{api-name}.test.ts
 **Structure:**
 
 ```typescript
-describe('{API-Name} Contract', () => {
+describe('{API-NNN-NN} {operation} Contract', () => {
   it('should accept valid request body', () => {
     const body = { /* valid per contract */ };
     const result = validateRequest(body);

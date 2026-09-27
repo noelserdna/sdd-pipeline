@@ -461,7 +461,7 @@ Rules: exactly one scenario per main flow, per extension, per exception row and 
 
 | Name | Value | Unit | Category | Source | Used in (ids) |
 |---|---|---|---|---|---|
-| `TITLE_MAX_LENGTH` | 1000 | UTF-16 units | limit | RN-003 | INV-TSK-003, UC-001, API-002 |
+| `TITLE_MAX_LENGTH` | 1000 | UTF-16 units | limit | RN-003 | INV-TSK-003, UC-001, API-001-01, API-001-03 |
 | `PERF_P95_LATENCY` | 200 | ms | performance | REQ-NF-001 | SPEC-PERF-001, WF-001 |
 | `TASK_STATUS` | pending, completed | enum | enum | VO-003 | UC-002, UC-005 |
 | `RATE_LIMIT_USER` | 100 | req/min | rate limit | RN-NNN | API-001 |

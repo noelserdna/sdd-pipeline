@@ -101,8 +101,9 @@ INV-[A-Z]+-\d{3}   → verify exists in spec/domain/05-INVARIANTS.md
 ADR-\d{3}          → verify spec/adr/ADR-{NNN}*.md exists
 RN-\d{3}           → verify exists in spec/CLARIFICATIONS.md
 REQ-[A-Z]+-\d{3}   → verify exists in requirements/REQUIREMENTS.md
-BDD-[a-z-]+        → verify spec/tests/BDD-{name}.md exists
-API-[a-z-]+        → verify spec/contracts/API-{name}.md exists
+BDD-UC-\d{3}       → verify spec/tests/BDD-UC-{NNN}.md exists
+API-\d{3}-\d{2}     → verify the operation row exists in the spec/contracts/API-{module}.md whose Module row is API-{NNN}
+API-[a-z-]+        → verify spec/contracts/API-{name}.md exists (contract file name)
 ```
 
 **Pass criteria:** All references resolve to existing content

@@ -7,7 +7,7 @@ description: "Imports external docs into SDD from Jira, OpenAPI/Swagger, Markdow
 
 > **Version:** 1.1.0
 > **Pipeline position:** Pre-pipeline — feeds `sdd-requirements-engineer` or `sdd-specifications-engineer`
-> **Invoked by:** `sdd-onboarding` (scenarios 5, 8)
+> **Recommended by:** `sdd-pipeline-status --diagnose` (Greenfield with docs, Brownfield with docs, Fork/migration)
 
 Converts exported files (never live Jira/Notion APIs) into `requirements/` and `spec/` artifacts, previewing every mapping before writing. It does not modify the source files, generate code or tests, or keep anything in sync after the one-time import.
 
@@ -145,7 +145,7 @@ Check: every item has an SDD ID; requirements are EARS or `[UNCONVERTED]`; use c
 
 | Skill | Relationship |
 |-------|-------------|
-| `sdd-onboarding` | Recommends import when external docs exist |
+| `sdd-pipeline-status --diagnose` | Recommends import when external docs exist |
 | `sdd-reverse-engineer` | May run after import; merges into `[IMPORTED]` entries |
 | `sdd-reconcile` | Verifies spec ↔ code alignment after import + reverse-engineer |
 | `sdd-specifications-engineer` | Completes a partial import |

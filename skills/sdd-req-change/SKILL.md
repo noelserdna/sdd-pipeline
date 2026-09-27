@@ -186,15 +186,16 @@ Rules, invalidation table, execution order, FASE targeting, failure handling and
 
 After Phase 9 (also after a `--cascade=dry-run`, since Phases 6-8 did write; not after `--dry-run`, which wrote nothing):
 
-1. Read `pipeline-state.json` (create the default structure if absent).
+1. Read `pipeline-state.json` (if absent, create it from `templates/pipeline-state.template.json` as `sdd-setup` Step 1 does; `sdd-state.sh` never creates it).
 2. **Restore the upstream stages.** The H3 hook flipped `requirements-engineer` and `specifications-engineer` to `running` when this run wrote `requirements/` and `spec/`. This skill completed that propagation itself, so set each one back to the status recorded in Phase 0 when that status was `done`:
 
 ```bash
-jq --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
-  .stages["requirements-engineer"].status = "done" | .stages["requirements-engineer"].lastRun = $t |
-  .stages["specifications-engineer"].status = "done" | .stages["specifications-engineer"].lastRun = $t
-' pipeline-state.json > pipeline-state.json.tmp && mv pipeline-state.json.tmp pipeline-state.json
+S="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh"
+bash "$S" set requirements-engineer done
+bash "$S" set specifications-engineer done
 ```
+
+`sdd-state.sh` takes the same lock as the hooks, keeps each stage's `summary` and sets `lastRun`; skip a stage whose Phase 0 status was not `done`.
 
 3. Set `stages["req-change"]`: `status: "done"`, `lastRun`, and `summary`:
    - `artifacts`: e.g. `{"file": "changes/CHANGE-REPORT-CHG-2026-03-04-001.md", "label": "Change Report"}`, plus the plan, the cascade report and the modified REQUIREMENTS.md (max 15)

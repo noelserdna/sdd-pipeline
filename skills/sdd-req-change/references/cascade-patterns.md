@@ -283,6 +283,8 @@ If git is not available, use file modification timestamps as a proxy:
 
 Each skill persists a structured summary in `pipeline-state.json` upon completion. This enables the dashboard to display rich stage information without re-scanning artifacts.
 
+**Changing a stage status.** Prefer the locked helper over a hand-written read-modify-write, which can clobber the hooks' async writes: `bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set <stage> <pending|running|done|stale|error>` (`get <stage>` reads it). It creates the stage key if missing, keeps `summary` and the other fields, sets `lastRun` on running/done and `currentStage` on running, clears `staleReason` except on stale, and never creates `pipeline-state.json` (exit 1 without it: create it from the template first). Write `summary` and `staleReason` with a separate jq patch.
+
 ### Summary Sub-Schema
 
 ```json
@@ -304,7 +306,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|
 | `artifacts` | array of `{file, label}` | Max 15 items | Files created/modified by the stage |
-| `metrics` | object (key→number) | Flat, skill-specific keys | Quantitative metrics (see table below) |
+| `metrics` | object (key→number, short string or small array/object) | Flat, skill-specific keys | Quantitative metrics (see table below) |
 | `highlights` | array of strings | Max 5 items | Notable observations or decisions |
 | `nextStep` | string | — | Recommended next action |
 | `generatedAt` | string (ISO-8601) | — | When this summary was generated |
@@ -315,22 +317,25 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | Skill | Metric Keys |
 |-------|-------------|
 | `requirements-engineer` | `total_requirements`, `functional`, `nonfunctional`, `constraints` |
-| `specifications-engineer` | `use_cases`, `workflows`, `api_contracts`, `bdd_scenarios`, `invariants`, `adrs` |
-| `spec-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `gate_result` |
-| `test-planner` | `bdd_scenarios`, `test_matrices`, `perf_scenarios`, `invariants_mapped`, `test_gaps` |
-| `plan-architect` | `total_fases`, `components`, `adrs_created`, `plan_chars`, `plan_budget_chars` |
-| `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert`, `migration_revert`, `config_revert` |
-| `task-implementer` | `tasks_completed`, `tasks_remaining`, `commits`, `tests_passed`, `tests_failed` |
-| `security-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `owasp_coverage` |
+| `specifications-engineer` | `use_cases`, `workflows`, `api_contracts`, `bdd_scenarios`, `invariants`, `adrs`, `spec_chars`, `spec_budget_chars`, `mode`, `spec_agents` |
+| `spec-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `batched_findings`, `gate_result`, `audit_cycle`, `topFindingCategories`, `report_chars`, `mode` |
+| `test-planner` | `bdd_scenarios`, `test_matrices`, `matrix_cases`, `perf_scenarios`, `e2e_scenarios`, `e2e_fields_total`, `e2e_fields_complete`, `e2e_field_coverage_pct`, `invariants_mapped`, `test_gaps`, `test_chars`, `mode`, `matrix_agents` |
+| `plan-architect` | `total_fases`, `components`, `adrs_created`, `clarify_questions`, `research_items`, `plan_chars`, `plan_budget_chars`, `operation_mapping` (`existing` \| `written` \| `appended` \| `n/a`) |
+| `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert`, `migration_revert`, `config_revert`, `streamsPerFase`, `mode`, `task_agents`, `format` |
+| `task-implementer` | `tasks_completed`, `tasks_remaining`, `commits`, `tests_passed`, `tests_failed`, `mode`, `task_agents`, `pauses`, `stack`, `profile_source`, `inline_p_tasks`; `--integrate` adds `streamsIntegrated`, `mergeConflicts` |
+| `security-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `global_score`, `grade`, `owasp_coverage` |
 | `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |
 | `tech-designer` | `dimensions_analyzed`, `quality_attributes`, `adr_drafts`, `trade_offs_evaluated` |
 | `ux-designer` | `dimensions_analyzed`, `wireframes`, `components_specified`, `wcag_level`, `design_tokens`, `frontend_security_items` |
+| `gap-detector` | `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`, `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`, `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` \| `llm`) |
+
+Each skill's own Persist section is authoritative; this table mirrors them.
 
 ### Summary Lifecycle Rules
 
 1. **Optional**: `summary` is `null` or absent when the stage has never completed.
 2. **Preserved on stale**: When a stage transitions to `stale`, its `summary` is retained (rendered dimmed in the dashboard).
 3. **Overwritten on re-run**: When a stage completes again, `summary` is fully replaced with the new data.
-4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, and `ux-designer` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
+4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, `ux-designer` and `gap-detector` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
 5. **Hook-safe**: The H3 state-updater hook does NOT modify `summary` — it is exclusively managed by skills.
 6. **Handoff patch**: `summary.handoff` is absent in single-session mode. In station mode it is added with a minimal patch (jq under lock, tmp → mv) after Persist Summary and after the skill's local gate question; it is never a full rewrite of the file, and it is replaced together with `summary` on re-run. Readers (H1, `sdd-pipeline-status`, `sdd-lead`, dashboard) must tolerate its absence.

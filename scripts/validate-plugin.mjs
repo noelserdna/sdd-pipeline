@@ -65,7 +65,7 @@ for (const dir of readdirSync(skillsDir)) {
 // 3. Agentes
 const agentsDir = path.join(ROOT, "agents");
 let agentCount = 0;
-for (const f of readdirSync(agentsDir).filter((f) => f.endsWith(".md"))) {
+for (const f of existsSync(agentsDir) ? readdirSync(agentsDir).filter((f) => f.endsWith(".md")) : []) {
   agentCount++;
   const fm = frontmatter(path.join(agentsDir, f));
   if (!fm?.name) errors.push(`agents/${f}: sin name en frontmatter`);

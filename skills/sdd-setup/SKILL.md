@@ -297,7 +297,7 @@ Report:
 ### Next steps
 1. Start a new Claude Code session (or run /reload-plugins) so the SessionStart hook picks up pipeline-state.json
 2. /sdd-pipeline-status to verify the pipeline state
-3. /sdd-requirements-engineer to start the pipeline (or /sdd-onboarding on an existing codebase)
+3. /sdd-requirements-engineer to start the pipeline (or /sdd-pipeline-status --diagnose on an existing codebase)
 4. --multisession: bash .claude/sdd/sdd-up.sh sdd-lead
 ```
 

@@ -248,28 +248,6 @@ Schema for `dashboard/traceability-graph.json` — the structured representation
 
   "adoption": {
     "present": true,
-    "onboarding": {
-      "present": true,
-      "scenario": "brownfield-bare",
-      "scenarioName": "Brownfield — No Documentation",
-      "confidence": 0.85,
-      "healthScore": 42,
-      "dimensions": {
-        "requirements": 0,
-        "specs": 0,
-        "tests": 65,
-        "architecture": 20,
-        "traceability": 0,
-        "codeQuality": 55,
-        "pipelineState": 0
-      },
-      "actionPlan": [
-        { "step": 1, "skill": "reverse-engineer", "description": "Generate SDD artifacts from existing code", "effort": "high" },
-        { "step": 2, "skill": "reconcile", "description": "Align generated specs with code reality", "effort": "medium" },
-        { "step": 3, "skill": "test-planner", "description": "Create test plan from specifications", "effort": "medium" }
-      ],
-      "signals": ["has_source_code", "no_requirements_dir", "no_spec_dir", "has_tests"]
-    },
     "reverseEngineering": {
       "present": true,
       "findings": {
@@ -390,11 +368,15 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `file` | string | Yes | Relative path to source file (forward slashes) |
 | `line` | number | Yes | Line number where the Ref comment was found |
 | `symbol` | string | Yes | Nearest symbol name (function, class, const, etc.) or `"filename:line"` fallback |
-| `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"unknown"` |
+| `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"file"` (file-level ref), `"range"` (llm-verified line range), `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the Ref comment (e.g., `["UC-001", "INV-EXT-005"]`) |
-| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (commit-inferred refs carried to the current path of a renamed file), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (verified by LLM analysis of code semantics), `"gap-detected"` (detected as missing coverage by gap analysis) |
+| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (commit-inferred refs carried to the current path of a renamed file), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (a `covered` verdict of `sdd-gap-detector --semantic`, see below), `"gap-detected"` (detected as missing coverage by gap analysis) |
 | `confidence` | number | No | Confidence score 0.0-1.0 for this reference. `1.0` for `origin: "direct"` (`// Refs:` comments), `0.95` for `"hook-captured"`, varies for `"llm-verified"`, `0.6-0.9` for `"blame-inferred"` and `"commit-inferred"` (based on commit recency), `0.5` for `"task-inferred"`. Default: `1.0` |
 | `inferredFrom` | object or null | No | Inference provenance when origin is not `"direct"`: `{ "commitSha": "abc1234", "taskId": "TASK-F1-003", "trailerRefs": ["UC-001"] }`. Default: `null` |
+| `lines` | [number, number] | No | `llm-verified` only: `[start, end]` of the evidence range (`line` = start) |
+| `judge` | string | No | `llm-verified` only: `"jev"` or `"llm"`, the gap detector's `decidedBy` |
+
+**llm-verified ingestion.** `generate.py` reads `.sdd/gap-analysis.json` → `semantic.requirements[]` (written by `sdd-gap-detector --semantic`, schema in its `references/output-formats.md` §1). Each entry with `status: "covered"`, `decidedBy` `jev` or `llm`, a REQ id and `evidence` of the form `path:start-end` (or `path:line`) becomes one codeRef on that REQ: `{ file, line, lines, symbol: "file:start-end", symbolType: "range", origin: "llm-verified", confidence, judge }` (`confidence` from the entry, default 0.85). Deduplication by `(file, refId)` keeps `direct` and `hook-captured` refs first, then `llm-verified`, then the commit/task/blame inferences. The refs count in `traceabilityCoverage.reqsWithCode` and in `codeStats.llmVerifiedRefs`. A missing file or section is ignored silently; malformed JSON prints a warning on stderr and the graph is built without them.
 
 **Origin states and visual mapping**:
 - **linked** (`origin: "direct"`): `// Refs:` comment in code — green solid badge
@@ -484,7 +466,7 @@ When a symbol has multiple codeRefs with different origins, the highest-confiden
 | `testStats` | object | Test scanning statistics |
 | `commitStats` | object | Commit scanning statistics |
 | `classificationStats` | object | Classification breakdown statistics |
-| `adoptionStats` | object or null | Adoption/onboarding statistics (null if no onboarding data) |
+| `adoptionStats` | object or null | Adoption statistics (null if no adoption data) |
 | `gapAnalysis` | object or null | Spec-to-code gap analysis statistics (null if not computed). See below |
 | `testResults` | object or null | Aggregated test execution results (null if no test run data). See below |
 | `codeOrphans` | array of strings | Source files with zero traceability (no codeRefs, testRefs, or commitRefs). Default: `[]` |
@@ -517,6 +499,7 @@ Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, 
 | `directRefs` | number | Total code refs from `// Refs:` comments (origin: direct) |
 | `inferredRefs` | number | Total code refs inferred from commits (origin: commit-inferred, task-inferred or blame-inferred) |
 | `hookCapturedRefs` | number | File-level refs merged from `.sdd/trace-map.json` (origin: hook-captured) |
+| `llmVerifiedRefs` | number | Line-range refs from `.sdd/gap-analysis.json` `semantic.requirements[]` (origin: llm-verified) |
 | `manualOverrides` | number | Total overrides applied from `.sdd/overrides.json` |
 | `orphanFiles` | string[] | Code files without a reference of any origin |
 
@@ -584,28 +567,14 @@ Array of relative file paths (forward slashes) for source files that have zero t
 
 ### adoption
 
-Top-level block for onboarding skill data. Defaults to `{ "present": false }` when no onboarding data exists.
+Top-level block for adoption data (reverse-engineer, reconcile, import reports), written by the dashboard skill to `dashboard/adoption-data.json`. Defaults to `{ "present": false }` when no adoption data exists.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `present` | boolean | Yes | Whether any adoption/onboarding data exists |
-| `onboarding` | object | No | Data from `onboarding/ONBOARDING-REPORT.md` |
+| `present` | boolean | Yes | Whether any adoption data exists |
 | `reverseEngineering` | object | No | Data from `findings/FINDINGS-REPORT.md` and `reverse-engineering/INVENTORY.md` |
 | `reconciliation` | object | No | Data from `reconciliation/RECONCILIATION-REPORT.md` |
 | `import` | object | No | Data from `import/IMPORT-REPORT.md` |
-
-### adoption.onboarding
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `present` | boolean | Whether onboarding report exists |
-| `scenario` | string | Scenario identifier (e.g., `"brownfield-bare"`, `"greenfield"`) |
-| `scenarioName` | string | Human-readable scenario name |
-| `confidence` | number | Classification confidence 0-1 |
-| `healthScore` | number | Project health score 0-100 |
-| `dimensions` | object | Per-dimension scores: `requirements`, `specs`, `tests`, `architecture`, `traceability`, `codeQuality`, `pipelineState` (each 0-100) |
-| `actionPlan` | array | Steps: `{ step, skill, description, effort }` |
-| `signals` | array of strings | Detection signals found |
 
 ### adoption.reverseEngineering
 
@@ -662,10 +631,10 @@ All v1 fields remain unchanged. v2 is a backward-compatible extension.
 | v2 Field | v3 Change |
 |----------|-----------|
 | `$schema: "traceability-graph-v2"` | Changed to `"traceability-graph-v3"` |
-| `adoption` | **New**: top-level adoption block with onboarding, reverseEngineering, reconciliation, import sub-blocks |
+| `adoption` | **New**: top-level adoption block with reverseEngineering, reconciliation, import sub-blocks (v3 also had an `onboarding` sub-block, dropped when that skill was merged into `sdd-pipeline-status --diagnose`) |
 | `statistics.adoptionStats` | **New**: adoption score, grade, findings counts, alignment percentage |
 
-All v2 fields remain unchanged. v3 is a backward-compatible extension. When no onboarding data exists, `adoption` defaults to `{ "present": false }` and `adoptionStats` is `null`.
+All v2 fields remain unchanged. v3 is a backward-compatible extension. When no adoption data exists, `adoption` defaults to `{ "present": false }` and `adoptionStats` is `null`.
 
 ## Migration from v3
 

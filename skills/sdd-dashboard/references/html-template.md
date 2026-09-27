@@ -851,6 +851,6 @@ The template expects these fields in `DATA_JSON`:
 }
 ```
 
-`codeRefs[].origin` is one of `direct`, `hook-captured`, `commit-inferred`, `blame-inferred`, `task-inferred`,
+`codeRefs[].origin` is one of `direct`, `hook-captured`, `llm-verified`, `commit-inferred`, `blame-inferred`, `task-inferred`,
 `manual-override`, `code-index` (see `graph-schema.md`). `codeStats.orphanFiles` lists code files (Stack Profile
 `code_paths`) without a reference of any origin.

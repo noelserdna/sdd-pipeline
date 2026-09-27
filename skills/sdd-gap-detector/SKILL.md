@@ -178,7 +178,7 @@ After writing the results, update `pipeline-state.json` (create it from
    - `metrics`: `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`,
      `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`,
      `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` | `llm`)
-   - `highlights`: 3-5 observations (e.g. "2 missing endpoints: API-012, API-015", "REQ-F-031 likely missing")
+   - `highlights`: 3-5 observations (e.g. "2 missing endpoints: API-001-12, API-002-03", "REQ-F-031 likely missing")
    - `nextStep`: e.g. "Review audits/GAP-ANALYSIS-REVIEW.md" or "Implement missing endpoints"
    - `generatedAt`: now
 3. Show the summary table. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode;

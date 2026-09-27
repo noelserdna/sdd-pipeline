@@ -127,7 +127,7 @@ Check if requirements exist for:
 - [ ] Supported integrations
 
 **Usability:**
-- [ ] Accessibility standards (WCAG 2.1 AA/AAA)
+- [ ] Accessibility standards (WCAG 2.2 AA/AAA)
 - [ ] Language/internationalization
 - [ ] Maximum number of clicks for key workflows
 - [ ] Error message standards

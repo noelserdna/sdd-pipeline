@@ -74,8 +74,8 @@ Build a condensed traceability matrix showing which REQs trace through to which 
 ```
 | REQ | UC | WF | API | BDD | INV | ADR |
 |-----|----|----|-----|-----|-----|-----|
-| REQ-001 | UC-001, UC-002 | WF-001 | API-001 | BDD-001 | INV-001 | ADR-001 |
-| REQ-002 | UC-003 | — | API-002 | — | — | — |
+| REQ-F-001 | UC-001, UC-002 | WF-001 | API-001-01 | BDD-UC-001 | INV-TSK-001 | ADR-001 |
+| REQ-F-002 | UC-003 | — | API-001-02 | — | — | — |
 ```
 
 Flag any REQ that doesn't trace through at least to a UC as **UNTRACEABLE**.

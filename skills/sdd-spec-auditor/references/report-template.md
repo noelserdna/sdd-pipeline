@@ -132,7 +132,7 @@ Rules:
 
 - Post-audit `Traceability Reconciliation` (`mode-fix.md`) is the 5-row table defined there, appended after `Verification`;
   the `Upstream Impact` table (Fix Step 4.4) is appended only when Tier 1 items exist, one row per item.
-- `--focused` audits write `audits/AUDIT-FOCUSED-{change-report-id}.md` with the same template minus `Baseline`
+- `--focused` audits write `audits/AUDIT-FOCUSED-{CHG-ID}.md` with the same template minus `Baseline`
   and `History`; the header states the scope (`Docs audited: {n} (change set CR-xxx)`).
 
 ## 4. `audits/CORRECTIONS-PLAN-AUDIT-v{X.Y}.md` (Mode Fix, Fix Phase 1)

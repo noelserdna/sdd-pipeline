@@ -15,12 +15,12 @@ gaps.ts in the same change.
   "generatedAt": "ISO-8601",
   "projectFramework": "express|fastify|hono|nextjs|nextjs-actions|flask|fastapi|django|rails|unknown",
   "endpoints": {
-    "specified":   [{"id": "API-005", "method": "POST", "path": "/api/users", "specFile": "spec/contracts/API-users.md:24"}],
-    "implemented": [{"id": "API-005", "method": "POST", "path": "/api/users", "codeFile": "src/routes/users.ts", "handler": "createUser", "line": 45}],
-    "missing":     [{"id": "API-012", "method": "DELETE", "path": "/api/users/:id", "specFile": "spec/contracts/API-users.md:38",
+    "specified":   [{"id": "API-001-05", "method": "POST", "path": "/api/users", "specFile": "spec/contracts/API-users.md:24"}],
+    "implemented": [{"id": "API-001-05", "method": "POST", "path": "/api/users", "codeFile": "src/routes/users.ts", "handler": "createUser", "line": 45}],
+    "missing":     [{"id": "API-001-12", "method": "DELETE", "path": "/api/users/:id", "specFile": "spec/contracts/API-users.md:38",
                      "nearMatch": "DELETE /admin/users/:id (src/routes/admin.ts:12)"}],
     "orphan":      [{"method": "GET", "path": "/api/legacy", "codeFile": "src/routes/legacy.ts", "handler": "getLegacy", "line": 12}],
-    "mismatch":    [{"id": "API-003", "issue": "Spec expects field 'email', code uses 'mail'", "specFile": "spec/contracts/API-users.md:15", "codeFile": "src/routes/users.ts:30"}]
+    "mismatch":    [{"id": "API-001-03", "issue": "Spec expects field 'email', code uses 'mail'", "specFile": "spec/contracts/API-users.md:15", "codeFile": "src/routes/users.ts:30"}]
   },
   "bddCoverage": {"totalScenarios": 50, "withTestFiles": 42, "withoutTestFiles": 8, "missing": ["BDD-020", "BDD-033"]},
   "statistics": {
@@ -51,7 +51,8 @@ gaps.ts in the same change.
 `semantic.requirements[].status`: `covered` · `partial` · `likely-missing` · `no-candidates`. `decidedBy`: `jev`
 (a threshold rule decided), `llm` (you decided after reading the chunks, or the whole pass ran in fallback) or
 `search` (nothing to judge). `origin`/`confidence`/`evidence` appear on `covered` entries; `origin` is always
-`"llm-verified"` and is a proposal for the traceability graph, not one of the graph's own origins. `reason` on
+`"llm-verified"`: `sdd-dashboard` (generate.py) turns each `covered` entry with `path:start-end` evidence into a
+`llm-verified` codeRef on that REQ, below direct and hook-captured refs (`sdd-dashboard/references/graph-schema.md`). `reason` on
 LLM-decided entries: `split` (several chunks in the 0.3-0.6 band), `uncertain` (between the thresholds) or
 `fallback` (Jev disabled). `nearMatch` on a missing endpoint is optional: the closest route that failed the
 segment-aligned rule, for the human to judge.
