@@ -34,7 +34,7 @@ Comprueba la instalación:
 
 ```
 /plugin list                # sdd-pipeline@noelserdna · enabled
-claude plugin details sdd-pipeline   # 23 skills, 5 agentes, hooks, MCP y coste de contexto
+claude plugin details sdd-pipeline   # 23 skills, hooks, MCP y coste de contexto (sin agentes)
 ```
 
 Al abrir la primera sesión Claude Code pedirá aprobar el servidor MCP `sdd`. Las skills aparecen como `/sdd-<nombre>` (namespace `sdd-pipeline:`).
@@ -50,10 +50,10 @@ En la raíz del proyecto (repositorio git):
 Qué hace (y qué no):
 
 - Crea `pipeline-state.json` (7 etapas en `pending`, `sddVersion`, `hooksVersion: 3`). Nunca lo sobrescribe.
-- Instala el hook git `commit-msg` en el `.git` común (compartido por los worktrees): exige `Refs:`/`Task:` en commits `feat|fix|perf|test|refactor`.
+- Instala el hook git `commit-msg` en el `.git` común (compartido por los worktrees): exige `Refs:`/`Task:` en commits `feat|fix|perf|test|refactor` (en `refactor` basta `Task:`); deja pasar `docs|chore|ci|style|build`, merges, `Revert "…"` y los `fixup!`/`squash!`/`amend!` de autosquash. Los commits de specs usan `docs(specs):` con `Refs:`.
 - Añade a `.gitignore` el bloque `# sdd-begin … # sdd-end`: `pipeline-state.json`, `.sdd/`, `.claude/worktrees/`, `.claude/settings.local.json`, `dashboard/traceability-graph.json`. Recomienda versionar `.claude/settings.json`.
 - Opcional: status line (`.claude/sdd-status-line.sh` + `statusLine` en `.claude/settings.json`, con `refreshInterval: 5` para que se repinte cada 5 s también mientras la sesión espera a subagentes; muestra rol, etapas, skill en curso, minutos y agentes activos), quality gates H7/H8, y `--multisession` (roles en `.claude/sdd-sessions.json` + `.claude/sdd/sdd-up.sh`).
-- **No** copia hooks ni agentes al proyecto: corren desde el plugin (`${CLAUDE_PLUGIN_ROOT}`).
+- **No** copia hooks al proyecto: corren desde el plugin (`${CLAUDE_PLUGIN_ROOT}`).
 
 Si detecta una instalación antigua (hooks en `.claude/hooks/sdd-*`, `sdd-upstream-guard` en `settings.json`, plugin `sdd@…` o `sdd-pipeline@sdd-pipeline-local`), propone ejecutar `scripts/migrate-hooks-v3.sh` — ver [migracion.md](migracion.md).
 
@@ -70,7 +70,7 @@ Si detecta una instalación antigua (hooks en `.claude/hooks/sdd-*`, `sdd-upstre
 /sdd-pipeline-status             → estado, stale, siguiente paso
 ```
 
-O pide al agente `sdd-orchestrator` que lo conduzca: *"ejecuta el pipeline SDD para este proyecto"*. Para proyectos existentes empieza por `/sdd-onboarding`.
+O deja que lo conduzca la skill `/sdd-orchestrator`: *"ejecuta el pipeline SDD para este proyecto"*. Para proyectos existentes empieza por `/sdd-pipeline-status --diagnose` (clasifica el proyecto y propone el orden de skills).
 
 ## 5. Probar el plugin sin instalarlo
 

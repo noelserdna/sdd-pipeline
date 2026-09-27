@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Motivación: una revisión completa del repositorio con un modelo de frontera (Claude Opus 5.5) y con Jev (TypeSafe) como cribado masivo. Jev juzgó 355 secciones de skills en 6,6 s, 56 peticiones de enrutado (55 acertadas) y 171 trozos de código. Después, cinco revisiones profundas verificaron sus marcas, y encontraron la mayoría de los bugs de contrato que se corrigen aquí. Detalle y límites en `docs/jev.md`. Incluye cambios incompatibles: la próxima versión debería ser **5.0.0**.
+
+### Removed (incompatible)
+- `sdd-verify-coverage` → `sdd-gap-detector --semantic`, que trocea ficheros completos (antes leía solo 200 líneas), usa los origins reales del grafo y opcionalmente usa Jev como juez. Su salida anterior no tenía consumidor.
+- `sdd-onboarding` → `sdd-pipeline-status --diagnose`: una hoja de hechos y una tabla de primera coincidencia sobre los 8 escenarios. La matriz de pesos dividía por cero y nunca clasificaba Greenfield.
+- Agentes `sdd-context-keeper` y `sdd-constitution-enforcer`: nadie los invocaba y se solapaban con session-summary, la memoria de Claude Code y el hook H2.
+- `sdd-cross-auditor` y `sdd-pipeline-auditor` pasan a `.claude/agents/`: auditan este repositorio y ya no se distribuyen.
+- El plugin ya no distribuye agentes.
+
+### Added
+- **`scripts/sdd-jev.mjs`**, integración opcional con Jev. Solo actúa con `TYPESAFE_API_KEY`; sin ella sale con código 3 y las skills usan el LLM.
+  - Comandos: `status`, `judge`, `req-lint` y `chunks`. Las preguntas están en `scripts/jev/*.json`.
+  - Lo usan requirements-engineer (Mode 2), spec-auditor (triaje de hits de patrones) y `gap-detector --semantic`.
+  - Tests con un mock local en `tests/jev/run.sh`.
+- **`sdd-orchestrator` como skill.** Era un agente, y un subagente no puede preguntar al usuario en cada puerta.
+- `scripts/sdd-state.sh set|get`: cambia el estado de una etapa con el mismo lock que los hooks.
+- Artículo 12 (Specification Primacy) en `references/sdd-constitution.md`.
+- `plan-architect` escribe `design/OPERATION-MAPPING.md` cuando no se ejecutó tech-designer.
+
+### Fixed
+- **Hooks:**
+  - H3 creaba `pipeline-state.json` en cualquier repo git. Con el plugin activo globalmente, el guard llegaba a denegar ediciones en proyectos ajenos.
+  - El guard aplicaba la primera etapa `running` por orden de fichero, y bloqueaba a req-change.
+  - Las etapas `done` volvían a `running` y se quedaban así.
+  - `SDD_STATE_ROOT` se filtraba a otros repos, y `STATE_ROOT` salía del cwd en lugar del fichero editado.
+  - La sesión mostraba "9/7 done".
+  - A la salida del augment-hook le faltaba `hookEventName`.
+  - commit-msg rechazaba commits Revert y fixup!.
+- **`generate.py`:**
+  - El parser de commits descartaba casi todos los commits, porque los ficheros caían en el registro siguiente.
+  - El trace-map del hook nunca se fusionaba.
+  - Los rangos inventaban IDs: "NFR-001 — 150 ms" daba 150 referencias.
+  - "BDD-style" contaba como ID.
+  - Los escaneos ignoraban el Stack Profile y solo cubrían `.ts/.js` con vitest.
+  - El clasificador usaba el mapa de dominios de otro proyecto.
+  - El JSON inline no se escapaba.
+- **Servidor MCP:** tipos y cobertura alineados con el grafo v6 (todos los origins).
+- **Contratos entre skills:**
+  - task-implementer leía `plan/PLAN-FASE-N.md` (la G-02 paraba siempre); la ruta real es `plan/fase-plans/`.
+  - Las plantillas de commit de req-change y del Mode Fix de spec-auditor eran rechazadas por el hook commit-msg. Ahora son `docs(specs)` con `Refs:`.
+  - El gate G2 de plan-architect exigía "0 hallazgos". Ahora lee `gate_result`.
+  - spec-auditor descartaba los hallazgos de ausencia, y el lead despachaba Streams sin el Stream `base`.
+  - reverse-engineer, import y reconcile escribían un árbol `spec/` plano obsoleto.
+  - reconcile deprecaba automáticamente lo no implementado, lo que viola el Art. 12. Ahora existe la clase `NOT_IMPLEMENTED`.
+  - Rutas `src/` fijas en lugar del Stack Profile.
+  - IDs de operación unificados en `API-NNN-NN`; pantallas UX en `SCR-NNN`, que chocaba con `WF-NNN`.
+- **Estándares:** WCAG 2.2 AA; INP sustituye a FID; ASVS fijado en 4.0.3.
+
+### Changed
+- **Skills recortadas para un modelo de frontera.**
+  - Se mueven a `references/` las plantillas de un solo paso.
+  - Se eliminan duplicados, teoría de manual, énfasis en mayúsculas y restos de proyectos anteriores (ADR-025/026, INV-SYS, ReadPDF, CV/JobOffer).
+  - `sdd-req-change`: 66k → 18k caracteres. `sdd-spec-auditor`: 62k → 23k. `sdd-task-implementer`: 61k → 31k. Laterales: 329k → 197k.
+- `CLAUDE.md` y los README se reescriben según el árbol real (no existía `automation/`, y el esquema de estado y los origins estaban desfasados).
+
 ## [4.3.0] - 2026-09-15
 
 Motivación: una carrera con la misma spec SDD implementada en paralelo con Next.js + Prisma y con Rails 8.1 (Sonnet 5, headless) terminó en empate, pero casi toda la fricción venía del propio pipeline: comandos npm/vitest fijos, rutas y códigos HTTP impuestos por las plantillas de contrato, tareas de test separadas del código, formato de tarea distinto en cada ejecución, subagentes para tareas triviales, hooks ciegos con la app en `web/` y un agente que fabricó el consentimiento de Prisma 12 veces.

@@ -110,7 +110,7 @@ sobre el mismo proyecto:
 
 Conclusión: **pasa el flag** (`--fanout`, o `--parallel` en el implementer) siempre que se supere el umbral, y añade una
 frase a la invocación ("lanzar los N carriles se pide explícitamente"). Eso convierte el criterio de la skill en petición
-del que llama, que es lo único determinista. `sdd-orchestrator` y `sdd-lead` ya lo hacen; `tests/e2e/20-smoke.sh` también,
+del que llama, que es lo único determinista. `sdd-orchestrator` (entonces agente, hoy skill) y `sdd-lead` ya lo hacen; `tests/e2e/20-smoke.sh` también,
 para que las mediciones sean comparables. Si aun así una etapa reporta `metrics.mode: sequential`, el motivo está en
 `summary.highlights`.
 

@@ -186,7 +186,7 @@ rm -f .gitignore .git/hooks/commit-msg
 mkdir -p .claude/hooks .claude/agents
 for h in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh sdd-trace-map-updater.sh sdd-status-line.sh; do printf '#!/bin/bash\n' > ".claude/hooks/$h"; done
 printf '// old\n' > .claude/hooks/sdd-augment-hook.js
-printf '# old agent\n' > .claude/agents/sdd-cross-auditor.md
+printf '# old agent\n' > .claude/agents/sdd-legacy-agent.md
 cat > .claude/settings.json <<'EOF'
 {
   "hooks": {
@@ -209,7 +209,7 @@ cat > pipeline-state.json <<'EOF'
 EOF
 before="$(find .claude pipeline-state.json -type f -exec cksum {} + | sort)"
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
-for needle in "sdd-session-start.sh" "sdd-upstream-guard.sh" "sdd-augment-hook.js" "sdd-pipeline-state-updater.sh" "sdd-trace-map-updater.sh" ".claude/agents/sdd-cross-auditor.md" "statusLine points to .claude/hooks" "commit-msg hook missing" "pipeline-state.json: sddVersion=none hooksVersion=0" ".gitignore" "[DRY RUN]"; do
+for needle in "sdd-session-start.sh" "sdd-upstream-guard.sh" "sdd-augment-hook.js" "sdd-pipeline-state-updater.sh" "sdd-trace-map-updater.sh" ".claude/agents/sdd-legacy-agent.md" "statusLine points to .claude/hooks" "commit-msg hook missing" "pipeline-state.json: sddVersion=none hooksVersion=0" ".gitignore" "[DRY RUN]"; do
   if contains "$out" "$needle"; then pass "migrate --dry-run lista: $needle"; else bad "migrate --dry-run no lista: $needle"; fi
 done
 after="$(find .claude pipeline-state.json -type f -exec cksum {} + | sort)"
@@ -221,7 +221,7 @@ check "migrate: statusLine apunta a .claude/sdd-status-line.sh" jq -e '.statusLi
 check "migrate: .claude/sdd-status-line.sh copiado del plugin" cmp -s .claude/sdd-status-line.sh "$ROOT/scripts/sdd-status-line.sh"
 check "migrate: .claude/sdd-status-line.sh ejecutable" test -x .claude/sdd-status-line.sh
 check "migrate: hooks copiados eliminados" sh -c '! ls .claude/hooks/sdd-* >/dev/null 2>&1'
-check "migrate: agentes copiados eliminados" test ! -e .claude/agents/sdd-cross-auditor.md
+check "migrate: agentes copiados eliminados" test ! -e .claude/agents/sdd-legacy-agent.md
 check "migrate: commit-msg reinstalado" grep -q "SDD Commit" .git/hooks/commit-msg
 PLUGIN_VERSION="$(jq -r .version "$ROOT/.claude-plugin/plugin.json")"
 check "migrate: pipeline-state sddVersion=$PLUGIN_VERSION hooksVersion=3" jq -e --arg v "$PLUGIN_VERSION" '.sddVersion == $v and .hooksVersion == 3' pipeline-state.json

@@ -9,8 +9,7 @@
 
 De los requisitos al código en producción: un pipeline estructurado, auditable y trazable que convierte requisitos en lenguaje natural en software implementado, con hooks que protegen el proceso y un servidor MCP que responde preguntas sobre el grafo de trazabilidad.
 
-- **24 skills** — el pipeline de 7 etapas, skills laterales, onboarding brownfield, utilidades y el lead multi-sesión
-- **5 agentes** — orquestador interactivo, auditor end-to-end, guardián de contexto, garante de la constitución, auditor cruzado
+- **23 skills** — el pipeline de 7 etapas, skills laterales, adopción brownfield, utilidades, el orquestador interactivo y el lead multi-sesión
 - **8 hooks** (14 registros de evento) — estado del pipeline al arrancar, guardia de inmutabilidad upstream, guardia contra el consentimiento fabricado en herramientas que exigen a un humano, actualización de estado y trace-map, contexto de trazabilidad, el registro de actividad que alimenta la status line y `sdd-watch`, y un recordatorio de una línea con los runs vivos en cada prompt
 - **Servidor MCP** — 6 tools, 7 recursos y 2 prompts sobre `dashboard/traceability-graph.json`
 - **Implementación multi-sesión** — sesiones con rol (`SDD_ROLE`), Streams paralelos en worktrees de git, handoffs al lead
@@ -41,11 +40,11 @@ En el primer uso Claude Code pide aprobar el servidor MCP `sdd`. Tras actualizar
 /sdd-test-planner                # test/
 /sdd-plan-architect              # plan/ (arquitectura, FASEs)
 /sdd-task-generator              # task/ (tareas atómicas, grafo de dependencias, streams)
-/sdd-task-implementer --fase=0   # src/, tests/, commits con trailers Refs:/Task:
+/sdd-task-implementer --fase 0   # src/, tests/, commits con trailers Refs:/Task:
 /sdd-pipeline-status             # dónde estoy, qué está stale, qué toca ahora
 ```
 
-O deja que el agente `sdd-orchestrator` conduzca el pipeline completo de forma interactiva: *"ejecuta el pipeline SDD para este proyecto"*.
+O deja que la skill `sdd-orchestrator` conduzca el pipeline completo de forma interactiva: *"ejecuta el pipeline SDD para este proyecto"*.
 
 ## El pipeline
 
@@ -87,38 +86,33 @@ El estado vive en `pipeline-state.json` (un fichero, única fuente de verdad); l
 | `sdd-tech-designer` | Decisiones de arquitectura y stack en 12 dimensiones (ATAM-lite) | `design/` |
 | `sdd-ux-designer` | Sistema de diseño, wireframes, accesibilidad, modelo de interacción | `ux/` |
 
-### Brownfield (6)
+### Brownfield (3)
 
 | Skill | Propósito |
 |-------|-----------|
-| `sdd-onboarding` | Diagnostica un proyecto existente (8 escenarios) y produce un plan de adopción |
 | `sdd-reverse-engineer` | Código → artefactos SDD (requisitos, specs, tareas, hallazgos) |
 | `sdd-reconcile` | Detecta y resuelve la deriva spec ↔ código |
 | `sdd-import` | Jira, OpenAPI, Markdown, Notion, CSV, Excel → formato SDD |
-| `sdd-code-index` | Referencias de código a nivel de símbolo (puente opcional con [GitNexus](https://github.com/nicobailon/gitnexus)) |
-| `sdd-verify-coverage` | Verificación de cobertura de requisitos asistida por LLM con niveles de confianza |
 
-### Utilidades (7)
+### Utilidades (9)
 
 | Skill | Propósito |
 |-------|-----------|
 | `sdd-setup` | Inicializa el proyecto: estado, hook git, política `.gitignore`, status line, roles multi-sesión |
-| `sdd-pipeline-status` | Informe de etapas, staleness y siguiente acción |
+| `sdd-pipeline-status` | Informe de etapas, staleness y siguiente acción; `--diagnose` clasifica un proyecto existente (8 escenarios de adopción) y lista las skills a ejecutar |
 | `sdd-traceability-check` | Verificación de la cadena completa, huérfanos y enlaces rotos |
-| `sdd-gap-detector` | Endpoints ausentes, código huérfano, desajustes de esquema — con documento de revisión humana |
+| `sdd-gap-detector` | Endpoints ausentes, código huérfano, desajustes de esquema — con documento de revisión humana; `--semantic` comprueba si el código implementa cada requisito (juez Jev si está activo, LLM si no) |
 | `sdd-dashboard` | Dashboard HTML interactivo de trazabilidad agrupado por fase de ingeniería |
 | `sdd-session-summary` | Resume la sesión y actualiza la memoria del proyecto |
+| `sdd-orchestrator` | Ejecuta el pipeline completo de forma interactiva desde la conversación principal, pidiendo las decisiones de puerta |
+| `sdd-code-index` | Referencias de código a nivel de símbolo (puente opcional con [GitNexus](https://github.com/nicobailon/gitnexus)) |
 | `sdd-lead` | Lead multi-sesión: despacha etapas a las sesiones con rol tras cada puerta humana, recibe handoffs, responde preguntas de las estaciones |
 
-## Agentes
+## Opcional: juicios masivos con Jev
 
-| Agente | Papel |
-|--------|-------|
-| `sdd-orchestrator` | Ejecuta el pipeline completo de forma interactiva, pidiendo las 12 decisiones de puerta |
-| `sdd-pipeline-auditor` | Ejecuta todas las skills sobre un proyecto de prueba y escribe `AUDIT-REPORT.md` / `AUDIT-HISTORY.md` |
-| `sdd-context-keeper` | Guarda el contexto informal (preferencias, decisiones aplazadas) fuera de los artefactos formales |
-| `sdd-constitution-enforcer` | Valida el trabajo contra los 11 artículos de la [constitución SDD](references/sdd-constitution.md) |
-| `sdd-cross-auditor` | Cruza los contratos de las skills (entradas/salidas) buscando desajustes |
+Con `TYPESAFE_API_KEY` definida, `scripts/sdd-jev.mjs` permite a las skills cribar muchos elementos pequeños de una pasada con Jev de TypeSafe (respuestas sí/no, elección y puntuación calibradas en ~100 ms). Lo usan tres skills: `sdd-requirements-engineer` para la calidad de los requisitos, `sdd-spec-auditor` para el triaje de los patrones de detección y `sdd-gap-detector --semantic` para la cobertura de requisitos. El LLM solo lee lo que Jev marca o lo que le deja dudas. Sin la key (o con `SDD_JEV=off`) todas las skills funcionan como antes. El texto de specs y código se envía a TypeSafe, así que actívalo solo donde esté permitido: ver [docs/jev.md](docs/jev.md).
+
+Los agentes de mantenimiento que auditan este repositorio (`sdd-pipeline-auditor`, `sdd-cross-auditor`) viven en `.claude/agents/` y no se distribuyen con el plugin.
 
 ## Hooks
 
@@ -175,19 +169,20 @@ Protocolo completo en [docs/multisesion.md](docs/multisesion.md); la revisión d
 
 ```
 .claude-plugin/   plugin.json, marketplace.json      hooks/       hooks.json + scripts (+ lib/sdd-common.sh)
-skills/           24 skills                          scripts/     ayudantes de setup, sdd-up.sh, release.sh, validadores
-agents/           5 agentes                          server/      servidor MCP (src/, dist/server.js, tests)
+skills/           23 skills                          scripts/     ayudantes de setup, sdd-state.sh, sdd-jev.mjs, validadores
+.claude/agents/   auditores de mantenimiento         server/      servidor MCP (src/, dist/server.js, tests)
 references/       constitución, protocolo de handoff templates/   pipeline-state, gitignore, sesiones, quality gates
-examples/todo-app proyecto de juguete para E2E       tests/       hooks, setup, e2e          docs/  guías, migración, diseño
+examples/todo-app proyecto de juguete para E2E       tests/       hooks, setup, tasks, dashboard, jev, bench, e2e   docs/  guías, migración, diseño
 ```
 
 ## Desarrollo
 
 ```bash
-node scripts/validate-plugin.mjs        # manifiestos, skills, agentes, hooks, mcp
+node scripts/validate-plugin.mjs        # manifiestos, skills, hooks, mcp, kits de stack
 bash tests/hooks/run.sh                 # comportamiento de los hooks (roles, worktrees, lock, activity log)
 bash tests/tasks/run.sh                 # gramática de línea de tarea (V-19) y estado por trailers
-bash tests/dashboard/run.sh             # parsers de resultados de tests (vitest, Minitest, RSpec)
+bash tests/dashboard/run.sh             # generate.py (inferencia por commits, rangos, Stack Profile) y parsers de resultados
+bash tests/jev/run.sh                   # sdd-jev.mjs contra un mock local de la API (sin key ni red)
 scripts/sdd-watch.sh --root ../mi-app   # panel en vivo: etapas, skill en curso, subagentes, sesiones, handoffs, preguntas (--once para una foto)
 scripts/sdd-watch.sh --brief            # una línea por run vivo del índice global (lo que ejecuta /sdd-watch)
 bash tests/e2e/run-all.sh               # B1 validación estática + B2 instalación real en un CLAUDE_CONFIG_DIR aislado
@@ -207,7 +202,8 @@ La CI ejecuta lint (shellcheck), validación, tests de hooks y la matriz de buil
 - [docs/guia-paso-a-paso.md](docs/guia-paso-a-paso.md) — guía paso a paso
 - [docs/coste-contexto.md](docs/coste-contexto.md) — coste de contexto por versión
 - [docs/perfilado.md](docs/perfilado.md) — dónde se va el tiempo de una etapa y cómo acortarlo (`scripts/sdd-profile.sh`)
-- [references/sdd-constitution.md](references/sdd-constitution.md) — los 11 artículos que siguen todas las skills
+- [docs/jev.md](docs/jev.md) — integración opcional con Jev, mediciones y límites
+- [references/sdd-constitution.md](references/sdd-constitution.md) — los 12 artículos que siguen todas las skills
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## Historia

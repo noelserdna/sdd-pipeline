@@ -69,7 +69,7 @@ tiempo. El pipeline completo con fan-out en auditoría y matrices debería queda
 
 ### Pendiente
 - Repetir la comparación completa con 4.0.3 (fan-out activo en auditoría y en las matrices de test) para actualizar el total de 1 h 39.
-- Auditor E2E completo (`sdd-pipeline-auditor`) sobre `examples/todo-app` y `sdd-watch` → dashboard HTML.
+- Auditor E2E completo (`sdd-pipeline-auditor`, hoy agente local del repositorio en `.claude/agents/`) sobre `examples/todo-app` y `sdd-watch` → dashboard HTML.
 
 ## Tercera pasada (4.0.3, 2026-08-27): el fan-out se activa, y lo que enseña comparar tres ejecuciones
 

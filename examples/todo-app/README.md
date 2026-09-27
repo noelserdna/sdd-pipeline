@@ -23,4 +23,4 @@ claude --plugin-dir /ruta/al/plugin -p "/sdd-specifications-engineer"
 # … ver tests/e2e/20-smoke.sh
 ```
 
-`AUDIT-HISTORY.md` registra los resultados del `sdd-pipeline-auditor` por versión del plugin.
+`AUDIT-HISTORY.md` registra los resultados del agente `sdd-pipeline-auditor` por versión del plugin. Es una herramienta de mantenimiento local del repositorio (`.claude/agents/sdd-pipeline-auditor.md`), no se distribuye con el plugin.

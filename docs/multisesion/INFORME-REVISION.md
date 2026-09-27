@@ -1,5 +1,7 @@
 # Informe de síntesis: propuesta multisesión para el pipeline SDD v3.1.0
 
+> **Documento histórico.** Describe un diseño anterior y no se mantiene; la referencia vigente es [multisesion.md](../multisesion.md).
+
 ## 1. Veredicto global
 
 La propuesta acierta en la tesis ("nada cambia la cadena; cambia dónde corre cada etapa y cómo se avisa") y en dejar Agent Teams fuera, pero se equivoca en dónde está el valor. Lo único que una sesión única no puede dar es **implementación paralela real por Stream en worktrees** (sdd-task-implementer/SKILL.md:609 y :633 obligan a commits secuenciales y a que solo el principal commitee). Las estaciones `sdd-spec` y `sdd-plan` no aportan concurrencia (cadena y cascada estrictamente secuenciales, cascade-patterns.md:82-98) y multiplican la atención humana, porque las preguntas viven dentro de los skills, no en el orquestador. La mensajería tal como está escrita (C2, C6, C7) no es mecanizable: `nextStep` es prosa, los destinos pueden no existir, y el orquestador no tiene `SendMessage` (agents/sdd-orchestrator.md:38). Y la premisa de worktrees es falsa en dos puntos: los Streams no están en TASK-ORDER.md ni tienen garantía de ficheros disjuntos, y `claude -w` no ramifica desde el tag. Conclusión: recortar a un MVP de worktrees + `--stream` + integración de Wave en el principal, con `SDD_ROLE` como identidad; el resto, posponer.

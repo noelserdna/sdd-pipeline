@@ -2,6 +2,11 @@
 
 > **Specification-Driven Development** — Construye software que funciona bien *desde el principio*,
 > no software que "funciona" y luego hay que arreglar.
+>
+> **Nota (4.x):** la instalación vigente está en [instalacion.md](instalacion.md). Los diagramas de esta guía
+> simplifican la estructura real de `spec/` (`domain/01..05-*.md`, `use-cases/UC-NNN-*.md`, `workflows/`,
+> `contracts/API-*.md`, `tests/BDD-UC-NNN.md`, `nfr/*.md`, `adr/ADR-NNN-*.md`); ante la duda manda el `SKILL.md`
+> de cada skill.
 
 ---
 
@@ -215,7 +220,7 @@ La instalación tiene **2 pasos**: agregar el marketplace y luego instalar el pl
 **Paso 1: Agregar el marketplace**
 
 ```
-/plugin marketplace add noelserdna/claude-plugin-sdd
+/plugin marketplace add noelserdna/sdd-pipeline
 ```
 
 Esto registra el repositorio de GitHub como fuente de plugins.
@@ -223,7 +228,7 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 **Paso 2: Instalar el plugin**
 
 ```
-/plugin install sdd@noelserdna-claude-plugin-sdd
+/plugin install sdd-pipeline@noelserdna
 ```
 
 > **Alternativa interactiva:** Puedes escribir `/plugin` sin argumentos para abrir
@@ -235,19 +240,19 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 │  ¿Qué sucede al instalar?                                                        │
 │                                                                                  │
 │  1. Descarga el plugin desde GitHub                                              │
-│     noelserdna/claude-plugin-sdd                                                 │
+│     noelserdna/sdd-pipeline                                                      │
 │                                                                                  │
-│  2. Registra los 22 skills como comandos /sdd:*                                  │
-│     /sdd:requirements-engineer                                                   │
-│     /sdd:specifications-engineer                                                 │
-│     /sdd:spec-auditor                                                            │
-│     ... (22 skills en total)                                                     │
+│  2. Registra las 23 skills como comandos /sdd-*                                  │
+│     /sdd-requirements-engineer                                                   │
+│     /sdd-specifications-engineer                                                 │
+│     /sdd-spec-auditor                                                            │
+│     ... (23 skills en total)                                                     │
 │                                                                                  │
-│  3. Instala hooks de automatización (H1-H5)                                      │
+│  3. Activa los hooks de automatización (corren desde el plugin)                  │
 │     Session start, upstream guard, state updater, etc.                            │
 │                                                                                  │
-│  4. Registra agentes de validación (A1-A8)                                       │
-│     Constitution enforcer, cross-auditor, etc.                                   │
+│  4. No instala agentes: el plugin no distribuye ninguno                          │
+│     (la conducción guiada es la skill /sdd-orchestrator)                         │
 │                                                                                  │
 │  5. Configura el servidor MCP (si Node.js 18+ disponible)                        │
 │     Herramientas de consulta de trazabilidad en tiempo real                       │
@@ -260,12 +265,12 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 **Gestión del plugin después de instalado:**
 
 ```
-/plugin disable sdd@noelserdna-claude-plugin-sdd     # Desactivar temporalmente
-/plugin enable sdd@noelserdna-claude-plugin-sdd      # Reactivar
-/plugin uninstall sdd@noelserdna-claude-plugin-sdd   # Desinstalar
+/plugin disable sdd-pipeline@noelserdna           # Desactivar temporalmente
+/plugin enable sdd-pipeline@noelserdna            # Reactivar
+/plugin uninstall sdd-pipeline@noelserdna         # Desinstalar
 ```
 
-> **Repositorio del plugin:** https://github.com/noelserdna/claude-plugin-sdd
+> **Repositorio del plugin:** https://github.com/noelserdna/sdd-pipeline
 
 ### Inicializar SDD en tu proyecto
 
@@ -279,17 +284,17 @@ claude
 Dentro de Claude Code:
 
 ```
-/sdd:setup
+/sdd-setup
 ```
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                  │
-│  ¿Qué hace /sdd:setup?                                                          │
+│  ¿Qué hace /sdd-setup?                                                          │
 │                                                                                  │
-│  A diferencia de /plugin install (que es global), /sdd:setup es POR PROYECTO:    │
+│  A diferencia de /plugin install (que es global), /sdd-setup es POR PROYECTO:    │
 │                                                                                  │
-│  1. Crea pipeline-state.json                                                     │
+│  1. Crea pipeline-state.json (los hooks nunca lo crean)                          │
 │     Estado del pipeline, con sddVersion y hooksVersion                           │
 │                                                                                  │
 │  2. Detecta upgrades (v1 → v2)                                                  │
@@ -306,14 +311,14 @@ Dentro de Claude Code:
 │  tu-proyecto/                                                                    │
 │  └── pipeline-state.json     ← Estado del pipeline SDD                           │
 │                                                                                  │
-│  Los hooks (H1-H5), agentes (A1-A8) y servidor MCP vienen incluidos             │
+│  Los hooks y el servidor MCP vienen incluidos                                   │
 │  en el plugin — NO se copian al proyecto. Solo pipeline-state.json es local.     │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 > **Resumen:** `/plugin install` = instalar una vez, global.
-> `/sdd:setup` = inicializar cada proyecto nuevo.
+> `/sdd-setup` = inicializar cada proyecto nuevo.
 
 ---
 
@@ -327,62 +332,62 @@ Dentro de Claude Code:
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
 ║  ┌─────────────────────┐                                                         ║
-║  │  /sdd:requirements-  │──→ requirements/REQUIREMENTS.md                        ║
+║  │  /sdd-requirements-  │──→ requirements/REQUIREMENTS.md                        ║
 ║  │   engineer           │    "¿Qué necesita el usuario?"                         ║
 ║  └────────┬────────────┘                                                         ║
 ║           │                                                                      ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐    spec/                                                ║
-║  │  /sdd:specifications-│──→ ├── DOMAIN-MODEL.md                                ║
+║  │  /sdd-specifications-│──→ ├── DOMAIN-MODEL.md                                ║
 ║  │   engineer           │    ├── USE-CASES.md                                    ║
 ║  └────────┬────────────┘    ├── WORKFLOWS.md                                    ║
 ║           │                  ├── API-CONTRACTS.md                                 ║
 ║           ▼                  ├── NFR.md                                           ║
 ║  ┌─────────────────────┐    └── adr/ADR-*.md                                    ║
-║  │  /sdd:spec-auditor   │──→ audits/AUDIT-BASELINE.md                            ║
+║  │  /sdd-spec-auditor   │──→ audits/AUDIT-BASELINE.md                            ║
 ║  │   (Mode Audit)       │    "¿Hay problemas en las specs?"                      ║
 ║  └────────┬────────────┘                                                         ║
 ║           │                                                                      ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐                                                         ║
-║  │  /sdd:spec-auditor   │──→ spec/ corregido                                    ║
+║  │  /sdd-spec-auditor   │──→ spec/ corregido                                    ║
 ║  │   (Mode Fix)         │    "Corregir los problemas encontrados"                ║
 ║  └────────┬────────────┘                                                         ║
 ║           │                                                                      ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐    test/                                                ║
-║  │  /sdd:test-planner   │──→ ├── TEST-PLAN.md                                   ║
+║  │  /sdd-test-planner   │──→ ├── TEST-PLAN.md                                   ║
 ║  └────────┬────────────┘    ├── TEST-MATRIX-*.md                                ║
 ║           │                  └── PERF-SCENARIOS.md                                ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐    plan/                                                ║
-║  │  /sdd:plan-architect │──→ ├── PLAN.md                                         ║
+║  │  /sdd-plan-architect │──→ ├── PLAN.md                                         ║
 ║  └────────┬────────────┘    ├── ARCHITECTURE.md                                  ║
 ║           │                  └── fases/FASE-*.md                                  ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐    task/                                                ║
-║  │  /sdd:task-generator │──→ ├── TASK-FASE-01.md                                ║
+║  │  /sdd-task-generator │──→ ├── TASK-FASE-01.md                                ║
 ║  └────────┬────────────┘    ├── TASK-FASE-02.md                                 ║
 ║           │                  └── TASK-INDEX.md                                    ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐                                                         ║
-║  │  /sdd:task-           │──→ src/ + tests/ + git commits                        ║
+║  │  /sdd-task-           │──→ src/ + tests/ + git commits                        ║
 ║  │   implementer        │    "Código real, trazable y testeado"                  ║
 ║  └─────────────────────┘                                                         ║
 ║                                                                                  ║
 ║  ┌─ Herramientas laterales ──────────────────────────────────────────────┐       ║
-║  │  /sdd:tech-designer       Diseño técnico (12 dimensiones)             │       ║
-║  │  /sdd:ux-designer         Diseño UX (12 dimensiones, WCAG)            │       ║
-║  │  /sdd:security-auditor    Auditoría de seguridad (OWASP)              │       ║
-║  │  /sdd:req-change          Gestión de cambios con cascada              │       ║
+║  │  /sdd-tech-designer       Diseño técnico (12 dimensiones)             │       ║
+║  │  /sdd-ux-designer         Diseño UX (12 dimensiones, WCAG)            │       ║
+║  │  /sdd-security-auditor    Auditoría de seguridad (OWASP)              │       ║
+║  │  /sdd-req-change          Gestión de cambios con cascada              │       ║
 ║  └───────────────────────────────────────────────────────────────────────┘       ║
 ║                                                                                  ║
 ║  ┌─ Utilidades ──────────────────────────────────────────────────────────┐       ║
-║  │  /sdd:pipeline-status     Estado actual del pipeline                  │       ║
-║  │  /sdd:traceability-check  Verificar cadena de trazabilidad            │       ║
-║  │  /sdd:dashboard           Dashboard HTML interactivo                  │       ║
-║  │  /sdd:code-index          Indexar código para trazabilidad profunda   │       ║
-║  │  /sdd:session-summary     Resumen de sesión                           │       ║
+║  │  /sdd-pipeline-status     Estado actual del pipeline                  │       ║
+║  │  /sdd-traceability-check  Verificar cadena de trazabilidad            │       ║
+║  │  /sdd-dashboard           Dashboard HTML interactivo                  │       ║
+║  │  /sdd-code-index          Indexar código para trazabilidad profunda   │       ║
+║  │  /sdd-session-summary     Resumen de sesión                           │       ║
 ║  └───────────────────────────────────────────────────────────────────────┘       ║
 ║                                                                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
@@ -404,7 +409,7 @@ Cada paso tiene un estado que se rastrea automáticamente:
 - **done** — Completado exitosamente
 - **stale** — Sus entradas cambiaron, necesita re-ejecutarse
 
-> **Tip:** En cualquier momento puedes ejecutar `/sdd:pipeline-status` para ver
+> **Tip:** En cualquier momento puedes ejecutar `/sdd-pipeline-status` para ver
 > en qué paso estás y qué deberías hacer a continuación.
 
 ---
@@ -438,7 +443,7 @@ Transforma tu idea vaga en requisitos formales, claros y verificables.
 Simplemente escribe el comando y describe tu idea a continuación. Puede ser tan informal como quieras:
 
 ```
-/sdd:requirements-engineer
+/sdd-requirements-engineer
 
 Quiero hacer una app para gestionar tareas.
 Los usuarios pueden crear tareas, marcarlas como completadas y eliminarlas.
@@ -453,7 +458,7 @@ Si ya tienes un archivo con notas, requisitos preliminares, o cualquier document
 (un `.md`, un `.txt`, un `.docx` exportado a texto, lo que sea), díselo:
 
 ```
-/sdd:requirements-engineer
+/sdd-requirements-engineer
 
 Aquí están mis requisitos iniciales, están en el archivo docs/mi-idea.md
 ```
@@ -465,7 +470,7 @@ El skill leerá el archivo y lo usará como punto de partida.
 Puedes darle todo lo que tengas — actas de reunión, correos, capturas, notas sueltas:
 
 ```
-/sdd:requirements-engineer
+/sdd-requirements-engineer
 
 Tengo varias fuentes:
 - Un documento general en docs/proyecto.md
@@ -516,7 +521,7 @@ Tengo varias fuentes:
 │                                                                      │
 │  Ejemplo:                                                            │
 │  ────────                                                            │
-│  REQ-TASK-001                                                        │
+│  REQ-F-001                                                           │
 │  WHEN a user submits a new task with title and description           │
 │  THE system SHALL create the task with status "pending"              │
 │  AND assign a unique identifier                                      │
@@ -537,16 +542,16 @@ Tengo varias fuentes:
   │  Requisitos                                  │
   │                                              │
   │  Funcionales (F)                             │
-  │  ├── REQ-TASK-001  Crear tarea         P0   │
-  │  ├── REQ-TASK-002  Listar tareas       P0   │
-  │  ├── REQ-TASK-003  Completar tarea     P0   │
-  │  ├── REQ-TASK-004  Eliminar tarea      P1   │
-  │  └── REQ-TASK-005  Filtrar tareas      P2   │
+  │  ├── REQ-F-001     Crear tarea         P0   │
+  │  ├── REQ-F-002     Listar tareas       P0   │
+  │  ├── REQ-F-003     Completar tarea     P0   │
+  │  ├── REQ-F-004     Eliminar tarea      P1   │
+  │  └── REQ-F-005     Filtrar tareas      P2   │
   │                                              │
   │  No Funcionales (NF)                         │
-  │  ├── REQ-PERF-001  Respuesta < 200ms   P0   │
-  │  ├── REQ-SEC-001   Autenticación JWT   P0   │
-  │  └── REQ-ACC-001   Responsive design   P1   │
+  │  ├── REQ-NF-001    Respuesta < 200ms   P0   │
+  │  ├── REQ-NF-002    Autenticación JWT   P0   │
+  │  └── REQ-NF-003    Responsive design   P1   │
   │                                              │
   │  P0 = Crítico  P1 = Importante  P2 = Deseable│
   └─────────────────────────────────────────────┘
@@ -607,7 +612,7 @@ Transforma los requisitos en especificaciones técnicas formales que definen
 ### Cómo ejecutarlo
 
 ```
-/sdd:specifications-engineer
+/sdd-specifications-engineer
 ```
 
 ### Los 6 documentos que genera
@@ -651,7 +656,7 @@ Describe cada interacción del usuario con el sistema:
 │                                                                  │
 │  Actor:    Usuario autenticado                                   │
 │  Trigger:  Usuario envía formulario de nueva tarea               │
-│  Refs:     REQ-TASK-001                                          │
+│  Refs:     REQ-F-001                                             │
 │                                                                  │
 │  Flujo principal:                                                │
 │  1. Usuario completa título y descripción                        │
@@ -732,7 +737,7 @@ Performance, seguridad, accesibilidad:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  NFR-PERF-001: Tiempo de respuesta                               │
-│  Refs: REQ-PERF-001                                              │
+│  Refs: REQ-NF-001                                                │
 │                                                                  │
 │  • API responses: p95 < 200ms                                    │
 │  • Page load: < 1.5s on 3G                                       │
@@ -755,7 +760,7 @@ Documenta cada decisión de diseño y *por qué* se tomó:
 │                                                                  │
 │  Estado: Accepted                                                │
 │  Fecha: 2026-03-02                                               │
-│  Refs: REQ-SEC-001                                               │
+│  Refs: REQ-NF-002                                                │
 │                                                                  │
 │  Contexto:                                                       │
 │  La app necesita autenticar usuarios para proteger sus tareas.   │
@@ -808,7 +813,7 @@ invariantes débiles, silencios peligrosos.
 
 ```
 # Primero: auditar (encontrar problemas)
-/sdd:spec-auditor
+/sdd-spec-auditor
 
 # Después: corregir (aplicar fixes)
 # El skill te preguntará si quieres modo Audit o Fix
@@ -886,7 +891,7 @@ Genera una estrategia de pruebas completa basada en las especificaciones.
 ### Cómo ejecutarlo
 
 ```
-/sdd:test-planner
+/sdd-test-planner
 ```
 
 ### La matriz de pruebas
@@ -959,7 +964,7 @@ ordenadas por dependencias.
 ### Cómo ejecutarlo
 
 ```
-/sdd:plan-architect
+/sdd-plan-architect
 ```
 
 ### Diagramas C4 (arquitectura por niveles)
@@ -1066,7 +1071,7 @@ con su mensaje predefinido, su estrategia de rollback, y su trazabilidad.
 ### Cómo ejecutarlo
 
 ```
-/sdd:task-generator
+/sdd-task-generator
 ```
 
 ### Anatomía de una tarea
@@ -1162,7 +1167,7 @@ creando commits atómicos con trazabilidad completa.
 ### Cómo ejecutarlo
 
 ```
-/sdd:task-implementer
+/sdd-task-implementer
 ```
 
 ### El ciclo TDD por tarea
@@ -1236,7 +1241,7 @@ No tienen un orden fijo — úsalas cuando las necesites.
 ### Diseño técnico (recomendado antes de plan-architect)
 
 ```
-/sdd:tech-designer
+/sdd-tech-designer
 ```
 
 Explora 12 dimensiones de arquitectura técnica y genera decisiones documentadas:
@@ -1264,7 +1269,7 @@ Explora 12 dimensiones de arquitectura técnica y genera decisiones documentadas
 │  ├── QUALITY-ATTRIBUTES.md      ← ATAM-lite (trade-offs)            │
 │  └── ADR-DRAFT-*.md             ← Borradores de ADRs                │
 │                                                                      │
-│  Tip: Si ejecutas esto ANTES de /sdd:plan-architect,                │
+│  Tip: Si ejecutas esto ANTES de /sdd-plan-architect,                │
 │  el arquitecto consumirá automáticamente tus decisiones.            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1272,7 +1277,7 @@ Explora 12 dimensiones de arquitectura técnica y genera decisiones documentadas
 ### Diseño UX (recomendado antes de plan-architect)
 
 ```
-/sdd:ux-designer
+/sdd-ux-designer
 ```
 
 Define el sistema de diseño visual y de interacción en 12 dimensiones:
@@ -1285,7 +1290,7 @@ Define el sistema de diseño visual y de interacción en 12 dimensiones:
 │  2. Design tokens          (variables reutilizables)                │
 │  3. Componentes            (Atomic Design: atoms→organisms)         │
 │  4. Responsive             (breakpoints, mobile-first)              │
-│  5. Accesibilidad          (WCAG 2.1 AA, ARIA, contraste)          │
+│  5. Accesibilidad          (WCAG 2.2 AA, ARIA, contraste)          │
 │  6. Interacción            (animaciones, feedback, estados)         │
 │  7. Formularios            (validación, errores, UX)                │
 │  8. Navegación             (IA, rutas, breadcrumbs)                 │
@@ -1302,7 +1307,7 @@ Define el sistema de diseño visual y de interacción en 12 dimensiones:
 │  ├── INTERACTION-MODEL.md       ← Modelo de interacción             │
 │  └── DESIGN-TOKENS.json         ← Tokens exportables                │
 │                                                                      │
-│  Tip: Si ejecutas esto ANTES de /sdd:plan-architect,                │
+│  Tip: Si ejecutas esto ANTES de /sdd-plan-architect,                │
 │  el arquitecto integrará tu diseño en las fases.                    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1312,7 +1317,7 @@ Define el sistema de diseño visual y de interacción en 12 dimensiones:
 Ejecutar en cualquier momento para evaluar la postura de seguridad:
 
 ```
-/sdd:security-auditor
+/sdd-security-auditor
 ```
 
 ```
@@ -1346,12 +1351,12 @@ Ejecutar en cualquier momento para evaluar la postura de seguridad:
 Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 
 ```
-/sdd:req-change
+/sdd-req-change
 ```
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Cambio de Requisito: REQ-TASK-001                                   │
+│  Cambio de Requisito: REQ-F-001                                      │
 │                                                                      │
 │  Tipo: MODIFY                                                        │
 │  Clasificación ISO 14764: Perfective (mejora)                        │
@@ -1362,7 +1367,7 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 │  Análisis de impacto:                                                │
 │  ┌──────────────────────────────────────────────────────────┐       │
 │  │                                                           │       │
-│  │  REQ-TASK-001 ──▶ UC-TASK-001 ──▶ WF-TASK-CREATE        │       │
+│  │  REQ-F-001 ──▶ UC-TASK-001 ──▶ WF-TASK-CREATE        │          │
 │  │       │                │               │                  │       │
 │  │       ▼                ▼               ▼                  │       │
 │  │  DOMAIN-MODEL    API-CONTRACTS    WORKFLOWS              │       │
@@ -1389,7 +1394,7 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 ### Estado del pipeline
 
 ```
-/sdd:pipeline-status
+/sdd-pipeline-status
 ```
 
 ```
@@ -1405,14 +1410,14 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 │  task-implementer         ░░░░░░░░░░░░  pending                  │
 │                                                                  │
 │  Siguiente acción recomendada:                                   │
-│  → Re-ejecutar /sdd:task-generator (inputs han cambiado)         │
+│  → Re-ejecutar /sdd-task-generator (inputs han cambiado)         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Verificación de trazabilidad
 
 ```
-/sdd:traceability-check
+/sdd-traceability-check
 ```
 
 ```
@@ -1421,13 +1426,13 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 │                                                                  │
 │  Chain: REQ → UC → WF → API → BDD → INV → ADR                   │
 │                                                                  │
-│  REQ-TASK-001  ✅ UC-TASK-001 ✅ WF-TASK-CREATE ✅ API-TASK-001  │
-│  REQ-TASK-002  ✅ UC-TASK-002 ✅ WF-TASK-LIST   ✅ API-TASK-002  │
-│  REQ-TASK-003  ✅ UC-TASK-003 ⚠️ WF missing!    ── ──           │
-│  REQ-SEC-001   ✅ UC-AUTH-001 ✅ WF-AUTH-LOGIN  ✅ API-AUTH-001  │
+│  REQ-F-001     ✅ UC-TASK-001 ✅ WF-TASK-CREATE ✅ API-TASK-001  │
+│  REQ-F-002     ✅ UC-TASK-002 ✅ WF-TASK-LIST   ✅ API-TASK-002  │
+│  REQ-F-003     ✅ UC-TASK-003 ⚠️ WF missing!    ── ──           │
+│  REQ-NF-002    ✅ UC-AUTH-001 ✅ WF-AUTH-LOGIN  ✅ API-AUTH-001  │
 │                                                                  │
 │  Problemas encontrados:                                          │
-│  ⚠️ REQ-TASK-003 → UC-TASK-003: Missing workflow WF-TASK-DONE   │
+│  ⚠️ REQ-F-003 → UC-TASK-003: Missing workflow WF-TASK-DONE      │
 │  ⚠️ ADR-002 no está referenciado por ningún UC                   │
 │                                                                  │
 │  Cobertura: 92% (23/25 links verificados)                        │
@@ -1437,7 +1442,7 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 ### Dashboard visual
 
 ```
-/sdd:dashboard
+/sdd-dashboard
 ```
 
 Genera un archivo HTML interactivo que puedes abrir en el navegador:
@@ -1485,7 +1490,7 @@ o abierto como archivo local (usa JSONP polling).
 ### Code intelligence
 
 ```
-/sdd:code-index
+/sdd-code-index
 ```
 
 Indexa tu código fuente y lo conecta con los artefactos SDD. Si tienes
@@ -1518,7 +1523,7 @@ con call graph, clusters y flujos de ejecución:
 ### Resumen de sesión
 
 ```
-/sdd:session-summary
+/sdd-session-summary
 ```
 
 Resume las decisiones tomadas durante la sesión actual,
@@ -1547,7 +1552,7 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 │                         ▼                                            │
 │  Sprint 2: Nuevas features                                           │
 │  ┌───────────────────────────────────────────┐                      │
-│  │ /sdd:req-change (ADD nuevos requisitos)    │                      │
+│  │ /sdd-req-change (ADD nuevos requisitos)    │                      │
 │  │      ↓ cascada automática                  │                      │
 │  │ SPEC → AUDIT → TEST → PLAN → TASK → IMPL  │                      │
 │  └───────────────────────────────────────────┘                      │
@@ -1555,7 +1560,7 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 │                         ▼                                            │
 │  Sprint 3: Bug fixes + mejoras                                       │
 │  ┌───────────────────────────────────────────┐                      │
-│  │ /sdd:req-change (MODIFY requisitos)        │                      │
+│  │ /sdd-req-change (MODIFY requisitos)        │                      │
 │  │      ↓ cascada selectiva                   │                      │
 │  │ Solo los artefactos afectados se actualizan│                      │
 │  └───────────────────────────────────────────┘                      │
@@ -1563,10 +1568,10 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 │                         ▼                                            │
 │  Continuo: Verificación                                              │
 │  ┌───────────────────────────────────────────┐                      │
-│  │ /sdd:pipeline-status                       │                      │
-│  │ /sdd:traceability-check                    │                      │
-│  │ /sdd:security-auditor                      │                      │
-│  │ /sdd:dashboard                             │                      │
+│  │ /sdd-pipeline-status                       │                      │
+│  │ /sdd-traceability-check                    │                      │
+│  │ /sdd-security-auditor                      │                      │
+│  │ /sdd-dashboard                             │                      │
 │  └───────────────────────────────────────────┘                      │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -1578,23 +1583,23 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                      │
 │  ¿Cambio en requisitos?                                              │
-│  └──→ /sdd:req-change                                                │
+│  └──→ /sdd-req-change                                                │
 │       Propaga automáticamente a specs, tests, plan, tasks            │
 │                                                                      │
 │  ¿Nuevo hallazgo de seguridad?                                       │
-│  └──→ /sdd:security-auditor                                          │
+│  └──→ /sdd-security-auditor                                          │
 │       Genera hallazgos → pueden convertirse en req-change            │
 │                                                                      │
 │  ¿El código se alejó de las specs?                                   │
-│  └──→ /sdd:reconcile                                                 │
+│  └──→ /sdd-reconcile                                                 │
 │       Detecta drift y propone correcciones                           │
 │                                                                      │
 │  ¿Pipeline roto o confuso?                                           │
-│  └──→ /sdd:pipeline-status                                           │
+│  └──→ /sdd-pipeline-status                                           │
 │       Te dice exactamente qué paso ejecutar                          │
 │                                                                      │
 │  ¿Trazabilidad rota?                                                 │
-│  └──→ /sdd:traceability-check                                        │
+│  └──→ /sdd-traceability-check                                        │
 │       Encuentra links rotos y huérfanos                              │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -1653,13 +1658,13 @@ claude   # Abrir Claude Code
 ```
 
 ```
-/sdd:setup
+/sdd-setup
 ```
 
 ### Paso 1: Requisitos
 
 ```
-/sdd:requirements-engineer
+/sdd-requirements-engineer
 ```
 
 Le dices a Claude:
@@ -1681,7 +1686,7 @@ mi-task-app/
 ### Paso 2: Especificaciones
 
 ```
-/sdd:specifications-engineer
+/sdd-specifications-engineer
 ```
 
 Lee los requisitos y genera especificaciones completas:
@@ -1706,7 +1711,7 @@ mi-task-app/
 ### Paso 3: Auditoría
 
 ```
-/sdd:spec-auditor
+/sdd-spec-auditor
 ```
 
 Encuentra 5 problemas, los corriges:
@@ -1721,7 +1726,7 @@ mi-task-app/
 ### Paso 4: Plan de pruebas
 
 ```
-/sdd:test-planner
+/sdd-test-planner
 ```
 
 ```
@@ -1739,7 +1744,7 @@ Antes de la arquitectura, puedes explorar decisiones técnicas y de diseño visu
 Esto es **opcional pero recomendado** — el plan-architect los consumirá automáticamente:
 
 ```
-/sdd:tech-designer
+/sdd-tech-designer
 ```
 
 ```
@@ -1751,7 +1756,7 @@ mi-task-app/
 ```
 
 ```
-/sdd:ux-designer
+/sdd-ux-designer
 ```
 
 ```
@@ -1759,7 +1764,7 @@ mi-task-app/
 └── ux/
     ├── UI-DESIGN-SYSTEM.md     ← Componentes, colores, tipografía
     ├── WIREFRAMES.md           ← Wireframes ASCII de cada pantalla
-    ├── ACCESSIBILITY-SPEC.md   ← WCAG 2.1 AA
+    ├── ACCESSIBILITY-SPEC.md   ← WCAG 2.2 AA
     ├── INTERACTION-MODEL.md    ← Estados, animaciones, feedback
     └── DESIGN-TOKENS.json      ← Tokens exportables a CSS/Tailwind
 ```
@@ -1767,7 +1772,7 @@ mi-task-app/
 ### Paso 5: Arquitectura
 
 ```
-/sdd:plan-architect
+/sdd-plan-architect
 ```
 
 Si ejecutaste tech-designer y/o ux-designer, el arquitecto los consume automáticamente
@@ -1788,7 +1793,7 @@ mi-task-app/
 ### Paso 6: Tareas
 
 ```
-/sdd:task-generator
+/sdd-task-generator
 ```
 
 ```
@@ -1805,7 +1810,7 @@ mi-task-app/
 ### Paso 7: Implementación
 
 ```
-/sdd:task-implementer
+/sdd-task-implementer
 ```
 
 El skill implementa tarea por tarea (puedes ir FASE por FASE):
@@ -1837,10 +1842,10 @@ mi-task-app/
 ### Verificación final
 
 ```
-/sdd:traceability-check    ← Todo conectado ✅
-/sdd:dashboard             ← Dashboard HTML generado
-/sdd:code-index            ← (opcional) Indexar código para blast radius
-/sdd:pipeline-status       ← Todos los pasos: done ✅
+/sdd-traceability-check    ← Todo conectado ✅
+/sdd-dashboard             ← Dashboard HTML generado
+/sdd-code-index            ← (opcional) Indexar código para blast radius
+/sdd-pipeline-status       ← Todos los pasos: done ✅
 ```
 
 ### Estructura final del proyecto
@@ -1900,20 +1905,20 @@ mi-task-app/
 auditoría, podrías implementar specs con errores. Si saltas el plan de pruebas,
 no sabrás qué testear.
 
-Sin embargo, puedes ejecutar `/sdd:pipeline-status` para ver qué pasos
+Sin embargo, puedes ejecutar `/sdd-pipeline-status` para ver qué pasos
 ya están completos y retomar desde donde te quedaste.
 
 ### ¿Puedo usar SDD en un proyecto existente?
 
-**Sí.** Usa las herramientas de onboarding:
+**Sí.** Empieza por el diagnóstico y sigue el plan que propone:
 
 ```
-/sdd:onboarding           ← Diagnostica tu proyecto
-                              y te recomienda el camino
+/sdd-pipeline-status --diagnose  ← Diagnostica tu proyecto
+                                    y te recomienda el camino
 
-/sdd:reverse-engineer      ← Genera artefactos SDD desde código existente
-/sdd:reconcile            ← Alinea specs existentes con el código
-/sdd:import               ← Importa docs externos (Jira, Notion, etc.)
+/sdd-reverse-engineer      ← Genera artefactos SDD desde código existente
+/sdd-reconcile            ← Alinea specs existentes con el código
+/sdd-import               ← Importa docs externos (Jira, Notion, etc.)
 ```
 
 ### ¿Es mucho overhead para un proyecto pequeño?
@@ -1929,7 +1934,7 @@ SDD ahorra tiempo a mediano plazo.
 ### ¿Cómo manejo múltiples sprints?
 
 1. **Sprint 1:** Pipeline completo (REQ → IMPL)
-2. **Sprint N:** `/sdd:req-change` para agregar/modificar requisitos
+2. **Sprint N:** `/sdd-req-change` para agregar/modificar requisitos
    con cascada automática al resto del pipeline
 
 ### ¿Puedo usar SDD con cualquier lenguaje o framework?
@@ -1944,7 +1949,7 @@ El ciclo de auditoría (`spec-auditor`) existe precisamente para eso.
 Además, el principio "nunca asumir, siempre preguntar" significa que
 Claude te consultará antes de tomar decisiones ambiguas.
 
-Si encuentras un error después de implementar, usa `/sdd:req-change`
+Si encuentras un error después de implementar, usa `/sdd-req-change`
 para corregirlo formalmente con trazabilidad.
 
 ### ¿Cómo actualizo el plugin a una nueva versión?
@@ -1952,13 +1957,13 @@ para corregirlo formalmente con trazabilidad.
 Desde Claude Code:
 
 ```
-/plugin update sdd@noelserdna-claude-plugin-sdd
+/plugin update sdd-pipeline@noelserdna
 ```
 
 Después, en cada proyecto:
 
 ```
-/sdd:setup
+/sdd-setup
 ```
 
 El setup detecta automáticamente si tu proyecto tiene una versión anterior
@@ -1976,7 +1981,7 @@ Ambos generan artefactos que plan-architect consume automáticamente si existen.
 
 ### ¿Qué es el code intelligence?
 
-`/sdd:code-index` analiza tu código fuente y lo conecta con los artefactos SDD.
+`/sdd-code-index` analiza tu código fuente y lo conecta con los artefactos SDD.
 Usa los commits con trailers `Refs:` y `Task:` (que task-implementer genera automáticamente)
 para inferir qué código implementa cada requisito.
 
@@ -1987,8 +1992,8 @@ call graphs, clusters de código, flujos de ejecución. Sin GitNexus, funciona e
 
 Sí, de tres formas:
 
-1. `/sdd:pipeline-status` — Resumen en texto
-2. `/sdd:dashboard` — Dashboard HTML interactivo
+1. `/sdd-pipeline-status` — Resumen en texto
+2. `/sdd-dashboard` — Dashboard HTML interactivo
 3. `pipeline-state.json` — Archivo JSON (automáticamente actualizado)
 
 ---
@@ -2026,36 +2031,36 @@ Sí, de tres formas:
 │                                                                   │
 │  PIPELINE (en orden):                                             │
 │                                                                   │
-│  1.  /sdd:setup                    Inicializar proyecto           │
-│  2.  /sdd:requirements-engineer    Definir qué se necesita       │
-│  3.  /sdd:specifications-engineer  Definir cómo funciona         │
-│  4.  /sdd:spec-auditor             Verificar y corregir specs     │
-│  5.  /sdd:test-planner             Planificar pruebas             │
-│  6.  /sdd:plan-architect           Diseñar arquitectura y fases  │
-│  7.  /sdd:task-generator           Generar tareas atómicas       │
-│  8.  /sdd:task-implementer         Implementar con TDD            │
+│  1.  /sdd-setup                    Inicializar proyecto           │
+│  2.  /sdd-requirements-engineer    Definir qué se necesita       │
+│  3.  /sdd-specifications-engineer  Definir cómo funciona         │
+│  4.  /sdd-spec-auditor             Verificar y corregir specs     │
+│  5.  /sdd-test-planner             Planificar pruebas             │
+│  6.  /sdd-plan-architect           Diseñar arquitectura y fases  │
+│  7.  /sdd-task-generator           Generar tareas atómicas       │
+│  8.  /sdd-task-implementer         Implementar con TDD            │
 │                                                                   │
 │  LATERALES (en cualquier momento):                                │
 │                                                                   │
-│  /sdd:tech-designer                Explorar stack y arquitectura  │
-│  /sdd:ux-designer                  Diseño visual y accesibilidad │
-│  /sdd:security-auditor             Auditoría OWASP               │
-│  /sdd:req-change                   Gestión de cambios + cascada  │
+│  /sdd-tech-designer                Explorar stack y arquitectura  │
+│  /sdd-ux-designer                  Diseño visual y accesibilidad │
+│  /sdd-security-auditor             Auditoría OWASP               │
+│  /sdd-req-change                   Gestión de cambios + cascada  │
 │                                                                   │
 │  UTILIDADES (cuando las necesites):                               │
 │                                                                   │
-│  /sdd:pipeline-status              ¿Dónde estoy?                 │
-│  /sdd:traceability-check           ¿Está todo conectado?         │
-│  /sdd:dashboard                    Verlo visualmente              │
-│  /sdd:code-index                   Conectar código con specs     │
-│  /sdd:session-summary              Resumen de sesión              │
+│  /sdd-pipeline-status              ¿Dónde estoy?                 │
+│  /sdd-traceability-check           ¿Está todo conectado?         │
+│  /sdd-dashboard                    Verlo visualmente              │
+│  /sdd-code-index                   Conectar código con specs     │
+│  /sdd-session-summary              Resumen de sesión              │
 │                                                                   │
-│  ONBOARDING (proyecto existente):                                 │
+│  PROYECTO EXISTENTE:                                              │
 │                                                                   │
-│  /sdd:onboarding                   Diagnosticar proyecto          │
-│  /sdd:reverse-engineer             Código → artefactos SDD       │
-│  /sdd:reconcile                    Alinear specs ↔ código        │
-│  /sdd:import                       Importar docs externos         │
+│  /sdd-pipeline-status --diagnose   Diagnosticar proyecto          │
+│  /sdd-reverse-engineer             Código → artefactos SDD       │
+│  /sdd-reconcile                    Alinear specs ↔ código        │
+│  /sdd-import                       Importar docs externos         │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```

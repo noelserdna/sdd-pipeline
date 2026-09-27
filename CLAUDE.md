@@ -4,289 +4,171 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **meta-project**: a collection of 24 Claude Code skills (9 pipeline + 4 onboarding + 7 utility + 1 setup + 2 lateral + 1 multi-session lead) that implement a complete Specification-Driven Development (SDD) pipeline based on SWEBOK v4, with automation infrastructure (hooks, agents, settings) and an MCP server for live traceability queries. There is no traditional source code, build system, or package manager — the "execution" happens by invoking skills within Claude Code CLI.
+A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json`) that implements a Specification-Driven Development pipeline based on SWEBOK v4:
 
-## Pipeline & Skill Execution Order
+- 23 skills: 7 pipeline, 4 lateral, 3 brownfield, 9 utility (including the interactive orchestrator and the multi-session lead)
+- 8 hook scripts (14 event registrations)
+- an MCP server for live traceability queries
+- an optional TypeSafe Jev integration for bulk judgments
+
+Most of the product is prompt text (skills and their references). The executable parts are:
+
+- the hooks (bash + one Node script)
+- `scripts/` (bash/Node helpers and validators)
+- `skills/sdd-dashboard/generate.py`
+- the TypeScript MCP server in `server/`, bundled with esbuild into the committed `server/dist/server.js`
+
+## Pipeline
 
 ```
-sdd-requirements-engineer  →  requirements/REQUIREMENTS.md
-        ↓
-sdd-specifications-engineer  →  spec/ (domain, use-cases, workflows, contracts, nfr, adr)
-        ↓
-sdd-spec-auditor (Mode Audit)  →  audits/AUDIT-BASELINE.md
-        ↓
-sdd-spec-auditor (Mode Fix)   →  corrected spec/ documents
-        ↓
-sdd-test-planner  →  test/TEST-PLAN.md, test/TEST-MATRIX-*.md, test/PERF-SCENARIOS.md, test/E2E-SCENARIOS.md
-        ↓
-sdd-plan-architect  →  plan/ (fases/FASE-*.md, PLAN.md, ARCHITECTURE.md, fase-plans/)
-        ↓
-sdd-task-generator  →  task/TASK-FASE-*.md
-        ↓
-sdd-task-implementer  →  code/test paths from the SDD Stack Profile (default src/, tests/), git commits
+sdd-requirements-engineer    →  requirements/REQUIREMENTS.md
+sdd-specifications-engineer  →  spec/ (domain, use-cases, workflows, contracts, tests, nfr, adr)
+sdd-spec-auditor             →  audits/AUDIT-BASELINE.md  (--fix applies accepted corrections to spec/)
+sdd-test-planner             →  test/ (TEST-PLAN, TEST-MATRIX-*, PERF-SCENARIOS, E2E-SCENARIOS)
+sdd-plan-architect           →  plan/ (PLAN.md, ARCHITECTURE.md, fases/FASE-{N}-{SLUG}.md, fase-plans/PLAN-FASE-{N}.md)
+sdd-task-generator           →  task/TASK-FASE-{N}.md
+sdd-task-implementer         →  code/test paths from the SDD Stack Profile (default src/, tests/), one commit per task
 ```
 
-**Lateral skills** (invoke at any point):
-- `sdd-tech-designer` → `design/TECHNICAL-DESIGN.md`, `design/QUALITY-ATTRIBUTES.md`, `design/ADR-DRAFT-*.md` — Technical architecture exploration across 12 dimensions (delivery channels, architecture style, tech stack, data strategy, auth, API, infrastructure, CI/CD, observability, cost, DX, i18n). Optional: consumed by plan-architect if exists.
-- `sdd-ux-designer` → `ux/UI-DESIGN-SYSTEM.md`, `ux/WIREFRAMES.md`, `ux/ACCESSIBILITY-SPEC.md`, `ux/INTERACTION-MODEL.md`, `ux/DESIGN-TOKENS.json` — UI/UX design system across 12 dimensions (brand, tokens, components, responsive, accessibility, interaction, forms, navigation, frontend security, performance, mobile, theming). Optional: consumed by plan-architect and test-planner (E2E scenarios) if exists.
-- `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`
-- `sdd-req-change` → Universal change entry point: manages ADD/MODIFY/DEPRECATE with maintenance classification (ISO 14764, Ch05) and optional pipeline cascade triggering (can re-trigger spec-auditor → test-planner → plan-architect → task-generator → task-implementer)
+**Lateral** (any time):
+- `sdd-tech-designer` → `design/`, including `OPERATION-MAPPING.md`, which plan-architect writes itself when tech-designer was not run.
+- `sdd-ux-designer` → `ux/`, read by plan-architect and test-planner.
+- `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`. Its fixes go through req-change.
+- `sdd-req-change` → ADD/MODIFY/DEPRECATE with ISO 14764 classification and an optional cascade (`--cascade=auto|manual|dry-run|plan-only`). It writes `changes/CHANGE-REPORT-{CHG-ID}.md`.
 
-**Onboarding skills** (for adopting SDD in existing projects):
-- `sdd-onboarding` → Diagnoses project state, classifies into 8 scenarios, generates adoption plan. Entry point for any project.
-- `sdd-reverse-engineer` → Analyzes existing code to generate complete SDD artifacts (requirements, specs, test plan, tasks, findings). For brownfield projects.
-- `sdd-reconcile` → Detects drift between SDD specs and code, classifies divergences, reconciles. Requires existing SDD artifacts + code.
-- `sdd-import` → Imports external docs (Jira, OpenAPI, Markdown, Notion, CSV, Excel) into SDD format. Pre-pipeline.
+**Brownfield:**
+- `sdd-reverse-engineer`: code → artifacts; seeds from `[IMPORTED]` items.
+- `sdd-reconcile`: drift. It amends specs only, writes CR entries, and reads `.sdd/gap-analysis.json`.
+- `sdd-import`: Jira, OpenAPI (→ `Style: http`), Markdown, Notion, CSV, Excel.
 
-**Utility skills** (invoke on demand):
-- `sdd-pipeline-status` → Pipeline status report with artifact verification and next-action recommendation
-- `sdd-traceability-check` → Verifies REQ→UC→WF→API→BDD→INV→ADR traceability chain, finds orphans/broken links
-- `sdd-dashboard` → Visual HTML traceability dashboard with interactive prompts, pipeline popovers, and JSONP live status feed
-- `sdd-code-index` → Indexes project code for deep traceability. Bridges GitNexus code intelligence with SDD artifacts (optional, enhances blast radius analysis and code coverage)
-- `sdd-session-summary` → Summarizes session decisions, categorizes formal vs informal context
-- `sdd-gap-detector` → Detects implementation gaps between specs and code: missing endpoints, orphan routes, schema mismatches, uncovered BDD scenarios. Writes `.sdd/gap-analysis.json`
-- `sdd-verify-coverage` → LLM-as-judge heuristic layer (P3): verifies requirement coverage via structured binary prompts against source code, produces confidence-scored results in `.sdd/verification-results.json`
+**Utility:**
+- `sdd-setup`: state file, git hook, status line, stack kits `--stack=<rails|nextjs-prisma>`, multi-session.
+- `sdd-pipeline-status`: `--diagnose` classifies an existing project into 8 adoption scenarios.
+- `sdd-traceability-check`
+- `sdd-gap-detector`: `--semantic` checks requirement coverage in the code.
+- `sdd-dashboard`: `generate.py` builds `dashboard/traceability-graph.json` and the HTML.
+- `sdd-code-index`: GitNexus bridge.
+- `sdd-session-summary`
+- `sdd-orchestrator`: drives the whole pipeline from the main conversation.
+- `sdd-lead`: multi-session, see `docs/multisesion.md`.
 
-**Setup skill**:
-- `sdd-setup` → Installs automation (hooks, agents, settings) into target projects; `--stack=<rails|nextjs-prisma>` also installs a stack kit (SDD Stack Profile, conventions, path rules — `docs/stacks.md`)
+## Repository Layout
 
-**Multi-session skill**:
-- `sdd-lead` → Multi-session lead: dispatches stages to role sessions after each human gate, receives handoffs, answers station questions (`docs/multisesion.md`)
-
-## Repository Structure
-
-Each skill follows the same layout:
 ```
-sdd-{skill-name}/
-├── SKILL.md           # Full skill definition (metadata, modes, process, constraints)
-└── references/        # Templates, checklists, taxonomies, patterns
-```
-
-Automation infrastructure:
-```
-automation/
-├── hooks/                               # Hook scripts (installed to target .claude/hooks/)
-│   ├── sdd-session-start.sh             # H1: Pipeline status injection at session start
-│   ├── sdd-upstream-guard.sh            # H2: Upstream artifact immutability guard
-│   ├── sdd-pipeline-state-updater.sh    # H3: Auto-update pipeline-state.json on writes
-│   ├── sdd-augment-hook.js              # H5: Enriches tool context with SDD traceability data
-│   ├── sdd-trace-map-updater.sh         # H9: Auto-updates traceability map on writes
-│   ├── sdd-activity-log.sh              # H10: Activity log (.sdd/activity.jsonl, ~/.claude/sdd/active-runs.json)
-│   ├── sdd-runs-line.sh                 # H11: One-line reminder of the live runs on each prompt
-│   └── sdd-tool-guard.sh                # H12: Denies assigning human-consent variables for AI-gated tools
-├── agents/                              # Agent definitions (installed to target .claude/agents/)
-│   ├── sdd-constitution-enforcer.md     # A1: Validates against 11 SDD Constitution articles
-│   ├── sdd-cross-auditor.md             # A2: Cross-references skill definitions for mismatches
-│   ├── sdd-context-keeper.md            # A3: Maintains informal project context
-│   └── sdd-pipeline-auditor.md          # A4: End-to-end pipeline audit with regression tracking
-├── status-line/
-│   └── sdd-status-line.sh              # Pipeline status line for Claude Code CLI (opt-in)
-├── scripts/
-│   └── migrate-hooks-v2.sh              # Migration script: v1→v2 hooks (idempotent, backup)
-├── settings-template.json               # P1: Settings template with H1-H3, H5, H9 hook configs + statusLine
-├── settings-optional-quality-gates.json # P2: Opt-in prompt/agent quality gate hooks (H7-H8)
-└── INSTALL.md                           # Manual installation guide
+.claude-plugin/        plugin.json, marketplace.json
+skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
+hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
+scripts/               sdd-state.sh (locked stage status), sdd-jev.mjs + jev/*.json, sdd-task-lint.mjs,
+                       install-*.sh, status lines, sdd-watch/up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
+server/                src/{index,server,graph-loader,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
+templates/             pipeline-state template, gitignore policy, optional quality gates, stacks/<kit>/
+references/            sdd-constitution.md (12 articles), handoff-protocol.md, async-questions.md
+commands/              /sdd-watch
+.claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
+examples/todo-app/     toy project used by the pipeline auditor
+tests/                 hooks, setup, tasks, dashboard, jev, bench, e2e
+docs/                  guides (Spanish), stacks, multisession, jev, measurements
 ```
 
-MCP server (live traceability queries):
-```
-server/                                  # TypeScript MCP server
-├── package.json                         # Deps: @modelcontextprotocol/sdk
-├── tsconfig.json
-└── src/
-    ├── index.ts                         # Entry: stdio transport (MCP)
-    ├── server.ts                        # createSDDServer() — registers tools/resources/prompts
-    ├── graph-loader.ts                  # Reads traceability-graph.json, file watcher
-    ├── tools/
-    │   ├── query.ts                     # sdd_query — search artifacts by text/ID/type
-    │   ├── impact.ts                    # sdd_impact — blast radius BFS by depth
-    │   ├── context.ts                   # sdd_context — 360° artifact view
-    │   ├── coverage.ts                  # sdd_coverage — gap analysis by domain/layer
-    │   └── trace.ts                     # sdd_trace — full traceability chain
-    ├── resources.ts                     # sdd:// URI handlers
-    ├── prompts.ts                       # Workflow prompts (analyze_impact, generate_status_report)
-    └── hints.ts                         # Next-step hints (GitNexus pattern)
+## Development Loop
+
+The same commands CI runs:
+
+```bash
+node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
+bash tests/hooks/run.sh && bash tests/setup/run.sh && bash tests/tasks/run.sh
+bash tests/dashboard/run.sh && bash tests/jev/run.sh && bash tests/bench/run.sh
+shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
+cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
 
-Scripts: `sdd-specifications-engineer/scripts/create-spec-structure.ps1` (PowerShell) and `sdd-setup/scripts/install-sdd-automation.sh` (bash).
-
-## Resources (`recursos/`)
-
-Reference implementations and external tools used as inspiration/comparison for the SDD skills:
-
-- **`OpenSpec/`** — Fission-AI's spec framework (`@fission-ai/openspec`, Node/TypeScript). Artifact-guided workflow with commands like `/opsx:new`, `/opsx:ff`. Iterative, brownfield-friendly approach.
-- **`spec-kit/`** — GitHub's Spec-Driven Development toolkit (Python CLI via `uv`). Generates working implementations from specifications using `specify` CLI.
-- **`swebok-v4.pdf`** — Software Engineering Body of Knowledge v4. The authoritative reference document cited by all skills. Also available at root level.
+Hooks run in this checkout too (the plugin is enabled here). The session start hook may export `SDD_STATE_ROOT`, so run fixture tests with `env -u SDD_STATE_ROOT`, and check that `git status` shows no `pipeline-state.json` or `.sdd/` before committing.
 
 ## Key Conventions
 
-- **EARS syntax** for requirements: `WHEN <trigger> THE <system> SHALL <behavior>`
-- **Traceability chain**: REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST
-- **1 task = 1 commit** using Conventional Commits with `Refs:` and `Task:` trailers
-- **Inference engine**: Commits with `Refs:`/`Task:` trailers enrich code coverage automatically; 4 origin states: `linked` (direct `// Refs:`), `inferred` (commit), `suggested` (task-only), `uncovered`
-- **Graph schema v6**: `codeRefs[].origin`, `codeRefs[].inferredFrom`, `commitRefs[].files`, BFS N-hop propagation (max depth 3), `.sdd/overrides.json` for manual pin/suppress
-- **Clarification-first**: Skills never assume — they ask the user via structured option tables
-- **Baseline auditing**: First audit creates baseline; subsequent audits only report new/regression findings
-- **Revert strategies**: Each task documents rollback approach (SAFE, COUPLED, MIGRATION, CONFIG); with `task_format: compact` a task without a Revert block is SAFE
-- **Specs are the source of truth** (Art. 12 — see below)
+- **EARS** statements for REQ-F/REQ-NF: `WHEN <trigger> THE <system> SHALL <behavior>`. Constraints (REQ-C) are plain statements.
+- **IDs:** REQ-F/NF/C-NNN · UC-NNN · WF-NNN · operations API-NNN-NN (module number from the id ledger) · BDD-UC-NNN · INV-{AREA}-NNN · ADR-NNN · RN (business rules) · TASK-F{N}-NNN · UX screens SCR-NNN.
+- **Traceability chain:** REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST.
+- **Commits:**
+  - Implementation: 1 task = 1 commit, Conventional Commits with `Refs:` and `Task:` trailers.
+  - Spec edits by skills: `docs(specs): …` with `Refs:`.
+  - The git `commit-msg` hook enforces this. It exempts docs/chore/ci/style/build, Merge, Revert, fixup!, squash! and amend!.
+- **Code references in the graph (v6):** `codeRefs[].origin` ∈ direct, commit-inferred, task-inferred (confidence 0.5), blame-inferred, propagated, hook-captured, code-index, llm-verified, manual-override. `.sdd/overrides.json` pins or suppresses refs.
+- **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`.
+- **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions. Excluded: Accepted, Won't fix, unexpired Deferred.
+- **Revert strategies** per task: SAFE, COUPLED, MIGRATION, CONFIG. With `task_format: compact`, a task without a Revert block is SAFE.
+- **Specs are the source of truth** (Article 12, below).
 
 ## Article 12: Specification Primacy
 
-This is the foundational principle of SDD. It governs all implementation and testing:
+This is the foundational principle, and the last article of `references/sdd-constitution.md`.
 
-**1. Tests verify specifications, NEVER the code.** A test is a formal assertion that the code conforms to the spec. If a test fails, the defect is in the code — fix the code, not the test. Tests must NEVER be adapted to match code behavior that deviates from specifications.
+1. **Tests verify specifications, never the code.** When a test fails, the defect is in the code. Never adapt a test to match code that deviates from the spec.
+2. **Specs may be wrong, but only humans decide.** An implementer (human or LLM) who finds a spec impractical or contradictory implements it **as written** and records a `SPEC-DEVIATION` entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` (spec ID and text, where it was observed, the proposed change and its impact, a recommendation of AMEND, KEEP or NEEDS-DISCUSSION). It must not silently change the spec, the test or the behaviour.
+3. **The cascade is: human decision → `sdd-req-change` → spec → tests → code.** Never the reverse.
 
-**2. Specs may be wrong — but only humans decide.** During implementation or testing, a developer (or LLM) may discover that a specification is impractical, contradictory, or a poor design decision. When this happens:
-- **DO NOT** silently change the spec
-- **DO NOT** silently change the test to match the "better" behavior
-- **DO NOT** implement the "better" behavior and ignore the spec
-- **DO** create a **Spec Deviation Report** in `deviations/DEV-NNN.md`:
+## Pipeline State
 
-```markdown
-# DEV-NNN: {title}
+`pipeline-state.json` lives at the project root (the main checkout when worktrees are used). The authoritative schema is `skills/sdd-req-change/references/cascade-patterns.md` §9, and the template is `templates/pipeline-state.template.json`.
 
-- **Spec:** {spec ID and text, e.g., RN-004: "Registration does not auto-login"}
-- **Observed during:** {implementation/testing of TASK-XX or E2E-XX}
-- **Deviation:** {what the implementer thinks should be different and why}
-- **Impact:** {what would change if the spec were amended}
-- **Recommendation:** AMEND | KEEP | NEEDS-DISCUSSION
-- **Status:** PENDING-REVIEW
-```
-
-- The implementer must **implement the spec as written** (not the "better" version)
-- A human reviews the deviation and either:
-  - **Keeps the spec** → no changes needed
-  - **Amends the spec** → triggers `sdd-req-change` with proper cascade
-
-**3. The cascade is: human decision → req-change → spec update → test update → code update.** Never the reverse. Code never drives specs; specs always drive code.
-
-This principle prevents silent drift between specifications and implementation, which is the #1 cause of "the code is the documentation" entropy in software projects.
-
-## Pipeline State Management
-
-Each target project using SDD skills tracks pipeline progress in a `pipeline-state.json` file at the project root. This enables fast-forward re-runs (inspired by OpenSpec's `/opsx:ff`) and staleness detection.
-
-**`pipeline-state.json` schema:**
-```json
-{
-  "currentStage": "spec-auditor",
-  "stages": {
-    "requirements-engineer":    { "status": "done", "completedAt": "ISO-8601", "inputHash": "sha256:...", "outputHash": "sha256:..." },
-    "specifications-engineer":  { "status": "done", "completedAt": "ISO-8601", "inputHash": "sha256:...", "outputHash": "sha256:..." },
-    "spec-auditor":             { "status": "running", "completedAt": null,     "inputHash": "sha256:...", "outputHash": null },
-    "test-planner":             { "status": "pending", "completedAt": null,     "inputHash": null,         "outputHash": null },
-    "plan-architect":           { "status": "pending", "completedAt": null,     "inputHash": null,         "outputHash": null },
-    "task-generator":           { "status": "pending", "completedAt": null,     "inputHash": null,         "outputHash": null },
-    "task-implementer":         { "status": "pending", "completedAt": null,     "inputHash": null,         "outputHash": null }
-  }
-}
-```
-
-Each completed stage also stores a `summary` object with: `artifacts` (files created), `metrics` (skill-specific numbers), `highlights` (notable observations), `nextStep` (recommended action), and `generatedAt` (timestamp). Skills persist this on completion; it's preserved when stage goes stale and overwritten on re-run. See `sdd-req-change/references/cascade-patterns.md` Section 9 for the full schema and per-skill metric keys.
-
-Lateral skills (`security-auditor`, `req-change`) store their state as additional keys in `stages`.
-
-**Stage I/O mapping** (used for hash computation):
-
-| Stage                    | Input artifacts              | Output artifacts          |
-|--------------------------|------------------------------|---------------------------|
-| requirements-engineer    | (user input)                 | `requirements/`           |
-| specifications-engineer  | `requirements/`              | `spec/`                   |
-| spec-auditor             | `spec/`                      | `audits/`, corrected `spec/` |
-| test-planner             | `spec/`, `audits/`, `ux/` (optional) | `test/`                   |
-| plan-architect           | `spec/`, `audits/`, `test/`, `design/` (optional), `ux/` (optional)  | `plan/`                   |
-| task-generator           | `plan/`                      | `task/`                   |
-| task-implementer         | `task/`, `spec/`, `plan/`    | code/test paths from the SDD Stack Profile (default `src/`, `tests/`) |
-
-**Staleness rules:**
-- A stage is **stale** when its `inputHash` no longer matches the current hash of its input directory.
-- When stage N becomes stale, all stages N+1..7 are also marked stale (`status: "stale"`).
-- Lateral skills (`sdd-security-auditor`, `sdd-req-change`) do not participate in the linear chain but may invalidate specific stages.
-- Lateral skills (`sdd-tech-designer`) output to `design/` which is consumed optionally by `plan-architect` Phase 0.
-- Lateral skills (`sdd-ux-designer`) output to `ux/` which is consumed optionally by `plan-architect` Phase 0 and `test-planner` Mode 5 (E2E enrichment only, non-staleness-triggering).
-- `sdd-req-change` is the primary pipeline cascade trigger: it reads/writes `pipeline-state.json` (Phases 0, 8, 9) and can invoke downstream skills via `--cascade={auto|manual|dry-run|plan-only}`. See `sdd-req-change/references/cascade-patterns.md` for full invalidation rules.
-
-**Re-run guidance** -- when a file changes in:
-- `requirements/` → re-run from `specifications-engineer` onward
-- `spec/`          → re-run from `spec-auditor` onward
-- `plan/`          → re-run from `task-generator` onward
-- `task/`          → re-run from `task-implementer`
-
-**State flow:**
-```
-pending → running → done → stale → running → done
-                      ↑                        |
-                      └────────────────────────┘
-```
-
-Skills should read `pipeline-state.json` on start and update it on completion. If the file does not exist, assume a fresh pipeline (all stages pending).
+- Top-level fields: `sddVersion`, `hooksVersion` (3), `currentStage`, `lastUpdated`, `stages`.
+- Each stage has `status` (pending | running | done | stale | error), `lastRun`, `outputHash`, `staleReason` and, on completion, `summary` (artifacts, metrics, highlights, nextStep, generatedAt).
+- Lateral skills add their own keys.
+- Only `sdd-setup` creates the file; hooks never create it.
+- Hooks only move pending/stale → running on writes.
+- Skills set done/stale/error, preferably with `bash "$SDD_PLUGIN_ROOT/scripts/sdd-state.sh" set <stage> <status>`, which takes the same lock as the hooks.
+- Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer, `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
+- Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}.
 
 ## Automation
 
-SDD automation is installed into target projects via `/sdd-setup` or the install script. It consists of:
+Hooks are declared in `hooks/hooks.json` and run from `${CLAUDE_PLUGIN_ROOT}`. Nothing is copied into projects. They fail open, and all except the guards are silent in projects without SDD state.
 
-**Hooks v2** (enforced automatically by Claude Code):
-- **H1 — Session Start** (`sdd-session-start.sh`): Reads `pipeline-state.json` and injects pipeline status. Event: `SessionStart` (matcher: `startup|resume|compact`).
-- **H2 — Upstream Guard** (`sdd-upstream-guard.sh`): Blocks downstream skills from modifying upstream artifacts (Art. 4). Event: `PreToolUse` (matcher: `Edit|Write`). Uses `hookSpecificOutput` wrapper.
-- **H3 — State Updater** (`sdd-pipeline-state-updater.sh`): Auto-updates `pipeline-state.json` on writes. Event: `PostToolUse` (matcher: `Write`, async).
-- **H4 — Stop Hook** (inline prompt in settings): Verifies pipeline state consistency on session end. Uses haiku model.
-- **H5 — Context Augment** (`sdd-augment-hook.js`): Enriches tool context with SDD traceability data. Event: `PreToolUse` (matcher: `Grep|Glob|Read|Edit|Write`). JavaScript (Node.js).
-- **H9 — Trace Map Updater** (`sdd-trace-map-updater.sh`): Auto-updates traceability map on spec/code writes (code paths from the SDD Stack Profile). Event: `PostToolUse` (matcher: `Write|Edit`, async).
-- **H10 — Activity Log** (`sdd-activity-log.sh`): Appends skill/agent events to `.sdd/activity.jsonl` and keeps the global run index `~/.claude/sdd/active-runs.json` that feeds the status line and `sdd-watch`. Events: SessionStart (matcher: `startup|resume`), PreToolUse (matcher: `Skill|Agent|Task`), UserPromptExpansion, SubagentStart, SubagentStop, Stop, SessionEnd.
-- **H11 — Runs Line** (`sdd-runs-line.sh`): One `systemMessage` line per live run on each prompt, silent when none. Events: UserPromptSubmit.
-- **H12 — Tool Guard** (`sdd-tool-guard.sh`): Denies Bash commands that assign human-consent variables for AI actions (e.g. `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`); CLAUDE.md, tasks and prompts are never human consent. Event: `PreToolUse` (matcher: `Bash`).
+| Hook | Event (matcher) | Purpose |
+|------|-----------------|---------|
+| `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/7 done`, stale stages, next step and session role |
+| `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts (most downstream running stage wins; a running req-change may edit requirements/ and spec/) |
+| `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools |
+| `sdd-augment-hook.js` | PreToolUse (Read/Edit/Write) | Adds up to 2 traceability lines for the file from the graph |
+| `sdd-activity-log.sh` | Session/Skill/Agent/Subagent/Stop events (async) | `.sdd/activity.jsonl` and the global run index `~/.claude/sdd/active-runs.json` |
+| `sdd-runs-line.sh` | UserPromptSubmit | One line per live run |
+| `sdd-pipeline-state-updater.sh` | PostToolUse (Write, async) | pending/stale → running for the stage owning the written path |
+| `sdd-trace-map-updater.sh` | PostToolUse (Write/Edit, async) | Traceability map of written code files |
 
-**Git hooks** (installed by `sdd-setup` into target `.git/hooks/`):
-- **commit-msg**: Enforces traceability trailers (`Refs:` and/or `Task:`) on commit messages, ensuring every commit links back to SDD artifacts.
+Also:
+- The git `commit-msg` hook, installed by `sdd-setup`.
+- Optional quality gates in `templates/settings-optional-quality-gates.json`.
+- Three status lines: project, global and subagent (`scripts/`).
+- Environment variables: `SDD_ROLE`, `SDD_STATE_ROOT` (honoured only when it belongs to the target repo), `SDD_PLUGIN_ROOT`.
+- Skill-level hook: the `sdd-spec-auditor` Stop prompt, which applies after Mode Fix only.
 
-**Status Line** (opt-in via `/sdd-setup` Step 5.7.5):
-- **Pipeline Status Line** (`sdd-status-line.sh`): Always-visible pipeline progress at the bottom of Claude Code CLI. Reads `pipeline-state.json` on each assistant message. Display-only, zero API cost. Shows: `SDD [4/7] test !1stale | $0.42`. Requires `jq` or `node`.
+## Jev (optional)
 
-**Optional hooks** (opt-in via `/sdd-setup` Step 5.7):
-- **H7 — Stop Quality Gate** (prompt hook): Pipeline consistency check at session end.
-- **H8 — Task Traceability Gate** (agent hook): Verifies commit trailers on TaskCompleted.
+`scripts/sdd-jev.mjs` sends small typed questions to TypeSafe's Jev when `TYPESAFE_API_KEY` is set (`SDD_JEV=off` disables it). Without the key it exits 3 and skills do the work with the LLM. Its uses are:
+- `req-lint` in requirements-engineer
+- pattern-hit triage in spec-auditor
+- the coverage judge in `gap-detector --semantic`
 
-**Skill-level hooks** (defined in SKILL.md frontmatter):
-- `sdd-task-implementer` Stop hook: Prompt verifying Refs:/Task: trailers on last commit.
-- `sdd-spec-auditor` Stop hook: Prompt verifying P0/P1 findings are addressed.
-
-**Agents** (installed to target `.claude/agents/` via `/sdd-setup`):
-- **A1 — Constitution Enforcer** (`sdd-constitution-enforcer.md`): Validates operations against the 11 SDD Constitution articles. Model: haiku.
-- **A2 — Cross-Auditor** (`sdd-cross-auditor.md`): Cross-references all skill definitions for I/O contract mismatches. Model: sonnet. Has project memory.
-- **A3 — Context Keeper** (`sdd-context-keeper.md`): Maintains informal project context (preferences, deferred decisions). Model: haiku. Has project memory.
-- **A4 — Pipeline Auditor** (`sdd-pipeline-auditor.md`): End-to-end pipeline audit. Executes ALL 24 skills on a test project, verifies artifacts, runs E2E tests, documents bugs/improvements. Produces AUDIT-REPORT.md and persistent AUDIT-HISTORY.md for regression tracking. Model: opus. Has project memory.
-
-**Pipeline State Schema** (authoritative source: `sdd-req-change/references/cascade-patterns.md`):
-- Uses `lastRun` (not `completedAt`), no `inputHash`, adds `staleReason`, `error` status, `lastChange` block.
-- Includes `sddVersion` and `hooksVersion` fields for upgrade detection.
-- Hooks and skills use this schema; the simplified schema in "Pipeline State Management" above is for conceptual understanding only.
+Question sets live in `scripts/jev/*.json`. Jev returns probabilities; skills own the thresholds and escalate the uncertain middle to the LLM. Never use it for permission decisions (guards, commit-msg). See `docs/jev.md`.
 
 ## Modifying Skills
 
-When editing a SKILL.md:
-- Preserve the YAML front matter (`name`, `description`) — Claude Code uses it for skill registration
-- The `description` field contains trigger phrases that control when the skill activates
-- Cross-references between skills (e.g., "reads output from sdd-spec-auditor") define the pipeline contract — keep them consistent
-- Reference documents in `references/` are loaded as context by the skill — changes affect skill behavior
+- Keep the YAML front matter. The `description` (≤ 400 chars, validated) carries the trigger phrases that route requests.
+- Write for a frontier model:
+  - State each rule once, calmly, with its reason.
+  - Put single-step templates and catalogs in `references/`, with a pointer at the step that needs them.
+  - Leave out generic advice, textbook theory and leftovers from past projects.
+- Cross-skill contracts (paths, IDs, state keys, metric keys in cascade-patterns §9, formats enforced by `sdd-task-lint.mjs` and the commit-msg hook) must stay consistent. Run `.claude/agents/sdd-cross-auditor.md` after contract changes.
 
 ## Standards Referenced
 
-- **SWEBOK v4** (chapters cited per-skill)
-- **OWASP ASVS v4** (security auditor)
-- **CWE** (security auditor)
-- **IEEE 830** (requirements format)
-- **ISO 14764** (maintenance classification in req-change)
-- **C4 Model** (architecture diagrams in plan-architect)
-- **Gherkin/BDD** (acceptance criteria throughout)
+SWEBOK v4 · OWASP ASVS 4.0.3 · CWE · IEEE 830 · ISO 14764 · C4 Model · Gherkin/BDD · WCAG 2.2 AA.
 
 ## Known Gaps
 
-- **Brownfield adoption:** Fully covered by 4 onboarding skills: `sdd-onboarding` (diagnosis), `sdd-reverse-engineer` (code→artifacts), `sdd-reconcile` (drift resolution), `sdd-import` (external docs). Covers greenfield, brownfield, drift, partial SDD, multi-team, fork, and tests-as-spec scenarios.
-- **SWEBOK Ch05 (Software Maintenance):** Partially covered by `sdd-req-change` v2.0.0 (ISO 14764 maintenance classification, feature retirement planning, impact analysis, regression risk, technical debt tracking, pipeline cascade). Production-specific operational maintenance (monitoring, incident response, runtime rollback) remains uncovered — these are operational concerns outside the SDD specification pipeline scope.
-- **SWEBOK Ch07 (Engineering Management):** No effort estimation, risk management, or project control metrics. The pipeline focuses on technical artifacts, not project management.
-- **SWEBOK Ch10 (Software Eng. Economics):** Cost-benefit analysis not covered.
-- **Platform dependency:** Skills use bash commands (grep, git) within Claude Code CLI, which always provides a bash environment. If porting to non-CLI contexts, these commands need abstraction.
+- SWEBOK Ch05 production operations (monitoring, incident response, runtime rollback), Ch07 engineering management and Ch10 economics are out of scope.
+- Skills rely on bash (grep, git) as provided by Claude Code; porting to non-CLI hosts needs that abstracted.
 
 ## Language
 
-Skills are written in English with Spanish contextual text. Output language follows the user's language. Technical terms remain in English.
+Skills are written in English with some Spanish contextual text. Output follows the user's language, and technical terms stay in English.

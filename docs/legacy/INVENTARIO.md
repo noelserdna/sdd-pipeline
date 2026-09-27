@@ -23,7 +23,7 @@ Origen de cada pieza del repositorio unificado `noelserdna/sdd-pipeline` y desti
 | `server/src` | sdd-skills (== claude-plugin-sdd) | `version` inyectada en build; `/sdd:` → `/sdd-` |
 | `server/package-lock.json` | claude-plugin-sdd | Regenerado por `npm install` (zod, esbuild, tsx) |
 | `LICENSE`, `CHANGELOG.md` | claude-plugin-sdd | Superset (hasta 3.1.0) |
-| `references/sdd-constitution.md`, `schema/` | sdd-skills | Sin cambios |
+| `references/sdd-constitution.md`, `schema/` | sdd-skills | Sin cambios (`schema/`, una propuesta de BD de evidencias que nada usaba, se retiró después; queda en la historia git) |
 | `scripts/sdd-status-line.sh` | sdd-skills `automation/status-line` | Se copia al proyecto desde `sdd-setup` |
 | `scripts/migrate-hooks-v2.sh` | sdd-skills `automation/scripts` | Base de `migrate-hooks-v3.sh` (F4) |
 | `templates/settings-optional-quality-gates.json` | sdd-skills `automation` | Opt-in H7/H8 |
@@ -35,7 +35,7 @@ Origen de cada pieza del repositorio unificado `noelserdna/sdd-pipeline` y desti
 | Pieza | Motivo |
 |---|---|
 | `automation/INSTALL.md`, `automation/settings-template.json` | Modelo de copia de hooks al proyecto; el plugin los aporta con `${CLAUDE_PLUGIN_ROOT}` |
-| `sdd-setup/scripts/install-sdd-automation.sh` | Rutas del autor; sustituido por `sdd-setup` reducido + `scripts/install-git-hooks.sh` (copia en `docs/legacy/`) |
+| `sdd-setup/scripts/install-sdd-automation.sh` | Rutas del autor; sustituido por `sdd-setup` reducido + `scripts/install-git-hooks.sh` (la copia que hubo en `docs/legacy/` se retiró después; queda en la historia git) |
 | `server/dist/*.d.ts`, `*.map`, `server/node_modules` (49 MB en claude-plugin-sdd) | Bundle único reproducible |
 | `claude-plugin-sdd/hooks/sdd-session-start.sh` | Duplicado muerto de `scripts/sdd-session-start.sh` |
 | `ideas/`, `modulo 2/`, `.DS_Store`, `.orphaned_at`, `.claude/settings.local.json` | Locales / residuos |

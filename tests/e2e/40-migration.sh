@@ -16,7 +16,8 @@ if ! git -C "$ROOT" show sdd-skills/v3.1.0:automation/settings-template.json > .
 JSON
 fi
 for h in sdd-session-start sdd-upstream-guard sdd-pipeline-state-updater sdd-status-line; do echo '#!/bin/bash' > ".claude/hooks/$h.sh"; done
-echo "---" > .claude/agents/sdd-context-keeper.md
+# agente copiado por una instalación pre-4.0 (el nombre da igual: migrate borra .claude/agents/sdd-*.md)
+echo "---" > .claude/agents/sdd-legacy-agent.md
 echo '{"sddVersion":"2.4.0","hooksVersion":2,"currentStage":"requirements-engineer","stages":{}}' > pipeline-state.json
 git add -A && git commit -qm "chore: v2 install" >/dev/null
 

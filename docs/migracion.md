@@ -29,7 +29,7 @@ Las tres pueden coexistir. Si conviven dos plugins tendrás skills `sdd-pipeline
 ## Qué hace `migrate-hooks-v3.sh`
 
 - Elimina de `.claude/settings.json` los hooks cuyo `command` contiene `sdd-` (H1, H2, H3, H5, H9 copiados) y **conserva** `statusLine` y cualquier hook ajeno.
-- Borra `.claude/hooks/sdd-*.sh|.js` y `.claude/agents/sdd-*.md` (el plugin los aporta), con copia en `.claude/backups/<fecha>/`.
+- Borra `.claude/hooks/sdd-*.sh|.js` y `.claude/agents/sdd-*.md` (los hooks los aporta el plugin; los agentes copiados ya no existen: `sdd-orchestrator` es ahora una skill y el resto se retiró), con copia en `.claude/backups/<fecha>/`.
 - Si la status line apuntaba a `.claude/hooks/sdd-status-line.sh`, copia la nueva a `.claude/sdd-status-line.sh` y actualiza la ruta.
 - Reinstala el hook git `commit-msg` desde el plugin (`scripts/install-git-hooks.sh`).
 - Pone `sddVersion` (versión del plugin) y `hooksVersion: 3` en `pipeline-state.json`; aplica la política `.gitignore`.
