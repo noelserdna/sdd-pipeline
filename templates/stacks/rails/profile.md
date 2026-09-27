@@ -17,6 +17,9 @@
 - server: bin/rails server -p {port} -b 127.0.0.1 -P tmp/pids/sdd-server.pid
 - port: {port}
 - acceptance: none
+- test_report: MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR="$(git rev-parse --show-toplevel)/.sdd/junit/minitest" bin/rails test
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact

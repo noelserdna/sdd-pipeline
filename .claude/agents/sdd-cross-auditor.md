@@ -15,6 +15,7 @@ You are the **SDD Cross-Auditor**. Your role is to ensure consistency across all
 Audit all skill definitions in the repository:
 
 ```
+skills/sdd-acceptance/SKILL.md
 skills/sdd-gap-detector/SKILL.md
 skills/sdd-import/SKILL.md
 skills/sdd-lead/SKILL.md
@@ -34,9 +35,9 @@ skills/sdd-task-generator/SKILL.md
 skills/sdd-task-implementer/SKILL.md
 skills/sdd-tech-designer/SKILL.md
 skills/sdd-test-planner/SKILL.md
-skills/sdd-traceability-check/SKILL.md
 skills/sdd-ux-designer/SKILL.md
 scripts/sdd-jev.mjs and scripts/jev/*.json
+scripts/sdd.mjs and scripts/lib/acceptance*.mjs (accept, gate, loop next)
 templates/stacks/*/{kit.json,profile.md,conventions.md,rules/*.md}
 skills/sdd-task-implementer/references/stack-profile.md
 skills/sdd-task-generator/references/task-template.md

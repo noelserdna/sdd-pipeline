@@ -242,6 +242,19 @@ check "migrate: backup de los hooks antiguos" sh -c 'ls .claude/backups/sdd-v3-*
 if contains "$out" "Migration complete"; then pass "migrate: resumen final"; else bad "migrate: sin resumen ($out)"; fi
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" 2>&1)"
 if contains "$out" "Nothing to migrate"; then pass "migrate: segunda pasada sin cambios (idempotente)"; else bad "migrate: segunda pasada ($out)"; fi
+# el validador vendorizado (.claude/sdd/) se refresca aunque el hook commit-msg ya esté al día
+printf '%s\n' "// stale copy" >> .claude/sdd/sdd.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
+if contains "$out" "vendored validator .claude/sdd/ differs from the plugin (sdd.mjs)"; then pass "migrate: detecta el validador vendorizado desactualizado"; else bad "migrate: validador vendorizado ($out)"; fi
+bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1
+check "migrate: refresca la copia vendorizada" sh -c '! grep -q "// stale copy" .claude/sdd/sdd.mjs && grep -q "Vendored by sdd-pipeline" .claude/sdd/sdd.mjs'
+rm -f .claude/sdd/lib/junit.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
+if contains "$out" "misses lib/junit.mjs"; then pass "migrate: detecta un módulo importado sin vendorizar"; else bad "migrate: módulo sin vendorizar ($out)"; fi
+bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1
+check "migrate: vuelve a vendorizar el módulo que faltaba" test -f .claude/sdd/lib/junit.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" 2>&1)"
+if contains "$out" "Nothing to migrate"; then pass "migrate: tras refrescar el validador, sin cambios"; else bad "migrate: tras refrescar ($out)"; fi
 
 # 6b. conserva hooks y ajustes ajenos
 cat > .claude/settings.json <<'EOF'

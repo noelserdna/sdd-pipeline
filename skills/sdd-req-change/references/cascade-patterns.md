@@ -55,6 +55,7 @@ The `pipeline-state.json` file tracks the current state of the entire SDD pipeli
 - `req-change` — populated by `/sdd-req-change`
 - `tech-designer` — populated by `/sdd-tech-designer`
 - `ux-designer` — populated by `/sdd-ux-designer`
+- `acceptance` — populated by `/sdd-acceptance`. Never marked stale by a cascade: `sdd accept` recomputes freshness itself (evidence against `evaluated_sha`, human decisions against the requirement's text hash), so a MODIFY reopens the affected requirement on the next `/sdd-acceptance --check`
 
 ---
 
@@ -327,6 +328,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |
 | `tech-designer` | `dimensions_analyzed`, `quality_attributes`, `adr_drafts`, `trade_offs_evaluated` |
 | `ux-designer` | `dimensions_analyzed`, `wireframes`, `components_specified`, `wcag_level`, `design_tokens`, `frontend_security_items` |
+| `acceptance` | `must_total`, `must_verified`, `must_waived`, `failing`, `missing`, `stale_evidence`, `goal` (`met` \| `met-with-waivers` \| `not-met`), `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode` |
 | `gap-detector` | `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`, `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`, `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` \| `llm`) |
 
 Each skill's own Persist section is authoritative; this table mirrors them.
@@ -336,6 +338,6 @@ Each skill's own Persist section is authoritative; this table mirrors them.
 1. **Optional**: `summary` is `null` or absent when the stage has never completed.
 2. **Preserved on stale**: When a stage transitions to `stale`, its `summary` is retained (rendered dimmed in the dashboard).
 3. **Overwritten on re-run**: When a stage completes again, `summary` is fully replaced with the new data.
-4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, `ux-designer` and `gap-detector` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
+4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, `ux-designer`, `gap-detector` and `acceptance` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
 5. **Hook-safe**: The H3 state-updater hook does NOT modify `summary` — it is exclusively managed by skills.
 6. **Handoff patch**: `summary.handoff` is absent in single-session mode. In station mode it is added with a minimal patch (jq under lock, tmp → mv) after Persist Summary and after the skill's local gate question; it is never a full rewrite of the file, and it is replaced together with `summary` on re-run. Readers (H1, `sdd-pipeline-status`, `sdd-lead`, dashboard) must tolerate its absence.

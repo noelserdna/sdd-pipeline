@@ -22,7 +22,8 @@
 #      files .sdd/current-task.json, .sdd/trace-map.json and .sdd/activity*.jsonl;
 #   3. removes statusLine / subagentStatusLine entries that run an SDD script (sdd-status-line*,
 #      sdd-subagent-status, ~/.claude/sdd/status-line.sh): the plugin no longer ships them;
-#   4. reinstalls the git commit-msg hook from the plugin (install-git-hooks.sh);
+#   4. reinstalls the git commit-msg hook and its vendored validator (.claude/sdd/sdd.mjs and the
+#      modules it imports) from the plugin (install-git-hooks.sh) when either differs from the plugin's;
 #   5. sets sddVersion (from plugin.json) and hooksVersion: 3 in pipeline-state.json;
 #   6. adds the "# sdd-begin ... # sdd-end" block of templates/gitignore.sdd to .gitignore.
 # Old plugin ids (sdd@..., sdd-pipeline@sdd-pipeline-local) are reported, not removed:
@@ -36,7 +37,7 @@ DRY_RUN=false
 GITIGNORE_ONLY=false
 TARGET_DIR=""
 
-usage() { sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -232,7 +233,38 @@ case "$SUB_CMD" in
 esac
 [ -z "$SL_ACTION" ] || add_fix "status-line-remove"
 
-# 4. commit-msg hook
+# 4. commit-msg hook and the validator install-git-hooks.sh vendors into .claude/sdd/
+# vendor_outdated DIR → prints why and returns 0 when DIR/sdd.mjs is missing, a vendored file differs from
+# scripts/<file> of the plugin (ignoring its "Vendored by" header line), or a relative import is not vendored.
+vendor_outdated() {
+  local dir="$1" f src spec target prev
+  [ -f "$PLUGIN_ROOT/scripts/sdd.mjs" ] || return 1
+  [ -f "$dir/sdd.mjs" ] || { echo "is missing"; return 0; }
+  for f in "$dir"/*.mjs "$dir"/*/*.mjs; do
+    [ -f "$f" ] || continue
+    f="${f#"$dir"/}"
+    src="$PLUGIN_ROOT/scripts/$f"
+    [ -f "$src" ] || continue
+    grep -v '^// Vendored by sdd-pipeline ' "$dir/$f" | cmp -s - "$src" || { echo "differs from the plugin ($f)"; return 0; }
+    while IFS= read -r spec; do
+      [ -n "$spec" ] || continue
+      target="$(dirname "$f")/$spec"
+      prev=""
+      while [ "$target" != "$prev" ]; do
+        prev="$target"
+        case "$target" in
+          ./*) target="${target#./}" ;;
+          */./*) target="${target%%/./*}/${target#*/./}" ;;
+          *[!/]*/../*) target="$(printf '%s' "$target" | sed -E 's#(^|/)[^/.][^/]*/\.\./#\1#')" ;;
+          *) break ;;
+        esac
+      done
+      case "$target" in ../*) continue ;; esac
+      [ -f "$dir/$target" ] || { echo "misses $target"; return 0; }
+    done < <(grep -oE "(from|import)[[:space:]]*\(?[\"'](\.\.?/[^\"']+)[\"']" "$src" | sed -E "s/.*[\"'](\.\.?\/[^\"']+)[\"']/\1/")
+  done
+  return 1
+}
 COMMIT_MSG_ACTION=""
 if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   HOOK_PATH="$(git -C "$PROJECT_DIR" rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
@@ -240,6 +272,10 @@ if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ ! -f "$HOOK_PATH/commit-msg" ] || ! cmp -s "$HOOK_PATH/commit-msg" "$PLUGIN_ROOT/hooks/sdd-commit-msg-hook.sh"; then
     COMMIT_MSG_ACTION="install"
     log_found "git commit-msg hook missing or outdated (will reinstall from the plugin)"
+    add_fix "commit-msg"
+  elif VENDOR_WHY="$(vendor_outdated "$(git -C "$PROJECT_DIR" rev-parse --show-toplevel)/.claude/sdd")"; then
+    COMMIT_MSG_ACTION="install"
+    log_found "vendored validator .claude/sdd/ $VENDOR_WHY (will refresh from the plugin)"
     add_fix "commit-msg"
   fi
 fi
@@ -377,7 +413,7 @@ fi
 # 3d. git commit-msg hook
 if [ -n "$COMMIT_MSG_ACTION" ]; then
   if bash "$PLUGIN_ROOT/scripts/install-git-hooks.sh" -C "$PROJECT_DIR" --quiet; then
-    log_fix "git commit-msg hook reinstalled from the plugin"
+    log_fix "git commit-msg hook and vendored validator refreshed from the plugin"
     CHANGED+=("commit-msg")
   else
     log_warn "could not reinstall the commit-msg hook (see above)"

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Tests de scripts/sdd-jev.mjs sin red ni API key: un servidor mock local (SDD_JEV_URL) responde como la API de
 # TypeSafe. Cubre opt-in (exit 3), req-lint (parseo, REQ-C sin EARS, flags), judge (JSONL, estado demasiado grande,
-# reintento tras 429), needs (parseRequirements, comprobación mecánica de necesidades, Choice por necesidad), chunks y que los conjuntos de preguntas de scripts/jev/*.json son JSON válido.
+# reintento tras 429), needs (parseRequirements, comprobación mecánica de necesidades, Choice por necesidad), chunks,
+# los conjuntos de aceptación (test-adequacy.json, evidence.json: forma, umbrales y paso por `judge` con los
+# fixtures etiquetados de tests/jev/fixtures/) y que los conjuntos de preguntas de scripts/jev/*.json son JSON válido.
+# Calibración real (opcional, con red): SDD_JEV_CALIBRATE_KEY=<key> bash tests/jev/run.sh imprime el acierto de
+# test-adequacy y evidence sobre esos fixtures contra la API de TypeSafe; nunca hace fallar la suite.
 # Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -16,7 +20,8 @@ js() { printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d
 
 tmp="$(mktemp -d)"
 trap 'kill "$mock_pid" 2>/dev/null || true; wait "$mock_pid" 2>/dev/null || true; rm -rf "$tmp"' EXIT
-unset TYPESAFE_API_KEY SDD_JEV SDD_JEV_URL || true
+CALIBRATE_KEY="${SDD_JEV_CALIBRATE_KEY:-}"
+unset TYPESAFE_API_KEY SDD_JEV SDD_JEV_URL SDD_JEV_CALIBRATE_KEY || true
 
 # ── mock: the noul "vague" is 0.9 when the state mentions "quickly", every other noul 0.1; choice picks not_ears for "should",
 #    else the first option; the first request answers 429 once to exercise the retry path.
@@ -31,7 +36,7 @@ const srv = http.createServer((req, res) => {
     const s = JSON.stringify(r.state);
     const answers = {};
     for (const [k, q] of Object.entries(r.questions)) {
-      if (q.type === "noul") answers[k] = { type: "noul", noul: k === "vague" && /quickly/.test(s) ? 0.9 : 0.1 };
+      if (q.type === "noul") answers[k] = { type: "noul", noul: (k === "vague" && /quickly/.test(s)) || (k === "asserts_then" && /expect\(|assert/.test(s)) ? 0.9 : 0.1 };
       else if (q.type === "choice") {
         const opts = Object.keys(q.criteria);
         let choice = /should/.test(s) && opts.includes("not_ears") ? "not_ears" : opts[0];
@@ -42,7 +47,10 @@ const srv = http.createServer((req, res) => {
           for (const o of opts) { if (o === "none") continue; const n = [...words(q.criteria[o])].filter((w) => src.has(w)).length; if (n > best) { best = n; choice = o; } }
         }
         answers[k] = { type: "choice", choice, confidence: 0.95, probabilities: Object.fromEntries(opts.map((o) => [o, o === choice ? 0.95 : 0.05 / (opts.length - 1)])) };
-      } else answers[k] = { type: "score", score: 1, confidence: 0.9, probabilities: { 0: 0.05, 1: 0.9, 2: 0.05 } };
+      } else {
+        if (!Array.isArray(q.criteria) || q.criteria.length < 2) { res.writeHead(422); return res.end("score criteria must be an ordered array"); }
+        answers[k] = { type: "score", score: 1, confidence: 0.9, probabilities: { 0: 0.05, 1: 0.9, 2: 0.05 } };
+      }
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ model: "jev-mock", answers, usage: { input_tokens: 10, output_tokens: 1 } }));
@@ -204,6 +212,44 @@ expect "needs: opciones = REQ-F/NF activos + REQ-C con necesidad + none" "$(js '
 expect "needs: requisito sin necesidad → candidato a gold plating" "$(js 'j.neverTop.filter(r=>r.flags.includes("gold-plating-candidate")).map(r=>r.id).join()')" "REQ-F-002,REQ-F-003,REQ-NF-001"
 run needs "$tmp/NEEDS.md" "$tmp/REQN.md"
 contains "$out" "gold-plating candidates" && pass "needs: resumen legible" || bad "needs: resumen legible ($out)"
+
+# ── acceptance sets: test-adequacy.json (Noul), evidence.json (Score) — advisory only ─────────────
+TA="$ROOT/scripts/jev/test-adequacy.json"; EV="$ROOT/scripts/jev/evidence.json"
+qjs() { node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(eval(process.argv[2])))' "$1" "$2"; }
+expect "test-adequacy: dos Noul (asserts_then, exercises_when)" "$(qjs "$TA" 'Object.entries(j.questions).map(([k,q])=>k+":"+q.type).join()')" "asserts_then:noul,exercises_when:noul"
+expect "test-adequacy: umbral de revisión 0.5 dentro del JSON" "$(qjs "$TA" 'j.thresholds.review_below')" "0.5"
+expect "test-adequacy: el estado nombra criterion, scenario y test" "$(qjs "$TA" '["criterion.text","test.code"].every(p=>JSON.stringify(j.questions).includes(p))')" "true"
+expect "evidence: un Score con 3 niveles ordenados (no / parcial / sí)" "$(qjs "$EV" 'const q=j.questions.shows_then;q.type+":"+q.criteria.length')" "score:3"
+expect "evidence: umbral dentro del JSON" "$(qjs "$EV" 'typeof j.thresholds.flag_below')" "number"
+expect "ambos se declaran informativos (nunca deciden veredictos)" "$(qjs "$TA" '/never changes a verdict/.test(j.description)')$(qjs "$EV" '/never records/.test(j.description)')" "truetrue"
+run judge --questions "$TA" --items "$ROOT/tests/jev/fixtures/test-adequacy.jsonl"
+expect "test-adequacy: judge sobre el fixture etiquetado → exit 0" "$rc" "0"
+expect "test-adequacy: 6 items con dos Noul cada uno" "$(js 'j.items.filter(i=>typeof i.answers.asserts_then==="number"&&typeof i.answers.exercises_when==="number").length')" "6"
+expect "test-adequacy: sin aserción → por debajo del umbral (revisión)" "$(js 'j.items.find(i=>i.id==="no-assert").answers.asserts_then<0.5')" "true"
+run judge --questions "$EV" --items "$ROOT/tests/jev/fixtures/evidence.jsonl"
+expect "evidence: judge sobre el fixture etiquetado → exit 0" "$rc" "0"
+expect "evidence: respuesta Score compacta por item" "$(js 'j.items.filter(i=>typeof i.answers.shows_then.score==="number").length')" "4"
+
+if [ -n "$CALIBRATE_KEY" ]; then
+  # Calibración real: acierto sobre las etiquetas, informativo (no cuenta como fallo).
+  (
+    export TYPESAFE_API_KEY="$CALIBRATE_KEY"; unset SDD_JEV_URL
+    node "$JEV" judge --questions "$TA" --items "$ROOT/tests/jev/fixtures/test-adequacy.jsonl" --out "$tmp/ta.json" >/dev/null 2>&1 || true
+    node "$JEV" judge --questions "$EV" --items "$ROOT/tests/jev/fixtures/evidence.jsonl" --out "$tmp/ev.json" >/dev/null 2>&1 || true
+    node -e '
+      const fs=require("fs"), [ta,ev,fa,fe,qa,qe]=process.argv.slice(1);
+      const lab=(f)=>Object.fromEntries(fs.readFileSync(f,"utf8").trim().split("\n").map(l=>JSON.parse(l)).map(o=>[o.id,o.label]));
+      const la=lab(fa), le=lab(fe), thr=JSON.parse(fs.readFileSync(qa,"utf8")).thresholds.review_below, fb=JSON.parse(fs.readFileSync(qe,"utf8")).thresholds.flag_below;
+      const a=JSON.parse(fs.readFileSync(ta,"utf8")).items, e=JSON.parse(fs.readFileSync(ev,"utf8")).items;
+      const okA=a.filter(i=>((i.answers.asserts_then>=thr&&i.answers.exercises_when>=thr)?"adequate":"inadequate")===la[i.id]).length;
+      const okE=e.filter(i=>(i.answers.shows_then.score>=fb)===(le[i.id]===2)).length;
+      console.log(`calibración (informativa): test-adequacy ${okA}/${a.length} · evidence ${okE}/${e.length}`);
+      for (const i of a) console.log(`  ${i.id} (${la[i.id]}): asserts_then=${i.answers.asserts_then.toFixed(2)} exercises_when=${i.answers.exercises_when.toFixed(2)}`);
+      for (const i of e) console.log(`  ${i.id} (${le[i.id]}): shows_then=${i.answers.shows_then.score.toFixed(2)}`);' \
+      "$tmp/ta.json" "$tmp/ev.json" "$ROOT/tests/jev/fixtures/test-adequacy.jsonl" "$ROOT/tests/jev/fixtures/evidence.jsonl" "$TA" "$EV" \
+      || echo "calibración: sin resultados (red o key)"
+  )
+fi
 
 # ── question sets ────────────────────────────────────────────────────────────
 for f in "$ROOT"/scripts/jev/*.json; do

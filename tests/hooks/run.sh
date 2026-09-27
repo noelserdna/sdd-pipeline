@@ -396,7 +396,7 @@ tg() {
   local out rc=0
   out=$(tg_out "$1" "$2" "$3") || rc=$?
   [ "$rc" -eq 0 ] || { echo "error($rc)"; return 0; }
-  if contains "$out" '"permissionDecision":"deny"'; then echo deny; elif [ -z "$out" ]; then echo allow; else echo "raro: $out"; fi
+  if contains "$out" '"permissionDecision":"deny"'; then echo deny; elif contains "$out" '"permissionDecision":"ask"'; then echo ask; elif [ -z "$out" ]; then echo allow; else echo "raro: $out"; fi
 }
 okd=1
 while IFS= read -r c; do
@@ -438,6 +438,58 @@ contains "$out" "db_reset_safe" && contains "$out" "ask a human" && pass "H12 si
 printf '{not json' | bash "$TOOL_GUARD" >/dev/null 2>&1 && pass "H12 JSON roto → exit 0" || bad "H12 JSON roto falla"
 if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
   [ "$(tg "PATH=$bin" "$rroot" 'PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 npx prisma migrate reset')" = deny ] && pass "sin jq: H12 deniega (fallback node)" || bad "sin jq: H12 no deniega"
+fi
+
+# ---------------------------------------------------------------- 20b. aceptación: registros humanos (H12 ask, H2 deny)
+oks=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = ask ] || { oks=0; echo "     no pregunta: $c"; }
+done <<'EOF'
+node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" accept record waiver --req REQ-F-001 --by Ana --role PO --reason x --follow-up #12
+sdd accept record inspection --req REQ-C-001 --by Ana --role PO --note ok
+cd app && node ../scripts/sdd.mjs  accept  record demo --req REQ-F-002 --observed ok --pass true --by A --role QA
+git tag -a fase-2-accepted -m "FASE-2 accepted by Ana"
+git -C web tag -s requirements-v3 -m "approved"
+git tag -d fase-1-accepted
+EOF
+[ "$oks" = 1 ] && pass "H12 pregunta (ask) ante sdd accept record y tags fase-N-accepted / requirements-vN" || bad "H12 no pregunta ante algún registro de aceptación"
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+node scripts/sdd.mjs accept --report acceptance/ACCEPTANCE-REPORT.md
+sdd gate --mode enforce
+git tag -l "fase-*-accepted"
+git tag --contains abc123 fase-1-accepted
+git tag -a v1.2.0 -m "release"
+git log --oneline requirements-v2..HEAD
+grep -rn "sdd accept record" skills
+echo accepted
+EOF
+[ "$oka" = 1 ] && pass "H12 permite sdd accept/gate, listar tags de aceptación, otros tags y búsquedas" || bad "H12 pregunta ante comandos que no registran aprobación"
+out=$(tg_out "" "$rroot" 'sdd accept record waiver --req REQ-F-001' || true)
+if printf '%s' "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolUse" and .permissionDecision == "ask"
+     and (.permissionDecisionReason | contains("confirmed") and contains("not a guarantee"))' >/dev/null 2>&1; then
+  pass "H12 ask con motivo (confirmación humana, sin prometer garantía)"
+else bad "H12 salida ask: $out"; fi
+[ "$(tg "" "$rroot" "$(printf '%s_AI_%s=1 sdd accept record waiver' FOO CONSENT)")" = deny ] && pass "H12 consentimiento IA fabricado gana a ask" || bad "H12 consentimiento + accept record no deniega"
+[ "$(guard "" "$repo" Write "$repo/acceptance/decisions.jsonl")" = deny ] && pass "H2 deniega Write en acceptance/decisions.jsonl sin stage running" || bad "H2 permite Write en decisions.jsonl"
+[ "$(guard "" "$repo" Edit "$repo/acceptance/ACCEPTANCE-REPORT.md")" = deny ] && pass "H2 deniega Edit en acceptance/ACCEPTANCE-REPORT.md" || bad "H2 permite Edit en ACCEPTANCE-REPORT.md"
+[ "$(guard "" "$repo" Write "$repo/acceptance/playwright.config.ts")" = allow ] && pass "H2 permite el resto de acceptance/ (suite Playwright)" || bad "H2 deniega acceptance/playwright.config.ts"
+contains "$(guard_out "" "$repo" Write "$repo/acceptance/decisions.jsonl")" "accept record" && pass "H2 motivo apunta a sdd accept record" || bad "H2 motivo de decisions.jsonl"
+
+# H1 resume la aceptación de .sdd/acceptance.json (sin él, nada)
+acc="$tmp/accsum"; git init -q "$acc"
+printf '{"sddVersion":"t","hooksVersion":3,"currentStage":"task-implementer","stages":{"task-implementer":{"status":"done"}}}' > "$acc/pipeline-state.json"
+out=$(h1 "" "$acc")
+contains "$out" "Acceptance:" && bad "H1 muestra aceptación sin .sdd/acceptance.json" || pass "H1 sin .sdd/acceptance.json no menciona aceptación"
+mkdir -p "$acc/.sdd"
+printf '{"evaluated_sha":"abcdef1234567","summary":{"must_total":3,"must_verified":2,"must_waived":0,"goal":false,"stale_evidence":1}}' > "$acc/.sdd/acceptance.json"
+out=$(h1 "" "$acc")
+contains "$out" "Acceptance: Must 2/3 verified (open: /sdd-acceptance --loop), stale evidence 1 @abcdef1" && pass "H1 resume la aceptación y sugiere --loop" || bad "H1 resumen de aceptación: $out"
+if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
+  out=$(h1 "PATH=$bin" "$acc")
+  contains "$out" "Acceptance: Must 2/3 verified" && pass "sin jq: H1 resume la aceptación (node)" || bad "sin jq: H1 aceptación: $out"
 fi
 
 # ---------------------------------------------------------------- 21. regresiones de la revisión (BUG-1..9)

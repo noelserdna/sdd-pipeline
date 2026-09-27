@@ -131,6 +131,32 @@ if [ -f "$GRAPH_FILE" ]; then
   [ -n "$COVERAGE" ] && CONTEXT="$CONTEXT $COVERAGE"
 fi
 
+# Resumen de aceptación del último `sdd accept` / `sdd gate` / `sdd loop next` (.sdd/acceptance.json, ignorado por git)
+ACCEPT_FILE="$STATE_ROOT/.sdd/acceptance.json"
+if [ -f "$ACCEPT_FILE" ]; then
+  acceptance_with_jq() {
+    jq -r '.summary as $s | select($s != null)
+      | "| Acceptance: Must " + ($s.must_verified | tostring) + "/" + ($s.must_total | tostring) + " verified"
+        + (if ($s.must_waived // 0) > 0 then ", " + ($s.must_waived | tostring) + " waived" else "" end)
+        + (if $s.goal then " (goal met)" else " (open: /sdd-acceptance --loop)" end)
+        + (if ($s.stale_evidence // 0) > 0 then ", stale evidence " + ($s.stale_evidence | tostring) else "" end)
+        + " @" + ((.evaluated_sha // "no-git") | .[0:7])' "$ACCEPT_FILE" 2>/dev/null
+  }
+  acceptance_with_node() {
+    SDD_ACCEPT_FILE="$ACCEPT_FILE" node -e "
+      try {
+        const l = JSON.parse(require('fs').readFileSync(process.env.SDD_ACCEPT_FILE, 'utf8')); const s = l.summary;
+        if (s) console.log('| Acceptance: Must ' + s.must_verified + '/' + s.must_total + ' verified'
+          + (s.must_waived ? ', ' + s.must_waived + ' waived' : '') + (s.goal ? ' (goal met)' : ' (open: /sdd-acceptance --loop)')
+          + (s.stale_evidence ? ', stale evidence ' + s.stale_evidence : '') + ' @' + String(l.evaluated_sha || 'no-git').slice(0, 7));
+      } catch (e) {}
+    " 2>/dev/null
+  }
+  ACCEPTANCE=$(acceptance_with_jq) || ACCEPTANCE=""
+  [ -n "$ACCEPTANCE" ] || ACCEPTANCE=$(acceptance_with_node) || ACCEPTANCE=""
+  [ -n "$ACCEPTANCE" ] && CONTEXT="$CONTEXT $ACCEPTANCE"
+fi
+
 # Handoff del último stage done que lo registre (stages[*].summary.handoff = {to, sentAt, result})
 handoff_with_jq() {
   jq -r '

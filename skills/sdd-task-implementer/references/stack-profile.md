@@ -29,6 +29,10 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - server: <cmd with {port}|none>
 - port: <n>
 - acceptance: <cmd from repo root; ID filter appended as --grep <ID>|none>
+- test_report: <cmd that writes JUnit XML to .sdd/junit/ (or test_report_path)|none>
+- test_report_path: <file, dir or dir/*.xml>   # optional; default .sdd/junit/
+- acceptance_gate: off|warn|enforce
+- tracker: github|gitlab|off
 - e2e_scaffold: allowed|never
 - task_state: checkbox|trailers
 - task_format: full|compact
@@ -55,6 +59,10 @@ detected/kit/legacy value (§3), then the default below.
 | `db_reset_safe` | after a schema/migration change when the test runner does not prepare the DB; AI Tool Guardrails | `none` |
 | `server` / `port` | server helper (§8): config tasks without tests, manual smoke | `none` / `3000` |
 | `acceptance` | E2E tasks (`--grep <E2E-ID>`), Phase 9 (once, fail fast) | `none` |
+| `test_report` | `sdd-acceptance --check/--loop` captures test results before `sdd accept`; runs from `app_dir` and writes JUnit XML whose test names carry the scenario id (`AC-NNN-NN`) | `none` (the acceptance ledger then finds no test evidence) |
+| `test_report_path` | where `sdd accept`/`sdd gate` read that JUnit (file, directory or `dir/*.xml`, comma-separated) | `.sdd/junit/` |
+| `acceptance_gate` | mode of `sdd gate` (`off` · `warn` prints and exits 0 · `enforce` fails when a Must is not VERIFIED or WAIVED) | `enforce`; set `warn` when adopting SDD in a brownfield project |
+| `tracker` | issue/PR provider for `sdd issue`/`sdd pr-body` (any push, issue or PR still asks the human) | `off` |
 | `e2e_scaffold` | construction-protocol.md E2E step 2 | `allowed` |
 | `task_state` | Phase 2, Phase 7, Modes 3/6/7, G-11, `--verify`, I-06/I-09 (§6) | `checkbox` |
 | `task_format` | Phase 6 review, Revert (§6) | `full` |
@@ -175,10 +183,17 @@ Rendered by the kit installer (`templates/stacks/<kit>/kit.json` is the source o
 - server: bin/rails server -p 3001 -b 127.0.0.1 -P tmp/pids/sdd-server.pid
 - port: 3001
 - acceptance: cd acceptance && BASE_URL=http://127.0.0.1:3001 npx playwright test
+- test_report: MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR="$(git rev-parse --show-toplevel)/.sdd/junit/minitest" bin/rails test
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: never
 - task_state: trailers
 - task_format: compact
 ```
+
+`test_report` needs the `minitest-reporters` gem (see the kit's testing rule). `$(git rev-parse --show-toplevel)` puts
+the JUnit under the repo root's `.sdd/junit/` even when `app_dir` is a subdirectory; the JUnit reporter empties its own
+directory, hence the `minitest/` subdirectory.
 
 `bin/rails test` keeps the test schema in sync by itself: `db_reset_safe` is only for the development database the
 server and the acceptance suite use, after a migration.
@@ -205,6 +220,9 @@ server and the acceptance suite use, after a migration.
 - server: npx next dev -p 3000 -H 127.0.0.1
 - port: 3000
 - acceptance: none
+- test_report: npx vitest run --reporter=junit --outputFile="$(git rev-parse --show-toplevel)/.sdd/junit/vitest.xml"
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact

@@ -5,10 +5,10 @@ Used by this skill at the end of Mode 1 when run standalone, and by the gate 1 o
 ## 1. Mechanical checks (must be clean)
 
 ```bash
-node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" needs requirements/CUSTOMER-NEEDS.md requirements/REQUIREMENTS.md --mechanical
+node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --needs requirements/CUSTOMER-NEEDS.md requirements/REQUIREMENTS.md
 ```
 
-Exit 0 means no errors: every need is covered by some `Needs:` line or out-of-scope with a decision, every active REQ-F/REQ-NF cites a need, every requirement has a valid `Verification:`. Fix errors before going on. Warnings (unconfirmed needs, examples not reviewed, Must ratio) are resolved by steps 3-5. When the project's `sdd` CLI offers `sdd lint --needs`, it runs the same check.
+Exit 0 means no errors: every need is covered by some `Needs:` line or out-of-scope with a decision, every active REQ-F/REQ-NF cites a need, every requirement has a valid `Verification:` (`test | demo | measurement | inspection`, the method `sdd accept` later uses to decide what counts as evidence). Fix errors before going on. Warnings (unconfirmed needs, examples not reviewed, Must ratio) are resolved by steps 3-5. `--json` gives the same result machine-readable; `sdd-jev.mjs needs --mechanical` is the same check.
 
 ## 2. Jev suggestions (opt-in)
 
@@ -54,7 +54,7 @@ Customer-needs-sha256: $(sha requirements/CUSTOMER-NEEDS.md)
 EOF
 ```
 
-Stop if either guard prints a message. Then set `stages["requirements-engineer"].summary.metrics.approved_tag` = `"requirements-v{Version}"` and `nextStep` = `"Run /sdd-specifications-engineer"` in `pipeline-state.json`. Push the tag (`git push origin "requirements-v$V"`) only when the user agrees; tags are not pushed by default. Anyone can verify later with `git show -s "requirements-v$V"` and `git show "requirements-v$V:requirements/REQUIREMENTS.md" | shasum -a 256`.
+Stop if either guard prints a message. The plugin's tool guard asks for confirmation before `git tag … requirements-v{N}`: that prompt is the person confirming, so run the tag only after their explicit Approve above (it prevents accidental self-approval; it is not a guarantee). Then set `stages["requirements-engineer"].summary.metrics.approved_tag` = `"requirements-v{Version}"` and `nextStep` = `"Run /sdd-specifications-engineer"` in `pipeline-state.json`. Push the tag (`git push origin "requirements-v$V"`) only when the user agrees; tags are not pushed by default. Anyone can verify later with `git show -s "requirements-v$V"` and `git show "requirements-v$V:requirements/REQUIREMENTS.md" | shasum -a 256`.
 
 ## 7. After approval
 

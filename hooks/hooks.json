@@ -1,5 +1,5 @@
 {
-  "description": "SDD pipeline guardrails: pipeline status injection at session start, upstream immutability guard, fabricated AI-consent guard on Bash, traceability context on file access, and pipeline-state updates (a stage is marked running when its skill starts or when a file under its directory is written).",
+  "description": "SDD pipeline guardrails: pipeline status injection at session start, upstream immutability guard, fabricated AI-consent guard on Bash, traceability context on file access, and pipeline-state updates (a stage is marked running when its skill starts or when a file under its directory is written); asks before recording acceptance (sdd accept record, fase-N-accepted and requirements-vN tags).",
   "hooks": {
     "SessionStart": [
       {

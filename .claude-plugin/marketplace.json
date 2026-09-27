@@ -16,7 +16,8 @@
         "sdd",
         "swebok",
         "specification-driven",
-        "traceability"
+        "traceability",
+        "acceptance"
       ],
       "author": {
         "name": "Andres Leon",

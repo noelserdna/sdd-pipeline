@@ -79,7 +79,7 @@ Skill: sdd-pipeline:sdd-tech-designer            → design/
 Skill: sdd-pipeline:sdd-ux-designer              → ux/
 Skill: sdd-pipeline:sdd-security-auditor         → audits/SECURITY-AUDIT-BASELINE.md
 Skill: sdd-pipeline:sdd-pipeline-status          → (console output)
-Skill: sdd-pipeline:sdd-traceability-check       → (console output)
+Skill: sdd-pipeline:sdd-acceptance               → acceptance/ACCEPTANCE-REPORT.md, .sdd/acceptance.json
 Skill: sdd-pipeline:sdd-gap-detector             → .sdd/gap-analysis.json
 Skill: sdd-pipeline:sdd-req-change               → changes/, updated specs
 Skill: sdd-pipeline:sdd-session-summary          → (console output)
@@ -99,7 +99,7 @@ Launch background agents for independent tasks:
 - Agent: "Run sdd-security-auditor" → audits/
 
 **Parallel group 2 — Verification (Phase 6):**
-- Agent: "Run traceability-check + pipeline-status"
+- Agent: "Run sdd-acceptance --check + pipeline-status"
 - Agent: "Run gap-detector --semantic"
 - Agent: "Build the traceability graph (scripts/sdd-graph.py)"
 
@@ -222,7 +222,7 @@ If gap-detector is not available (e.g., no source code yet), skip with a note.
 
 ### Phase 6: Utility Skills
 1. `Skill: sdd-pipeline:sdd-pipeline-status` — verify 7/7 done
-2. `Skill: sdd-pipeline:sdd-traceability-check` — chain, orphans, broken refs
+2. `Skill: sdd-pipeline:sdd-acceptance --check` — verdict per requirement with its evidence, plus chain integrity (orphans, broken refs); the report must list every active REQ
 3. `python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` — writes `dashboard/traceability-graph.json` (read by the MCP server and the hooks); verify it exists and has artifacts
 4. `Skill: sdd-pipeline:sdd-session-summary` — session delta
 

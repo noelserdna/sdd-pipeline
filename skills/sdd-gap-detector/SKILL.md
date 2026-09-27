@@ -154,6 +154,11 @@ human decision. Present facts neutrally with the risk of each option; do not rec
 not fix anything. Gold plating is as harmful as a missing feature — code without a requirement is untested
 surface and breaks traceability — but only a human can decide whether it becomes a REQ or goes.
 
+The decisions the human writes in this file (PROMOTE / REMOVE / ACCEPT / DEFER per ORPHAN, with its rationale) are
+the record: `sdd-acceptance --check` reads `audits/GAP-ANALYSIS-REVIEW.md` and lists them next to the acceptance
+report, and an ORPHAN still without a decision is shown there as open, because unrequested code is part of what the
+customer receives. When you re-run, carry over every decision already written for a finding that still exists.
+
 ## Constraints
 
 - Read-only on `spec/`, `requirements/` and code. Writes only `.sdd/gap-analysis.json`, `.sdd/jev-coverage.json`
@@ -165,8 +170,8 @@ surface and breaks traceability — but only a human can decide whether it becom
 
 ## Related skills
 
-`python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` builds the graph used in S.1 and loads `.sdd/gap-analysis.json`; `/sdd-traceability-check`
-verifies ID chains across artifacts; `/sdd-reconcile` resolves drift using these findings; the MCP tool `sdd_gaps`
+`python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` builds the graph used in S.1 and loads `.sdd/gap-analysis.json`; `/sdd-acceptance --check`
+verifies ID chains across artifacts and reports each requirement's verdict with its evidence (it reads the orphan decisions of this skill's review document); `/sdd-reconcile` resolves drift using these findings; the MCP tool `sdd_gaps`
 serves `.sdd/gap-analysis.json`.
 
 ## Persist summary

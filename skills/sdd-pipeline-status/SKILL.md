@@ -39,9 +39,17 @@ the current directory.
    `git log -1 --format=%cI -- <input dirs>` newer than `lastRun` (inputs per stage: CLAUDE.md "Stage I/O
    mapping"). Uncommitted edits do not show up this way; mention `git status` if the user expects them to count.
 4. **Errors.** Stages with `status: "error"`, with `staleReason` if present.
-5. **Report** (template below). Next action: the first stage that is stale, errored or pending, in pipeline order
+5. **Acceptance.** Read `$STATE_ROOT/.sdd/acceptance.json` (written by `sdd accept`, `sdd gate` and `sdd loop next`;
+   git-ignored) when it exists: `summary.must_verified`/`must_total`, `must_waived` (`waived_musts`), `by_verdict`
+   (FAILING, MISSING), `stale_evidence`, `goal`, plus `evaluated_sha` and `generatedAt`. It answers "is each
+   requirement delivered, with what evidence", which stage statuses cannot. If `evaluated_sha` differs from
+   `git rev-parse HEAD`, say the summary predates the last commit. Do not run `sdd accept` yourself: this skill only
+   reads.
+6. **Report** (template below). Next action: the first stage that is stale, errored or pending, in pipeline order
    (requirements → specifications → spec-auditor → test-planner → plan-architect → task-generator →
-   task-implementer).
+   task-implementer). When all of them are done: no `acceptance.json` → `/sdd-acceptance --check`; open Musts
+   (goal false: some Must FAILING or MISSING) → `/sdd-acceptance --loop`; stale evidence only → `/sdd-acceptance
+   --check` to re-capture the tests; goal met → `/sdd-acceptance --sign-off`.
 
 ```
 ## SDD Pipeline Status
@@ -53,6 +61,10 @@ the current directory.
 
 ### Last Change          (only with a `lastChange` block)
 - Change Report: CHG-2026-01-20-001 · Changed: requirements/, spec/ · Invalidated: plan-architect, task-generator · Cascade: manual
+
+### Acceptance           (only with .sdd/acceptance.json)
+- Must 7/9 verified, 1 waived (REQ-NF-002) · FAILING 1 · MISSING 0 · stale evidence 0 · evaluated at a1b2c3d (HEAD) · goal not met
+- Open Musts: REQ-F-004 (FAILING)
 
 ### Handoffs             (multi-session only)
 | Stage | To | Sent | Result |
@@ -102,7 +114,9 @@ no drift is not an onboarding case: fall back to Status mode.
 
 **3. Plan.** Output the ordered commands for the scenario, adjusted to the facts. Start every plan with
 `/sdd-setup` when `pipeline-state.json` is missing (add `--stack=<rails|nextjs-prisma|auto>` when the stack fits a
-kit, `--app-dir DIR` when the app is not at the root).
+kit, `--app-dir DIR` when the app is not at the root). For every scenario with existing code, recommend
+`acceptance_gate: warn` in the SDD Stack Profile until the adoption is complete: `sdd gate` then reports open Musts
+without failing CI (new projects keep the default, `enforce`).
 
 | Scenario | Commands after setup |
 |----------|----------------------|
@@ -110,9 +124,9 @@ kit, `--app-dir DIR` when the app is not at the root).
 | Brownfield bare | `/sdd-reverse-engineer --inventory-only` (review Checkpoint 1) · `/sdd-reverse-engineer --continue` · `/sdd-spec-auditor` · `/sdd-gap-detector --semantic` |
 | Brownfield with docs | `/sdd-import <file> [--format=openapi\|jira\|csv\|excel\|markdown\|notion] [--target=requirements\|specs\|both]` per source (`--merge` from the second source on) · `/sdd-reverse-engineer` (enriches the `[IMPORTED]` entries) · `/sdd-reconcile --dry-run` · `/sdd-spec-auditor` · `/sdd-gap-detector` |
 | Tests-as-spec | `/sdd-reverse-engineer` (assertions become invariants, setups preconditions; review them at Checkpoint 1) · `/sdd-spec-auditor` · `/sdd-test-planner` · `/sdd-gap-detector --semantic` |
-| SDD drift | `/sdd-reconcile --dry-run` · `/sdd-reconcile` (`--scope=<paths>` to go module by module) · `/sdd-spec-auditor` · `/sdd-gap-detector` · `/sdd-traceability-check` |
+| SDD drift | `/sdd-reconcile --dry-run` · `/sdd-reconcile` (`--scope=<paths>` to go module by module) · `/sdd-spec-auditor` · `/sdd-gap-detector` · `/sdd-acceptance --check` |
 | Partial SDD | the first missing stage in pipeline order, then the rest; `/sdd-reconcile --dry-run` first if code changed since the last SDD stage |
-| Multi-team | per package, the plan of its own scenario with `--scope=<package paths>` on `/sdd-reverse-engineer` and `/sdd-reconcile`; `/sdd-traceability-check` at the end |
+| Multi-team | per package, the plan of its own scenario with `--scope=<package paths>` on `/sdd-reverse-engineer` and `/sdd-reconcile`; `/sdd-acceptance --check` at the end |
 | Fork/migration | `/sdd-import` of the upstream docs or specs if any · `/sdd-reverse-engineer --scope=<paths changed since git merge-base HEAD upstream/<branch>>` · `/sdd-spec-auditor` · then the standard pipeline |
 
 Report: the fact sheet, the scenario with the rule that matched, the plan as a numbered table (command, why,

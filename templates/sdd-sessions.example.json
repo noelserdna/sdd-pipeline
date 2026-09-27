@@ -88,12 +88,12 @@
       "owns": [
         ".sdd/*",
         "audits/GAP-*",
+        "acceptance/*",
         "dashboard/*"
       ],
       "stages": [
         "gap-detector",
-        "traceability-check",
-        "dashboard"
+        "acceptance"
       ]
     }
   }

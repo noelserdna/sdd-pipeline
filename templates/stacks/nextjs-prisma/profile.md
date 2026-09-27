@@ -17,6 +17,9 @@
 - server: npx next dev -p {port} -H 127.0.0.1
 - port: {port}
 - acceptance: none
+- test_report: npx vitest run --reporter=junit --outputFile="$(git rev-parse --show-toplevel)/.sdd/junit/vitest.xml"
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact

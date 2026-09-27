@@ -100,7 +100,7 @@ Write the Impact Matrix per CR (`phase-templates.md` §3).
 Every gap becomes a question with options and a recommendation; nothing is assumed. Ask in batches of at most 4.
 
 1. Check each CR against the desirable properties: unambiguous, testable, binding (priority confirmed), atomic (split if it bundles changes), true (need, not solution), in glossary vocabulary, acceptable (no unresolved conflict with INV/ADR/RN).
-2. ADD: draft the EARS statement and Given/When/Then acceptance criteria and have the user validate them. MODIFY: show current and proposed statement, validate the delta. DEPRECATE: ask what happens to governed data and behaviour, whether migration is needed, and whether dependent REQs change too.
+2. ADD: draft the EARS statement, Given/When/Then acceptance criteria with concrete data, `Needs:` (the `N-NNN` of `requirements/CUSTOMER-NEEDS.md` it serves; a need nobody has written down yet is first captured there verbatim with who said it) and `Verification:` (`test | demo | measurement | inspection`), and have the user validate them. Both fields are what `sdd lint --needs` and `sdd accept` read: without them the requirement cannot be traced to the customer or accepted. MODIFY: show current and proposed statement, validate the delta, and re-confirm `Needs:` and `Verification:`. DEPRECATE: ask what happens to governed data and behaviour, whether migration is needed, and whether dependent REQs change too.
 3. Record every answer in the Clarification Log (`phase-templates.md` §4), noting whether it needs a new ADR, INV or RN.
 
 ## Phase 4 — Change Plan
@@ -136,7 +136,7 @@ For each APPROVED delta, in plan order:
 
 1. Apply its file changes in requirements-first order — the requirement defines the change and every spec edit cites its REQ-ID:
    `requirements/REQUIREMENTS.md` → `domain/01..05` → `use-cases/` → `workflows/` → `contracts/` (API, EVENTS, PERMISSIONS-MATRIX) → `tests/` (BDD-UC-NNN, PROPERTY-TESTS) → `nfr/` → `adr/` → `runbooks/` → `CLARIFICATIONS.md`, `VALUE-REGISTRY.md`, `TRACEABILITY-MATRIX.md` → `CHANGELOG.md` (entry format and version bumps: `phase-templates.md` §7).
-2. **REQUIREMENTS.md** (format owned by `sdd-requirements-engineer`): ADD inserts the REQ in its section (Functional / Nonfunctional / Constraints) and a row in the Traceability table; MODIFY replaces it in place; DEPRECATE keeps it in place with `- **Status:** Deprecated (YYYY-MM-DD) — {reason}` and marks its Traceability row deprecated (never delete: specs, tests and commits reference it).
+2. **REQUIREMENTS.md** (format owned by `sdd-requirements-engineer`): ADD inserts the REQ in its section (Functional / Nonfunctional / Constraints), with its `Needs:` and `Verification:` lines, and a row in the Traceability table; MODIFY replaces it in place, keeping both lines. A MODIFY reopens that requirement's acceptance by itself: waivers, demos, measurements and inspections in `acceptance/decisions.jsonl` are tied to a hash of the statement and criteria, so the next `sdd accept` lists them under "Decisions to re-confirm" and stops counting them; tests keep counting only while their names still match the renumbered criteria. Say so in the Change Report; DEPRECATE keeps it in place with `- **Status:** Deprecated (YYYY-MM-DD) — {reason}` and marks its Traceability row deprecated (never delete: specs, tests and commits reference it).
 3. Bump document versions where a version header exists; use glossary terms only.
 4. Set the delta to `APPLIED` and commit that CR alone:
 
@@ -152,6 +152,8 @@ git commit -m "docs(specs): {add|modify|deprecate} REQ-F-012 {summary}" \
 Large batches (3+ CRs or 15+ documents) may fan out spec edits of a single CR to agents scoped by folder (DOM → `domain/`, UC-WF → `use-cases/` + `workflows/`, CON → `contracts/`, TEST-NFR → `tests/`, `nfr/`, `adr/`, `runbooks/`). The main thread applies the REQUIREMENTS.md part first, dispatches, then writes cross-references and the Traceability updates itself and makes the commit; two agents needing the same file means stop and resolve by hand.
 
 **Edge cases.** Two CRs that contradict each other → stop, present both, re-plan after the user chooses. A pre-existing traceability gap in a touched document → record it as an open item, do not fix it here. A circular REQ dependency → flag it and ask whether it is intentional; record the answer.
+
+**New requirements version.** After the last CR is applied, bump `> **Version:**` in the REQUIREMENTS.md header (minor for ADD/MODIFY/DEPRECATE, e.g. 1.2 → 1.3), set `> **Status:** Review`, run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --needs` and follow the approval procedure of `sdd-requirements-engineer/references/approval.md` §6 for the new version: explicit approval by the approver, `docs(requirements): approve requirements v{Version}` commit and a new annotated tag `requirements-v{Version}` (the plugin's tool guard asks before creating it). Earlier tags are never moved. In `--batch` there is no approver to ask: leave `Status: Review` and list the pending approval in the Change Report.
 
 ## Phase 7 — Alignment Audit
 
@@ -178,6 +180,7 @@ Rules, invalidation table, execution order, FASE targeting, failure handling and
 /sdd-plan-architect --regenerate-fases --affected={N,M}
 /sdd-task-generator --fase={N} --incremental          # once per affected FASE
 /sdd-task-implementer --fase {N} --new-tasks-only     # once per affected FASE; auto mode only
+/sdd-acceptance --check                               # re-evaluates the changed requirements; auto mode only
 ```
 
 `sdd-security-auditor` runs alongside the focused audit when a security requirement changed; it does not block the chain.

@@ -238,7 +238,7 @@ Computed and rendered as the last six rows of the `Gate detail` table:
 
 ## Mode Fix (`--fix`)
 
-When invoked with `--fix` (or asked to apply audit corrections), read [references/mode-fix.md](references/mode-fix.md) and follow it: corrections plan, execution with the Propagation Checklist, `docs(specs)` commits with `Refs:`, baseline update, upstream impact analysis by tier (Step 4.5 decision, station path), post-audit traceability reconciliation. Mode Fix never writes `requirements/`.
+When invoked with `--fix` (or asked to apply audit corrections), read [references/mode-fix.md](references/mode-fix.md) and follow it: corrections plan, execution with the Propagation Checklist, `docs(specs)` commits with `Change:` (the finding id) and `Refs:` trailers, baseline update, upstream impact analysis by tier (Step 4.5 decision, station path), post-audit traceability reconciliation. Mode Fix never writes `requirements/`.
 
 ## Integration with Pipeline
 

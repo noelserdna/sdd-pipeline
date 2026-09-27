@@ -115,9 +115,10 @@ if (claimH && Number(claimH[1]) !== hookScripts.size) errors.push(`plugin.json d
 // 7. Stack kits (templates/stacks/<kit>): contrato de docs/stacks.md
 const PROFILE_KEYS = ["stack", "app_dir", "code_paths", "test_paths", "install", "test", "test_file", "test_name",
   "typecheck", "lint_files", "lint", "build", "coverage", "db_reset_safe", "server", "port", "acceptance",
-  "e2e_scaffold", "task_state", "task_format"];
-// Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md).
-const OPTIONAL_PROFILE_KEYS = ["default_branch"];
+  "e2e_scaffold", "task_state", "task_format", "test_report", "acceptance_gate", "tracker"];
+// Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md;
+// test_report_path: where test_report writes JUnit when it is not .sdd/junit/, project-specific).
+const OPTIONAL_PROFILE_KEYS = ["default_branch", "test_report_path"];
 const REQUIRED_KEYS = ["test", "test_file", "lint", "server", "port", "db_reset_safe"];
 const FORBIDDEN = [
   [/CONSENT/, "CONSENT"], [/migrate\s+reset/i, "migrate reset"], [/@restart/i, "@restart"],
@@ -203,6 +204,9 @@ if (existsSync(stacksDir)) {
       expect("e2e_scaffold", (v) => ["allowed", "never"].includes(v), "debe ser allowed o never");
       expect("task_state", (v) => ["checkbox", "trailers"].includes(v), "debe ser checkbox o trailers");
       expect("task_format", (v) => ["full", "compact"].includes(v), "debe ser full o compact");
+      expect("acceptance_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
+      expect("tracker", (v) => ["github", "gitlab", "off"].includes(v), "debe ser github, gitlab u off");
+      expect("test_report", (v) => v === "none" || /\.sdd\/junit\//.test(v), "debe escribir JUnit en .sdd/junit/ (o ser none)");
       for (const k of ["code_paths", "test_paths"]) expect(k, (v) => v.split(",").every((p) => p.trim().startsWith("{app_dir}/")), ": cada ruta debe empezar por {app_dir}/");
       if (defaults) for (const k of PROFILE_KEYS) {
         if (k === "app_dir" || k === "port" || !(k in prof) || typeof defaults[k] !== "string") continue;
