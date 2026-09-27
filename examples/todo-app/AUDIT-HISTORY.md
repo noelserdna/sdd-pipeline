@@ -50,3 +50,17 @@ de cliente.
 | F14 sin tipo de rama para la aceptación global | minor | arreglado en esta rama (`sdd branch start acceptance`) |
 | F15 restricciones comprobables por código declaradas `inspection` | mejora | arreglado en esta rama (guía: `test` con `REQ-C-NNN AC1`) |
 | F16 bloque de PR / celda de evidencia de 31 KB para 10 requisitos | mejora | arreglado en esta rama (resumen por criterio; 4,3 KB en el mismo proyecto) |
+
+## 2026-09-27 — comparación: vibe coding, ruta adaptativa y pipeline completo
+
+Misma app, mismos `requirements/`, medida con un juego neutral de 19 criterios de caja negra derivado solo de `REQUIREMENTS.md`. Puertas humanas firmadas por un proxy de prueba.
+
+| Enfoque | Tiempo | Criterios | Tests propios | ID único tras borrar la última tarea | Trazabilidad |
+|---|---|---|---|---|---|
+| Vibe coding (1 prompt, sin plugin) | 6 min | 19/19 | 117 | no (reutiliza el ID) | ninguna |
+| Ruta adaptativa (Jev: sin specs, auditoría ni plan de tests) | 1 h 53 | 19/19 | 149 | no (reutiliza el ID) | completa, puerta final exit 0 |
+| Pipeline completo | ≈ 4 h 15 | 19/19 | 617 | sí | completa |
+
+- Ruta adaptativa: setup 2 min, ruta < 1, plan 14 (desde requisitos), tareas 32, FASE-0 23, FASE-1 ≈ 13, FASE-2 ≈ 11, FASE-3 ≈ 14, aceptación 3.
+- Lo que solo atrapó el pipeline completo: la promesa "id único incremental" de REQ-F-001, que ningún criterio comprobaba; las specs la convirtieron en regla. Desde este run `req-lint` pregunta a Jev por promesas sin criterio (REQ-F-001 0,95; REQ-F-003 0,90).
+- Hallazgos del run adaptativo: F19 (setup no commiteaba lo suyo; los merges de FASE fallaron) y F20 (las FASE siguientes se apilaron en la rama de FASE-0), corregidos en `b8ab2be`.
