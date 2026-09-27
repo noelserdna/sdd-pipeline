@@ -13,7 +13,7 @@ For EACH requirement, evaluate:
 ### 1.1 Clarity and Ambiguity
 
 - [ ] **Single interpretation**: Can this be read in only one way?
-- [ ] **No vague terms**: Avoid "fast", "user-friendly", "efficient", "flexible", "robust", "easy", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "etc.", "and/or", "if applicable"
+- [ ] **No vague terms** (canonical list for the pipeline; other skills point here): "fast", "quickly", "user-friendly", "efficient", "flexible", "robust", "easy", "simple", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "etc.", "and/or", "if applicable", "as needed", and their equivalents in the document's language (e.g. "rápido", "fácil", "intuitivo", "adecuado", "según sea necesario")
 - [ ] **No pronouns without clear referents**: "it", "they", "this" must have unambiguous antecedents
 - [ ] **Quantified where needed**: performance, capacity, timing have specific numbers
 - [ ] **Defined domain terms**: technical or business terms are defined or use stakeholder vocabulary

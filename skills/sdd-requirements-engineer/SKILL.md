@@ -5,78 +5,56 @@ description: "Requirements engineering (SWEBOK v4): elicit, write (user stories,
 
 # Requirements Engineer (SWEBOK v4)
 
-Professional requirements engineering skill based on IEEE SWEBOK v4 Chapter 1: Software Requirements.
+Requirements engineering based on SWEBOK v4 Chapter 1. First stage of the SDD pipeline: its output, `requirements/REQUIREMENTS.md`, is the input of `sdd-specifications-engineer`.
 
 ## Modes of Operation
 
-This skill operates in three modes. Determine which mode based on user intent:
+Pick the mode from the user's intent.
 
 ### Mode 1: Elicit Requirements
 
-Use when the user wants help gathering, discovering, or creating requirements for a project.
+Use when the user wants help gathering, discovering, or creating requirements.
 
-1. Read [references/elicitation-guide.md](references/elicitation-guide.md) for the full elicitation workflow
-2. Ask the user about the project context: what problem is being solved, who are the stakeholders, what constraints exist
-3. Guide the user through stakeholder identification
-4. Help select appropriate elicitation techniques
-5. For each requirement surfaced, apply the 5-Whys to ensure it represents the true need, not a premature solution
-6. Categorize each requirement: functional (policies/processes) vs. nonfunctional (technology constraints / quality of service)
-7. Write requirements using the appropriate specification format (see Specification Formats below)
-8. Track additional attributes: source, priority, rationale, acceptance criteria
+1. Read [references/elicitation-guide.md](references/elicitation-guide.md) (stakeholder classes, 5-Whys).
+2. Ask about the project context: problem being solved, stakeholders, constraints.
+3. Walk through stakeholder identification and pick elicitation techniques that fit them.
+4. For each requirement surfaced, apply the 5-Whys so it states the true need, not a premature solution.
+5. Categorize each one: functional (policies/processes) vs. nonfunctional (technology constraints / quality of service) vs. constraint.
+6. Write them into `requirements/REQUIREMENTS.md` (Output Artifacts below), with source, priority, rationale and acceptance criteria.
 
 ### Mode 2: Audit Requirements
 
-Use when the user provides existing requirements for review/quality assessment.
+Use when the user provides existing requirements for review.
 
-1. Read [references/audit-checklist.md](references/audit-checklist.md) for the complete audit framework
-2. Evaluate EACH requirement against the individual checklist (ambiguity, testability, atomicity, necessity, completeness)
-3. Evaluate the COLLECTION against the collection checklist (completeness, consistency, feasibility)
-4. Produce an audit report with severity levels: FAIL (must fix), WARN (should fix), PASS
-5. For each issue found, provide a specific, actionable recommendation with a rewritten version when possible
-6. Identify gaps: missing stakeholder perspectives, uncovered edge cases, absent security/error handling
+1. Read [references/audit-checklist.md](references/audit-checklist.md).
+2. Evaluate each requirement against the individual checklist and the whole set against the collection checklist. With many requirements, screen them first when Jev is enabled (opt-in, sends the statements to TypeSafe): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" req-lint requirements/REQUIREMENTS.md --out .sdd/jev/req-lint.json` flags vague, compound, unverifiable and implementation-leaking statements and non-EARS patterns (probability > 0.5). Read the flagged ones first; the flags are hints, so still confirm each one and apply the checklist to the rest. Exit code 3 means Jev is off: review every requirement yourself.
+3. Produce the audit report (template in the checklist) with FAIL / WARN / PASS per issue, a concrete recommendation and, when possible, a rewritten statement.
+4. Identify gaps: missing stakeholder perspectives, uncovered edge cases, absent security or error handling.
+
+The audit report is the deliverable. Write or update `requirements/REQUIREMENTS.md` only when the user accepts the rewrites.
 
 ### Mode 3: Specify/Format Requirements
 
-Use when the user wants help writing requirements in a specific format or converting between formats.
+Use when the user wants requirements written in a specific format or converted between formats.
 
-Choose the format based on context:
+In `REQUIREMENTS.md` the **Statement** of every REQ-F / REQ-NF is always EARS (below), because downstream skills parse it. Other formats are additional views, produced on request (in the reply or as an extra section), never a replacement for the EARS statement:
 
-**User Story**: `As a [role] I want [capability] so that [benefit]`
-- Best for: Agile teams, feature-level requirements
-- Always add acceptance criteria in BDD format
+- **User Story**: `As a [role] I want [capability] so that [benefit]` — feature-level, agile teams; always with BDD acceptance criteria.
+- **BDD Scenario**: `Given [context], when [stimulus], then [outcome]` — cover normal, alternative and exception paths.
+- **Use Case**: triggering event, parameters, preconditions, postconditions, normal/alternative courses, exceptions — complex interactions.
+- **Actor-Action**: `[Triggering event], [Actor] shall [Action] [Condition]` — contractual documents.
+- **Shall Statement**: `The system shall [behavior]` — traditional SRS, regulatory contexts.
 
-**BDD Scenario**: `Given [context], when [stimulus], then [outcome]`
-- Best for: precise, testable acceptance criteria
-- Ensure comprehensive scenarios: normal, alternative, exception paths
+## Key Principles
 
-**Use Case**: structured template with triggering event, parameters, preconditions, postconditions, normal/alternative courses, exceptions
-- Best for: complex workflows, system interactions
+- **Perfect Technology Filter**: a requirement that would still exist with infinitely fast, free, failure-free computing is functional; everything else is nonfunctional.
+- **Quality gates**: every requirement is unambiguous, testable, atomic, binding and stakeholder-aligned; flag and fix the ones that are not. The vague-term list lives in `references/audit-checklist.md` §1.1.
+- **Quality-of-service economics**: for each QoS target, identify the perfection point (better brings no value) and the fail point (worse makes the product unusable).
+- **Prioritization (Kano-aware)**: weigh both the satisfaction from having a feature and the dissatisfaction from lacking it; a missing basic feature hurts more than a missing delighter. Scale: Must have / Should have / Nice to have (or 1-10).
 
-**Actor-Action**: `[Triggering event], [Actor] shall [Action] [Condition]`
-- Best for: formal specification documents, contractual requirements
+## EARS Syntax
 
-**Shall Statement**: `The system shall [behavior]`
-- Best for: traditional SRS documents, regulatory contexts
-
-## Key Principles (Always Apply)
-
-### The Perfect Technology Filter
-Separate functional from nonfunctional: functional requirements would still exist even if infinite computing resources were available. Everything else is nonfunctional.
-
-### Requirement Quality Gates
-Every requirement must be: unambiguous, testable, atomic, binding, stakeholder-aligned. If not, flag and fix.
-
-### Forbidden Words in Requirements
-Flag these vague terms: "fast", "user-friendly", "efficient", "flexible", "robust", "easy", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "etc.", "and/or", "if applicable", "as needed", "simple", "quickly".
-
-### Prioritization (Kano-aware)
-Consider BOTH satisfaction from having a feature AND dissatisfaction from lacking it. A missing basic feature causes more damage than a missing delighter.
-
-Priority scales: Must have / Should have / Nice to have, or numerical 1-10.
-
-## EARS Syntax (Preferred for SDD Pipeline)
-
-When operating within the SDD pipeline, use EARS (Easy Approach to Requirements Syntax) as the primary format. This ensures compatibility with downstream skills (`sdd-specifications-engineer`, `sdd-spec-auditor`, etc.):
+The statement format of the SDD pipeline (`sdd-specifications-engineer`, `sdd-spec-auditor` and later skills read it):
 
 | Pattern | Template | Example |
 |---------|----------|---------|
@@ -91,7 +69,7 @@ When operating within the SDD pipeline, use EARS (Easy Approach to Requirements 
 
 ### Primary Output: `requirements/REQUIREMENTS.md`
 
-All modes MUST produce or update a structured requirements document at `requirements/REQUIREMENTS.md` with this format:
+Modes 1 and 3 write or update this document (Mode 2 only after the user accepts rewrites):
 
 ```markdown
 # Requirements Document
@@ -114,9 +92,6 @@ All modes MUST produce or update a structured requirements document at `requirem
   - GIVEN {context} WHEN {action} THEN {outcome}
 - **Dependencies:** {REQ-F-NNN, or "None"}
 
-### REQ-F-002: {Title}
-...
-
 ## Nonfunctional Requirements
 
 ### REQ-NF-001: {Title}
@@ -136,43 +111,25 @@ All modes MUST produce or update a structured requirements document at `requirem
 
 ## Traceability
 
-| REQ ID | Type | Priority | Source | Acceptance Criteria |
-|--------|------|----------|--------|---------------------|
-| REQ-F-001 | Functional | Must | {source} | Yes |
-| REQ-NF-001 | Nonfunctional | Must | {source} | Yes |
+| REQ ID | Type | Priority | Source | Dependencies |
+|--------|------|----------|--------|--------------|
+| REQ-F-001 | Functional | Must | {source} | None |
+| REQ-NF-001 | Nonfunctional | Must | {source} | REQ-F-001 |
 ```
 
 ### Rules for Output
-1. **Every requirement gets a unique ID** with prefix: `REQ-F-` (functional), `REQ-NF-` (nonfunctional), `REQ-C-` (constraint)
-2. **Every requirement has acceptance criteria** in BDD format (Given/When/Then)
-3. **Every requirement uses EARS syntax** for the statement
-4. **No vague terms** — all metrics must be quantified
-5. **Traceability table** at the end summarizes all requirements
 
-## Pipeline Integration
+1. IDs: `REQ-F-NNN` (functional), `REQ-NF-NNN` (nonfunctional), `REQ-C-NNN` (constraint), unique across the document.
+2. Every REQ-F and REQ-NF has an EARS statement and BDD acceptance criteria (Given/When/Then). Constraints (REQ-C) are plain statements with Type and Source; they need neither.
+3. No vague terms; every quality metric is quantified.
+4. The Traceability table lists every requirement.
+5. **Re-runs keep IDs stable.** Never renumber or reuse an ID; new requirements take the next free number, removed ones are marked deprecated rather than deleted, because specs, tests and commits reference them. Once `spec/` exists, changes to requirements go through `sdd-req-change` (it classifies the change and cascades staleness) instead of re-running this skill.
 
-This skill is **Step 1** of the SDD pipeline:
-
-```
-sdd-requirements-engineer → requirements/REQUIREMENTS.md
-        ↓
-sdd-specifications-engineer → spec/ (reads REQUIREMENTS.md as input)
-        ↓
-sdd-spec-auditor → audits/AUDIT-BASELINE.md
-        ↓
-...
-```
-
-**Next step:** After generating `requirements/REQUIREMENTS.md`, tell the user:
-> "Requirements document generated. Next step: run `sdd-specifications-engineer` to transform these requirements into formal technical specifications."
-
-## Deep Reference
-
-For detailed SWEBOK knowledge on categories, analysis, economics, tracing, management: read [references/swebok-requirements-knowledge.md](references/swebok-requirements-knowledge.md).
+**Next step:** after writing `requirements/REQUIREMENTS.md`, tell the user: "Requirements document generated. Next step: run `sdd-specifications-engineer` to transform these requirements into formal specifications."
 
 ## Persist Summary
 
-After generating all output artifacts, update `pipeline-state.json`:
+After writing `requirements/REQUIREMENTS.md` (an audit-only Mode 2 run leaves the state untouched), update `pipeline-state.json`:
 
 1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
 2. Set `stages["requirements-engineer"].status` = `"done"`
@@ -189,4 +146,4 @@ After generating all output artifacts, update `pipeline-state.json`:
 
 ## Output Language
 
-Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English.
+Respond and write artifacts in the user's language; technical terms (EARS keywords, IDs) stay in English.

@@ -3,74 +3,15 @@ name: sdd-test-planner
 description: "Test planning per SWEBOK v4: strategy, matrices, coverage per FASE, performance (NFRs) and E2E acceptance scenarios. Triggers: 'test plan', 'test strategy', 'test matrix', 'performance tests', 'test coverage', 'e2e scenarios', 'acceptance tests', 'playwright', 'plan de pruebas', 'estrategia de testing', 'cobertura de tests', 'tests de aceptacion'."
 ---
 
-# SDD Test Planner Skill
+# SDD Test Planner
 
-> **Principio:** Un plan de testing no es una lista de tests — es una estrategia que garantiza que cada requisito,
-> cada invariante y cada contrato tiene verificación adecuada en el tipo, nivel y momento correcto.
-> SWEBOK v4 Ch04: "Testing is the dynamic verification that a program provides expected behaviors."
+> A test plan is not a list of tests: it is the strategy that gives every requirement, invariant and contract the right verification at the right level and time.
 
-## Purpose
-
-Generate comprehensive test strategies, test matrices, performance scenarios, and E2E acceptance scenarios from specification documents. Bridge the gap between BDD scenarios (in `spec/tests/`) and actionable test tasks (in `task/`), including end-to-end user journey validation.
-
-## When to Use This Skill
-
-- Specifications exist in `spec/` and have been audited by `sdd-spec-auditor`
-- You need a test strategy before generating implementation plans
-- You want to define test coverage targets per FASE
-- You need performance test scenarios derived from NFRs
-- You want to audit test completeness of existing BDD specs
-- You want to generate test matrices for complex use cases
-- You need E2E acceptance scenarios derived from workflows (WF-*)
-
-## When NOT to Use This Skill
-
-- To write or execute tests → use `sdd-task-implementer`
-- To audit specs for quality → use `sdd-spec-auditor`
-- To generate task files → use `sdd-task-generator`
-- To create specs → use `sdd-specifications-engineer`
-
-## Relationship to Other Skills
-
-| Skill | Relationship |
-|-------|-------------|
-| `sdd-specifications-engineer` | **Upstream**: produces `spec/tests/BDD-*.md` and `spec/nfr/*.md` |
-| `sdd-spec-auditor` | **Upstream**: validates spec quality before test planning |
-| `sdd-security-auditor` | **Lateral**: security findings feed into security test scenarios |
-| `sdd-ux-designer` | **Lateral (optional)**: enriches E2E scenarios with page objects and a11y assertions |
-| **`sdd-test-planner`** | **THIS SKILL**: produces test strategy, matrices, and E2E scenarios |
-| `sdd-plan-architect` | **Downstream**: consumes test strategy for FASE planning |
-| `sdd-task-generator` | **Downstream**: consumes test matrices to generate test tasks |
-
-### Pipeline Position
-
-```
-Requisitos → sdd-specifications-engineer → sdd-spec-auditor →
-                                                    ↓
-                                            sdd-test-planner ← YOU ARE HERE
-                                                    ↓
-                                             sdd-plan-architect
-                                                    ↓
-                                            sdd-task-generator
-                                                    ↓
-                                           sdd-task-implementer
-
-Lateral: sdd-security-auditor → feeds security test scenarios
-Lateral: sdd-ux-designer → enriches E2E scenarios (optional)
-```
-
-> **SWEBOK v4 alignment:**
-> - Ch04 §1: Testing Fundamentals (levels, types, techniques)
-> - Ch04 §2: Test Process (planning, design, execution, evaluation)
-> - Ch04 §3: Test Techniques (black-box, white-box, experience-based)
-> - Ch04 §4: Test Measurement (coverage, defect metrics)
-> - Ch04 §5: Test Management (planning, estimation, monitoring)
-
----
+Turns the audited `spec/` into a test strategy (`test/TEST-PLAN.md`), per-UC test matrices, performance scenarios and E2E acceptance scenarios. Runs after `sdd-spec-auditor` and before `sdd-plan-architect` (which reads TEST-PLAN §9) and `sdd-task-generator` (which turns matrices into test tasks). Optional inputs: `audits/SECURITY-AUDIT-BASELINE.md` (security test ids) and `ux/` (E2E enrichment: page objects, accessibility assertions). It writes no test code (`sdd-task-implementer` does) and never edits `spec/` (spec defects go to the matrices' "Findings for sdd-spec-auditor").
 
 ## Reading Strategy (index first)
 
-Generation time is dominated by output tokens; reading the whole corpus only adds cache and turns (see `docs/perfilado.md`). Never `cat` the whole `spec/` tree. Build an index, then open only the sections a mode needs.
+Generation time is dominated by output tokens; reading the whole corpus only adds turns. Never `cat` the whole `spec/` tree: build an index, then open only the sections a mode needs.
 
 1. **Index** — one command (~2-4 k chars for a 10-requirement project):
    ```bash
@@ -82,9 +23,9 @@ Generation time is dominated by output tokens; reading the whole corpus only add
    | Need | Open only |
    |------|-----------|
    | Levels, gaps (Mode 1) | UC acceptance-criteria / exception-flow blocks; BDD scenario titles; `spec/nfr/*` target rows; INV table (id + one line) |
-   | Matrix for UC-NNN (Mode 2) | the UC's inputs/parameters table, main and exception flow steps, its BDD file, the contract section of its endpoint/function (`grep -n 'UC-NNN' spec/contracts/`), its state machine in `04-STATES.md` |
+   | Matrix for UC-NNN (Mode 2) | the UC's inputs/parameters table, main and exception flow steps, its BDD file, its operation rows in the contract (`grep -n 'UC-NNN' spec/contracts/`), its state machine in `04-STATES.md` |
    | PERF (Mode 3) | rows with a number and a unit in `PERFORMANCE.md` / `LIMITS.md` (`grep -n -E '[0-9]+ *(ms|s|req|MB|%)'`) |
-   | E2E (Mode 5) | WF step lists, UC input-parameter tables, contract request-body tables, `ux/WIREFRAMES.md` interactive elements |
+   | E2E (Mode 5) | WF step lists, UC input tables, the `Input (VO)` cells of the contract operations (or request-body schemas with `Style: http`), `ux/WIREFRAMES.md` interactive elements |
 
    Never open `01-GLOSSARY.md`, ADR bodies, runbooks or `CLARIFICATIONS.md` in full: grep the id you cite (`grep -n -A3 'RN-007' spec/CLARIFICATIONS.md`).
 3. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `sdd-dashboard`), use them for id lookups instead of grep.
@@ -105,19 +46,29 @@ Report the total as `metrics.test_chars` (`wc -c test/*.md`) in Persist Summary 
 
 ## Full Run Order
 
-1. Gates → index `spec/` (Reading Strategy).
+1. Readiness gates (below) → index `spec/` (Reading Strategy).
 2. Mode 1 `TEST-PLAN.md` in the main thread; write §3 Design Decisions first — it is the convention contract the matrix subagents must not repeat.
 3. Mode 2 matrices: fan-out to subagents (see Mode 2). They run in the background.
 4. **Mode 5 `E2E-SCENARIOS.md` is delegated too when it is the critical path** — more than 1 workflow, or more than 20
    expected scenarios: one subagent writes the Critical and Full tiers from the WF step lists and the §3 conventions
    (same launch rules as the matrices), while the main thread keeps the Smoke tier and the **field-inventory
-   cross-validation**, which may STOP and therefore never leaves the main thread. Below that threshold, or with
-   `--sequential`, Mode 5 stays in the main thread.
-   Measured 2026-08-27 (`docs/medidas.md`): with the matrices fanned out to 3 agents (2-4.5 min each) the stage still
-   took 11 min, because the critical path was the main thread writing TEST-PLAN + PERF + 40 E2E scenarios. Parallelising
-   what is *not* on the critical path buys nothing.
+   cross-validation**, which may stop for a user decision and therefore never leaves the main thread. Below that
+   threshold, or with `--sequential`, Mode 5 stays in the main thread. (The critical path is the main thread's own
+   writing; parallelising only the matrices does not shorten the stage.)
 5. Mode 3 `PERF-SCENARIOS.md` in the main thread while the agents run.
 6. Consolidate: agent summaries → TEST-PLAN §4 gaps / §10 metrics; Persist Summary; Handoff.
+
+## Readiness Gates
+
+| Gate | Check | On failure |
+|---|---|---|
+| G0 | `pipeline-state.json` → `stages["spec-auditor"].summary.metrics.gate_result` ∈ {`PASS`, `CONDITIONAL`} | Missing or `FAIL`: tell the user and ask whether to run `sdd-spec-auditor` first (recommended) or plan against the unaudited spec; in the latter case add a first highlight "planned against spec with audit gate {FAIL|missing}" |
+| G1 | `spec/domain/`, `spec/use-cases/`, `spec/contracts/` exist and are non-empty | Stop: nothing to plan from; recommend `sdd-specifications-engineer` |
+| G2 | `spec/tests/BDD-UC-*.md` exist (at least partially) | Continue; every UC without a BDD file becomes a `MISSING-BDD` gap |
+| G3 | `spec/nfr/*.md` exist | Continue; Mode 3 writes only "Not planned" and TEST-PLAN §4 gets a `MISSING-NFR-TEST` gap per quantified NFR expected by a REQ-NF |
+| G4 (Mode 5) | `spec/workflows/WF-*.md` exist | No WF → no E2E scenarios; user-facing UCs are listed as `MISSING-E2E` gaps (G1 already guarantees UCs) |
+
+**Asking without a human.** A question or stop in this skill (G0, V-FIELD errors, INCOMPLETE fields, coverage target) is asked with `AskUserQuestion` in an interactive session. A station (`SDD_ROLE` set, or a role resolved from `.claude/sdd-sessions.json`, and the role is not `sdd-lead`) follows the plugin-root `references/async-questions.md`: write the `Q-<role>-NNN [OPEN]` block, continue with the work that does not depend on it (e.g. other workflows), and hand off `status=blocked` when nothing unblocked remains. A non-interactive run with no role takes the recommended option, records the open item as a gap in TEST-PLAN §4 and lists it in `summary.highlights`.
 
 ---
 
@@ -127,19 +78,15 @@ Report the total as `metrics.test_chars` (`wc -c test/*.md`) in Persist Summary 
 
 Use when the user wants a comprehensive test plan for the project.
 
-**Readiness Gates:**
-- G1: `spec/` directory exists with at least `domain/`, `use-cases/`, `contracts/`
-- G2: `spec/tests/BDD-*.md` files exist (at least partially)
-- G3: `spec/nfr/*.md` files exist (at least PERFORMANCE.md)
+Gates G0–G3 apply.
 
-**Process:**
 
 1. **Index, then open sections** (Reading Strategy). From the index, without opening whole files:
    - UC ids, titles, actors, exception-flow headings (`grep -n -E '^#|Exception|Excepci' spec/use-cases/UC-*.md`)
    - BDD scenario titles per UC (`grep -n -E '^ *(Scenario|Escenario)' spec/tests/BDD-*.md`) → main/exception flow coverage
    - INV ids + one line (`grep -n -E '^\| *INV-' spec/domain/05-INVARIANTS.md`); PROP ids in `spec/tests/PROPERTY-TESTS.md`
    - Quantified NFR rows (`grep -n -E '[0-9]+ *(ms|s|req|MB|%|users)' spec/nfr/*.md`); security control ids (`SEC-*`)
-   - Contract endpoint/function ids (`grep -n -E '^\| *API-|^### ' spec/contracts/API-*.md`); event names in `EVENTS-*.md`
+   - Contract operation ids (`grep -n -E '^\| *API-[0-9]{3}-[0-9]{2}' spec/contracts/API-*.md`) and each module's `Style`; event names in `EVENTS-*.md`
    - `audits/SECURITY-AUDIT-BASELINE.md` finding ids (if exists)
 
    Open a section only when the id line is not enough (e.g. an exception flow whose BDD coverage is unclear).
@@ -151,7 +98,7 @@ Use when the user wants a comprehensive test plan for the project.
    | Entity invariants (INV-*) | Unit tests (property-based) | Unit |
    | UC main flows | BDD scenarios (Given/When/Then) | Integration |
    | UC exception flows | Negative BDD scenarios | Integration |
-   | API contracts | Contract tests (request/response schema) | Integration |
+   | Operation contracts (API-NNN-NN) | Contract tests (input → effect / domain errors; request/response schema only with `Style: http`) | Integration |
    | Event schemas | Event contract tests (schema validation) | Integration |
    | Workflows (WF-*) | End-to-end scenarios | E2E |
    | NFR Performance | Load tests, stress tests | Performance |
@@ -175,7 +122,7 @@ Use when the user wants a comprehensive test plan for the project.
 ```markdown
 # Test Plan — {project}
 
-> Spec v{X.Y} (audit-clean) · SWEBOK v4 Ch04 · Project type: {WEB-APP | API-ONLY | CLI | LIBRARY}
+> Spec v{X.Y} · audit gate {PASS|CONDITIONAL} · Project type: {WEB-APP | API-ONLY | CLI | LIBRARY}
 > Companion files: TEST-MATRIX-UC-*.md ({N}), PERF-SCENARIOS.md, E2E-SCENARIOS.md
 
 ## 1. Strategy Summary
@@ -184,7 +131,7 @@ Use when the user wants a comprehensive test plan for the project.
 |-----------|--------|---------|--------|
 | UC main + exception flows with BDD | 100% | {N}% | spec/tests/ |
 | Invariants with property tests | 100% of INV-* | {N}% | domain/05-INVARIANTS.md |
-| Contract endpoints/functions with contract tests | 100% | {N}% | spec/contracts/ |
+| Contract operations (API-NNN-NN) with contract tests | 100% | {N}% | spec/contracts/ |
 | Quantified NFRs with a scenario | 100% | {N}% | spec/nfr/ |
 | Applicable security controls | 100% | {N}% | nfr/SECURITY.md, audits/ |
 | User-facing WF-* with E2E | 100% | {N}% | spec/workflows/ |
@@ -276,12 +223,10 @@ Use when the user wants detailed input/output matrices for use cases.
 
 **Scope:** If the user does not specify a UC, generate matrices for ALL use cases in `spec/use-cases/`. One file per UC: `test/TEST-MATRIX-UC-NNN.md`.
 
-**Fan-out (default when there are more than 3 UCs) — part of this skill's contract, not an optional expansion of scope:**
-matrices are mechanical and independent, so generate them in parallel subagents with a fast model; the main thread keeps
-TEST-PLAN, PERF and E2E. Invoking `/sdd-test-planner` on a spec with more than 3 UCs *is* the explicit request for those
-subagents: they are read-only over `spec/`, bounded (one per 2-3 UCs, no nesting) and each writes only its own
-`TEST-MATRIX-UC-*.md`. Do not downgrade to a single thread out of caution; downgrade only with `--sequential`, below the
-threshold, or when the `Agent` tool is not in your tool list, and say why in `summary.highlights`. `--fanout` forces it.
+**Fan-out above 3 UCs is part of this skill's contract.** Matrices are mechanical and independent, so parallel
+subagents write them (read-only over `spec/`, one per 2-3 UCs, no nesting, each writing only its own
+`TEST-MATRIX-UC-*.md`) while the main thread keeps TEST-PLAN, PERF and E2E. Do not downgrade out of caution; downgrade
+only with `--sequential`, at ≤ 3 UCs, or without the `Agent` tool, and say why in `summary.highlights`. `--fanout` forces it.
 
 1. Group UCs 2-3 per agent, by shared entity or contract, so each agent reads a contract once.
 2. Launch all groups in ONE message with the `Agent` tool. Pass `model: sonnet` unless the environment variable `CLAUDE_CODE_SUBAGENT_MODEL` is set — then omit `model` and let the environment decide. Do not use `subagent_type: "fork"`: a fresh agent with a small context is the point.
@@ -292,12 +237,12 @@ threshold, or when the `Agent` tool is not in your tool list, and say why in `su
    Read ONLY (grep -n for ids first, then sed -n the sections):
    - spec/use-cases/{UC files}: inputs/parameters, main and exception flows, acceptance criteria
    - spec/tests/{BDD files}: scenario titles and AC ids
-   - spec/contracts/{contract file}: only the sections of these UCs (grep -n 'UC-{NNN}\|{function}')
+   - spec/contracts/{contract file}: only the operation rows and Errors rows of these UCs (grep -n 'UC-{NNN}\|API-{NNN}-{NN}')
    - spec/domain/04-STATES.md: only the SM-* driven by these UCs; spec/domain/05-INVARIANTS.md: ids + one line
    - test/TEST-PLAN.md §3 (conventions; never repeat them in the matrix)
    For each UC write test/TEST-MATRIX-UC-{NNN}.md following this template exactly:
    {template}
-   Rules: one row per case; expected = domain error code + observable outcome, HTTP status only with `Style: http`; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
+   Rules: one row per case; expected = domain error code + observable outcome, HTTP status only with `Style: http`, exit code for a CLI; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
    Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
    ```
 4. Main thread: continue with Mode 3 (and with Mode 5's Smoke tier and field-inventory cross-validation when Mode 5 is delegated) while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
@@ -306,9 +251,9 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 
 **Process (per UC, in the main thread or in a subagent):**
 
-1. **Read the UC by section** — inputs, preconditions, main/exception flows, AC ids; then its BDD file, the contract section of its endpoint/function, and its state machine (if any)
+1. **Read the UC by section** — inputs, preconditions, main/exception flows, AC ids; then its BDD file, its operation rows in the contract, and its state machine (if any)
 2. **Extract inputs:** every parameter, precondition, actor role, and the persisted state the UC depends on
-3. **Apply test design techniques** (SWEBOK v4 Ch04 §3) **and group the results:**
+3. **Apply test design techniques and group the results:**
 
    **a. Equivalence Partitioning:** one entry per class with one representative value — never every value of the class.
 
@@ -323,7 +268,7 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 ```markdown
 # Test Matrix: UC-{NNN} — {title}
 
-> Refs: UC-{NNN}, {API id}, BDD-UC-{NNN} (AC-{NNN}-01..{NN}), {INV/PROP/RN ids}{, SM-NNN}
+> Refs: UC-{NNN}, API-{NNN}-{NN}, BDD-UC-{NNN} (AC-{NNN}-01..{NN}), {INV/PROP/RN ids}{, SM-NNN}
 > Techniques: EP, BVA, decision table{, state transition} · Default level: {unit | integration | E2E} · Conventions: TEST-PLAN.md §3
 
 ## Inputs
@@ -388,7 +333,7 @@ Use when the user needs performance test scenarios derived from NFR specs.
 | ID | Type | Target / dataset | Method (≤ 140 chars) | Pass criterion | Blocking | Refs |
 |----|------|------------------|-----------------------|----------------|----------|------|
 | PERF-001 | load | {endpoint or command} · {N records} | {ramp, duration, samples} | p99 < {N} ms · 0% errors | yes | {ids} |
-| PERF-002 | stress | {rate-limit threshold} | single client exceeding {N} req/min | 429 after limit · Retry-After present | yes | {ids} |
+| PERF-002 | stress | {rate-limit threshold} | single client exceeding {N} req/min | `{E_RATE_LIMITED}` after the limit (429 + Retry-After only with `Style: http`) | yes | {ids} |
 
 ## Harness
 
@@ -407,458 +352,85 @@ Use when the user needs performance test scenarios derived from NFR specs.
 
 ### Mode 4: Audit Test Coverage
 
-Use when the user wants to verify that existing test specs are complete.
+Use when the user wants to verify that the planned (and, if present, implemented) tests cover the spec.
 
-**Process:**
-
-1. **Build traceability matrix:**
-   - List ALL UCs, invariants, contracts, workflows, NFRs
-   - For each, check if a corresponding test exists in `spec/tests/`
-
-2. **Compute coverage metrics:**
+1. **List the spec elements** from the index: UCs and their exception rows, INV ids, contract operations (`API-NNN-NN`), user-facing WFs, quantified NFRs.
+2. **Find their tests** where each kind lives:
+   - BDD scenarios and property tests: `spec/tests/BDD-UC-NNN.md` (AC ids), `spec/tests/PROPERTY-TESTS.md` (INV ids).
+   - Contract, boundary and state tests: `test/TEST-MATRIX-UC-*.md` (the `Refs` column cites the operation and AC ids).
+   - NFR and E2E scenarios: `test/PERF-SCENARIOS.md`, `test/E2E-SCENARIOS.md`.
+   - Implemented tests, when code exists: grep the ids (`AC-`, `INV-`, `API-`, `E2E-`, `PERF-`) under the `test_paths` of the SDD Stack Profile (`../sdd-task-implementer/references/stack-profile.md`; default `tests/`).
+3. **Compute coverage:**
 
    | Dimension | Formula | Target |
    |-----------|---------|--------|
-   | UC Coverage | UCs with BDD / total UCs | 100% |
-   | Exception Coverage | Exception flows tested / total exception flows | ≥ 80% |
-   | Invariant Coverage | INVs with property tests / total INVs | 100% |
-   | Contract Coverage | Endpoints with contract tests / total endpoints | 100% |
-   | NFR Coverage | Measurable NFRs with test scenarios / total measurable NFRs | 100% |
-   | E2E Coverage | User-facing WFs with E2E scenarios / total user-facing WFs | 100% |
+   | UC coverage | UCs with BDD / total UCs | 100% |
+   | Exception coverage | exception rows with a scenario or matrix case / total exception rows | ≥ 80% |
+   | Invariant coverage | INVs with a property test / total INVs | 100% |
+   | Contract coverage | operations with a contract test / total operations | 100% |
+   | NFR coverage | quantified NFRs with a scenario / total quantified NFRs | 100% |
+   | E2E coverage | user-facing WFs with E2E scenarios / total user-facing WFs | 100% |
 
-3. **Output coverage report with gaps and recommendations**
-
----
+4. **Write `test/TEST-AUDIT.md`** (≤ 6 000 chars): the coverage table with current values and PASS/FAIL, then one gap row per uncovered element (`Gap ID | Type | Spec element | Missing | Priority`, same types as TEST-PLAN §4) and, when implemented tests were checked, one row per planned test id with no implementation. No prose.
 
 ### Mode 5: Generate E2E Acceptance Scenarios
 
-Use when the user needs end-to-end acceptance test scenarios that validate complete user journeys through the system. Produces actionable scenarios traceable from workflows back to requirements.
+Use for end-to-end acceptance scenarios that validate complete user journeys, traceable from workflows back to requirements. Gates G2 and G4 apply.
 
-**Readiness Gates:**
-- G1: `spec/workflows/WF-*.md` files exist (at least one)
-- G2: `spec/use-cases/UC-*.md` files exist
-- G3: `spec/tests/BDD-*.md` files exist (at least partially)
-
-**Process:**
-
-1. **Detect project type:**
+1. **Detect the project type** (first match wins):
 
    ```
-   IF ux/ directory exists AND ux/WIREFRAMES.md is present:
-     → project_type = WEB-APP (full browser E2E with page objects)
-   ELIF spec/contracts/API-*.md is `Style: http` (or pre-4.3 `Method | Path`) AND no ux/:
-     → project_type = API-ONLY (API E2E via HTTP, no browser)
-   ELIF contracts are `Style: operations` AND a user-facing WF exists:
-     → project_type = WEB-APP without UX enrichment (locators from REQ roles/names)
-   ELIF project is CLI tool (detected from plan/ARCHITECTURE.md or CLAUDE.md):
-     → project_type = CLI (subprocess E2E)
-   ELSE:
-     → project_type = LIBRARY (skip E2E, document exemption)
+   IF ux/WIREFRAMES.md exists                                              → WEB-APP (browser E2E with page objects)
+   ELIF the system is a CLI — an `exit` column in the contracts' Errors tables,
+        a CLI in plan/ARCHITECTURE.md or design/TECHNICAL-DESIGN.md, or a
+        command-line interface named by a REQ                              → CLI (subprocess E2E)
+   ELIF a contract is `Style: http` (or pre-4.3 `Method | Path`) and no ux/ → API-ONLY (HTTP E2E, no browser)
+   ELIF contracts are `Style: operations` and a user-facing WF exists      → WEB-APP without UX enrichment (locators from REQ roles/names)
+   ELSE                                                                    → LIBRARY
    ```
 
-   If `project_type = LIBRARY`, output a note in TEST-PLAN.md explaining E2E exemption and stop.
+   LIBRARY: add the E2E exemption to TEST-PLAN §2 and stop Mode 5.
 
-2. **Index workflow and spec artifacts, open sections only** (Reading Strategy):
-   - `spec/workflows/WF-*.md` → step lists, actors, UCs involved (`grep -n -E '^#|^\| *[0-9]+ *\||UC-[0-9]+'`)
-   - `spec/use-cases/UC-*.md` → the input-parameter table of each UC in the WF (**ALL parameters with type and required/optional**) and the exception-flow headings — not the narrative
-   - `spec/tests/BDD-*.md` → scenario titles + AC ids (reuse, don't duplicate)
-   - `spec/contracts/API-*.md` → request-body field tables of the endpoints in the WF (**ALL fields with required/optional and validation rules**)
-   - `requirements/REQUIREMENTS.md` → REQ ids + the UC each one cites, for the transitive REQ→UC→WF mapping
-   - `test/TEST-MATRIX-UC-*.md` (if already generated) → boundary row ids to reference, never to restate
+2. **Index, then open sections only** (Reading Strategy): WF step lists, actors and UCs (`grep -n -E '^#|^\| *[0-9]+ *\||UC-[0-9]+'`); for each UC in a WF, its complete input table (every input with type and required/optional) and exception rows; BDD scenario titles and AC ids (reuse, do not duplicate); the operation rows of the WF's operations — every input with its VO, required/optional and validation (with `Style: http`, the request-body schema); REQ ids and the UCs they cite (transitive REQ → UC → WF mapping); boundary row ids of `test/TEST-MATRIX-UC-*.md` if already generated (reference, never restate).
 
-3. **Read UX artifacts (if `project_type = WEB-APP` and `ux/` exists):**
-   - `ux/WIREFRAMES.md` → extract component inventory, interactive elements per screen
-   - `ux/INTERACTION-MODEL.md` → extract state diagrams, loading states, error states, **conditional visibility rules**
-   - `ux/ACCESSIBILITY-SPEC.md` → extract keyboard navigation matrix, ARIA mappings
+3. **UX artifacts** (WEB-APP with `ux/`): `WIREFRAMES.md` (component inventory, interactive elements per screen), `INTERACTION-MODEL.md` (states, loading and error states, conditional visibility), `ACCESSIBILITY-SPEC.md` (keyboard matrix, ARIA mappings).
 
-4. **Build field inventory per workflow (MANDATORY):**
+4. **Field inventory per workflow** (required). For each WF with E2E scenarios, list every field from three sources and cross-reference them — UC input (`UC-003.2`), operation input (`API-001-01.title`), wireframe element — with required, type, validation rules and whether it is conditional (table shape in the template).
 
-   For each WF-* that will have E2E scenarios, enumerate ALL fields from three sources and cross-reference them:
+   Cross-validation:
+   - `V-FIELD-01` (ERROR): every required input of the operation appears in the inventory with a UC input source.
+   - `V-FIELD-02` (ERROR): every UC input appears in the inventory.
+   - `V-FIELD-03` (ERROR): every data-entry element of the wireframe (buttons excluded) appears in the inventory.
+   - `V-FIELD-04` (WARN): in UC/operation but not in the wireframe → `MISSING-UI` for user review.
+   - `V-FIELD-05` (WARN): in the wireframe but not in UC/operation → `UI-ONLY`, may need an interaction step.
 
-   ```
-   WF-007 Field Inventory (from UC-003, API-SRV-01, WIREFRAMES §WF-007):
-   | Field        | UC param | API field | Wireframe element          | Required | Type      | Validation rules         | Conditional? |
-   |--------------|----------|-----------|----------------------------|----------|-----------|--------------------------|--------------|
-   | clienteId    | UC-003.1 | body.clienteId | Cliente [v Buscar...]  | Yes      | select    | Must exist in system     | No           |
-   | tipoServicio | UC-003.2 | body.tipo      | (o) Fibra ( ) Movil    | Yes      | radio     | enum: fibra, movil       | No           |
-   | velocidad    | UC-003.3 | body.velocidad | Velocidad [v 300Mb...] | Yes      | select    | depends on tipoServicio  | Yes: only when tipoServicio=fibra |
-   | ...          | ...      | ...       | ...                        | ...      | ...       | ...                      | ...          |
-   ```
+   An ERROR is a spec inconsistency: show the table and ask the user to resolve it before generating that workflow's scenarios (station or non-interactive run: § Readiness Gates, "Asking without a human" — the affected WF is skipped and recorded as a gap; other WFs continue).
 
-   **Cross-validation rules (STOP on ERROR, warn on WARN):**
-   - `V-FIELD-01` (ERROR): Every `required` field in the API contract MUST appear in the inventory with a UC param source
-   - `V-FIELD-02` (ERROR): Every UC input parameter MUST appear in the inventory
-   - `V-FIELD-03` (ERROR): Every interactive input element in the wireframe MUST appear in the inventory (buttons excluded — only data-entry elements)
-   - `V-FIELD-04` (WARN): A field in UC/API but not in the wireframe → flag as `MISSING-UI` for user review
-   - `V-FIELD-05` (WARN): A wireframe element not in UC/API → flag as `UI-ONLY`, may need interaction step
+5. **Field behavioral matrix** (required). Per field: VALID (happy value → positive behaviour), EMPTY (required left blank → validation error or blocked submit), INVALID (wrong type/format/value → validation error), BOUNDARY (edge values; reuse the matrix rows), CONDITIONAL (visibility/value changes triggered by other fields). Every required field has at least VALID + EMPTY; every field with validation rules at least one INVALID; every conditional field a CONDITIONAL behaviour per trigger value; interaction chains (selecting X loads Y) are documented.
 
-   **If any ERROR is found, present the table to the user and STOP. This is a spec inconsistency that must be resolved before generating scenarios.**
+6. **Scenarios, driven by the behavioral matrix** (not by a narrative walkthrough):
+   - a. **Happy path (P0):** one step per inventory field with VALID values in presentation order, then submit and assert the postcondition. A field without a step makes the scenario incomplete.
+   - b. **Required-field validation (P0):** per required field, leave it empty with all others valid and submit; assert the UC exception row's error code and its catalog message (HTTP 400 only with `Style: http`). One variation table.
+   - c. **Invalid values (P1):** per INVALID behaviour, same pattern; one variation table.
+   - d. **Conditional behaviour (P1):** changing the trigger shows/hides/resets the dependent fields, including reset of already-filled conditional fields.
+   - e. **Field interactions (P1):** each interaction chain end to end.
+   - f. **UC exception flows (P1/P2):** one row per exception row of the constituent UCs — business errors, in addition to field validation.
+   - g. **Accessibility (WEB-APP):** axe-core scan at each major navigation step; keyboard-only completion (tab through all fields, submit with Enter).
+   - h. **Detail by tier:** Smoke (P0) and Critical (P1) in full (steps or variation tables); Full tier (P2) as a one-line list (id · given · action · expected · refs). BOUNDARY variations cite the matrix row (`TEST-MATRIX-UC-001 T14`) and keep only boundaries that change the journey. Assertion cells ≤ 100 chars; payloads and fixtures go to a shared `Fixtures` line, referenced by name.
 
-5. **Build field behavioral matrix (MANDATORY):**
+7. **Field coverage verification** (required, after generation). Per field: happy-path step, empty variation, invalid variation, conditional scenario, interaction scenario → status. A required field without happy step + empty variation, a validated field without an invalid variation, or a conditional field without a conditional scenario is `INCOMPLETE`; for each, ask the user whether to add the scenario or record an exemption with its justification.
 
-   For each field in the inventory, define the behavioral scenarios it requires:
+8. **Transitive coverage:** map each scenario to its REQs (`E2E-WF-001-01 → WF-001 → {UC-003, UC-004} → {REQ-F-010, REQ-F-011}`). A REQ with no E2E scenario is `EXEMPT-BACKEND` (internal, no user-facing flow), `EXEMPT-NFR` (covered by performance/security tests) or `GAP` (user-facing, uncovered → review).
 
-   ```
-   WF-007 Field Behavioral Matrix:
-   | Field        | VALID              | EMPTY              | INVALID                | BOUNDARY           | CONDITIONAL                          |
-   |--------------|--------------------|--------------------|-----------------------|--------------------|--------------------------------------|
-   | clienteId    | Select existing    | Submit without →   | Non-existent ID →     | —                  | —                                    |
-   |              | client → proceed   | blocked/error msg  | error msg             |                    |                                      |
-   | tipoServicio | Select fibra →     | Submit without →   | —                     | —                  | fibra → show velocidad, plan fields  |
-   |              | show fibra fields  | blocked/error msg  |                       |                    | movil → show linea, portab fields    |
-   | velocidad    | Select 300Mb →     | Submit without →   | —                     | —                  | Only visible when tipoServicio=fibra |
-   |              | proceed            | blocked/error msg  |                       |                    | Hidden when tipoServicio=movil       |
-   ```
-
-   Behavioral categories:
-   - **VALID**: Standard happy-path value → expected positive behavior
-   - **EMPTY**: Required field left blank → expected validation error or submit block
-   - **INVALID**: Wrong type, format, or value → expected validation error message
-   - **BOUNDARY**: Edge values (min/max length, min/max numeric) → reuse from TEST-MATRIX if exists
-   - **CONDITIONAL**: Field visibility/value changes triggered by other fields → test that field appears/disappears/resets correctly
-
-   **Rules:**
-   - Every required field MUST have at least VALID + EMPTY behaviors defined
-   - Every field with validation rules MUST have at least one INVALID behavior
-   - Every field marked `Conditional? = Yes` MUST have CONDITIONAL behaviors for each trigger value
-   - Fields with interactions (e.g., selecting client loads client data) MUST document the interaction chain
-
-6. **Generate E2E scenarios from field behavioral matrix:**
-
-   For each WF-* that involves user interaction, generate scenarios **driven by the field behavioral matrix**, not by narrative walkthrough:
-
-   **a. Happy path scenario (P0):**
-   - One step per field in the inventory (ALL of them), filled with VALID values in the order they appear in the wireframe
-   - Final submit and assert postcondition
-   - **Every MAPPED field MUST have a Fill/Select/Click step.** If a field is missing from the steps, the scenario is incomplete.
-
-   **b. Required-field validation scenarios (P0):**
-   - For each required field: leave it empty, fill all others with valid values, attempt submit
-   - Assert: specific validation error message for that field (the UC exception row's error code and its catalog message; an HTTP 400 only with `Style: http`)
-   - Combine into a variation table when possible (one row per required field)
-
-   **c. Invalid-value scenarios (P1):**
-   - For each field with INVALID behaviors in the matrix: fill with invalid value, fill all others with valid values, attempt submit
-   - Assert: specific validation error for that field
-   - Combine into a variation table
-
-   **d. Conditional behavior scenarios (P1):**
-   - For each CONDITIONAL field: test that changing the trigger field correctly shows/hides/resets dependent fields
-   - Example: select tipoServicio=fibra → assert velocidad field appears; switch to movil → assert velocidad disappears and linea field appears
-   - Include "field reset" behavior: if user fills conditional fields, then changes trigger → conditional fields should reset
-
-   **e. Field interaction scenarios (P1):**
-   - For each field interaction chain: test the full chain
-   - Example: select clienteId → client data loads → dependent fields auto-populate
-
-   **f. UC exception flow scenarios (P1/P2):**
-   - One row per exception flow in the constituent UCs (as before)
-   - These are ADDITIONAL to field-level scenarios — they cover business logic errors, not field validation
-
-   **g. Accessibility gate:**
-   - axe-core scan at each major navigation step
-   - Keyboard-only form completion (tab through all fields, submit with Enter)
-
-   **h. Detail by tier (output budget):**
-   - Smoke (P0) and Critical (P1) scenarios are written in full (steps table or variation table).
-   - Full-tier (P2) scenarios are a one-line list: id · given · action · expected · refs; the implementer expands them.
-   - BOUNDARY variations reference the matrix row (`TEST-MATRIX-UC-001 T14`) instead of restating input and expectation; keep only boundaries that change the journey (another screen, message or state) — the rest stay in the matrix.
-   - Steps tables: one step per field, but the Assertion cell is one clause (≤ 100 chars). Exact payloads and fixtures go to a shared `Fixtures` list at the top of §Scenarios, referenced by name.
-
-7. **Post-generation completeness check (MANDATORY):**
-
-   After generating all scenarios, build and output this verification matrix:
-
-   ```
-   WF-007 Field Coverage Verification:
-   | Field        | Happy path step? | Empty variation? | Invalid variation? | Conditional tested? | Interaction tested? | Status |
-   |--------------|-----------------|------------------|-------------------|--------------------|--------------------|--------|
-   | clienteId    | Step 3 ✅        | Var E2E-02 ✅     | Var E2E-05 ✅      | N/A                | E2E-WF-007-05 ✅   | COMPLETE |
-   | tipoServicio | Step 4 ✅        | Var E2E-03 ✅     | N/A                | E2E-WF-007-04 ✅   | N/A                | COMPLETE |
-   | velocidad    | Step 5 ✅        | Var E2E-04 ✅     | N/A                | E2E-WF-007-04 ✅   | N/A                | COMPLETE |
-   ```
-
-   **Completeness rules:**
-   - Every required field MUST have: happy path step + empty variation → otherwise status = `INCOMPLETE`
-   - Every field with validation rules MUST have: invalid variation → otherwise status = `INCOMPLETE`
-   - Every conditional field MUST have: conditional scenario → otherwise status = `INCOMPLETE`
-   - If ANY field has status `INCOMPLETE`, flag as finding and ask user whether to add the missing scenario or document exemption with justification
-
-8. **Build transitive coverage matrix:**
-
-   Map each E2E scenario back to the REQs it covers transitively:
-   ```
-   E2E-WF-001-01 → WF-001 → {UC-003, UC-004} → {REQ-FUNC-010, REQ-FUNC-011}
-   ```
-
-   For REQs not covered by any E2E scenario, classify as:
-   - `EXEMPT-BACKEND`: Internal/infrastructure REQ, no user-facing flow
-   - `EXEMPT-NFR`: Non-functional REQ, covered by performance/security tests
-   - `GAP`: User-facing REQ with no transitive E2E coverage → flag for review
-
-9. **Generate `test/E2E-SCENARIOS.md`** (budget ≤ 15 000 chars for one user-facing WF, +3 000 per additional WF; Smoke/Critical detailed, Full as a list):
-
-```markdown
-# E2E Acceptance Scenarios
-
-> **Project:** {project name}
-> **Project type:** {WEB-APP | API-ONLY | CLI}
-> **Generated from:** spec/workflows/, spec/use-cases/, spec/contracts/
-> **UX enrichment:** {Yes — from ux/ | No — abstract scenarios}
-
-## E2E Strategy
-
-| Dimension | Value |
-|-----------|-------|
-| Framework | Playwright (recommended) |
-| Selector strategy | getByRole > getByLabel > getByText > getByTestId (fallback) |
-| Auth strategy | storageState reuse (1 login test, others reuse state) |
-| Data strategy | {transaction-rollback | snapshot-restore | unique-per-test} |
-| Accessibility | axe-core scan at each navigation (WCAG 2.1 AA) |
-| Parallelism | Playwright sharding across {N} workers |
-
-### Tiered Execution
-
-| Tier | Scenarios | Run time | Trigger |
-|------|-----------|----------|---------|
-| Smoke | P0 happy paths only | < 2 min | Every PR |
-| Critical | P0 + P1 paths | < 10 min | Every merge to main |
-| Full | All E2E scenarios | < 30 min | Nightly / release |
-
-### Viewport Matrix (WEB-APP only, derived from ux/DESIGN-TOKENS.json)
-
-| Viewport | Width | Run |
-|----------|-------|-----|
-| Mobile | 375px | P0 + P1 scenarios |
-| Desktop | 1280px | All scenarios |
+9. **Write `test/E2E-SCENARIOS.md`** — read [references/e2e-template.md](references/e2e-template.md) first. Budget ≤ 15 000 chars for one user-facing WF, +3 000 per additional WF.
 
 ---
 
-## Field Inventory: WF-{NNN}
+## Observable Outcomes, Not Transport
 
-> Cross-referenced from: UC-{NNN} params, API-{NNN} body, WIREFRAMES §{screen}
+Expected results are domain error codes (`E_TITLE_EMPTY`) and what the user or caller observes: message shown, accessible role/name, state after reload or restart, exit code for a CLI. An HTTP status, route or redirect is expected only when the contract declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http); with `Style: operations` transport lives in `design/OPERATION-MAPPING.md` and is never a test oracle, except a URL a REQ mandates. Every test traces to a spec element and stays independent of other tests (no shared mutable state, no ordering).
 
-| Field | UC param | API field | Wireframe element | Required | Type | Validation rules | Conditional? |
-|-------|----------|-----------|-------------------|----------|------|-----------------|--------------|
-| {field1} | UC-{NNN}.1 | body.{f1} | {element desc} | Yes | {type} | {rules} | No |
-| {field2} | UC-{NNN}.2 | body.{f2} | {element desc} | Yes | {type} | {rules} | Yes: when {trigger} |
-| ... | ... | ... | ... | ... | ... | ... | ... |
-
-### Field Behavioral Matrix: WF-{NNN}
-
-| Field | VALID | EMPTY | INVALID | BOUNDARY | CONDITIONAL |
-|-------|-------|-------|---------|----------|-------------|
-| {field1} | {valid action → expected result} | {submit without → expected error} | {bad value → expected error} | {edge values if applicable} | {N/A or trigger→effect} |
-| {field2} | {valid action → expected result} | {submit without → expected error} | {N/A or bad value → error} | {N/A or edge values} | {trigger changes → field shows/hides/resets} |
-
----
-
-## Scenarios
-
-> Fixtures (named once, referenced by name in the steps): `{name}` = {≤ 80 chars} · `{name}` = {≤ 80 chars}
-
-### E2E-WF-{NNN}-01: {Workflow title} — Happy Path (P0)
-
-- **Workflow:** WF-{NNN}
-- **Use Cases:** UC-{NNN}, UC-{NNN}
-- **Requirements (transitive):** REQ-FUNC-{NNN}, REQ-FUNC-{NNN}
-- **Priority:** P0
-- **Tier:** smoke
-- **Auth fixture:** {authenticated | admin | unauthenticated}
-- **Fields covered:** ALL ({N} fields from inventory)
-
-#### Elements Referenced (when ux/ exists)
-
-| Element | Locator hint | Source |
-|---------|-------------|--------|
-| {name} | getByRole("{role}", { name: /{pattern}/i }) | WIREFRAMES §{screen} |
-| {name} | getByLabel("{label}") | WIREFRAMES §{screen} |
-
-#### Steps
-
-> One step per field in inventory, in wireframe presentation order. No field may be skipped.
-
-| # | Action | Target | Assertion | Spec Ref |
-|---|--------|--------|-----------|----------|
-| 1 | Navigate to {url} | — | Page title = "{title}" | WF-{NNN} step 1 |
-| 2 | axe-core scan | full page | No violations | ACCESSIBILITY-SPEC |
-| 3 | Fill/Select {field1} | {element} | Field accepts input, {interaction effect if any} | UC-{NNN} §main.{N} |
-| 4 | Fill/Select {field2} | {element} | Field accepts input, {conditional fields appear if applicable} | UC-{NNN} §main.{N} |
-| ... | (one step per field from inventory) | ... | ... | ... |
-| N | Click submit | {button} | {expected success feedback} | UC-{NNN} §main.{N} |
-| N+1 | Assert final state | — | {postcondition} | WF-{NNN} postcondition |
-
-### E2E-WF-{NNN} — Required-Field Validation (P0)
-
-> One variation per required field. All other fields filled with valid values.
-
-| Variant ID | Empty field | Other fields | Action | Expected behavior | Spec Ref |
-|------------|-------------|-------------|--------|-------------------|----------|
-| E2E-WF-{NNN}-V01 | {field1} | All valid | Submit | Error: "{validation message}" | UC-{NNN} §exception.{N} |
-| E2E-WF-{NNN}-V02 | {field2} | All valid | Submit | Error: "{validation message}" | UC-{NNN} §exception.{N} |
-
-### E2E-WF-{NNN} — Invalid-Value Scenarios (P1)
-
-> One variation per field with validation rules. All other fields filled with valid values.
-
-| Variant ID | Field | Invalid value | Other fields | Expected behavior | Spec Ref |
-|------------|-------|---------------|-------------|-------------------|----------|
-| E2E-WF-{NNN}-IV01 | {field} | {invalid value} | All valid | Error: "{validation message}" | UC-{NNN} §exception.{N} |
-
-### E2E-WF-{NNN} — Conditional Behavior Scenarios (P1)
-
-> One scenario per conditional field trigger. Tests visibility, reset, and dependent field behavior.
-
-| Variant ID | Trigger field | Trigger value | Expected effect | Reset tested? | Spec Ref |
-|------------|---------------|---------------|-----------------|---------------|----------|
-| E2E-WF-{NNN}-CD01 | {trigger} | {value1} | {fields shown/hidden, values reset} | Yes | UC-{NNN} §main.{N}, INTERACTION-MODEL §{state} |
-| E2E-WF-{NNN}-CD02 | {trigger} | {value2} | {different fields shown/hidden} | Yes | UC-{NNN} §main.{N} |
-
-### E2E-WF-{NNN} — Field Interaction Scenarios (P1)
-
-> Tests interaction chains where one field's value affects others (auto-populate, cascading selects, etc.)
-
-| Variant ID | Source field | Action | Affected fields | Expected effect | Spec Ref |
-|------------|-------------|--------|-----------------|-----------------|----------|
-| E2E-WF-{NNN}-FI01 | {field} | {select value} | {field2, field3} | {auto-populated/filtered/enabled} | UC-{NNN} §main.{N} |
-
-### E2E-WF-{NNN} — UC Exception Flows (P1/P2)
-
-> Business logic errors beyond field validation (e.g., duplicate detection, insufficient permissions, external service failures).
-
-| Variant ID | Diverges at step | Input change | Expected behavior | Spec Ref |
-|------------|------------------|-------------|-------------------|----------|
-| E2E-WF-{NNN}-EX01 | Step {N} | {precondition not met} | {error code → message shown or fallback; state unchanged} | UC-{NNN} §exception.{N} |
-
-### E2E-WF-{NNN} — Accessibility (P1)
-
-> Keyboard-only and screen-reader scenarios.
-
-| Variant ID | Scenario | Steps | Assertion | Spec Ref |
-|------------|----------|-------|-----------|----------|
-| E2E-WF-{NNN}-A11Y-01 | Keyboard-only completion | Tab through all {N} fields, fill each, Enter to submit | All fields reachable, submit succeeds | ACCESSIBILITY-SPEC |
-
-### E2E-WF-{NNN} — Full tier (P2) — list only
-
-> Nightly / release scenarios (soak, concurrency, kill-during-write, large datasets). One line each; no steps table — the implementer expands them.
-
-| Variant ID | Given | Action | Expected | Spec Ref |
-|------------|-------|--------|----------|----------|
-| E2E-WF-{NNN}-F01 | {precondition ≤ 80 chars} | {action ≤ 60 chars} | {outcome ≤ 80 chars} | {ids} |
-
----
-
-## Field Coverage Verification
-
-> Post-generation completeness check. Every field MUST have COMPLETE status.
-
-### WF-{NNN}
-
-| Field | Happy path step? | Empty variation? | Invalid variation? | Conditional tested? | Interaction tested? | Status |
-|-------|-----------------|------------------|-------------------|--------------------|--------------------|--------|
-| {field1} | Step {N} ✅ | V01 ✅ | IV01 ✅ | N/A | FI01 ✅ | COMPLETE |
-| {field2} | Step {N} ✅ | V02 ✅ | N/A | CD01 ✅ | N/A | COMPLETE |
-
-**Completeness rules:**
-- Required field without empty variation → `INCOMPLETE`
-- Field with validation rules without invalid variation → `INCOMPLETE`
-- Conditional field without conditional scenario → `INCOMPLETE`
-- Any `INCOMPLETE` → flag as finding, ask user for exemption or add missing scenario
-
----
-
-## Scenarios for API-ONLY projects
-
-### E2E-API-{NNN}-01: {Workflow title} — Happy Path
-
-- **Workflow:** WF-{NNN}
-- **Use Cases:** UC-{NNN}, UC-{NNN}
-- **Type:** API E2E (no browser)
-
-#### Request Body Field Inventory
-
-| Field | Required | Type | Validation | Source |
-|-------|----------|------|-----------|--------|
-| {field1} | Yes | {type} | {rules} | API-{NNN}, UC-{NNN} |
-
-#### Steps
-
-| # | Method | Endpoint | Body/Params | Assert status | Assert body | Spec Ref |
-|---|--------|----------|-------------|---------------|-------------|----------|
-| 1 | POST | /api/{resource} | {ALL required fields} | 201 | {schema} | API-{NNN} |
-| 2 | GET | /api/{resource}/{id} | — | 200 | {all fields present} | API-{NNN} |
-
-#### Required-Field Validation (API)
-
-| Variant | Missing field | Assert status | Assert body | Spec Ref |
-|---------|--------------|---------------|-------------|----------|
-| E2E-API-{NNN}-V01 | {field1} | 400 | error.field = "{field1}" | API-{NNN} §validation |
-
-#### Invalid-Value Validation (API)
-
-| Variant | Field | Invalid value | Assert status | Assert body | Spec Ref |
-|---------|-------|---------------|---------------|-------------|----------|
-| E2E-API-{NNN}-IV01 | {field1} | {invalid} | 400/422 | error: "{message}" | API-{NNN} §validation |
-
----
-
-## Coverage Matrix
-
-| REQ ID | Type | E2E Coverage | Justification if excluded |
-|--------|------|-------------|---------------------------|
-| REQ-FUNC-{NNN} | UI-func | E2E-WF-{NNN}-01 + {N} variations | — |
-| REQ-FUNC-{NNN} | API-only | — | EXEMPT-BACKEND: no user-facing flow |
-| REQ-NFR-{NNN} | Perf | — | EXEMPT-NFR: covered by PERF-SCENARIOS.md |
-| REQ-FUNC-{NNN} | UI-func | — | GAP: needs WF or E2E scenario |
-```
-
----
-
-## Key Principles
-
-### Test Independence
-Each test must be independent — no shared mutable state, no execution order dependency. SWEBOK v4 Ch04 §1.
-
-### Traceability
-Every test traces to a spec element (UC, INV, NFR, API contract). No test exists without a spec justification. No spec element exists without a test.
-
-### Observable Outcomes, Not Transport
-Expected results are domain error codes (`E_TITLE_EMPTY`) and what the user or caller observes: message shown, accessible role/name, state after reload or restart, exit code for a CLI. An HTTP status, route or redirect is expected only when the contract declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http); with `Style: operations` transport lives in `design/OPERATION-MAPPING.md` and is never a test oracle, except a URL a REQ mandates.
-
-### Risk-Based Prioritization
-Not all tests are equal. Prioritize by:
-1. **Business criticality** of the UC
-2. **Failure impact** (data loss > UX issue)
-3. **Probability of defect** (complex logic > simple CRUD)
-
-### Shift-Left Testing
-Test planning happens at spec time, not at implementation time. This skill exists precisely to move testing left in the pipeline.
-
----
-
-## Pipeline Integration
-
-This skill is **Step 3.5** of the SDD pipeline (between spec-auditor and plan-architect):
-
-```
-sdd-requirements-engineer → requirements/REQUIREMENTS.md
-        ↓
-sdd-specifications-engineer → spec/
-        ↓
-sdd-spec-auditor → audits/AUDIT-BASELINE.md
-        ↓
-sdd-test-planner → test/TEST-PLAN.md, test/TEST-MATRIX-*.md, test/PERF-SCENARIOS.md, test/E2E-SCENARIOS.md (THIS SKILL)
-        ↓
-sdd-plan-architect → plan/
-        ↓
-sdd-task-generator → task/ (includes test tasks from test plan)
-        ↓
-sdd-task-implementer → src/, tests/
-```
-
-**Input:** `spec/` (audit-clean), optionally `audits/SECURITY-AUDIT-BASELINE.md`, optionally `ux/` (enriches E2E scenarios)
-**Output:** `test/TEST-PLAN.md`, `test/TEST-MATRIX-UC-*.md`, `test/PERF-SCENARIOS.md`, `test/E2E-SCENARIOS.md`
-**Next step:** Run `sdd-plan-architect` which reads test strategy for FASE planning
+**Next step:** `sdd-plan-architect` (reads TEST-PLAN §5 per-FASE targets and §9 design requirements).
 
 ## Persist Summary
 
@@ -879,4 +451,4 @@ After generating all output artifacts, update `pipeline-state.json`:
 
 ## Output Language
 
-Respond in the same language the user uses. If the user writes in Spanish, respond in Spanish. If in English, respond in English.
+Write the test documents and respond in the user's language; ids and technical terms stay in English.

@@ -4,1049 +4,265 @@ description: "Audits specs for defects: ambiguities, implicit rules, dangerous s
 hooks:
   Stop:
     - type: prompt
-      prompt: "Check the audit report. Are there any P0 (Critical) or P1 (High) findings that remain unresolved? Answer YES only if all P0/P1 findings have been addressed or documented with explicit user acknowledgment."
+      prompt: "If this session did not run sdd-spec-auditor Mode Fix (--fix), answer YES: a discovery audit leaves findings open for triage by design. If Mode Fix ran, answer YES only if every P0 (Critical) and P1 (High) finding with FIX disposition was corrected, or carries an explicit user disposition (ACCEPT, DEFER, WONT_FIX) in the Baseline tables of audits/AUDIT-BASELINE.md."
       once: true
 ---
 
-# SDD Spec Auditor Skill
+# SDD Spec Auditor
 
-> **Principio:** Auditar es validar la especificación como contrato, no como código.
-> No se asume comportamiento no especificado. No se propone implementación.
+> Auditing validates the specification as a contract, not as code. Unspecified behaviour is never assumed; implementations are never proposed.
 
-## Purpose
-
-Detectar defectos en especificaciones técnicas mediante análisis sistemático y cruce de documentos, generando informes de hallazgos con ubicación precisa, descripción del problema y preguntas de resolución.
-
-## When to Use This Skill
-
-Use this skill when:
-- Reviewing existing specifications for quality assurance
-- Preparing for implementation phases (pre-implementation audit)
-- Validating spec consistency after major changes
-- Conducting periodic spec health checks
-- Onboarding to an existing spec repository
-- Preparing for external audits (SOC2, GDPR, etc.)
+Finds defects in `spec/` by systematic, cross-document analysis and writes a compact finding index (`audits/AUDIT-BASELINE.md`) with exact location, the problem, and the spec-level correction or the question that unblocks it. Mode Fix (`--fix`) applies triaged corrections.
 
 ## Core Principles
 
-### 1. No Assumptions
-
-```
-❌ "Probablemente significa X"
-❌ "Se asume que Y"
-❌ "Por defecto sería Z"
-
-✅ "No está especificado qué ocurre cuando..."
-✅ "Falta definir el comportamiento para..."
-✅ "El documento no indica si..."
-```
-
-### 2. No Implementation
-
-```
-❌ "Se podría implementar con..."
-❌ "El código debería..."
-❌ "Propongo agregar este endpoint..."
-
-✅ "Falta especificar el contrato de..."
-✅ "No hay invariante que garantice..."
-✅ "Pregunta: ¿Qué debe ocurrir cuando...?"
-```
-
-### 3. Cross-Document Analysis
-
-```
-Cada hallazgo debe indicar:
-- Documento(s) afectado(s)
-- Línea o sección específica
-- Documentos relacionados que contradicen o complementan
-```
-
----
+- **No assumptions:** write "it is not specified what happens when…", never "it probably means…".
+- **No implementation:** "the contract of X is missing" or "what must happen when…?", never "implement it with…".
+- **Cross-document evidence:** every finding cites `doc:line` and the related documents that contradict or complement it; quotes ≤ 12 words.
 
 ## Defect Categories
 
-### CAT-01: Ambigüedades
+Signals and one example finding per category: [references/defect-categories.md](references/defect-categories.md) (read it before Phase 5; auditors get the pointer).
 
-Términos o frases que admiten múltiples interpretaciones.
-
-**Señales:**
-- Palabras como "apropiado", "razonable", "adecuado", "normalmente"
-- Falta de cuantificadores exactos
-- Pronombres ambiguos ("esto", "aquel", "el sistema")
-
-**Ejemplo de hallazgo:**
-```markdown
-### AMB-001: "Reasonable" response time is not quantified — P2 · CAT-01 · new
-- **Where:** `nfr/PERFORMANCE.md:45`
-- **What:** "tiempo de respuesta razonable" has no numeric value.
-- **Why:** Unverifiable NFR; `contracts/API-extraction.md:30` defines no timeout either.
-- **Fix:** Which p99 latency (ms) is acceptable? Replace the phrase with the value and its measurement window.
-```
-
----
-
-### CAT-02: Reglas Implícitas
-
-Comportamientos que se dan por entendidos pero no están documentados.
-
-**Señales:**
-- Flujos que "obviamente" hacen algo
-- Validaciones no especificadas
-- Orden de operaciones asumido
-
-**Ejemplo de hallazgo:**
-```markdown
-### IMP-001: Email validation assumed but never specified — P1 · CAT-02 · new
-- **Where:** `use-cases/UC-015-create-user.md:23`
-- **What:** Step "ingresar email" states no format or uniqueness validation.
-- **Why:** Implementers will pick a rule; `domain/02-ENTITIES.md:58` (User) has no constraint either.
-- **Fix:** RFC 5322 format? Uniqueness per organization or global? Add the rule to UC-015 and an INV in 05-INVARIANTS.md.
-```
-
----
-
-### CAT-03: Silencios Peligrosos
-
-Casos no cubiertos que podrían causar comportamiento indefinido.
-
-**Señales:**
-- Flujos sin manejo de errores
-- Estados sin transiciones de salida
-- Casos borde no mencionados
-- Timeouts no definidos
-
-**Ejemplo de hallazgo:**
-```markdown
-### SIL-001: LLM timeout in extraction has no defined outcome — P0 · CAT-03 · new
-- **Where:** `workflows/WF-001-extraction.md:89` · `nfr/LIMITS.md:34`
-- **What:** Step 4 has no branch for the LLM not answering within the timeout.
-- **Why:** Undefined production behaviour; LIMITS.md defines the timeout but no action, `domain/04-STATES.md` has no timeout state.
-- **Fix:** Automatic retry? Fallback? Final Extraction state? Add the exception flow to WF-001 and the transition to 04-STATES.md.
-```
-
----
-
-### CAT-04: Ambigüedades Semánticas
-
-Mismo término usado con diferentes significados, o términos diferentes para el mismo concepto.
-
-**Señales:**
-- Sinónimos no controlados
-- Término en glosario con definición diferente al uso
-- Variaciones en mayúsculas/minúsculas
-
-**Ejemplo de hallazgo:**
-```markdown
-### SEM-001: "job" used for the glossary term "Extraction" — P3 · CAT-04 · new
-- **Where:** `workflows/WF-001.md:12` (3 occurrences) vs `domain/01-GLOSSARY.md:40`
-- **What:** "job" is not a glossary term; the canonical term is "Extraction".
-- **Why:** Ubiquitous-language violation (CHECK-SH01).
-- **Fix:** Replace "job" by "Extraction" in WF-001 (or add "job" to the "NO usar" column).
-```
-
----
-
-### CAT-05: Contradicciones Entre Documentos
-
-Especificaciones que se contradicen entre sí.
-
-**Señales:**
-- Valores diferentes para mismo parámetro
-- Flujos incompatibles
-- Permisos contradictorios
-
-**Ejemplo de hallazgo:**
-```markdown
-### CON-001: Extraction timeout 180 s vs 360 s — P1 · CAT-05 · new
-- **Where:** `workflows/WF-001.md:67` ("timeout: 360s") vs `nfr/LIMITS.md:34` ("timeout: 180s")
-- **What:** Two values for the same timeout; WF-001 is the divergent document (Minority Rule).
-- **Why:** Implementers cannot choose; no RN in `CLARIFICATIONS.md` settles it.
-- **Fix:** Which value is authoritative? Align WF-001 (or LIMITS.md) and record the decision as an RN.
-```
-
----
-
-### CAT-06: Especificaciones Incompletas
-
-Documentos que faltan o secciones vacías/placeholder.
-
-**Señales:**
-- TODOs sin resolver
-- Secciones "TBD"
-- Referencias a documentos inexistentes
-- Campos vacíos en templates
-
-**Ejemplo de hallazgo:**
-```markdown
-### INC-001: UC-023 has an empty "Exception Flows" section — P1 · CAT-06 · new
-- **Where:** `use-cases/UC-023-delete-cv.md:45`
-- **What:** The section exists but is empty; deleting a CV with active MatchResults is unspecified.
-- **Why:** `domain/05-INVARIANTS.md` has no referential-integrity INV for CV → MatchResult.
-- **Fix:** Forbid deletion? Cascade? Soft delete? Fill the section and add the INV.
-```
-
----
-
-### CAT-07: Invariantes Débiles o Ausentes
-
-Reglas de negocio críticas sin invariante formal, o invariantes sin validación especificada.
-
-**Señales:**
-- Restricciones mencionadas en texto pero sin INV-ID
-- Invariantes sin query de validación
-- Reglas de negocio solo en casos de uso (no en INVARIANTS.md)
-
-**Ejemplo de hallazgo:**
-```markdown
-### INV-001: Score range stated in prose without an invariant — P2 · CAT-07 · new
-- **Where:** `use-cases/UC-007.md:34`
-- **What:** "el score debe estar entre 0 y 100" has no INV-XXX-NNN.
-- **Why:** `domain/05-INVARIANTS.md` has no score-range invariant; nothing validates it.
-- **Fix:** Create INV-CVA-NNN (range 0–100, CHECK constraint + Zod validation) and reference it from UC-007.
-```
-
----
-
-### CAT-08: Riesgos de Evolución Futura
-
-Diseños que dificultarán cambios futuros predecibles.
-
-**Señales:**
-- Hardcoding de valores que podrían cambiar
-- Acoplamiento fuerte entre módulos
-- Falta de extensibilidad en enums/estados
-- Ausencia de versionado en APIs
-
-**Ejemplo de hallazgo:**
-```markdown
-### EVO-001: ExtractionStatus is a closed enum — P2 · CAT-08 · new
-- **Where:** `domain/04-STATES.md:23`
-- **What:** Adding a state requires a migration; no evolution strategy is documented.
-- **Why:** `adr/` has no ADR on state evolution (CAT-08 is capped at P2).
-- **Fix:** Document the migration process, or an ADR choosing string + validation over a closed enum.
-```
-
----
-
-### CAT-09: Decisiones Implícitas Sin ADR
-
-Decisiones arquitectónicas tomadas sin documentación formal.
-
-**Señales:**
-- Tecnologías mencionadas sin justificación
-- Patrones usados sin explicar alternativas
-- Trade-offs no documentados
-
-**Ejemplo de hallazgo:**
-```markdown
-### ADR-001: Storage choice (R2) has no ADR — P2 · CAT-09 · new
-- **Where:** `workflows/WF-001.md:56`
-- **What:** "guardar en R2" with no ADR justifying R2 vs S3 vs GCS.
-- **Why:** Data-store choice is a material decision; `adr/` has no storage ADR.
-- **Fix:** Create ADR-NNN with context, decision and alternatives considered.
-```
-
----
-
-### CAT-10: Sobreespecificación de Transporte
-
-Mecánica de transporte o de UI fijada sin que un REQ la exija: ata la spec a un stack y choca con sus convenciones.
-
-**Señales** (corpus `spec/`, `ux/` y `test/` si existen; greps en `references/detection-patterns.md` § CAT-10):
-- Verbos/paths HTTP, códigos de estado o redirects fuera de contratos `Style: http`
-- Atributos `required|maxlength|pattern` que bloquean mensajes de validación del servidor
-- Mecánica JS ("sin script de cliente", "recarga completa") o URLs (`?editar=`) no exigidas por un REQ
-
-**Severidad:** ≤ P2; P1 si bloquea mensajes o comportamientos que la spec exige. **Fix:** reescribir como semántica de operación + "transport: see design/OPERATION-MAPPING.md"; nunca eliminar transporte que un REQ exige (citar el REQ).
-
-**Ejemplo de hallazgo:**
-```markdown
-### TRN-001: Contract fixes routes and statuses no REQ demands — P2 · CAT-10 · new
-- **Where:** `contracts/API-tareas.md:14`
-- **What:** `POST /tareas/{id}/titulo` + 400/404 per error in a `Style: operations` module.
-- **Why:** No REQ demands it; it pushes custom routes over the stack idiom.
-- **Fix:** Operation `renameTask` + domain codes; transport → `design/OPERATION-MAPPING.md`.
-```
-
----
+| Cat | Prefix | Defect | Severity cap |
+|---|---|---|---|
+| CAT-01 | `AMB-` | Ambiguity: vague qualifiers, missing quantifiers, unclear referents | — |
+| CAT-02 | `IMP-` | Implicit rule: behaviour assumed but stated nowhere | — |
+| CAT-03 | `SIL-` | Dangerous silence: a specific scenario not handled (error, timeout, edge case, dead state) | — |
+| CAT-04 | `SEM-` | Semantic ambiguity: synonyms, same term with different meanings | naming/format ≤ P3 |
+| CAT-05 | `CON-` | Contradiction between documents | — |
+| CAT-06 | `INC-` | Incomplete: empty section, TBD, broken reference, open `[NEEDS CLARIFICATION]` | — |
+| CAT-07 | `INV-` | Rule in prose without formal invariant, or invariant without validation | — |
+| CAT-08 | `EVO-` | Future evolution risk (closed enums, hard-coding, coupling, unversioned API) | ≤ P2 |
+| CAT-09 | `ADR-` | Material decision without ADR | — |
+| CAT-10 | `TRN-` | Transport/UI mechanics no REQ demands | ≤ P2; P1 when it blocks required behaviour |
 
 ### Category Disambiguation Rules
 
-When a finding could belong to multiple categories, apply these rules to assign exactly ONE category:
+Each finding gets exactly one category.
 
-| Overlap | Disambiguation |
+| Overlap | Rule |
 |---|---|
-| **CAT-01 vs CAT-04** | CAT-01 = vague language ("reasonable", "appropriate"). CAT-04 = terminology inconsistency (synonyms, same concept with different names). If the word is vague → CAT-01. If two documents use different words for the same concept → CAT-04. |
-| **CAT-02 vs CAT-07** | CAT-02 = behavior assumed but never stated anywhere. CAT-07 = constraint IS stated in prose but lacks formal INV-ID. If the rule is not mentioned at all → CAT-02. If mentioned but not formalized → CAT-07. |
-| **CAT-03 vs CAT-06** | CAT-03 = a specific scenario is not handled ("what if timeout?"). CAT-06 = a structural element is missing (empty section, TBD, broken reference). If a specific scenario is missing from a populated section → CAT-03. If the entire section/field is missing or empty → CAT-06. |
-| **CAT-09 materiality** | Only flag missing ADRs for significant architectural decisions (data stores, auth mechanisms, infrastructure platforms, communication protocols). Common industry-standard choices (HTTP, JSON, REST, UTF-8) do NOT require ADRs. |
-| **CAT-09 vs CAT-10** | CAT-09 = a material decision lacks its ADR (fix: write it). CAT-10 = transport/UI mechanics no REQ demands (fix: move to `design/OPERATION-MAPPING.md`, no ADR). |
-| **CAT-10 vs SEC-CAT-10** | Unrelated: `SEC-CAT-10` (`sdd-security-auditor`) = security decision without ADR. A mechanic a security control demands (CSRF token, `SameSite`) is not CAT-10. |
-
-> A finding MUST be classified under exactly ONE category. Dual-categorization is not permitted.
+| CAT-01 vs CAT-04 | Vague word → CAT-01. Two documents using different words for one concept → CAT-04. |
+| CAT-02 vs CAT-07 | Rule not mentioned anywhere → CAT-02. Mentioned in prose but without an INV id → CAT-07. |
+| CAT-03 vs CAT-06 | A specific scenario missing from a populated section → CAT-03. A whole section/field missing, empty or TBD → CAT-06. |
+| CAT-09 materiality | Only material decisions (data store, auth, infrastructure platform, protocol, encryption, tenancy, id format). Industry defaults (HTTP, JSON, UTF-8) need no ADR. |
+| CAT-09 vs CAT-10 | Material decision lacking its ADR → CAT-09 (fix: write it). Transport/UI mechanics no REQ demands → CAT-10 (fix: move to `design/OPERATION-MAPPING.md`, no ADR). |
+| CAT-10 vs SEC-CAT-10 | Unrelated: `SEC-CAT-10` (`sdd-security-auditor`) is a security decision without ADR. A mechanic a security control demands (CSRF token, `SameSite`) is not CAT-10. |
 
 ## Spec-Level Verification (3C Protocol)
 
-> Extends the 3-dimensional verification protocol (used post-implementation by `sdd-task-implementer`)
-> to the specification level. Inspired by OpenSpec's `/opsx:verify` stage-agnostic approach.
-> These checks complement CAT-01..CAT-10 by providing a structural pass/fail gate before implementation.
+A structural pass/fail gate that complements CAT-01..10.
 
-### Dimension 1: Completeness (Spec Coverage)
+**Completeness**
+- CHECK-SC01: every REQ in `requirements/REQUIREMENTS.md` traces to at least one spec artifact (UC, WF, operation or INV).
+- CHECK-SC02: no orphan specs — every artifact traces to a REQ or has a `DERIVED-SPECS.md` row.
+- CHECK-SC03: the mandatory directories `domain/`, `use-cases/`, `contracts/` and `tests/` each contain at least one document (`workflows/`, `adr/`, `nfr/`, `runbooks/` are conditional and may be absent).
+- CHECK-SC04: no placeholder sections — no TBD, TODO or empty sections.
+- CHECK-SC05: traceability chain intact — REQ → UC → WF → API → BDD → INV → ADR linkable end to end.
 
-```
-CHECK-SC01: Every REQ in requirements/REQUIREMENTS.md traces to at least one spec artifact (UC, WF, contract, or INV)
-CHECK-SC02: No orphan specs — every spec artifact traces back to at least one REQ
-CHECK-SC03: All spec subdirectories populated — domain/, use-cases/, workflows/, contracts/, nfr/, adr/ each contain at least one document
-CHECK-SC04: No placeholder sections — no TBD, TODO, or empty sections remain in any spec document
-CHECK-SC05: Traceability chain intact — REQ → UC → WF → API → BDD → INV → ADR linkable end-to-end
-```
+**Correctness**
+- CHECK-SR01: each spec reflects the intent of its traced REQ, not just the letter.
+- CHECK-SR02: no two documents assert conflicting facts about the same concept.
+- CHECK-SR03: every INV id referenced in UCs/WFs/contracts exists in `domain/05-INVARIANTS.md` with a complete definition.
+- CHECK-SR04: states referenced in UCs and WFs match `domain/04-STATES.md` exactly.
+- CHECK-SR05: roles and permissions in UCs match `contracts/PERMISSIONS-MATRIX.md`.
 
-### Dimension 2: Correctness (Spec-Requirement Alignment)
+**Coherence**
+- CHECK-SH01: all documents use only glossary terms.
+- CHECK-SH02: the same concept has the same name everywhere.
+- CHECK-SH03: every reference (UC, WF, ADR, INV, API, AC, RN) resolves.
+- CHECK-SH04: shared values are identical in every document that mentions them.
+- CHECK-SH05: documents of the same type follow the same template structure.
 
-```
-CHECK-SR01: Semantic match — each spec accurately reflects the intent of its traced REQ (not just the letter)
-CHECK-SR02: No contradictions — no two spec documents assert conflicting facts about the same concept
-CHECK-SR03: INV codes valid — every INV-XXX-NNN referenced in UCs/WFs/contracts exists in domain/05-INVARIANTS.md with complete definition
-CHECK-SR04: State transitions consistent — states referenced in UCs and WFs match domain/04-STATES.md exactly
-CHECK-SR05: Permission alignment — roles and permissions in UCs match contracts/PERMISSIONS-MATRIX.md
-```
-
-### Dimension 3: Coherence (Cross-Spec Consistency)
-
-```
-CHECK-SH01: Glossary adherence — all spec documents use only terms defined in domain/01-GLOSSARY.md
-CHECK-SH02: Terminology uniformity — same concept uses identical name across all documents (no synonyms)
-CHECK-SH03: Cross-references valid — every document reference (UC-XXX, WF-XXX, ADR-XXX, INV-XXX) resolves to an existing document
-CHECK-SH04: Value consistency — shared values (timeouts, limits, enums) are identical in every document that mentions them
-CHECK-SH05: Format consistency — all documents of the same type follow the same template structure
-```
-
-### 3C Verdict
-
-Report the 3C result as the first three rows of the `Gate detail` table of the report (`references/report-template.md` §3): one row per dimension, `PASS n/n` or `FAIL: {failing check ids → finding ids}`. Do not restate the passing checks.
-
-> Any FAIL in Completeness or Correctness blocks pipeline progression to `sdd-plan-architect`.
-> Coherence failures are warnings that should be resolved but do not block.
-> In fan-out mode each check has one owner (`references/fanout-protocol.md` §4); the main thread merges the auditors' `checks` with its own.
-
----
+Report the 3C result as the first three rows of the `Gate detail` table (`references/report-template.md` §3): `PASS n/n` or `FAIL: {failing check ids → finding ids}`. A FAIL in Completeness or Correctness makes the Gate FAIL (it blocks `sdd-test-planner`); Coherence failures are warnings. In fan-out mode each check has one owner (`references/fanout-protocol.md` §4).
 
 ## Audit Process
 
-### Execution Strategy (read first)
+### Execution Strategy
 
-The full protocol is `references/fanout-protocol.md`. The rules that govern every audit:
+Full protocol: [references/fanout-protocol.md](references/fanout-protocol.md) (mode table, index commands, budgets, scopes and prefixes, launch, auditor prompt, JSON shape, consolidation).
 
-1. **Index before files.** Phase 1 builds `$IDX` with one `grep -rn` over `spec/` (headings and id lines, cut at 110 chars). Everything else is opened by section (`sed -n 'a,bp'`, ≤ 60 lines per call) using the index line numbers. **Never `cat` a spec file in the main thread**; a file ≤ 8 k chars may be read whole only by the thread that owns it.
-2. **Budget.** The main thread holds at most ~30 k tokens of spec content (index summaries, baseline ids, grep outputs, `sed -n` spot checks of P0/P1 evidence). Each dimension auditor holds its own scope plus ≤ 200 lines of neighbour lookups per finding.
-Flags: `--fanout` forces the dimension auditors regardless of size; `--sequential` forces one thread.
-
-3. **Fan-out by default — it is part of the skill's contract, not an optional expansion of scope.** Invoking `/sdd-spec-auditor` on a spec above the threshold *is* the explicit request for the dimension auditors: they are read-only, bounded to four, and replace work you would otherwise do sequentially. Never downgrade to sequential out of caution; downgrade only for the reasons in `references/fanout-protocol.md` §1, and record the reason in `metrics.mode` and `summary.highlights`. When `spec/` has more than 8 files or more than 40 k chars, Phases 2–5 run in **four parallel dimension auditors** (Domain `DOM-`, Use cases + workflows `UC-`, Contracts + BDD `CON-`, NFR + ADR + runbooks `NFR-`) launched with the `Agent` tool — also under `claude -p`, where the tool is available. Each reads only its directories and returns compact JSON findings; the main thread consolidates, deduplicates, reviews P0/P1 evidence, computes the Gate and writes the report. Auditors run on `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`); consolidation and the Gate always use the main model. Smaller specs, `--sequential`, or a tool list without `Agent` → sequential mode in one thread with the same index discipline.
-4. **Compact output.** The report is `audits/AUDIT-BASELINE.md` written per `references/report-template.md` (budget ≤ 25 k chars for ≤ 15 requirements). Findings are collected in the JSON shape of the protocol before anything is written.
+1. **Index before files.** Phase 1 builds `$IDX` with one `grep -rn` over `spec/`. Everything else is opened by section (`sed -n 'a,bp'`, ≤ 60 lines) from the index line numbers. The main thread never `cat`s a spec file; a file ≤ 8 k chars may be read whole only by the thread that owns it.
+2. **Budget.** The main thread holds at most ~30 k tokens of spec content (index summaries, baseline ids, grep output, spot checks of P0/P1 evidence).
+3. **Fan-out above the threshold is part of this skill's contract.** When `spec/` has more than 8 files or more than 40 k chars, Phases 2–5 run in four read-only dimension auditors (Domain `DOM-`, Use cases + workflows `UC-`, Contracts + BDD `CON-`, NFR + ADR + runbooks `NFR-`) launched with the `Agent` tool (also under `claude -p`). Do not downgrade out of caution; downgrade only for a reason in `fanout-protocol.md` §1 and record it in `metrics.mode` and `summary.highlights`. `--fanout` forces the auditors; `--sequential` forces one thread.
+4. **Compact output.** Findings are collected in the JSON shape of `fanout-protocol.md` §6 before anything is written; the report follows `references/report-template.md`.
 
 ### Phase 0: Baseline Loading
 
-Before starting the audit, check for an existing `audits/AUDIT-BASELINE.md` (the previous compact report; its `Baseline` and `History` sections are the tracking tables — format in `references/report-template.md` §3).
+Check for `audits/AUDIT-BASELINE.md` (its `Baseline` and `History` sections are the tracking tables).
 
-1. **Read only ids and short descriptions**, never the whole file: `grep -E '^### [A-Z]+-[0-9]+|^\| [A-Z]+-[0-9]+' audits/AUDIT-BASELINE.md` (≤ 3 k tokens).
-2. **If it exists:**
-   - Rows of `Accepted`, `Won't fix` and `Deferred` are **excluded** from this audit (not re-reported); count them for the header. A `Deferred` row past its `Re-evaluate on` date is re-evaluated and may be re-reported.
-   - Findings of the previous body not in those tables are **open**: if detected again they are `persistent` (Persistence Escalation Rule); a finding in a document modified by a previous fix is a `regression` (Phase 6).
-   - Carry the `Baseline` and `History` sections forward into the new report; the body is rewritten.
-   - In fan-out mode, pass the excluded rows (`ID — short description`) to each auditor as "known findings".
-3. **If it does not exist:** first audit — `Delta vs none (first audit)` in the header; all findings are `new`.
-
----
+1. Read only ids and short descriptions: `grep -E '^### [A-Z]+-[0-9]+|^\| [A-Z]+-[0-9]+' audits/AUDIT-BASELINE.md`.
+2. **Exclusion set** (the only one — the fan-out consolidation and every other rule use it): rows of `Accepted`, `Won't fix`, and `Deferred` whose `Re-evaluate on` date has not passed. A matching finding (same document + same defect) is not re-reported; count it for the header. An expired `Deferred` row is re-evaluated and may be reported again. `Resolved` rows are not excluded: a resolved finding detected again is a `regression`.
+3. Findings of the previous body that are in no Baseline table are **open**: detected again → `persistent` (Persistence Escalation Rule).
+4. Carry `Baseline` and `History` forward; the body is rewritten. In fan-out mode pass the exclusion set (`ID — short description`) to each auditor as "known findings".
+5. No baseline → first audit: `Delta vs none (first audit)`; every finding is `new`.
 
 ### Phase 1: Inventory and Index
 
-1. Measure and decide the mode (`fanout-protocol.md` §1): `FILES` and `CHARS` of `spec/**/*.md`.
-2. Build the index (`fanout-protocol.md` §2) and read only its summaries: headings per file (structure, gaps in numbering, SH05) and the id set (referenced ids that do not exist → SH03).
-3. Record for the Coverage table: every document path found; document versions and dates come from the index lines, not from opening the files.
-4. **Fan-out mode:** launch the four auditors now (`fanout-protocol.md` §5–§6, one message with four `Agent` calls or `run_in_background`), then continue with the main-thread checks of §4 while they run. **Sequential mode:** proceed with Phases 2–5 by dimension order (`fanout-protocol.md` §8).
-
-> Phases 2–5 below are the checks; in fan-out mode each one is executed by the auditor that owns the scope (`fanout-protocol.md` §4) and the main thread runs only cross-references, REQ coverage, markers, SC03 and SH05. In sequential mode the main thread runs all of them, section by section.
+1. Measure `FILES` and `CHARS` of `spec/**/*.md` and choose the mode (`fanout-protocol.md` §1).
+2. Build the index (§2) and read only its summaries: headings per file (structure, numbering gaps, SH05) and the id set (referenced ids that do not exist → SH03).
+3. Record every document path for the Coverage table; versions and dates come from the index lines.
+4. Fan-out: launch the four auditors now (one message, four `Agent` calls, or `run_in_background`), then run the main-thread checks of §4 (cross-references, REQ coverage, markers, SC03, SH05, baseline, regression) while they work. Sequential: run Phases 2–5 in dimension order (§8).
 
 ### Phase 2: Glossary Compliance
 
-1. Extract all terms from `domain/01-GLOSSARY.md`
-2. Scan all documents for:
-   - Terms not in glossary
-   - Synonyms of glossary terms
-   - Inconsistent capitalization
+Extract the terms of `domain/01-GLOSSARY.md`; scan all documents for terms missing from the glossary, "Do not use" synonyms and inconsistent capitalization.
 
 ### Phase 3: Cross-Reference Analysis
 
-1. Build reference graph (document → documents it references)
-2. Identify broken references
-3. Identify orphan documents (not referenced by any other)
-4. Check bidirectional consistency (A says X, B says Y about same topic)
+Build the reference graph; find broken references, orphan documents and pairs of documents that say different things about the same topic.
 
 ### Phase 3.5: Value Registry Verification
 
-If `spec/VALUE-REGISTRY.md` exists, use it as the authoritative source for shared values:
-1. For every entry in the registry, grep ALL spec documents for that value name
-2. Verify the value is identical everywhere it appears
-3. Flag any document using a different value for the same metric
-4. If the registry does NOT exist, create a finding (CAT-06) recommending its creation, listing all discovered shared values (timeouts, limits, rate limits, enum values)
+With `spec/VALUE-REGISTRY.md`: grep every registry name and value over `spec/`; flag any document using a different value for the same metric. Without it: one CAT-06 finding recommending it, listing the shared values found (timeouts, limits, rate limits, enums).
 
 ### Phase 4: Completeness Check
 
-1. For each UC: verify all sections filled
-2. For each WF: verify all steps have error handling
-3. For each INV: verify validation rule exists
-4. For each ADR: verify status is not "Proposed" indefinitely
-5. **Scan for `[NEEDS CLARIFICATION]` markers** — Detect all `<!-- [NEEDS CLARIFICATION] NC-NNN: ... -->` comments across spec documents. Each open marker is an **unresolved ambiguity** that the specifications engineer deferred. Report each one as a finding under **CAT-06 (Incomplete Specifications)** with:
-   - **ID:** `INC-NNN` (normal finding sequence)
-   - **Severity:** At minimum **Medium**; escalate to **High** if the marker blocks a use case's main flow or a contract definition
-   - **Location:** The file and line where the marker appears
-   - **Problem:** Quote the marker's question verbatim
-   - **Question:** "Has this been decided? If so, resolve the marker and record the decision in CLARIFICATIONS.md"
-   - Cross-check against `spec/CLARIFICATIONS-PENDING.md` (if it exists) to verify the index is in sync with actual markers in the documents. Report any discrepancies (marker in file but missing from index, or index entry without corresponding marker)
+1. Every UC section filled; every WF step with error handling; every INV with a validation; no ADR left `Proposed` indefinitely.
+2. **`[NEEDS CLARIFICATION]` markers:** each open `<!-- [NEEDS CLARIFICATION] NC-NNN: … -->` is one CAT-06 finding (`INC-NNN`) located at the marker, quoting its question; severity at least P2, P1 when it blocks a UC main flow or a contract definition; fix = "decide, remove the marker and record the RN in CLARIFICATIONS.md". Cross-check `spec/CLARIFICATIONS-PENDING.md` against the markers and report discrepancies either way.
 
 ### Phase 5: Defect Detection
 
-Apply each CAT-XX category systematically:
-1. Open the sections the index lists for the document (`sed -n`); whole file only if ≤ 8 k chars
-2. Apply the category checklist for that document type (`references/audit-checklists.md`, only that section) and the grep patterns of `references/detection-patterns.md`
-3. Record findings in the compact shape `{id, sev, cat, doc, line, also, claim, why, fix}` (`fanout-protocol.md` §6) — location + what is wrong + why + the spec-level fix or the question
-4. Cross-reference with related documents through `grep -n` / `sed -n` on the cited lines, never by reading the neighbour whole
+For each document type: open the sections the index lists (whole file only if ≤ 8 k chars), apply its checklist in `references/audit-checklists.md` (that section only) and the patterns in `references/detection-patterns.md`, and record findings as `{id, sev, cat, doc, line, also, claim, why, fix}`. Neighbour evidence comes from `grep -n` / `sed -n` on the cited lines, never by reading the neighbour whole.
+
+**Optional Jev triage of pattern hits** (opt-in; sends the hit lines to TypeSafe). The CAT-01/02/03/04/06/07/09 patterns in `detection-patterns.md` match many correct lines. When `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" status` exits 0 and there are more than ~30 hits, write one JSONL item per hit (`{"id":"<file>:<line>","state":{"hit":{"file","line","text","context"}}}`, context = the line ±3) and run `sdd-jev.mjs judge --questions scripts/jev/spec-triage.json --items hits.jsonl --out .sdd/jev/spec-triage.json` (question file under the plugin root). Drop a hit only when the answer is `not_a_defect` with confidence ≥ 0.8. Every other hit goes through the normal check, starting with the ones Jev labelled with a category. Hits for CAT-05, CAT-08 and CAT-10 skip the triage: they need other documents. Exit code 3 means Jev is off: check every hit.
 
 ### Phase 6: Regression Verification
 
-If a previous audit exists, perform regression analysis after defect detection:
+With a previous audit:
 
-1. **Identify modified files since last audit:**
-   - If git is available: use `git diff --name-only` between the last audit tag (e.g., `AUDIT-vX.Y-resolved`) and HEAD
-   - If git is NOT available: compare file modification timestamps against the last audit report date
-   - If no tag exists, use the last audit report date as reference
-   - Focus on files within the `spec/` directory
-
-2. **For each modified file, verify fix integrity:**
-   - Check that fixes did not introduce new inconsistencies
-   - Verify that the fix aligns with the original audit finding's intent
-   - Confirm cross-references remain valid after the change
-
-3. **Cross-check high-coupling documents:**
-   When any of these files was modified, verify ALL its dependents:
-   - `02-ENTITIES.md` modified → check `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, all UCs that reference modified entities
-   - `03-VALUE-OBJECTS.md` modified → check `02-ENTITIES.md` (field types), all UCs and contracts using those VOs
-   - `04-STATES.md` modified → check `05-INVARIANTS.md` (state-dependent invariants), all UCs with state transitions, all WFs
-   - `05-INVARIANTS.md` modified → check UCs that enforce those invariants, contracts that validate them
-   - `PERMISSIONS-MATRIX.md` modified → check ALL API contracts for endpoint-permission alignment
-   - `CLARIFICATIONS.md` modified → check UCs referenced by each modified RN
-
-4. **Enum/Value-Object sync verification:**
-   - If an enum was added/modified in any document, grep ALL spec files for that enum name
-   - Verify the enum values are identical everywhere they appear
-   - Flag any document that uses the old values or is missing the new values
-
-5. **Classify each finding:**
-   - **new**: Not present in any previous audit
-   - **persistent**: Was reported in previous audit and remains unfixed
-   - **regression**: Was NOT in previous audit but appears in a file that was modified to fix a previous finding
-
----
+1. Modified files since then: `git diff --name-only AUDIT-vX.Y-resolved..HEAD -- spec/` (the tag suggested by the last Mode Fix); without the tag, `git log --since=<last report date> --name-only -- spec/`; without git, file timestamps against the report date.
+2. For each modified file: the fix did not introduce new inconsistencies, matches the original finding's intent, and cross-references still resolve.
+3. High-coupling files — check all their dependents when modified: `02-ENTITIES.md` → 03, 04, 05 and UCs using the entities; `03-VALUE-OBJECTS.md` → 02 field types, UCs and contracts using the VOs; `04-STATES.md` → 05, UCs with transitions, WFs; `05-INVARIANTS.md` → enforcing UCs and validating contracts; `PERMISSIONS-MATRIX.md` → every contract; `CLARIFICATIONS.md` → UCs citing the modified RNs.
+4. Enum/VO sync: a changed enum is grepped over `spec/`; every occurrence has the same values.
+5. Status of each finding: `new` (never reported), `persistent` (reported and still open), `regression` (not open before, and located in a file modified by a previous fix, or matching a `Resolved` row).
 
 ### Phase 7: Finding Consolidation
 
-After detecting all findings (Phase 5) and classifying them (Phase 6), consolidate findings to reduce noise and improve actionability. In fan-out mode this phase starts by merging the four auditors' JSON results (`fanout-protocol.md` §7: deduplication, baseline filter, final ids by category, severity review of every P0/P1 against the cited lines); the rules below apply in both modes.
+In fan-out mode this starts by merging the auditors' JSON (`fanout-protocol.md` §7: deduplication, baseline filter, final ids, severity review of every P0/P1 against the cited lines). Then, in both modes:
 
-#### 7.1 Pattern Batching
-
-When the same defect type appears across multiple documents, report as ONE batched finding:
-
-```
-BAD:  INC-001: Missing BDD for UC-003
-      INC-002: Missing BDD for UC-005
-      INC-003: Missing BDD for UC-007
-      (3 separate findings)
-
-GOOD: INC-001: Missing BDD scenarios for UC-003, UC-005, UC-007
-      Locations: [list all affected files]
-      (1 batched finding with 3 locations)
-```
-
-#### 7.2 Family Grouping
-
-These finding families MUST be discovered and reported together in a single pass — never incrementally across iterations:
-
-| Family | What to check | How to check |
-|---|---|---|
-| Missing BDD | ALL UCs for BDD coverage | For each UC, verify at least 1 happy + 1 error BDD scenario exists |
-| Missing API error codes | ALL `Style: http` contracts for error responses | For each endpoint, verify 401, 403, 404, 409, 429 are documented where applicable |
-| Terminology violations | ALL docs for glossary compliance | Grep for every "NO usar" term from glossary across all spec/ files |
-| Value inconsistencies | ALL shared values across ALL docs | For each value in LIMITS.md/PERFORMANCE.md, grep all spec/ files for that value |
-| Missing invariants | ALL UCs for unformalized constraints | Scan UC text for "must", "shall not", "always", "never", "at least", "at most" without INV-ID reference |
-
-#### 7.3 Cascade Dependency
-
-When fixing finding X will automatically resolve findings Y and Z, mark the dependency:
-
-```
-INC-005: Missing VALIDATION_ERROR in API-002-04 [CASCADE-DEP: INC-004]
-```
-
-Cascade-dependent findings are NOT separately tracked for fix/verification — they resolve when their parent is fixed.
-
----
-
-### Convergence Protocol
-
-The audit process MUST converge. These rules replace the implicit unbounded loop.
-
-#### Maximum Audit Cycles
-
-```
-Cycle 1: DISCOVERY — Full comprehensive audit (Phases 0-7 above). All categories, all documents.
-Cycle 2: FIX — Apply corrections for findings with FIX disposition (Mode Fix).
-Cycle 3: VERIFICATION — Narrow-scope verification of fixes only (see Verification Rules below).
-```
-
-After Cycle 3, if Critical findings remain, present the user with explicit options:
-- Fix critical findings and run ONE more verification pass
-- Accept risk and proceed with documented acknowledgment
-
-**Hard limit: 5 cycles maximum.** If convergence is not reached in 5 cycles, remaining Medium/Low findings are automatically moved to baseline as `deferred`.
-
-#### Quality Gate Thresholds
-
-Replace the "ALL PASS" requirement with tiered thresholds:
-
-| Gate Level | Criteria | Can proceed to plan-architect? |
-|---|---|---|
-| **PASS** | 0 Critical, 0 High, ≤5 Medium (all Low accepted/deferred) | Yes |
-| **CONDITIONAL PASS** | 0 Critical, ≤2 High (documented), ≤10 Medium | Yes, with advisory warnings |
-| **FAIL** | Any Critical unresolved, or >2 High unresolved | No — must fix or accept |
-
-The auditor MUST recommend the appropriate gate level. The user decides whether to proceed.
-
-#### Verification Rules (Cycle 3)
-
-During verification, the auditor MUST:
-- ✅ Verify that each fixed finding is actually resolved
-- ✅ Check for regressions in documents directly modified by fixes
-- ✅ Check immediate dependents of modified documents (per Propagation Checklist)
-
-During verification, the auditor MUST NOT:
-- ❌ Perform a full Phase 1-7 sweep on unchanged documents
-- ❌ Discover new finding categories not found in the Discovery cycle
-- ❌ Apply deeper analysis than was applied in Discovery
-- ❌ Report new Low/Medium findings in documents NOT directly affected by fixes
-
-New findings discovered during verification:
-- If **Critical**: Report and require fix (extends verification by exactly 1 finding)
-- If **High**: Report but add to audit baseline for next full audit
-- If **Medium/Low**: Log as advisory note, do NOT count against the gate
-
-Verification output is the ≤ 6-line `Verification (cycle 3)` block appended to the report (`references/report-template.md` §3): one line per fixed finding with its evidence `doc:line`, plus regressions, cross-reference count and new findings. It runs sequentially in the main thread (no fan-out).
-
-#### Triage Phase
-
-After Discovery (Cycle 1) and before Fix (Cycle 2), present ALL findings to the user for triage:
-
-| Disposition | Meaning | Default for... |
-|---|---|---|
-| `FIX` | Must be corrected before proceeding | All Critical, all High |
-| `ACCEPT` | Known limitation, documented and accepted | — |
-| `DEFER` | Will address later (set re-evaluation date) | — |
-| `WONT_FIX` | By design, not a defect in this context | — |
-
-Default for Medium: `FIX` (user can override to ACCEPT/DEFER).
-Default for Low: User's choice (present options).
-
-Only findings with `FIX` disposition proceed to Mode Fix. Others go directly to baseline.
-
-## Audit Report Format
-
-The report is **`audits/AUDIT-BASELINE.md`**, one file, written with the compact template of `references/report-template.md` (mandatory; read it before writing). Its sections, in order:
-
-| Section | Content | Cap |
-|---|---|---|
-| Header | Audit id, date, specs version, docs audited, mode (`fanout`/`sequential`), cycles; **Gate** with a one-clause reason; counters P0/P1/P2/P3, batched, cross-validated, excluded by baseline; delta vs the previous audit (new/persistent/regression/resolved); top 3 categories | ≤ 1 200 chars |
-| Gate detail | One table: 3C rows (failing check ids → finding ids only) + the six Quality Metrics | 9 rows |
-| Findings P0–P2 | One block per finding: `ID: title — P{n} · CAT · status`, **Where** (`doc:line`), **What**, **Why**, **Fix** (≤ 3 lines: spec-level correction or the question that unblocks it) | ≤ 900 chars each |
-| Findings P3 | One table row per finding: ID, Cat, Where, What (≤ 12 words), Fix (≤ 12 words) | ≤ 220 chars each |
-| Coverage | One row per audited document: P0/P1/P2/P3 counts + ids. No prose, no "no issues found in…", no spec content | 1 row/doc (> 40 docs: clean docs collapsed into one row) |
-| Not audited | Only when non-empty | 1 line/doc |
-| Baseline | Accepted / Won't fix / Deferred / Resolved tables (carried forward, updated by Mode Fix) | 1 row/finding |
-| History | One row per audit run (counts, Gate, mode, report chars) | 1 row/run |
-
-Budget: **≤ 25 k chars for ≤ 15 requirements**, +1 k per extra requirement, hard cap 60 k (`report-template.md` §1). No empty sections, no per-category tables with zero rows, no restated spec content (quotes ≤ 12 words), no priority lists repeating the ids, no second copy of the report. Severities are written P0–P3 (P0 = Critical … P3 = Low).
-
-> Omitted detail is not lost: every finding carries `doc:line`, so the document is reopened from the id; Mode Fix works on the findings' Where/What/Fix, not on the report's prose; auditors' JSON is the working set during consolidation. Record `wc -c` of the report as `metrics.report_chars`.
-
----
-
-## Quality Metrics (SWEBOK v4 Ch10 — Software Quality)
-
-The auditor MUST compute these metrics and render them as the last six rows of the `Gate detail` table of the report (`references/report-template.md` §3) — no separate scorecard section.
-
-| Metric | Definition | Target | Formula |
-|--------|-----------|--------|---------|
-| **Spec Defect Density** | Critical/High findings per spec document | < 2 critical per document | `critical_findings / total_documents` |
-| **Traceability Coverage** | % of requirements with at least one linked spec (UC, WF, or contract) | 100% | `reqs_with_spec / total_reqs × 100` |
-| **Orphan Rate** | % of spec documents without traceability to any requirement | 0% | `orphan_specs / total_specs × 100` |
-| **Clarification Density** | Open `[NEEDS CLARIFICATION]` or `[TBD]` markers per document | 0 before downstream | `open_markers / total_documents` |
-| **Audit Pass Rate** | % of spec documents passing all checks (zero Critical/High findings) | > 90% at baseline | `clean_docs / total_documents × 100` |
-| **Cross-Reference Validity** | % of inter-document references that resolve correctly | 100% | `valid_refs / total_refs × 100` |
-
-### Quality Scorecard Rendering
-
-Each metric is one row `| {Metric} | {value} ({target}) {PASS/FAIL} |` of the `Gate detail` table; the overall Gate goes in the header line (`**Gate:** PASS | CONDITIONAL PASS | FAIL — {reason}`), decided by the Quality Gate Thresholds of the Convergence Protocol. PASS = proceed. CONDITIONAL PASS = proceed with advisory. FAIL = must resolve P0/P1 findings first.
-
----
+- **Pattern batching:** the same defect type across several documents is ONE finding listing every location (e.g. "Missing BDD scenarios for UC-003, UC-005, UC-007").
+- **Family grouping:** these families are discovered and reported whole in a single pass, never incrementally across cycles — missing BDD (every UC has ≥ 1 happy + 1 error scenario); missing standard errors (every `Style: http` operation: 401/403/404/409/429 where applicable); terminology ("Do not use" terms over `spec/`); value inconsistencies (every registry/LIMITS/PERFORMANCE value over `spec/`); unformalized constraints (UC constraint language without INV id).
+- **Cascade dependency:** when fixing X resolves Y, mark Y `[CASCADE-DEP: X]`; it is not tracked separately.
 
 ## Severity Classification
 
-| Severidad | Label | Criterio | Pregunta clave |
-|-----------|-------|----------|----------------|
-| **Crítico** | **P0** | Bloquea implementación o causa comportamiento indefinido en producción | ¿Bloquea implementación? |
-| **Alto** | **P1** | Riesgo de bugs significativos o violación de requisitos | ¿Causa bugs o viola requisitos? |
-| **Medio** | **P2** | Inconsistencia que dificulta mantenimiento o comprensión | ¿Dificulta comprensión? |
-| **Bajo** | **P3** | Mejora de claridad o estilo sin impacto funcional | ¿Solo mejora estilo? |
+| Label | Criterion | Key question |
+|---|---|---|
+| **P0** (Critical) | Blocks implementation or causes undefined production behaviour | Does it block implementation? |
+| **P1** (High) | Risk of significant bugs or a violated requirement | Does it cause bugs or violate a REQ? |
+| **P2** (Medium) | Inconsistency that hinders maintenance or comprehension | Does it hinder understanding? |
+| **P3** (Low) | Clarity or style improvement without functional impact | Is it only style? |
 
-Reports, JSON findings and `pipeline-state.json` use the P0–P3 labels (`critical`/`high`/`medium`/`low` keys in metrics are unchanged).
+Reports, JSON and `pipeline-state.json` use P0–P3 (the `critical`/`high`/`medium`/`low` metric keys are unchanged).
 
 ### Signal Filters
 
-Apply these filters BEFORE assigning severity to reduce noise:
+Apply before assigning severity:
 
-1. **Evidence requirement:** Only report findings with concrete evidence from 2+ documents. A finding based on a single document and a subjective interpretation is NOT a valid finding.
-
-2. **CAT-08 severity cap:** Evolution Risks (CAT-08) have a **maximum severity of Medium**. They cannot be Critical or High because they are speculative about future needs, not current defects.
-
-3. **Style/format severity cap:** Findings about naming conventions, lowercase/uppercase inconsistencies, or formatting issues have a **maximum severity of Low**.
-
-4. **Implementation-blocking test:** Use this decision tree:
-   ```
-   Does this defect block implementation?
-   ├── YES → Crítico or Alto
-   │   ├── Undefined behavior in production? → Crítico
-   │   └── Risk of bugs but workaround exists? → Alto
-   └── NO → Medio or Bajo
-       ├── Hinders comprehension/maintenance? → Medio
-       └── Style/clarity improvement only? → Bajo
-   ```
+1. **Evidence:** a finding needs concrete evidence from two or more documents, or from the document plus the element that is missing from it (an absent section, error row, invariant or scenario). A single document read subjectively is not a finding.
+2. **Caps:** CAT-08 at most P2; naming, capitalization and formatting findings at most P3; CAT-10 per its row above.
+3. **Implementation-blocking test:** blocks implementation → P0 if behaviour in production is undefined, P1 if bugs are likely but a workaround exists; does not block → P2 if it hinders comprehension or maintenance, P3 if style only.
 
 ### Persistence Escalation Rule
 
-Findings that persist across audit iterations MUST be escalated:
-
 | Persistence | Action |
 |---|---|
-| Found in 1 audit, not yet fixed | Normal severity — no change |
-| Persists across 2 audits without resolution | Severity escalates by 1 level (Low→Medium, Medium→High) |
-| Persists across 3+ audits | User MUST assign explicit disposition: `fix`, `accept`, `defer`, or `wont_fix`. Cannot remain unresolved. |
+| Found in 1 audit, not yet fixed | Severity unchanged |
+| Open across 2 audits | Escalate one level (P3 → P2, P2 → P1), never above the finding's cap (Signal Filter 2) and never to P0 |
+| Open across 3+ audits | The user assigns an explicit disposition (FIX, ACCEPT, DEFER, WONT_FIX); it cannot stay open |
 
-> **Rationale:** Persistent findings create noise in audit reports and mask new issues. Escalation creates pressure to resolve or explicitly accept them.
+## Audit Stability Rules
 
----
+- **Rule 1 — Baseline:** excluded findings are exactly the Phase 0 exclusion set.
+- **Rule 2 — Respect design decisions:** behaviour explained by an ADR in `adr/` or an RN in `CLARIFICATIONS.md` is a decision, not a defect.
+- **Rule 3 — Minority rule for contradictions:** when N documents agree on a value and one differs, the defect is located in the divergent document — one finding, not N.
 
-## Checklist de Auditoría Rápida
+## Convergence Protocol
 
-### Por Documento
-
-- [ ] ¿Tiene versión y fecha de actualización?
-- [ ] ¿Usa solo términos del glosario?
-- [ ] ¿Todas las referencias a otros docs son válidas?
-- [ ] ¿Tiene todas las secciones del template completas?
-- [ ] ¿Los valores numéricos tienen unidades?
-- [ ] ¿Los flujos tienen manejo de errores?
-
-### Por Repositorio
-
-- [ ] ¿El glosario está actualizado?
-- [ ] ¿Hay ADR para cada decisión tecnológica mencionada?
-- [ ] ¿Cada invariante tiene validación especificada?
-- [ ] ¿Los timeouts son consistentes entre documentos?
-- [ ] ¿Los rate limits son consistentes?
-- [ ] ¿Hay UC para cada funcionalidad mencionada en OVERVIEW?
-
----
-
-## Mode Fix: Apply Audit Corrections
-
-> **Principio:** Corregir es integrar respuestas verificadas en la especificación, no inventar comportamiento.
-
-After an audit has been performed AND audit questions have been answered, use Mode Fix to systematically apply corrections. This replaces the need for a separate `sdd-spec-fixer` skill.
-
-### When to Use Mode Fix
-
-- An audit report has been produced AND its questions have been answered
-- Specification defects need to be systematically corrected
-- Post-audit corrections require traceability and ADR creation
-
-### Fix Principles
-
-1. **No Invention** — Every change MUST trace to an audit finding + validated answer
-2. **No Code** — Only specification text, invariants, ADRs, and clarifications
-3. **Full Traceability** — Every correction references: Finding ID, answer, document(s) modified, change type
-4. **No Silent Conflict Resolution** — Create ADR for any non-trivial decision
-5. **Zero Omissions** — Every finding in the audit report MUST be addressed
-
-### Correction Categories
-
-| Audit Category | Correction Type | Primary Action |
-|----------------|-----------------|----------------|
-| AMB (Ambiguities) | SPEC CHANGE | Rewrite vague text with precise, quantified language |
-| IMP (Implicit Rules) | NEW INVARIANT + SPEC CHANGE | Formalize implicit behavior as invariant |
-| SIL (Dangerous Silences) | SPEC CHANGE | Add missing flows, error handling, edge cases |
-| SEM (Semantic) | SEMANTIC CLARIFICATION | Align terminology with glossary |
-| CON (Contradictions) | SPEC CHANGE + ADR REQUIRED | Resolve conflict, update all docs, document decision |
-| INC (Incomplete) | SPEC CHANGE | Complete missing sections, fill TBDs |
-| INV (Weak Invariants) | NEW INVARIANT | Formalize rules with ID, validation, constraint |
-| EVO (Evolution Risks) | ADR REQUIRED | Document extensibility strategy |
-| ADR (Missing ADRs) | ADR REQUIRED | Create ADR with context, decision, alternatives |
-| TRN (Transport over-specification) | SPEC CHANGE | Rewrite as operation semantics + "transport: see design/OPERATION-MAPPING.md"; keep REQ-mandated transport, citing the REQ |
-
-### Fix Process
-
-#### Fix Phase 0: Locate Audit Report
-
-1. Open `audits/AUDIT-BASELINE.md` (the compact report; a `--focused` fix reads `audits/AUDIT-FOCUSED-*.md`). It is ≤ 25 k chars: read it whole.
-2. Extract EVERY finding with: ID, severity (P0–P3), category, **Where** (`doc:line`), **What**, **Why**, **Fix** (the proposed correction or the open question), and the answer received (from the user, the questions file, or `[NO ANSWER]`). The report's prose is not the working set: the cited lines are — open them with `sed -n` when applying a correction.
-3. Count findings by severity and disposition and confirm with the user (or apply the delegated scope, e.g. "P0/P1 without asking").
-
-#### Fix Phase 1: Create Corrections Plan
-
-Create `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md` per `references/report-template.md` §4 (budget ≤ 12 k chars for ≤ 15 requirements):
-
-- Summary table: totals per severity and disposition (FIX / ACCEPT / DEFER / WONT_FIX).
-- One block per **P0–P2 finding with FIX disposition**, referenced by id (do not copy What/Why from the report): decision (answer or chosen option), change (≤ 3 lines, `doc:line`), before → after limited to the changed sentence or value (≤ 4 lines; omitted for new sections/ADRs), dependents to update (Propagation Checklist), rejected alternative (one line), dependencies, upstream Tier.
-- **Every other finding** (P3, and P0–P2 with ACCEPT/DEFER/WONT_FIX or `[NO ANSWER]`) is one row of the `Dispositions` table: id, severity, disposition, reason or re-evaluation date.
-
-#### Fix Phase 1.5: User Workflow Decision
-
-Ask the user:
-- **Option 1: Batch mode** — Apply all recommended solutions in priority order
-- **Option 2: Interactive mode** — Decide one by one
-
-#### Fix Phase 2: Execute Corrections
-
-Process in priority order: Critical → High → Medium → Low.
-Within each severity: CON first, then SIL, then others.
-
-**Propagation Checklist:** When modifying any spec document, verify and update ALL dependent documents atomically. Incomplete propagation is the #1 cause of audit regressions.
-
-| If you modify... | You MUST also verify and update... |
-|---|---|
-| `domain/01-GLOSSARY.md` | ALL spec documents for term usage alignment |
-| `domain/02-ENTITIES.md` | `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, all UCs referencing modified entities, all API contracts with those entities in schemas |
-| `domain/03-VALUE-OBJECTS.md` | `02-ENTITIES.md` (field types), all UCs and contracts using those VOs, `05-INVARIANTS.md` if VO has constraints |
-| `domain/04-STATES.md` | `05-INVARIANTS.md`, all UCs with state transitions, all WFs, all BDD scenarios testing state changes |
-| `domain/05-INVARIANTS.md` | UCs that enforce those invariants, contracts that validate them, BDD scenarios that test them |
-| `contracts/PERMISSIONS-MATRIX.md` | ALL API contracts for endpoint-permission alignment |
-| Any UC exception flow | Corresponding API contract error codes, BDD error scenarios, `03-VALUE-OBJECTS.md` ErrorResponse |
-| Any enum value in any document | ALL documents that reference that enum (use grep to find all occurrences) |
-| `nfr/LIMITS.md` or `nfr/PERFORMANCE.md` | All WFs (timeouts), all API contracts (rate limits), all UCs (limits in text) |
-| Any terminology change | ALL spec documents for the old term (find-and-replace across entire spec/) |
-
-**Propagation Verification:** After applying fixes, run `grep -r "OLD_TERM\|OLD_VALUE" spec/` for every changed term or value to confirm zero residual occurrences of the old version.
-
-**Commit format:**
 ```
-fix(specs): resolve {FINDING-ID} - {brief description}
-
-Audit: AUDIT-vX.X
-Severity: {severity}
-Correction: {SPEC CHANGE | NEW INVARIANT | ADR REQUIRED | SEMANTIC CLARIFICATION}
-Documents: {comma-separated list}
+Cycle 1  DISCOVERY     full audit (Phases 0–7), all categories, all documents
+         TRIAGE        user assigns dispositions
+Cycle 2  FIX           Mode Fix on FIX findings
+Cycle 3  VERIFICATION  narrow re-check of the fixes only
 ```
 
-#### Fix Phase 3: Verification Summary and Baseline Update
+After Cycle 3, if P0 findings remain, ask the user: fix them and run one more verification pass, or accept the risk with a documented acknowledgment. **Hard limit: 5 cycles.** At the limit, open P2/P3 findings move to `Deferred`; open P1 findings stay open and are listed by id in the report header and `summary.highlights`, and the Gate is computed as usual (≤ 2 → CONDITIONAL PASS); open P0 findings need an explicit user disposition.
 
-1. In `audits/AUDIT-BASELINE.md`: append ` — RESOLVED ({artifact})` to the heading of each fixed P0–P2 finding; add one row per fixed finding to `Baseline › Resolved`, per accepted/deferred/won't-fix disposition to the matching table; update the `History` row (Gate after fix).
-2. Append the ≤ 8-line `Fix cycle` block (`references/report-template.md` §3): fixed/skipped/open counts with ids, new artifacts, documents modified (count), breaking changes, commits or the reason they were not made. No per-document tables.
-3. Suggest tagging: `git tag AUDIT-vX.X-resolved`
+### Quality Gate
 
-#### Fix Phase 4: Upstream Impact Analysis
+Counts are **open** findings: not resolved and not in the Phase 0 exclusion set (a user ACCEPT/DEFER/WONT_FIX moves a finding there). P3 never affects the Gate. Evaluate in order; the first match wins:
 
-> **Principio:** Las correcciones en especificaciones pueden revelar que los requisitos de origen están incompletos o desalineados. Esta fase cierra el ciclo de retroalimentación hacia arriba sin violar Art. 4 (el spec-auditor detecta pero no modifica requisitos — delega a req-change).
+| Gate | Condition | Downstream (`sdd-test-planner`) |
+|---|---|---|
+| **FAIL** | P0 ≥ 1, or P1 > 2, or a 3C Completeness/Correctness FAIL, or a BLOCKED Upstream/Reconciliation gate (`references/mode-fix.md`) | Blocked — fix or accept first |
+| **PASS** | P1 = 0 and P2 ≤ 5 | Proceeds |
+| **CONDITIONAL PASS** | every other case (0 P0, ≤ 2 P1, any P2): list the open P1 ids; add an advisory when P2 > 10 | Proceeds with advisory |
 
-After all corrections are applied and the baseline is updated, analyze whether the corrections impact upstream requirements.
+The auditor recommends the Gate; the user decides whether to proceed. Downstream skills read it from `stages["spec-auditor"].summary.metrics.gate_result` (`PASS` | `CONDITIONAL` | `FAIL`).
 
-##### Step 4.1: Classify Corrections by Traceability Tier
+### Verification Rules (Cycle 3)
 
-For each corrected finding, classify its upstream impact using the 3-Tier system:
+Verify each fixed finding is resolved, check regressions in the documents the fixes modified and their immediate dependents (Propagation Checklist in `references/mode-fix.md`). Do not sweep unchanged documents, open new categories, or go deeper than Discovery. New findings: P0 → report and require a fix (extends verification by exactly that finding); P1 → report and add to the baseline for the next full audit; P2/P3 → advisory note, not counted. Output: the ≤ 6-line `Verification (cycle 3)` block of `report-template.md` §3; sequential, main thread.
 
-| Tier | Criteria | Examples | Action |
-|---|---|---|---|
-| **Tier 1** — User-visible behavior change | Correction changes behavior a REQ explicitly defined, OR introduces new user-facing functionality with no tracing REQ | Changing a timeout that a REQ specified; adding a new UC without REQ; new user notification flow | **Must propagate** to requirements via `sdd-req-change` |
-| **Tier 2** — Technical detail derived from existing REQ | Correction adds error flows, invariants, BDD scenarios, API details, or state transitions that are technical elaborations of behavior already covered by a REQ | Adding 404 to an API endpoint; formalizing an invariant from UC text; adding BDD edge case for existing UC | **Register** in `spec/DERIVED-SPECS.md` — no REQ needed |
-| **Tier 3** — Cosmetic/structural | Terminology fix, format correction, cross-reference fix, filling TBD with info already implied | Fixing a glossary term; reordering error table; adding missing cross-reference | **No action** needed |
+### Triage
 
-**Classification Decision Tree:**
-```
-Does this correction change user-visible behavior?
-├── YES → Does a REQ already define this behavior?
-│   ├── YES → Does the correction CONTRADICT the REQ?
-│   │   ├── YES → Tier 1 (MODIFY: REQ must be updated)
-│   │   └── NO  → Tier 2 (technical elaboration of existing REQ)
-│   └── NO  → Tier 1 (ADD: new REQ needed)
-└── NO  → Is it a technical detail (error code, invariant, BDD)?
-    ├── YES → Can it trace to an existing REQ indirectly?
-    │   ├── YES → Tier 2 (derived from REQ-X)
-    │   └── NO  → Tier 1 (new business rule without REQ)
-    └── NO  → Tier 3 (cosmetic)
-```
+After Discovery and before Fix, present all findings to the user with their default disposition:
 
-##### Step 4.2: Cross-Reference Against Requirements
+| Disposition | Meaning | Default for |
+|---|---|---|
+| `FIX` | Correct before proceeding | P0, P1, P2 (user may override P2) |
+| `ACCEPT` | Known limitation, documented | — |
+| `DEFER` | Address later (set a `Re-evaluate on` date) | — |
+| `WONT_FIX` | By design in this context | — |
 
-For each Tier 1 and Tier 2 correction:
+P3: user's choice. Only `FIX` findings go to Mode Fix; the others go to the Baseline tables.
 
-1. **Identify the REQ(s)** that the corrected spec document traces to (via Refs field, UC→REQ mapping, or INV→REQ chain)
-2. **For Tier 1 (MODIFY):** Compare the REQ's statement and acceptance criteria against the corrected spec. Flag if:
-   - The REQ statement contradicts the corrected behavior
-   - The REQ acceptance criteria are incomplete (missing cases added by the correction)
-   - The REQ's scope is narrower than what the correction defines
-3. **For Tier 1 (ADD):** Verify there is truly no REQ that covers this functionality. Search:
-   - Direct REQ references in the spec document
-   - Implicit coverage via parent REQs or domain-level REQs
-   - If none found → mark as `[PENDING REQ]`
-4. **For Tier 2:** Record the derived-from REQ in `spec/DERIVED-SPECS.md`
+## Audit Report
 
-##### Step 4.3: Update DERIVED-SPECS.md
+Read [references/report-template.md](references/report-template.md) before writing `audits/AUDIT-BASELINE.md` (sections, per-item caps, budget ≤ 25 k chars for ≤ 15 requirements, what the report must not contain). Record `wc -c` as `metrics.report_chars`.
 
-After classification, update `spec/DERIVED-SPECS.md` with ALL Tier 1 and Tier 2 corrections:
+### Quality Metrics
 
-```markdown
-## Audit-Derived Specifications (AUDIT-vX.X)
+Computed and rendered as the last six rows of the `Gate detail` table:
 
-| Spec Artifact | Finding ID | Derived From | Tier | Justification |
-|---|---|---|---|---|
-| INV-SRV-003 | INV-001 | REQ-F-008 | 2 | Formalization of "score between 0 and 100" |
-| EX3 in UC-005 | SIL-002 | REQ-F-012 | 2 | Error flow: timeout handling |
-| UC-011 (health check) | INC-005 | — | 1 | **[PENDING REQ]** New user-visible endpoint |
-| ADR-007 | ADR-001 | — | 2 | Technical decision, no REQ needed |
-```
+| Metric | Formula | Target |
+|---|---|---|
+| Spec defect density | `(P0 + P1 findings) / total_documents` | < 2 per document |
+| Traceability coverage | `reqs_with_spec / total_reqs × 100` (spec = UC, WF or operation) | 100% |
+| Orphan rate | `orphan_specs / total_specs × 100` | 0% |
+| Clarification density | `open NC/TBD markers / total_documents` | 0 before downstream |
+| Audit pass rate | `docs with no P0/P1 / total_documents × 100` | > 90% |
+| Cross-reference validity | `valid_refs / total_refs × 100` | 100% |
 
-##### Step 4.4: Generate Impact Summary
+## Mode Fix (`--fix`)
 
-Present to the user:
-
-```markdown
-## Upstream Impact Analysis
-
-| # | Finding ID | Correction Summary | Tier | REQ Affected | Description |
-|---|---|---|---|---|---|
-| 1 | {ID} | {brief} | 1 (MODIFY) | REQ-F-012 | REQ needs update: {what changed} |
-| 2 | {ID} | {brief} | 1 (ADD) | [PENDING REQ] | New requirement needed: {what's missing} |
-| 3 | {ID} | {brief} | 2 | REQ-F-008 | Derived — registered in DERIVED-SPECS.md |
-| 4 | {ID} | {brief} | 3 | — | Cosmetic — no action |
-
-**Totals:** {N} Tier 1, {N} Tier 2, {N} Tier 3
-**Tier 1 pending REQs:** {N}
-```
-
-##### Step 4.5: Pipeline Gate and User Decision
-
-**Pipeline Gate Rule:**
-- **≤3 Tier 1 items without REQs:** Advisory — pipeline can proceed. Items are registered as `[PENDING REQ]` in DERIVED-SPECS.md
-- **>3 Tier 1 items without REQs:** **Pipeline BLOCKED** — too many spec artifacts lack requirement backing. Must create REQs before proceeding to plan-architect.
-
-**User Decision (when Tier 1 items exist):**
-
-- **Option 1: Invoke req-change now** (Recommended) — Execute `/sdd-req-change` with pre-populated CRs. Pass:
-  - CR table with: CR-ID, Type (ADD/MODIFY), REQ-ID (or "new"), description, source finding ID, Tier
-  - Note that spec documents are already corrected — only requirements need updating
-  - Audit ID for traceability
-- **Option 2: Generate impact report only** — Write to `audits/UPSTREAM-IMPACT-AUDIT-vX.X.md` for later review. Tier 1 items remain as `[PENDING REQ]`
-- **Option 3: Accept risk** — Acknowledge Tier 1 items as intentional spec-level additions without formal REQs. Mark as `[ACCEPTED WITHOUT REQ]` in DERIVED-SPECS.md with user justification
-
-> **Note:** If Option 1 is selected, the req-change skill handles all requirement modifications. The spec-auditor only detects and classifies — it never writes to `requirements/`.
-
-> **Station mode** (`SDD_ROLE` set, or a role resolved from `.claude/sdd-sessions.json`, and the role is not `sdd-lead`): do not pick an option. Write the Upstream Impact table, leave Tier 1 items as `[PENDING REQ]`, append the decision as a `Q-<role>-NNN [OPEN]` block (Options 1/2/3 above as A/B/C, A recommended; `Blocks:` = pipeline gate to plan-architect) to `$STATE_ROOT/.sdd/questions-<role>.md` following the plugin-root `references/async-questions.md`, finish the audit report and Persist Summary, then send the handoff with `status=blocked questions=<n> file=<path>` and end the turn. On resume, apply the `[ANSWERED]` option exactly as if the user had chosen it. Without a role: ask the user as above.
-
-### Fix Constraints
-
-1. NEVER generate code — only specification text, invariants, ADRs
-2. NEVER invent behavior — every change traces to finding + answer
-3. NEVER resolve conflicts silently — create ADR
-4. ALWAYS show before/after for every spec change — limited to the changed sentence or value (≤ 4 lines), never the surrounding section
-5. ALWAYS make atomic commits per correction
-6. NEVER skip a finding — every one MUST appear in the corrections plan: P0–P2 with FIX as a block, all others as one row of the Dispositions table
-7. NEVER modify requirements directly — upstream impacts are detected and delegated to req-change
-8. ALWAYS classify corrections by Tier (1/2/3) and register Tier 1-2 in `spec/DERIVED-SPECS.md`
-
----
-
-## Post-Audit Traceability Reconciliation
-
-After the complete audit+fix cycle finishes (Discovery → Fix → Verification), run a final traceability reconciliation before the pipeline advances to `sdd-plan-architect`.
-
-### Reconciliation Process
-
-1. **Scan all spec artifacts:** List every UC, WF, INV, API contract, BDD scenario, and ADR in `spec/`
-2. **For each artifact, check traceability:**
-   - Does it trace to a REQ in `requirements/REQUIREMENTS.md`? → OK
-   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 2? → OK (derived, documented)
-   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 1 with `[ACCEPTED WITHOUT REQ]`? → OK (accepted)
-   - Does it appear in `spec/DERIVED-SPECS.md` as Tier 1 with `[PENDING REQ]`? → **Flag**
-   - Does it NOT appear anywhere? → **Untraced artifact** — must be classified
-
-3. **Report:**
-
-```markdown
-## Traceability Reconciliation Report
-
-| Status | Count | Details |
-|--------|-------|---------|
-| Traced to REQ | {N} | Fully traceable |
-| Derived (Tier 2) | {N} | Documented in DERIVED-SPECS.md |
-| Accepted without REQ (Tier 1) | {N} | User explicitly accepted |
-| Pending REQ (Tier 1) | {N} | **Action needed** |
-| Untraced | {N} | **Must classify** |
-
-**Pipeline gate:** {PASS / BLOCKED}
-```
-
-4. **Pipeline Gate:**
-   - **PASS** if: Pending REQ ≤ 3 AND Untraced = 0
-   - **BLOCKED** if: Pending REQ > 3 OR Untraced > 0
-
-5. **For untraced artifacts:** Present to user for classification (Tier 1/2/3) and register in DERIVED-SPECS.md
-
----
+When invoked with `--fix` (or asked to apply audit corrections), read [references/mode-fix.md](references/mode-fix.md) and follow it: corrections plan, execution with the Propagation Checklist, `docs(specs)` commits with `Refs:`, baseline update, upstream impact analysis by tier (Step 4.5 decision, station path), post-audit traceability reconciliation. Mode Fix never writes `requirements/`.
 
 ## Integration with Pipeline
 
-This skill is **Step 3** of the SDD pipeline, covering both audit and fix:
-
-```
-sdd-specifications-engineer (create) → sdd-spec-auditor (audit) → sdd-spec-auditor (fix) → sdd-spec-auditor (re-audit)
-```
+Third stage: after `sdd-specifications-engineer`; next stage `sdd-test-planner` (then `sdd-plan-architect`). Tier 1 upstream impact goes to `sdd-req-change`.
 
 | Mode | Input | Output |
 |------|-------|--------|
-| Mode Audit | Specifications + previous `audits/AUDIT-BASELINE.md` | `audits/AUDIT-BASELINE.md` (compact report + Baseline/History tables) |
-| Mode Fix | `audits/AUDIT-BASELINE.md` + Answers | Corrected specs + `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md` + Baseline update + Upstream impact analysis |
-| Mode Focused | Change Report + Specifications subset | `audits/AUDIT-FOCUSED-{id}.md` on changed documents |
+| Audit (default) | `spec/` + previous `audits/AUDIT-BASELINE.md` | `audits/AUDIT-BASELINE.md` (report + Baseline/History) |
+| Fix (`--fix`) | `audits/AUDIT-BASELINE.md` + answers | corrected `spec/`, `audits/CORRECTIONS-PLAN-AUDIT-vX.X.md`, baseline update, upstream impact |
+| Focused (`--focused`) | Change Report + affected `spec/` subset | `audits/AUDIT-FOCUSED-{id}.md` |
 
 ### Invocation
 
 ```bash
-/sdd-spec-auditor                                                    # Full audit (default; fan-out by dimension when spec/ > 8 files or > 40 k chars)
-/sdd-spec-auditor --sequential                                       # Force one thread (debugging, or when the Agent tool is unavailable)
-/sdd-spec-auditor --fix                                              # Apply corrections from answered audit
-/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{id}.md   # Focused audit on changed documents only (triggered by sdd-req-change cascade)
+/sdd-spec-auditor                                                    # Full audit (fan-out when spec/ > 8 files or > 40 k chars)
+/sdd-spec-auditor --sequential                                       # Force one thread
+/sdd-spec-auditor --fanout                                           # Force the four dimension auditors
+/sdd-spec-auditor --fix                                              # Apply corrections from a triaged audit
+/sdd-spec-auditor --focused --scope=changes/CHANGE-REPORT-{id}.md   # Audit only the changed documents (sdd-req-change cascade)
 ```
 
-### Mode Focused (`--focused`)
+### Mode Focused
 
-When `--focused` is provided together with `--scope` pointing to a Change Report, the auditor operates in a reduced-scope mode:
-
-1. **Scope restriction:** Only audit the documents listed in the Change Report's "Documents Modified" section. All other spec documents are treated as unchanged context (read but not audited).
-2. **Skip full cross-document audit:** Do NOT perform a full Phase 1-6 sweep. Instead, focus exclusively on verifying alignment and consistency of the changed documents against each other and against their immediate neighbors in the traceability chain.
-3. **Output:** Generate a focused audit report at `audits/AUDIT-FOCUSED-{change-report-id}.md` (e.g., `audits/AUDIT-FOCUSED-CR-007.md`). It uses the compact template (`references/report-template.md` §3, without the Baseline and History sections), the same categories (CAT-01..CAT-10) and severity classification, and includes only findings related to the modified documents. Execution is sequential unless the change set itself exceeds the fan-out threshold.
-4. **3C Verification:** Run the 3C Protocol checks (Completeness, Correctness, Coherence) scoped to the changed documents only. The verdict applies to the change set, not to the entire specification.
-5. **Cascade origin:** This mode is typically invoked automatically by `sdd-req-change` Phase 9 (Pipeline Cascade) after requirements changes have been propagated to spec documents. It provides a lightweight validation gate without requiring a full re-audit.
-
-> **Note:** If the focused audit reveals Critical or High findings, the user should consider running a full audit (`/sdd-spec-auditor` without `--focused`) to check for broader ripple effects.
-
-**Full pipeline:**
-```
-sdd-requirements-engineer → requirements/REQUIREMENTS.md
-sdd-specifications-engineer → spec/
-sdd-spec-auditor (audit) → audits/AUDIT-BASELINE.md
-sdd-spec-auditor (fix) → spec/ (corrections) + audits/CORRECTIONS-PLAN-*.md
-  └─ Phase 4: upstream impact? ──YES──→ sdd-req-change → requirements/ (updated)
-                                 NO
-                                 ↓
-sdd-plan-architect → plan/
-sdd-task-generator → task/
-sdd-task-implementer → src/, tests/
-```
-
----
-
-## Multi-Agent Protocol (fan-out by dimension)
-
-Fan-out is the default execution mode above the threshold (Execution Strategy). Full protocol — mode decision, index commands, budgets, scopes, launch parameters, auditor prompt, JSON shape and consolidation — in `references/fanout-protocol.md`.
-
-### Agent ID Prefixes
-
-<!-- Standard SDD agent prefix convention: prefixes map to spec/ subdirectories.
-     DOM- → domain/, UC- → use-cases/ + workflows/, CON- → contracts/ + tests/,
-     NFR- → nfr/ + adr/ + runbooks/.
-     All SDD skills sharing multi-agent protocols MUST use these same prefixes. -->
-
-Each auditor uses its prefix for **provisional** ids in its JSON; the consolidator assigns the final category ids and keeps the provisional one as `Source`:
-
-| Auditor | Prefix | Reads ONLY | Owns corpus-wide (grep) |
-|---------|--------|------------|-------------------------|
-| Domain | `DOM-` | `spec/domain/`, `spec/CLARIFICATIONS.md` | Terminology violations; rules without invariant |
-| Use cases / Workflows | `UC-` | `spec/use-cases/`, `spec/workflows/` | Unformalized constraints in UC text; state transitions vs `04-STATES.md` |
-| Contracts / BDD | `CON-` | `spec/contracts/`, `spec/tests/` | Missing BDD per UC; missing API error codes; permissions; CAT-10 over `spec/`+`ux/`+`test/` |
-| NFR / ADR / Runbooks | `NFR-` | `spec/nfr/`, `spec/adr/`, `spec/runbooks/`, `spec/VALUE-REGISTRY.md` | Shared-value inconsistencies; ADR status/materiality |
-| Main thread | — | index, `README.md`, `TRACEABILITY-MATRIX.md`, `DERIVED-SPECS.md`, `CLARIFICATIONS-PENDING.md`, REQ ids | Cross-references, REQ coverage, markers, SC03, SH05, baseline, regression |
-
-Auditors: `subagent_type: general-purpose`, `model: sonnet` (omit when `CLAUDE_CODE_SUBAGENT_MODEL` is set), read-only, return JSON only (≤ 6 k chars, ≤ 25 findings, P0 first), never write files, never Persist Summary or Handoff.
-
-### Consolidation (main thread, main model)
-
-1. Merge the four JSON results; `docs_read` union → Coverage table.
-2. Deduplicate: same document + same line (±5) or section + same defect type → keep the most complete finding, union the locations, mark `[CROSS-VALIDATED]` (highest confidence; both `Source` prefixes kept). A contradiction reported from both sides is one finding located in the divergent document (Minority Rule).
-3. Apply the baseline filter (Phase 0) and the Phase 7 batching/cascade rules across dimensions.
-4. Assign final ids per category (`AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR- TRN-`) in severity order; the final `CON-` means CAT-05, not the Contracts auditor.
-5. Review every P0/P1 against its cited lines (`sed -n`, ≤ 60 lines) before it enters the report; downgrade or drop without evidence.
-6. Compute 3C, metrics and Gate; write the report; Persist Summary with `metrics.mode = "fanout"`.
-
----
-
-## Audit Stability Rules
-
-These rules prevent audit noise and ensure consistent, actionable results across audit iterations:
-
-### Rule 1: No Re-Reporting Resolved Findings
-
-Do not report findings that were reported AND resolved in previous audits. Check the baseline file (`AUDIT-BASELINE.md`) before reporting. If a finding matches a baseline entry with status `accepted`, `wont_fix`, or `resolved`, exclude it.
-
-### Rule 2: Respect Design Decisions
-
-Do not report as a defect something that is a documented design decision. Before flagging a potential issue:
-- Check `adr/` for an ADR that explains the decision
-- Check `CLARIFICATIONS.md` for a business rule that justifies it
-- If an ADR or RN covers it, it is NOT a defect — skip it
-
-### Rule 3: Minority Rule for Contradictions
-
-If a value appears in N documents and only 1 document differs:
-- The defect is in the **1 divergent document**, NOT in all N documents
-- Report: "Document X has value Y, but N-1 other documents consistently use value Z"
-- Do NOT report N separate findings for the same contradiction
-
-### Rule 4: Precision Over Volume
-
-Prefer **precise findings with clear fixes** over **general observations**:
-
-```
-BAD:  "Several documents use inconsistent terminology"
-GOOD: "UC-015:34 uses 'job' instead of 'Extraction' (per 01-GLOSSARY.md)"
-
-BAD:  "Security could be improved"
-GOOD: "UC-023 lacks authorization check — no role specified for DELETE operation (see PERMISSIONS-MATRIX.md)"
-```
-
-Every finding MUST include:
-- Exact file and section/line
-- The specific value or text that is wrong
-- What the correct value should be (or a question to determine it)
-- Evidence from 2+ documents (for cross-document findings)
-
----
-
-## Important Constraints
-
-1. **NUNCA proponer implementación** - Solo identificar el problema y formular pregunta
-2. **NUNCA asumir comportamiento** - Si no está especificado, es un hallazgo
-3. **SIEMPRE indicar ubicación exacta** - Documento y línea (`doc:line`); es lo que permite volver al documento desde el informe compacto
-4. **SIEMPRE cruzar documentos** - Un hallazgo puede involucrar múltiples docs
-5. **SIEMPRE cerrar con resolución** - El hallazgo termina con `Fix` (≤ 3 líneas): la corrección a nivel de especificación o la pregunta que hay que responder antes de poder escribirla
-6. **NUNCA restituir las specs en el informe** - Citas ≤ 12 palabras; el informe es un índice de hallazgos con presupuesto (`references/report-template.md`)
-
----
+With `--focused --scope=<Change Report>`: audit only the documents in the report's "Documents Modified" section (others are read as context, not audited); check them against each other and their immediate neighbours in the traceability chain instead of a full Phase 1–6 sweep; run the 3C checks scoped to the change set; write `audits/AUDIT-FOCUSED-{change-report-id}.md` with the compact template minus `Baseline` and `History`. Sequential unless the change set exceeds the fan-out threshold. Usually triggered by `sdd-req-change` Phase 9. P0/P1 findings → recommend a full audit.
 
 ## Persist Summary
 
@@ -1058,10 +274,14 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
 4. Set `stages["spec-auditor"].summary`:
    - `artifacts`: list of files created/modified with labels (e.g., `{"file": "audits/AUDIT-BASELINE.md", "label": "Audit Baseline"}`)
    - `metrics`: `{ "total_findings": N, "critical": N, "high": N, "medium": N, "low": N, "batched_findings": N, "gate_result": "PASS"|"CONDITIONAL"|"FAIL", "audit_cycle": N, "topFindingCategories": ["CAT-06", "CAT-03", "CAT-07"], "report_chars": N, "mode": "fanout"|"sequential" }` (top 3 categories by frequency; `report_chars` = `wc -c audits/AUDIT-BASELINE.md`; `mode` = execution mode actually used, `fanout` even when one auditor had to be re-run sequentially — say so in `highlights`)
-   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: CONDITIONAL — 1 High documented", "fanout: 4 auditors (sonnet), NFR re-run sequentially", "report 18.4 k chars")
+   - `highlights`: top 3-5 notable observations (e.g., "26 findings: 2 P0, 5 P1", "Gate: CONDITIONAL — 1 P1 open (CON-002)", "fanout: 4 auditors (sonnet), NFR re-run sequentially", "report 18.4 k chars")
    - `nextStep`: `"Run /sdd-test-planner"` (if gate PASS/CONDITIONAL) or `"Run /sdd-spec-auditor --fix"` (if gate FAIL)
-   - `templateImprovements`: list of 1-3 recommendations for the spec-engineer based on most frequent finding categories (e.g., "UC template should require explicit error codes per step", "Add invariant extraction for constraint language in UCs"). These are consumed by the spec-engineer on the NEXT project run to apply extra scrutiny.
+   - `templateImprovements`: 1-3 recommendations for the spec engineer based on the most frequent finding categories (e.g., "UC template should require explicit error codes per step"). `sdd-specifications-engineer` reads them on its next run in this project (e.g. a re-run after a requirements change).
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)
 7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+
+## Output Language
+
+Write the report and respond in the user's language; ids, category codes and technical terms stay in English.

@@ -1,26 +1,16 @@
 # Execution Protocol: Id Ledger, Fan-out by Requirement Group, Consolidation from JSON
 
-> Profile that motivated this (`docs/medidas.md`, `docs/perfilado.md`): 22 min for a 10-requirement project — the
-> longest stage of the pipeline — in **one thread**. Stage time is almost entirely output tokens (the 88 k chars of
-> `spec/` are only ~20 % of what the stage generates; the rest is the per-requirement reasoning: error flows,
-> invariant extraction, scenario design). Reading less does not shorten that; generating in parallel does.
-> Target: wall-clock ≈ phases A+B + the slowest lane + phases D+E, main-thread context ≤ ~30 k tokens of spec content,
-> zero id collisions, zero broken cross-references.
+Target: wall-clock ≈ phases A+B + the slowest lane + phases D+E, main-thread context ≤ ~30 k tokens of spec content,
+zero id collisions, zero broken cross-references.
 
 ## 0. Fan-out is part of this skill's contract
 
-Launching the requirement lanes is **the requested behaviour of `/sdd-specifications-engineer`** above the threshold,
-not an optional expansion of scope: invoking this skill on a requirements set of that size *is* the explicit request for
-them. They are bounded workers (at most four at a time, no nesting), each reads only its own requirements plus the
-already-written shared documents, and each writes a **disjoint set of files** whose ids were reserved before they
-started. **Do not downgrade to sequential out of caution.** Downgrade only for a reason in §1, and record it in
-`metrics.mode` and in `summary.highlights`.
+Above the threshold, launching the requirement lanes is the requested behaviour of `/sdd-specifications-engineer`,
+not an optional expansion of scope. Lanes are bounded workers (at most four at a time, no nesting) that write disjoint
+sets of files whose ids were reserved before they started. Downgrade only for a reason in §1 and record it in
+`metrics.mode` and `summary.highlights`.
 
-Measured on 2026-08-27 (`docs/medidas.md`, `sdd-spec-auditor`): a run that downgraded to sequential "because the session
-guidance forbids spawning subagents without an explicit request" took 11 min; the same work with fan-out took 5 min and
-**cost half as much**, because each worker holds a small context instead of the whole corpus.
-
-## 1. Choose the mode (Mode 2 step 0, before writing anything)
+## 1. Choose the mode (Mode 2 step 5, before writing anything)
 
 ```bash
 F=$(grep -ohE '\bREQ-F-[0-9]{3}\b' requirements/REQUIREMENTS.md | sort -u | wc -l | tr -d ' ')   # functional REQs
@@ -33,9 +23,9 @@ N=$(grep -ohE '\bREQ-[A-Z]+-[0-9]{3}\b' requirements/REQUIREMENTS.md | sort -u |
 | `F ≤ 4` | **sequential** (one thread, same Generation Order, same id ledger) |
 | `--fanout` flag | **fanout**, whatever the size (forces the mode; useful for benchmarking) |
 | `--sequential` flag, or the `Agent` tool is not in the tool list | sequential; add the reason to `summary.highlights` |
-| Mode 5 (brownfield), Mode 3, Mode 4 | sequential — they are diagnostic or incremental, not bulk generation |
+| Mode 3, Mode 4 | sequential — they are diagnostic, not bulk generation |
 
-Mode 1 (analysis and user decisions) is **always** the main thread: it asks the user, and a subagent cannot.
+Mode 1 (analysis and user decisions) always runs in the main thread: it asks the user, and a subagent cannot.
 
 ## 2. Lanes and write sets
 
@@ -91,7 +81,7 @@ Mode: fanout · lanes: R1 R2 R3 X · model: sonnet
 ## Fixed skeletons — cite these ids, never invent one
 - WF-001 Command lifecycle. Steps: 1 parse argv · 2 validate · 3 load store · 4 apply operation · 5 persist · 6 render · 7 exit.
 - ADR-001 store file shape · ADR-002 atomic save · ADR-003 single-user CLI · ADR-004 error model · ADR-005 clock (owner: X)
-- Contract modules: API-001 = `api` (`src/api`) · Style operations, API-002 = `cli` · Style operations (`http` only
+- Contract modules: API-001 = `api` (file `contracts/API-api.md`) · Style operations, API-002 = `cli` · Style operations (`http` only
   when a REQ demands an HTTP API for external clients — cite it). Operation → UC → lane as in the table above.
 - Domain areas for INV: TSK (task), STO (store), CLI (interface).
 ```
@@ -100,7 +90,7 @@ Reservation rules — these are what make collisions impossible:
 
 1. **UC ids are allocated per requirement**, 1–2 per functional REQ (`REQ-F-001 → UC-001..UC-002`), listed explicitly.
    `AC-NNN-NN` derives from the UC number, so acceptance-criterion ids are disjoint by construction.
-2. **`API-{module}-NN` operation ids are allocated one by one** in phase A, each to exactly one lane, with a ≤ 6-word
+2. **`API-NNN-NN` operation ids are allocated one by one** in phase A, each to exactly one lane, with a ≤ 6-word
    purpose. A lane that needs another lane's operation cites its id; it never renames or renumbers one.
 3. **Minted ids carry the lane digit.** The ledger gives every lane a digit `L` (1–9; the X lane takes the next free
    one). Phase A owns `INV-{AREA}-0NN` and `NC-0NN`; lane *L* mints only `INV-{AREA}-{L}NN` and `NC-{L}NN` — and the
@@ -221,7 +211,7 @@ You own the cross-cutting documents that do not depend on any use case: {REQ-NF-
 listed in the ledger's "Fixed skeletons".
 READ additionally: the REQ-NF / REQ-C sections named in the ledger; {REFS}/document-templates.md Templates 6, 7 and
 the PROPERTY-TESTS shape; the ledger's UC id + title list (to cite UC ids you must never open).
-WRITE exactly: {spec/nfr/PERFORMANCE.md, LIMITS.md, SECURITY.md, OBSERVABILITY.md}, {spec/adr/ADR-001-…md … ADR-005-…md},
+WRITE exactly: {spec/nfr/PERFORMANCE.md, LIMITS.md, SECURITY.md, plus OBSERVABILITY.md / MAINTAINABILITY.md only when a REQ-NF covers them}, {spec/adr/ADR-001-…md … ADR-005-…md},
 spec/tests/PROPERTY-TESTS.md. Budgets: nfr ≤ 2 500, ADR ≤ 1 500, PROPERTY-TESTS ≤ 4 000 chars.
 Rules: one ADR per decision ACTUALLY taken (Nygard short: context ≤ 5 lines, alternatives table `Option | Why not`,
 consequences as +/− bullets, a risk is a `−` bullet). An NFR category that does not apply is ONE row

@@ -2,143 +2,14 @@
 
 ## Overview
 
-This guide describes the complete workflow for transforming requirements into formal specifications, following SWEBOK v4 Chapter 1, Section 5 (Requirements Specification) and Chapter 2 (Software Design).
+The phases from requirements intake to deliverables. Gap analysis and decision collection (Mode 1) follow `gap-analysis-checklist.md`; this guide covers what happens after.
 
----
+## Phase 1–3: Intake, gap analysis, decisions
 
-## Phase 1: Requirements Intake
-
-### 1.1 Locate Requirements
-
-Search for requirements in:
-- `requirements/` directory
-- `docs/requirements/` directory
-- `reqs/` directory
-- Any `.md`, `.docx`, `.xlsx` files with "requirement" in name
-- Jira/Confluence if configured
-- README or project documentation
-
-### 1.2 Inventory Requirements
-
-Create an inventory of all found requirements:
-
-```
-| ID | Description (summary) | Type | Source | Priority | Has Acceptance Criteria | Spec-Ready |
-|----|----------------------|------|--------|----------|------------------------|------------|
-```
-
-### 1.3 Classify Requirements
-
-For each requirement determine:
-- **Functional**: Observable behaviors (policies, processes) - Apply Perfect Technology Filter
-- **Nonfunctional - Technology**: Specific technology mandates/prohibitions
-- **Nonfunctional - QoS**: Quality of service constraints (performance, reliability, etc.)
-- **Interface**: External system interactions
-- **Data**: Data model, lifecycle, and integrity rules
-- **Constraint**: Business or technical limitations
-
----
-
-## Phase 2: Gap Analysis
-
-### 2.1 Completeness Check
-
-For each category, verify requirements exist:
-
-**Functional Completeness:**
-- [ ] All user-facing features identified
-- [ ] All business rules/policies specified
-- [ ] All workflows/processes documented
-- [ ] All user roles and permissions defined
-- [ ] CRUD operations for all data entities
-- [ ] Search/filter/sort capabilities
-- [ ] Reporting/analytics needs
-- [ ] Notification/alerting requirements
-
-**Nonfunctional Completeness:**
-- [ ] Response time targets
-- [ ] Throughput/capacity targets
-- [ ] Availability/uptime targets
-- [ ] Data retention policies
-- [ ] Backup/recovery requirements
-- [ ] Concurrent user capacity
-- [ ] Browser/device/OS compatibility
-- [ ] Accessibility standards (WCAG)
-- [ ] Internationalization/localization
-
-**Security Completeness:**
-- [ ] Authentication method
-- [ ] Authorization model (RBAC, ABAC, etc.)
-- [ ] Data encryption (at rest, in transit)
-- [ ] Audit logging
-- [ ] Session management
-- [ ] Input validation rules
-- [ ] Rate limiting
-- [ ] Data privacy/GDPR compliance
-
-**Integration Completeness:**
-- [ ] All external system interfaces identified
-- [ ] API contracts defined (request/response)
-- [ ] Authentication for external systems
-- [ ] Error handling for external failures
-- [ ] Data synchronization strategy
-- [ ] Fallback behavior when integrations fail
-
-### 2.2 Ambiguity Detection
-
-Scan for these patterns:
-
-**Vague Qualifiers:**
-- "fast", "quick", "responsive" -> Ask: "What specific response time in milliseconds?"
-- "easy", "intuitive", "user-friendly" -> Ask: "What specific UX criteria? Number of clicks? Error rate?"
-- "secure" -> Ask: "What specific security controls? Against what threats?"
-- "reliable" -> Ask: "What specific uptime %? What is acceptable downtime?"
-- "scalable" -> Ask: "What specific load? How many concurrent users? What growth rate?"
-- "flexible" -> Ask: "What specific configurability? What parameters must be adjustable?"
-
-**Implicit Assumptions:**
-- Technology stack not stated
-- Deployment environment not defined
-- User skill level assumed
-- Network conditions assumed
-- Data volume assumptions
-- Browser/device assumptions
-
-**Missing Boundary Conditions:**
-- Maximum values not defined
-- Minimum values not defined
-- Empty/null handling not specified
-- Overflow behavior not specified
-- Timeout values not defined
-
-### 2.3 Conflict Detection
-
-Check for:
-- Requirements that mandate contradictory behaviors
-- Nonfunctional requirements that make functional requirements infeasible
-- Priority conflicts (two "must-have" features that are mutually exclusive)
-- Scope conflicts (requirements that exceed stated project boundaries)
-
----
-
-## Phase 3: Decision Collection
-
-### 3.1 Decision Framework
-
-For every issue found, present it to the user with the Decision Request Template in `gap-analysis-checklist.md` (≤ 12 lines, one line per option) through `AskUserQuestion`.
-
-### 3.2 Decision Log
-
-The decision log **is** `spec/CLARIFICATIONS.md` (Template 16): one D-NNN row per format/structure decision, one RN-NNN row per business rule (source REQ, question, rule adopted, rejected options in one clause each, tier). No other log, no per-decision prose; the readiness report and every spec document cite the RN id.
-
-### 3.3 Decision Categories
-
-**Architecture Decisions**: affect the overall system structure
-**Interface Decisions**: define how components/systems interact
-**Data Decisions**: define data structures, storage, and lifecycle
-**Quality Decisions**: set specific quality targets
-**Scope Decisions**: include or exclude functionality
-**Format Decisions**: choose specification formats and structure
+- **Locate requirements** in `requirements/` first; otherwise `docs/requirements/`, `reqs/`, any file with "requirement" in its name, the README.
+- **Gap analysis:** `gap-analysis-checklist.md` Phases 1–2 (readiness per requirement, collection coverage). Ask only about the gaps the stated scope implies.
+- **Decisions:** each issue goes to the user with the Decision Request Template of `gap-analysis-checklist.md` (SKILL.md § Asking the User: ≤ 4 questions per `AskUserQuestion`, severity order).
+- **Decision log:** `spec/CLARIFICATIONS.md` (Template 16) **is** the log: one D-NNN row per format/structure decision, one RN-NNN row per business rule (source REQ, question, rule adopted, rejected options in one clause each, tier). No other log; the readiness report and every spec document cite the RN id.
 
 ---
 
@@ -148,43 +19,11 @@ The decision log **is** `spec/CLARIFICATIONS.md` (Template 16): one D-NNN row pe
 
 Follow SKILL.md § Generation Order (id ledger → shared domain homes → one pass per requirement writing UC + BDD together → cross-cutting files → grep-based gate) and § Output Budget (≤ 120k chars for ≤ 15 requirements). Write each file once; never re-read a written file except through `grep` in the gate.
 
-Decide the execution mode before writing anything (SKILL.md § Execution Strategy, `fanout-protocol.md`): with **more than 4 functional requirements** the per-requirement pass runs in parallel lanes of 2-3 requirements each, plus one cross-cutting lane for `nfr/` and `adr/`, every id having been reserved in the ledger beforehand; at or below the threshold, or with `--sequential`, one thread does the same work in the same order. Phase 3 (Decision Collection) always runs **before** the fan-out — a lane cannot ask the user, and unresolved ambiguities come back as `NC` markers.
+Decide the execution mode before writing anything (SKILL.md § Execution Strategy, `fanout-protocol.md`): with more than 4 functional requirements the per-requirement pass runs in parallel lanes of 2-3 requirements each, plus one cross-cutting lane for `nfr/` and `adr/`, every id having been reserved in the ledger beforehand; at or below the threshold, or with `--sequential`, one thread does the same work in the same order. Decision collection always runs before the fan-out (SKILL.md Lane contract).
 
-### 4.1 Choose Specification Technique
+### 4.1 Specification technique
 
-Based on SWEBOK v4, select the most appropriate technique(s):
-
-**Unstructured Natural Language ("The system shall...")**
-- Use for: Simple, standalone requirements
-- Pros: Easy to write and read
-- Cons: Prone to ambiguity
-- Mitigate by: Adding acceptance criteria
-
-**Structured Natural Language (Actor-Action)**
-- Format: `[Triggering event], [Actor] shall [Action] [Condition]`
-- Use for: Formal documents, contractual requirements
-- Pros: Consistent, traceable
-- Cons: Can be rigid
-
-**Use Case Specifications**
-- Template: Event, Parameters, Preconditions, Postconditions, Normal/Alternative/Exception courses
-- Use for: Complex workflows, multi-step interactions
-- Pros: Comprehensive, covers all paths
-- Cons: Verbose, may be redundant for simple features
-
-**User Stories + BDD Scenarios**
-- Story: `As a [role] I want [capability] so that [benefit]`
-- Scenario: `Given [context], When [stimulus], Then [outcome]`
-- Use for: Agile teams, iterative development
-- Pros: User-centered, directly testable
-- Cons: May miss system-level concerns
-
-**Model-Based Specifications**
-- Structural: Class diagrams, ERD, data models (as markdown tables)
-- Behavioral: State diagrams, activity flows, sequence descriptions
-- Use for: Architecturally complex systems
-- Pros: Precise, visual
-- Cons: Requires modeling skills to read
+The default is the modular `spec/` tree with use cases + BDD scenarios (Templates 2 and 13). User stories (Template 3), actor-action statements (Template 4) or a monolithic SRS (Template 1) are used only when the user chooses them in Mode 2 step 3.
 
 ### 4.2 Specification Writing Rules
 
@@ -201,20 +40,9 @@ Based on SWEBOK v4, select the most appropriate technique(s):
 11. **Boilerplate once per file** — auth/rate limit/version, standard errors, actors (W7)
 12. **Write each file once** — plan ids, invariants and exception rows before writing (W9)
 
-### 4.3 Specification ID Scheme
+### 4.3 Specification IDs
 
-```
-SPEC-[MODULE]-[TYPE]-[NUMBER]
-
-MODULE: 3-letter module code (e.g., AUTH, USR, PAY, ORD)
-TYPE: F (functional), N (nonfunctional), I (interface), D (data)
-NUMBER: sequential within module+type
-
-Examples:
-SPEC-AUTH-F-001: First functional spec for authentication module
-SPEC-PAY-N-001: First nonfunctional spec for payments module
-SPEC-USR-I-001: First interface spec for user module
-```
+Use the ids of SKILL.md § Specification Folder Structure and the id ledger: `UC-NNN`, `WF-NNN`, `API-NNN-NN`, `INV-{AREA}-NNN`, `AC-NNN-NN`, `RN-NNN`, `ADR-NNN`, `NC-NNN`, and in `nfr/` the row ids of Template 7.
 
 ### 4.4 Specification Attributes
 
@@ -262,8 +90,6 @@ There is no separate coverage report: coverage is the last line of `spec/TRACEAB
 ---
 
 ## Phase 6: Deliverables
-
-> **IMPORTANT:** The output directory is `spec/` (singular, no 's'). This is the canonical structure expected by all downstream SDD skills.
 
 ### 6.1 Required Deliverables
 

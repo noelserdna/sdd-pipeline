@@ -49,7 +49,7 @@ Record the final size in `pipeline-state.json` as `metrics.report_chars`.
 | 3C Completeness (SC01–SC05) | {PASS 5/5 \| FAIL: SC04 → INC-001, INC-002} |
 | 3C Correctness (SR01–SR05) | {PASS \| FAIL: SR02 → CON-001} |
 | 3C Coherence (SH01–SH05) | {PASS \| WARN: SH01 → SEM-002} |
-| Spec defect density | {n} P0/doc (target < 2) {PASS/FAIL} |
+| Spec defect density | {n} (P0+P1)/doc (target < 2) {PASS/FAIL} |
 | Traceability coverage | {n}% (100%) {PASS/FAIL} |
 | Orphan rate | {n}% (0%) {PASS/FAIL} |
 | Clarification density | {n}/doc (0) {PASS/FAIL} |
@@ -111,6 +111,8 @@ Rules:
   short descriptions (`grep -E '^### [A-Z]+-[0-9]+|^\| [A-Z]+-[0-9]+' audits/AUDIT-BASELINE.md`), carries the
   `Baseline` and `History` sections forward, and rewrites the body.
 - Severity labels: P0 = Critical, P1 = High, P2 = Medium, P3 = Low (Severity Classification in SKILL.md).
+- Baseline tables: only `Accepted`, `Won't fix` and unexpired `Deferred` rows exclude findings from the next audit
+  (SKILL.md Phase 0); `Resolved` rows are history, and a resolved finding detected again is a `regression`.
 - Order: P0 first, then P1, then P2; inside a severity, CON (contradictions) first, then SIL, then the rest.
 - Batched findings (Phase 7.1) list every location in `Where` and count once.
 - After Mode Fix: append ` — RESOLVED ({artifact, e.g. ADR-006})` to the heading of each fixed P0–P2 finding, move it
@@ -128,7 +130,7 @@ Rules:
 - New findings during verification: {n} ({ids, severity} or —)
 ```
 
-- Post-audit `Traceability Reconciliation` (SKILL.md) is the 5-row table defined there, appended after `Verification`;
+- Post-audit `Traceability Reconciliation` (`mode-fix.md`) is the 5-row table defined there, appended after `Verification`;
   the `Upstream Impact` table (Fix Step 4.4) is appended only when Tier 1 items exist, one row per item.
 - `--focused` audits write `audits/AUDIT-FOCUSED-{change-report-id}.md` with the same template minus `Baseline`
   and `History`; the header states the scope (`Docs audited: {n} (change set CR-xxx)`).
@@ -136,7 +138,7 @@ Rules:
 ## 4. `audits/CORRECTIONS-PLAN-AUDIT-v{X.Y}.md` (Mode Fix, Fix Phase 1)
 
 Only findings with `FIX` disposition and severity P0–P2 get a block. Every other finding is one row of the
-`Dispositions` table (Fix Constraint 6: nothing is skipped, but nothing is restated). Reference the finding by id;
+`Dispositions` table (`mode-fix.md` principle 5: nothing is skipped, but nothing is restated). Reference the finding by id;
 do not copy `What/Why` from the report.
 
 ```markdown

@@ -323,6 +323,7 @@ None. *(or a table: Event | Step | Payload | Consumers)*
 
 | Field | Value |
 |---|---|
+| Module | API-NNN (number from the id ledger; operation ids are `API-NNN-NN`) |
 | Style | http — REQ-… demands an HTTP API for external clients |
 | Base / Version | `/api/v1` · v1 |
 | Auth | JWT bearer *(or: Not applicable — in-process calls, ADR-NNN)* |
@@ -379,6 +380,7 @@ Rule (`Style: http` only — a REQ demands an HTTP API for external clients; cit
 
 | Field | Value |
 |---|---|
+| Module | API-NNN (number from the id ledger; operation ids are `API-NNN-NN`) |
 | Style | operations |
 | Auth | session user *(or: Not applicable — single local user, ADR-NNN)* |
 | Refs | REQ-…; UC-…; ADR-… |

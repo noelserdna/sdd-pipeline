@@ -1,658 +1,219 @@
-# Detection Patterns for Automated Audit
+# Detection Patterns
 
-> Patrones de búsqueda para detectar defectos automáticamente en especificaciones.
+> Grep patterns that surface candidate defects. A hit is a lead, not a finding: open the cited lines, apply the Signal
+> Filters and the category rules of SKILL.md, then record it. Patterns are bilingual (English / Spanish); add the
+> equivalents of the spec's language when it is another one.
 
----
-
-## CAT-01: Ambigüedades - Palabras Sospechosas
-
-### Grep Patterns
+## CAT-01: Ambiguities — vague words
 
 ```bash
-# Cuantificadores vagos
-grep -rniE "(apropiado|adecuado|razonable|suficiente|normal|típico)" spec/
-
-# Tiempo indefinido
-grep -rniE "(pronto|rápido|inmediato|cuando sea posible|en breve)" spec/
-
-# Frecuencia indefinida
-grep -rniE "(frecuentemente|regularmente|periódicamente|ocasionalmente)" spec/
-
-# Cantidad indefinida
-grep -rniE "(varios|algunos|muchos|pocos|la mayoría|casi todos)" spec/
-
-# Condicionales ambiguos
-grep -rniE "(si es necesario|cuando corresponda|según sea apropiado)" spec/
-
-# Comparativos sin referencia
-grep -rniE "(mejor|peor|más rápido|más lento|mayor|menor)" spec/
-
-# "etc" y listas incompletas
-grep -rniE "(etc\.|y otros|entre otros|y similares)" spec/
+# Vague qualifiers
+grep -rniE '\b(appropriate|adequate|reasonable|sufficient|normal(ly)?|typical|apropiad[oa]|adecuad[oa]|razonable|suficiente|normalmente|típic[oa])\b' spec/
+# Undefined time
+grep -rniE '\b(soon|fast|quick(ly)?|immediate(ly)?|as soon as possible|pronto|rápid[oa]|inmediat[oa]|cuando sea posible|en breve)\b' spec/
+# Undefined frequency / quantity
+grep -rniE '\b(frequently|regularly|periodically|occasionally|several|some|many|few|most|frecuentemente|regularmente|periódicamente|varios|algunos|muchos|pocos|la mayoría)\b' spec/
+# Ambiguous conditionals and open lists
+grep -rniE '(if necessary|as needed|when appropriate|if applicable|si es necesario|cuando corresponda|según sea necesario|etc\.|and others|among others|y otros|entre otros)' spec/
+# Comparatives without reference
+grep -rniE '\b(better|worse|faster|slower|mejor|peor|más rápido|más lento)\b' spec/
 ```
 
-### Palabras a Investigar
+| Word | Problem | Question |
+|---|---|---|
+| appropriate / apropiado | no criterion | What makes it appropriate? |
+| reasonable / razonable | subjective | What is the number? |
+| normally / normalmente | implies exceptions | What happens in the other cases? |
+| should / debería | not binding | MUST or SHOULD? |
+| may / can / puede | optional or capability? | MAY or CAN? |
+| etc. | incomplete list | Which are all the cases? |
 
-| Palabra | Problema | Pregunta |
-|---------|----------|----------|
-| "apropiado" | Sin criterio definido | ¿Qué lo hace apropiado? |
-| "razonable" | Subjetivo | ¿Cuál es el valor numérico? |
-| "normalmente" | Implica excepciones | ¿Qué pasa en casos anormales? |
-| "debería" | No es obligatorio | ¿Es MUST o SHOULD? |
-| "puede" | Opcional o capacidad? | ¿Es MAY o CAN? |
-| "etc." | Lista incompleta | ¿Cuáles son todos los casos? |
+The canonical vague-term list for requirements is `../sdd-requirements-engineer/references/audit-checklist.md` §1.1.
 
----
-
-## CAT-02: Reglas Implícitas - Patrones
-
-### Grep Patterns
+## CAT-02: Implicit rules
 
 ```bash
-# Validaciones implícitas
-grep -rniE "(válido|inválido|correcto|incorrecto)" spec/ | grep -v "validación"
-
-# Asunciones de unicidad
-grep -rniE "(único|duplicado|ya existe)" spec/
-
-# Orden implícito
-grep -rniE "(primero|después|antes de|luego)" spec/
-
-# Defaults no especificados
-grep -rniE "por defecto|default" spec/
-
-# Permisos implícitos
-grep -rniE "(puede|no puede|tiene acceso|sin acceso)" spec/
+grep -rniE '\b(valid|invalid|correct|incorrect|válid[oa]|inválid[oa]|correct[oa])\b' spec/ | grep -viE 'INV-|E_[A-Z_]+'
+grep -rniE '\b(unique|duplicate|already exists|únic[oa]|duplicad[oa]|ya existe)\b' spec/ | grep -v 'INV-'
+grep -rniE '\b(by default|default|por defecto)\b' spec/
+grep -rniE '\b(can|cannot|has access|puede|no puede|tiene acceso)\b' spec/use-cases/
 ```
 
-### Señales de Reglas Implícitas
+Typical silent assumptions: "the user enters a value" (format? uniqueness?), "the file is saved" (where? name?
+permissions?), "a notification is sent" (to whom? channel? when?), "the status is updated" (who may? audited?).
 
-```markdown
-- "El usuario ingresa su email" → ¿Se valida formato? ¿Unicidad?
-- "Se guarda el archivo" → ¿Dónde? ¿Con qué nombre? ¿Permisos?
-- "Se envía notificación" → ¿A quién? ¿Qué canal? ¿Inmediato?
-- "Se actualiza el estado" → ¿Quién puede? ¿Se registra audit?
-```
-
----
-
-## CAT-03: Silencios Peligrosos - Detección
-
-### Grep Patterns
+## CAT-03: Dangerous silences
 
 ```bash
-# Buscar flujos sin manejo de error
-grep -rniE "^(When|Cuando)" spec/use-cases/ | grep -v -i "error\|excep\|falla"
-
-# Steps sin timeout
-grep -rniE "^### Step" spec/workflows/ -A 10 | grep -v "timeout"
-
-# Estados sin transición de error
-grep -rniE "status.*=" spec/domain/04-STATES.md | grep -v "failed\|error"
-
-# Operaciones sin rollback
-grep -rniE "(crear|insertar|guardar|actualizar|eliminar)" spec/ | grep -v "rollback\|compensar\|revert"
+# UCs whose exceptions table has no rows (heading followed by header + separator only)
+grep -n -A3 '^## Exceptions' spec/use-cases/*.md | grep -B1 -A2 '^--$'
+# Workflow steps without timeout or retry cell
+grep -n '^| [0-9]' spec/workflows/*.md | grep -E '\| *\| *\|'
+# States without a failure/terminal transition
+grep -niE 'failed|error|cancel|fallid|cancelad' spec/domain/04-STATES.md
 ```
 
-### Checklist de Silencios
+For each operation check: failure, timeout, partial data, duplicates, no data, user cancels, concurrent access.
 
-```markdown
-Para cada operación, verificar:
-- [ ] ¿Qué pasa si falla?
-- [ ] ¿Qué pasa si hay timeout?
-- [ ] ¿Qué pasa si hay datos parciales?
-- [ ] ¿Qué pasa si hay duplicados?
-- [ ] ¿Qué pasa si no hay datos?
-- [ ] ¿Qué pasa si el usuario cancela?
-- [ ] ¿Qué pasa concurrentemente?
-```
-
----
-
-## CAT-04: Ambigüedades Semánticas - Detección
-
-### Grep Patterns
+## CAT-04: Semantic ambiguities
 
 ```bash
-# Extraer términos del glosario
-TERMS=$(grep -oE "^\| \*\*[^*]+\*\*" spec/domain/01-GLOSSARY.md | sed 's/| \*\*//;s/\*\*//')
-
-# Buscar sinónimos prohibidos
-grep -rniE "(job|task|proceso)" spec/ --include="*.md" | grep -v GLOSSARY
-
-# Buscar variaciones de capitalización
-grep -rn "extraction" spec/ | grep -v "Extraction"
-
-# Buscar términos no definidos
-grep -rnoE "\b[A-Z][a-z]+[A-Z][a-z]+\b" spec/ | sort -u
-# (CamelCase terms that might need glossary entry)
+# "Do not use" synonyms from the glossary, grepped over the corpus (last column of the glossary table)
+awk -F'|' '/^\|/ && NR>2 {print $(NF-1)}' spec/domain/01-GLOSSARY.md | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -v '^$' |
+  while read -r t; do grep -rniw -- "$t" spec/ | grep -v '01-GLOSSARY' ; done
+# CamelCase / capitalised terms that may need a glossary entry
+grep -rhoE '\b[A-Z][a-z]+[A-Z][A-Za-z]+\b' spec/ | sort | uniq -c | sort -rn | head -40
 ```
 
-### Matriz de Sinónimos Comunes
+Check each glossary term for case variations (`Task` vs `task` used as the domain concept) and for the same concept
+named differently across documents. The synonym list comes from the project's glossary, never from a fixed matrix.
 
-| Término Canónico | Sinónimos a Detectar |
-|------------------|---------------------|
-| Extraction | job, task, proceso, extracción |
-| CV | resume, curriculum, hoja de vida |
-| Organización | tenant, empresa, company, cliente |
-| JobOffer | vacancy, position, puesto, oferta |
-| MatchResult | match, score, resultado |
-| User | usuario, member, account |
-
----
-
-## CAT-05: Contradicciones - Detección
-
-### Grep Patterns para Valores
+## CAT-05: Contradictions
 
 ```bash
-# Buscar todos los timeouts
-grep -rniE "timeout.*[0-9]+" spec/ | sort
-
-# Buscar todos los límites de tamaño
-grep -rniE "(size|tamaño).*[0-9]+" spec/ | sort
-
-# Buscar todos los rate limits
-grep -rniE "rate.*limit.*[0-9]+" spec/ | sort
-
-# Buscar todos los retention periods
-grep -rniE "retention.*[0-9]+" spec/ | sort
-
-# Comparar valores del mismo concepto
-grep -rniE "max_file_size|file.size.limit" spec/
+grep -rniE 'timeout.*[0-9]+' spec/ | sort
+grep -rniE '(size|tamaño|length|longitud|max|máx).*[0-9]+' spec/ | sort
+grep -rniE '(rate.?limit|límite de tasa).*[0-9]+' spec/ | sort
+grep -rniE '(retention|retención).*[0-9]+' spec/ | sort
+# Every registry value: the number should appear only next to its name
+grep -oE '^\| *`[A-Z_]+` *\| *[0-9]+' spec/VALUE-REGISTRY.md
 ```
 
-### Valores Críticos a Cruzar
+Cross the same concept across `VALUE-REGISTRY.md`, `nfr/LIMITS.md`, workflows, contracts and UCs; the divergent
+document is the location (Minority Rule).
 
-| Concepto | Documentos a Revisar |
-|----------|---------------------|
-| Timeout extracción | LIMITS.md, WF-001.md, API-extraction.md |
-| Max file size | LIMITS.md, UC-001.md, API-upload.md |
-| Rate limit | LIMITS.md, API-*.md, ADR-025.md |
-| Session timeout | SECURITY.md, LIMITS.md |
-| Retention period | SECURITY.md, GDPR docs, LIMITS.md |
-
----
-
-## CAT-06: Especificaciones Incompletas - Detección
-
-### Grep Patterns
+## CAT-06: Incomplete specifications
 
 ```bash
-# TODOs pendientes
-grep -rniE "(TODO|TBD|FIXME|PENDING|WIP)" spec/
-
-# Secciones vacías (solo heading sin contenido)
-grep -rniE "^##" spec/ -A 1 | grep -B 1 "^--$"
-
-# Placeholders
-grep -rniE "(\{.*\}|<.*>|\[.*\])" spec/ | grep -v "código\|example"
-
-# Referencias a documentos que no existen
-grep -rnoE "(UC-[0-9]+|WF-[0-9]+|ADR-[0-9]+|INV-[A-Z]+-[0-9]+)" spec/ | sort -u
-
-# Campos sin valor
-grep -rniE ":\s*$" spec/
+grep -rniE '\b(TODO|TBD|FIXME|PENDING|WIP)\b' spec/
+grep -rn '\[NEEDS CLARIFICATION\]' spec/
+# Heading immediately followed by another heading (empty section)
+find spec -name '*.md' -exec awk 'FNR==1{p=""} /^#/{ if (p ~ /^#/) print FILENAME": "p" → "$0 } NF{p=$0}' {} +
+# Unfilled template placeholders
+grep -rnE '\[(name|title|actor|condition|step|value)\]|\{[a-z_ -]+\}' spec/
 ```
 
-### Secciones Requeridas por Tipo
+Required sections, from the specifications-engineer templates (`document-templates.md`):
 
-```yaml
-use-case:
-  required:
-    - Actores
-    - Precondiciones
-    - Postcondiciones
-    - Flujo Principal
-    - Flujos de Excepción
-    - Errores
-    - Trazabilidad
+| Document | Required |
+|---|---|
+| Use case (Template 2) | header table with `Refs`, `Actors`, `Trigger`; `Input / Output`; `Preconditions`; `Postconditions` (success + failure); `Main flow`; `Exceptions & errors` (≥ 1 row). `Extensions` and `Open questions` are optional |
+| Workflow (Template 11) | header with `Trigger`, `Total timeout`, `Refs`; `Steps` table (timeout, retry, on failure, compensation); `Error scenarios`; `Events emitted` (may be `None.`); `Metrics` |
+| Invariants (Template 10) | one row per invariant: ID, rule, enforced at, UCs, violation error, validation |
+| Contract (Template 12/12b) | header with `Module`, `Style`, `Refs`; `Operations` table; one `Errors` table |
+| BDD (Template 13) | `Refs` line; one scenario per main flow, extension, exception row and edge case, titled `AC-NNN-NN — … [REQ-X ACn]` |
 
-workflow:
-  required:
-    - Trigger
-    - Timeout
-    - Steps (con timeout individual)
-    - Error handling
-    - Compensación
-    - Métricas
+A mandatory section containing `None.` is complete (writing rule W4), not a CAT-06 finding.
 
-invariant:
-  required:
-    - ID
-    - Regla declarativa
-    - Validación (SQL o Zod)
-```
-
----
-
-## CAT-07: Invariantes Débiles - Detección
-
-### Grep Patterns
+## CAT-07: Weak invariants
 
 ```bash
-# Buscar restricciones en UCs que no son INV
-grep -rniE "(debe|no debe|siempre|nunca|máximo|mínimo)" spec/use-cases/ | grep -v "INV-"
-
-# Invariantes sin validación
-grep -rniE "^### INV-" spec/domain/05-INVARIANTS.md -A 10 | grep -v "CHECK\|Zod\|validate"
-
-# Rangos sin ambos límites
-grep -rniE "entre [0-9]+ y" spec/
-grep -rniE "> [0-9]+[^0-9]" spec/ | grep -v "<"
-
-# Buscar "debe ser único" sin constraint UNIQUE
-grep -rniE "único|unique" spec/ | grep -v "UNIQUE\|constraint"
+# Constraint language in UCs without an INV reference
+grep -rniE '\b(must|shall not|always|never|at most|at least|maximum|minimum|between [0-9]+ and|debe|no debe|siempre|nunca|como máximo|como mínimo|entre [0-9]+ y)\b' spec/use-cases/ | grep -v 'INV-'
+# Invariant rows with an empty validation cell
+grep -nE '^\| *INV-[A-Z]+-[0-9]{3}' spec/domain/05-INVARIANTS.md | grep -E '\| *\|? *$'
+# One-sided ranges
+grep -rniE '(> *[0-9]+|greater than [0-9]+|mayor que [0-9]+)' spec/ | grep -viE '(< *[0-9]+|less than|menor que)'
 ```
 
-### Invariantes que Suelen Faltar
+Invariants that are often missing: uniqueness of natural identifiers; numeric ranges; referential integrity; temporal
+order (start < end); allowed state transitions; tenant isolation; deletion with dependants.
 
-```markdown
-- [ ] Unicidad de identificadores naturales (email, slug)
-- [ ] Rangos de valores numéricos (score, percentage)
-- [ ] Integridad referencial (FK constraints)
-- [ ] Constraints temporales (start_date < end_date)
-- [ ] Constraints de estado (solo ciertas transiciones válidas)
-- [ ] Constraints de tenant isolation
-- [ ] Constraints de soft delete (no eliminar si tiene dependencias)
-```
-
----
-
-## CAT-08: Riesgos de Evolución - Detección
-
-### Grep Patterns
+## CAT-08: Evolution risks
 
 ```bash
-# Enums hardcodeados
-grep -rniE "enum|type.*=.*\|" spec/
-
-# Valores hardcodeados
-grep -rniE "= ['\"]?[a-z_]+['\"]?" spec/domain/
-
-# Versiones de API sin estrategia
-grep -rniE "/v[0-9]+/" spec/contracts/ | head -5
-
-# Campos sin nullable strategy
-grep -rniE "required.*true" spec/ | grep -v "optional"
+grep -rniE '\benum\b|type .*= *'"'"'[a-z_]+'"'"' *\|' spec/domain/
+grep -rniE '/v[0-9]+/' spec/contracts/
 ```
 
-### Señales de Riesgo de Evolución
+Signals: closed enum without an evolution rule; sequential ids exposed externally; non-null fields without default on
+existing data; public API without versioning; states without a deprecated/archived path.
 
-```markdown
-- Enum cerrado sin estado "other" o "unknown"
-- ID secuencial en lugar de UUID
-- Campos not null sin default
-- API sin versionado
-- Schemas sin additionalProperties handling
-- Estados sin transición a "deprecated" o "archived"
-```
-
----
-
-## CAT-09: Decisiones Sin ADR - Detección
-
-### Grep Patterns
+## CAT-09: Decisions without ADR
 
 ```bash
-# Tecnologías mencionadas sin ADR
-TECHS="R2|D1|KV|Workers|Cloudflare|Redis|PostgreSQL|MongoDB|JWT|OAuth"
-grep -rniE "$TECHS" spec/ | grep -v "adr/"
-
-# Patrones arquitectónicos sin justificación
-grep -rniE "(saga|cqrs|event.sourcing|microservic)" spec/ | grep -v "adr/"
-
-# Decisiones de seguridad sin ADR
-grep -rniE "(encryption|AES|RSA|SHA|bcrypt|argon)" spec/ | grep -v "adr/"
-
-# Trade-offs mencionados
-grep -rniE "(trade.off|compromise|alternativa)" spec/
+# Technology names outside adr/ — build the list from the spec itself, then check each has an ADR
+grep -rhoE '\b(PostgreSQL|MySQL|SQLite|MongoDB|Redis|DynamoDB|S3|Kafka|RabbitMQ|JWT|OAuth2?|SAML|GraphQL|gRPC|WebSocket|AES|RSA|bcrypt|argon2)\b' spec/ --exclude-dir=adr | sort | uniq -c
+grep -rniE '\b(saga|cqrs|event.sourcing|microservice|multi.?tenan)' spec/ --exclude-dir=adr
+grep -rniE '(trade.?off|compromise|alternative|alternativa|compromiso)' spec/ --exclude-dir=adr
 ```
 
-### Decisiones que Requieren ADR
+Decisions that need an ADR: database / storage, authentication, PII encryption, multi-tenancy model, rate-limiting
+strategy, fallback strategy for external services, retry/backoff, id format, API versioning.
 
-```markdown
-- [ ] Elección de base de datos
-- [ ] Elección de storage (R2, S3, etc.)
-- [ ] Estrategia de autenticación
-- [ ] Estrategia de encriptación PII
-- [ ] Modelo de multi-tenancy
-- [ ] Estrategia de rate limiting
-- [ ] Modelo de fallback (LLM)
-- [ ] Estrategia de retry/backoff
-- [ ] Formato de IDs (UUID vs sequential)
-- [ ] Estrategia de versionado de API
-```
+## CAT-10: Transport over-specification
 
----
-
-## CAT-10: Sobreespecificación de Transporte - Detección
-
-> Corpus: `spec/`, más `ux/` y `test/` si existen (lo cubre el auditor Contracts & BDD sobre todo el corpus).
-> `design/` es el hogar legítimo del transporte (`design/OPERATION-MAPPING.md`) y **no** se escanea.
-
-### Grep Patterns
+> Corpus: `spec/`, plus `ux/` and `test/` when present (the Contracts & BDD auditor covers it corpus-wide).
+> `design/` is the legitimate home of transport (`design/OPERATION-MAPPING.md`) and is not scanned.
 
 ```bash
 CORPUS="spec"; [ -d ux ] && CORPUS="$CORPUS ux"; [ -d test ] && CORPUS="$CORPUS test"
 
-# 0. Estilo por módulo. Sin fila Style + columnas Method/Path = contrato pre-4.3 → se trata como http
+# 0. Style per module. No Style row + Method/Path columns = pre-4.3 contract → treated as http
 grep -nE '^\| *Style *\|' spec/contracts/API-*.md
 grep -lE '^\| *(ID *\| *)?Method *\| *Path' spec/contracts/API-*.md
 
-# 1. Verbos + rutas HTTP y columnas de transporte
+# 1. HTTP verbs + routes and transport columns
 grep -rnE '\b(GET|POST|PUT|PATCH|DELETE)\b +`?/' $CORPUS
 grep -rnE '^\| *(ID *\| *)?(Method|HTTP|Path|Route|Endpoint) *\|' $CORPUS
 
-# 2. Códigos de estado y redirects
+# 2. Status codes and redirects
 grep -rnE '\b(status|HTTP|código) *:? *[1-5][0-9]{2}\b|redirect|redirig' $CORPUS
 
-# 3. Atributos de formulario que bloquean mensajes del servidor (revisar cada hit: la columna
-#    "Required" de un inventario de campos o "required" en prosa NO es señal; el atributo HTML sí)
+# 3. Form attributes that hide server messages (review each hit: a "Required" column of a field inventory or
+#    "required" in prose is not a signal; the HTML attribute is)
 grep -rnE '\b(maxlength|minlength)\b|\bpattern=|<(input|textarea|select)[^>]*\brequired|`required`' $CORPUS | grep -v 'aria-required'
 
-# 4. Mecánica de cliente / recarga
-grep -rniE 'sin (javascript|js|script)|no (client|js) script|full.?page reload|recarga (completa|de (la )?página)|preventDefault|fetch\(' $CORPUS
+# 4. Client mechanics / reload
+grep -rniE 'without (javascript|js)|no (client|js) script|full.?page reload|sin (javascript|js|script)|recarga (completa|de (la )?página)|preventDefault|fetch\(' $CORPUS
 
-# 5. Estructura de URL y query params
+# 5. URL structure and query params
 grep -rnE '\?[a-z_]+=' $CORPUS
 ```
 
-### Cuándo NO es hallazgo
+Not a finding:
+- The module is `Style: http` (or a pre-4.3 contract with `Method | Path`) and the hit is in that contract or its API scenarios.
+- A REQ demands that transport (`grep -n '?status=' requirements/REQUIREMENTS.md` returns the line): it is mandatory transport and must cite the REQ; not citing it → P3 "cite REQ".
+- Required security controls (CSRF token, `SameSite`, `Secure`): `sdd-security-auditor`'s domain.
+- `aria-required`, `aria-invalid`, `aria-describedby`: accessibility, not transport.
 
-- El módulo es `Style: http` (o contrato pre-4.3 con `Method | Path`) y el hit está en ese contrato o en sus escenarios de API.
-- Un REQ exige ese transporte (`grep -n '?estado=' requirements/REQUIREMENTS.md` devuelve la línea): es transporte obligatorio y debe citar el REQ; si no lo cita → P3 "citar REQ".
-- Controles de seguridad exigidos (token CSRF, `SameSite`, `Secure`): dominio de `sdd-security-auditor`.
-- `aria-required`, `aria-invalid`, `aria-describedby`: accesibilidad, no transporte.
-
-### Severidad
-
-| Situación | Sev |
+| Situation | Sev |
 |---|---|
-| El transporte bloquea un mensaje o comportamiento exigido (`required`/`maxlength` que impide ver `E_TITLE_EMPTY`; enlace donde el REQ nombra un botón) | P1 |
-| Rutas, verbos, estados, redirects, mecánica JS o URLs no exigidas en contratos `operations`, UC, BDD, ux o test | P2 |
-| Transporte exigido por un REQ pero sin citarlo | P3 |
+| Transport blocks a required message or behaviour (`required`/`maxlength` hiding `E_TITLE_EMPTY`; a link where the REQ names a button) | P1 |
+| Routes, verbs, statuses, redirects, JS mechanics or URLs no REQ demands, in `operations` contracts, UCs, BDD, ux or test | P2 |
+| Transport a REQ demands, without citing it | P3 |
 
-### Reescritura (Mode Fix)
+Rewrites (Mode Fix):
 
-| Antes | Después |
+| Before | After |
 |---|---|
-| `POST /tareas/{id}/titulo` → 400 `E_TITLE_EMPTY` | `renameTask(id, title)` → `E_TITLE_EMPTY`; transport: see design/OPERATION-MAPPING.md |
-| "Recarga la página completa y redirige a `?editar=`" | "Tras guardar, la lista muestra el título nuevo" (+ REQ si la URL es obligatoria) |
-| `<input required maxlength=120>` | "Título obligatorio, ≤ `TITLE_MAX_LENGTH` (INV-TSK-003); `E_TITLE_EMPTY` se muestra junto al campo" |
+| `POST /tasks/{id}/title` → 400 `E_TITLE_EMPTY` | `renameTask(id, title)` → `E_TITLE_EMPTY`; transport: see design/OPERATION-MAPPING.md |
+| "Reloads the whole page and redirects to `?edit=`" | "After saving, the list shows the new title" (+ REQ if the URL is mandatory) |
+| `<input required maxlength=120>` | "Title required, ≤ `TITLE_MAX_LENGTH` (INV-TSK-003); `E_TITLE_EMPTY` is shown next to the field" |
 | `Then status 400` | `Then error E_TITLE_EMPTY is shown and the list is unchanged` |
 
-Nunca se elimina una URL o mecánica que un REQ exige: se conserva y se cita el REQ.
+A URL or mechanic a REQ demands is never removed: it stays and cites the REQ.
 
----
-
-## Scripts de Auditoría Automatizada
-
-### Script: Buscar Todas las Ambigüedades
+## Regression detection (Phase 6)
 
 ```bash
-#!/bin/bash
-# audit-ambiguities.sh
-
-echo "=== Ambiguity Detection Report ==="
-echo ""
-
-echo "## Vague Quantifiers"
-grep -rniE "(apropiado|adecuado|razonable|suficiente)" spec/ --include="*.md"
-
-echo ""
-echo "## Undefined Time"
-grep -rniE "(pronto|rápido|inmediato|cuando sea posible)" spec/ --include="*.md"
-
-echo ""
-echo "## Incomplete Lists (etc.)"
-grep -rniE "(etc\.|y otros|entre otros)" spec/ --include="*.md"
-
-echo ""
-echo "## Modal Verbs (should/may)"
-grep -rniE "\b(debería|podría|puede que)\b" spec/ --include="*.md"
-```
-
-### Script: Validar Consistencia de Valores
-
-```bash
-#!/bin/bash
-# audit-values.sh
-
-echo "=== Value Consistency Report ==="
-echo ""
-
-echo "## All Timeouts"
-grep -rniE "timeout.*[0-9]+" spec/ --include="*.md" | sort
-
-echo ""
-echo "## All Size Limits"
-grep -rniE "(size|tamaño).*[0-9]+\s*(mb|kb|bytes)" spec/ --include="*.md" | sort
-
-echo ""
-echo "## All Rate Limits"
-grep -rniE "rate.*[0-9]+.*(min|hour|day|sec)" spec/ --include="*.md" | sort
-```
-
-### Script: Verificar Referencias
-
-```bash
-#!/bin/bash
-# audit-references.sh
-
-echo "=== Reference Validation Report ==="
-echo ""
-
-# Extract all referenced IDs
-echo "## Referenced Use Cases"
-grep -rhoE "UC-[0-9]+" spec/ | sort -u | while read uc; do
-  if [ ! -f "spec/use-cases/${uc}*.md" ]; then
-    echo "MISSING: $uc"
-  fi
-done
-
-echo ""
-echo "## Referenced Workflows"
-grep -rhoE "WF-[0-9]+" spec/ | sort -u | while read wf; do
-  if ! ls spec/workflows/${wf}*.md 2>/dev/null; then
-    echo "MISSING: $wf"
-  fi
-done
-
-echo ""
-echo "## Referenced ADRs"
-grep -rhoE "ADR-[0-9]+" spec/ | sort -u | while read adr; do
-  if ! ls spec/adr/${adr}*.md 2>/dev/null; then
-    echo "MISSING: $adr"
-  fi
-done
-```
-
-### Script: Detectar Silencios en Workflows
-
-```bash
-#!/bin/bash
-# audit-workflow-silences.sh
-
-echo "=== Workflow Silence Detection ==="
-echo ""
-
-for wf in spec/workflows/WF-*.md; do
-  echo "## Checking: $wf"
-
-  # Check for steps without timeout
-  if ! grep -q "timeout" "$wf"; then
-    echo "  WARNING: No timeout found"
-  fi
-
-  # Check for missing error handling
-  if ! grep -qi "error\|excep\|fail" "$wf"; then
-    echo "  WARNING: No error handling found"
-  fi
-
-  # Check for missing compensation
-  if ! grep -qi "compensat\|rollback\|revert" "$wf"; then
-    echo "  WARNING: No compensation strategy found"
-  fi
-
-  echo ""
-done
-```
-
----
-
-## Uso de Patrones en Auditoría
-
-### Flujo Recomendado
-
-```
-1. Ejecutar scripts de detección automática
-2. Revisar output y filtrar falsos positivos
-3. Para cada hallazgo real:
-   - Determinar categoría (CAT-XX)
-   - Asignar severidad
-   - Formular pregunta de resolución
-4. Agregar al informe de auditoría
-```
-
-### Ejemplo de Uso
-
-```bash
-# Detectar todas las ambigüedades en un directorio
-cd spec/
-grep -rniE "(apropiado|razonable|adecuado)" . --include="*.md" > /tmp/ambiguities.txt
-
-# Revisar manualmente y clasificar
-# Para cada línea válida, crear hallazgo:
-# AMB-001: {ubicación} - {problema} - {pregunta}
-```
-
----
-
-## Regression Detection Patterns
-
-> Patterns for detecting regressions introduced by previous audit fixes.
-
-### Identify Modified Files Since Last Audit
-
-```bash
-# Using git tag from last audit
+# Files modified since the last resolved audit (tag suggested by Mode Fix), or since the last report date
 git diff --name-only AUDIT-vX.Y-resolved..HEAD -- spec/
+git log --since="YYYY-MM-DD" --name-only --pretty=format: -- spec/ | sort -u | grep -v '^$'
 
-# Using date of last audit report
-git log --since="YYYY-MM-DD" --name-only --pretty=format: -- spec/ | sort -u | grep -v "^$"
+# Documents referencing the entities of a modified file
+for e in $(grep -oE '^#{2,3} [A-Z][A-Za-z]+' spec/domain/02-ENTITIES.md | sed 's/^#* //'); do
+  echo "== $e"; grep -rlw "$e" spec/ | grep -v 02-ENTITIES; done
 
-# Show files with their change stats
-git diff --stat AUDIT-vX.Y-resolved..HEAD -- spec/
+# Enum values: same set everywhere they are declared
+grep -rnE "(type|enum|status).*=.*\|" spec/domain/
+grep -rn "<enum value>" spec/
+
+# Referenced invariants that are not defined
+comm -23 <(grep -rhoE 'INV-[A-Z]+-[0-9]{3}' spec/ | sort -u) \
+         <(grep -hoE '^\| *INV-[A-Z]+-[0-9]{3}' spec/domain/05-INVARIANTS.md | tr -d '| ' | sort -u)
 ```
 
-### Find All Documents Referencing a Modified File
-
-```bash
-# Given a modified entity file, find all documents that reference its entities
-MODIFIED_FILE="domain/02-ENTITIES.md"
-
-# Extract entity names from the modified file
-ENTITIES=$(grep -oE "^### [A-Z][a-zA-Z]+" "spec/$MODIFIED_FILE" | sed 's/^### //')
-
-# For each entity, find all documents that reference it
-for entity in $ENTITIES; do
-  echo "=== References to $entity ==="
-  grep -rniE "\b$entity\b" spec/ --include="*.md" | grep -v "$MODIFIED_FILE"
-done
-```
-
-### Verify Enum Synchronization Between Files
-
-```bash
-# Extract all enum-like definitions (TypeScript union types or markdown lists)
-# from a specific document and cross-check everywhere
-
-# Step 1: Find all enum/type definitions in domain files
-grep -rniE "(type|enum|status).*=.*\|" spec/domain/ --include="*.md"
-
-# Step 2: For a specific enum value, verify it appears consistently
-ENUM_VALUE="selection_started"
-echo "=== Occurrences of '$ENUM_VALUE' ==="
-grep -rni "$ENUM_VALUE" spec/ --include="*.md"
-
-# Step 3: Compare enum values between two files
-# Extract values from file A
-grep -oE "'[a-z_]+'" spec/domain/04-STATES.md | sort -u > /tmp/states-a.txt
-# Extract values from file B
-grep -oE "'[a-z_]+'" spec/domain/03-VALUE-OBJECTS.md | sort -u > /tmp/states-b.txt
-# Find differences
-diff /tmp/states-a.txt /tmp/states-b.txt
-```
-
-### Detect High-Coupling Document Drift
-
-```bash
-# Check if high-coupling documents were modified together
-# These document groups should always be updated atomically
-
-echo "=== Domain Core (should change together) ==="
-git log --oneline --since="YYYY-MM-DD" -- \
-  spec/domain/02-ENTITIES.md \
-  spec/domain/03-VALUE-OBJECTS.md \
-  spec/domain/04-STATES.md \
-  spec/domain/05-INVARIANTS.md
-
-echo ""
-echo "=== Permissions Hub (should change together) ==="
-git log --oneline --since="YYYY-MM-DD" -- \
-  spec/contracts/PERMISSIONS-MATRIX.md \
-  spec/contracts/API-*.md
-
-echo ""
-echo "=== Business Rules (should change together) ==="
-git log --oneline --since="YYYY-MM-DD" -- \
-  spec/CLARIFICATIONS.md \
-  spec/use-cases/
-```
-
-### Script: Full Regression Scan
-
-```bash
-#!/bin/bash
-# audit-regression.sh
-# Run after fixes to detect regressions
-
-LAST_AUDIT_TAG="${1:-AUDIT-v8.0-resolved}"
-
-echo "=== Regression Scan (since $LAST_AUDIT_TAG) ==="
-echo ""
-
-# 1. List all modified spec files
-echo "## Modified Files"
-MODIFIED=$(git diff --name-only "$LAST_AUDIT_TAG"..HEAD -- spec/ 2>/dev/null)
-if [ -z "$MODIFIED" ]; then
-  echo "No files modified since $LAST_AUDIT_TAG"
-  exit 0
-fi
-echo "$MODIFIED"
-echo ""
-
-# 2. Check enum consistency
-echo "## Enum Sync Check"
-for file in $MODIFIED; do
-  if echo "$file" | grep -qE "(ENTITIES|VALUE-OBJECTS|STATES)"; then
-    echo "  HIGH-COUPLING file modified: $file"
-    echo "  Checking dependents..."
-    # Extract key terms and search for them
-    grep -oE "^### [A-Z][a-zA-Z]+" "$file" 2>/dev/null | sed 's/^### //' | while read term; do
-      REFS=$(grep -rl "$term" spec/ --include="*.md" 2>/dev/null | grep -v "$file" | wc -l)
-      echo "    $term: referenced in $REFS other files"
-    done
-  fi
-done
-echo ""
-
-# 3. Check for orphaned references
-echo "## Orphaned Reference Check"
-grep -rhoE "INV-[A-Z]+-[0-9]+" spec/ --include="*.md" 2>/dev/null | sort -u | while read inv; do
-  if ! grep -q "$inv" spec/domain/05-INVARIANTS.md 2>/dev/null; then
-    echo "  ORPHAN: $inv referenced but not defined in INVARIANTS.md"
-  fi
-done
-```
+High-coupling groups that should change together: domain core (`02-ENTITIES`, `03-VALUE-OBJECTS`, `04-STATES`,
+`05-INVARIANTS`); permissions (`PERMISSIONS-MATRIX.md` + `API-*.md`); business rules (`CLARIFICATIONS.md` + the UCs
+citing the RNs).
