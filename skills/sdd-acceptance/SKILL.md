@@ -30,7 +30,7 @@ SDD="node ${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"     # in CI: 
 /sdd-acceptance --fase N                # the same, scoped to the Requisitos: line of plan/fases/FASE-N-*.md
 /sdd-acceptance --loop [--fase N] [--max-cycles 3]   # goal loop until every Must is VERIFIED or WAIVED
 /sdd-acceptance --sign-off [--fase N | --release NAME] # gate + human acceptance + tag
-/sdd-acceptance --publish [--fase N]    # PR/issue body from the gate
+/sdd-acceptance --publish [--fase N]    # PR/issue block + optional status page
 ```
 
 ### Flags
@@ -43,7 +43,7 @@ SDD="node ${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"     # in CI: 
 | `--max-cycles N` | With `--loop`: cycle limit, default 3; the CLI caps it at 5 |
 | `--sign-off` | Release gate and recorded human acceptance (below) |
 | `--release NAME` | With `--sign-off` and no `--fase`: the release to accept (e.g. `v1.4.0`) |
-| `--publish` | Prints the acceptance block for a PR or issue body |
+| `--publish` | PR/issue acceptance block and, optionally, the shareable status page (Artifact) |
 
 ## Verdicts and evidence
 
@@ -247,10 +247,18 @@ it has the confirmation question, the record command and the tag message.
 
 ## `--publish`
 
-Prints the acceptance block for a PR or issue body: `$SDD gate --md [--fase N]`, followed by the approved test edits
-of the last loop, if any. Replace the `Closes #<issue>` placeholder with the real issue (a FASE PR uses `Refs #N`,
-because the FASE issue closes at acceptance) or remove it. Nothing is pushed or created without asking. The shareable
-status page is added in a later milestone; until then this mode prints text only.
+Two outputs, both built from the same data (`.sdd/acceptance.json`, the report, the FASE files, `sdd issue` links):
+
+1. **PR / issue block** (always): `$SDD gate --md [--fase N]`, followed by the approved test edits of the last loop,
+   if any. A FASE PR links its issue with `Refs #N` (the issue closes at acceptance); a change PR uses `Closes #N`.
+   `sdd pr-body` prints the full PR body when the tracker is configured.
+2. **Status page** (optional, replaces the old HTML dashboard): a shareable page for the customer and the team,
+   published as a Claude Artifact. Read [references/status-page.md](references/status-page.md) before building it.
+   Ask before the first publish of a project, because it sends requirement titles and verdicts off the machine. Only
+   when the session offers the Artifact tool; otherwise (for example `claude -p`) `acceptance/ACCEPTANCE-REPORT.md`
+   is the shareable view.
+
+Nothing is pushed, created or published without asking.
 
 ## Constraints
 
