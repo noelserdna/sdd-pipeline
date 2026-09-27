@@ -341,5 +341,6 @@ After writing all artifacts, update `pipeline-state.json` (create with the defau
    - `highlights`: 3-5 observations (e.g. "42 tasks across 7 FASEs", "65% parallelizable") plus one line per FASE with more than one work Stream ("FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)"). When the mode was degraded to sequential, the first highlight is the reason.
    - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
    - `generatedAt`: now
-3. Show the summary table to the user.
-4. Handoff: plugin-root `references/handoff-protocol.md` (station mode only; never from a subagent).
+3. Commit the files this run wrote: `git add task/`, then `docs(tasks): …` with `Refs:` the FASE ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+4. Show the summary table to the user.
+5. Handoff: plugin-root `references/handoff-protocol.md` (station mode only; never from a subagent).

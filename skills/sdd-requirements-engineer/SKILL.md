@@ -99,8 +99,9 @@ After writing `requirements/REQUIREMENTS.md` (an audit-only Mode 2 run leaves th
    - `nextStep`: `"Run /sdd-specifications-engineer"` once approved, otherwise `"Approve requirements (gate 1)"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Display summary table to user (console output)
-7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+6. Commit what this run wrote, draft included, because specs and commits cite these REQ ids: `git add requirements/` and `docs(requirements): draft requirements v{Version}` with `Refs:` every REQ id, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). The approval gate later commits the `Approved` header and tags.
+7. Display summary table to user (console output)
+8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 
 ## Output Language
 

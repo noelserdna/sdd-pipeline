@@ -188,5 +188,7 @@ After writing the results, update `pipeline-state.json` (create it from
    - `highlights`: 3-5 observations (e.g. "2 missing endpoints: API-001-12, API-002-03", "REQ-F-031 likely missing")
    - `nextStep`: e.g. "Review audits/GAP-ANALYSIS-REVIEW.md" or "Implement missing endpoints"
    - `generatedAt`: now
-3. Show the summary table. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode;
+3. Commit the review (`git add audits/GAP-ANALYSIS-REVIEW.md`; `.sdd/gap-analysis.json` is ignored), then
+   `docs(gaps): …` with `Refs:` the ids of the missing or mismatched items, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+4. Show the summary table. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode;
    never from a subagent).

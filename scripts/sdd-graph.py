@@ -308,6 +308,7 @@ def classify_id(id_str):
     if id_str.startswith("RN-"): return "RN"
     if id_str.startswith("FASE-"): return "FASE"
     if id_str.startswith("TASK-"): return "TASK"
+    if id_str in _NFR_TABLE_IDS: return "NFR"
     return None
 
 
@@ -506,6 +507,50 @@ def _walk_source_files(project_dir, bases):
 # Main extraction
 # ──────────────────────────────────────────────────────────
 
+# NFR ids defined in spec/nfr/*.md (Template 7): the first cell of a table row or a heading, with any prefix
+# (SEC-005, SPEC-MNT-001, SPEC-PERF-001). Filled by scan_files; references and commit Refs to them resolve.
+_NFR_TABLE_IDS = set()
+_NFR_ID_RE = re.compile(r'^[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{2,4}$')
+_NFR_ROW_RE = re.compile(r'^\s*\|\s*([A-Z][A-Z0-9-]*-\d{2,4})\s*\|')
+_NFR_HEADING_RE = re.compile(r'^#{1,6}\s+([A-Z][A-Z0-9-]*-\d{2,4})\s*(?:[:\u2013\u2014-]\s*(.*))?$')
+# Module row of a contract (Templates 12/12b): | Module | API-002 — module `cli` … | defines the module id API-002
+_MODULE_ROW_RE = re.compile(r'^\s*\|\s*Module\s*\|\s*(API-\d{3,4})(?![\w-])\s*[:\u2013\u2014-]?\s*([^|]*)\|')
+
+
+def _is_nfr_file(frel):
+    return frel.startswith("spec/nfr/") and frel.lower().endswith(".md")
+
+
+def collect_nfr_ids(md_files, project_dir):
+    """{id: (file, line, title)} of the ids an NFR file defines; ids of the other types keep their own patterns."""
+    found = OrderedDict()
+    for fpath in md_files:
+        frel = _rel_path(fpath, project_dir)
+        if not _is_nfr_file(frel):
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        for idx, line in enumerate(lines):
+            line = line.rstrip()
+            m = _NFR_ROW_RE.match(line) or _NFR_HEADING_RE.match(line)
+            if not m:
+                continue
+            nid = m.group(1)
+            known = classify_id(nid)
+            if not _NFR_ID_RE.match(nid) or (known and known != "NFR") or nid in found:
+                continue
+            if line.lstrip().startswith("|"):
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                title = cells[1] if len(cells) > 1 else ""
+            else:
+                title = (m.group(2) or "").strip()
+            found[nid] = (frel, idx + 1, title)
+    return found
+
+
 def collect_md_files(project_dir):
     """Walk scan directories and collect all .md files."""
     files = []
@@ -545,6 +590,21 @@ def scan_files(project_dir):
 
     md_files = collect_md_files(project_dir)
     print(f"Scanning {len(md_files)} .md files across {SCAN_DIRS}...")
+
+    _NFR_TABLE_IDS.clear()
+    nfr_ids = collect_nfr_ids(md_files, project_dir)
+    for nid, (nfile, nline, ntitle) in nfr_ids.items():
+        if nid.startswith("NFR-"):
+            continue  # NFR-NNN keeps the generic heading/table patterns
+        _NFR_TABLE_IDS.add(nid)
+        artifacts[nid] = {
+            "id": nid, "type": "NFR", "category": nid.rsplit("-", 1)[0], "title": ntitle,
+            "file": nfile, "line": nline, "priority": None, "stage": TYPE_TO_STAGE["NFR"],
+        }
+    nfr_ref_re = None
+    if _NFR_TABLE_IDS:
+        alts = "|".join(re.escape(i) for i in sorted(_NFR_TABLE_IDS, key=len, reverse=True))
+        nfr_ref_re = re.compile(r'(?<![A-Za-z0-9-])(' + alts + r')(?![A-Za-z0-9-])')
 
     for fpath in md_files:
         try:
@@ -626,6 +686,14 @@ def scan_files(project_dir):
                     current_section = hm.group(1)
 
             # 2. Check table-based definitions
+            if frel.startswith("spec/contracts/"):
+                mm = _MODULE_ROW_RE.match(line_stripped)
+                if mm and mm.group(1) not in artifacts:
+                    artifacts[mm.group(1)] = {
+                        "id": mm.group(1), "type": "API", "category": "module",
+                        "title": mm.group(2).strip() or os.path.splitext(fname)[0],
+                        "file": frel, "line": line_num, "priority": None, "stage": TYPE_TO_STAGE["API"],
+                    }
             for ttype, tpat in TABLE_DEF_PATTERNS:
                 for tm in tpat.finditer(line_stripped):
                     tid = normalize_id(tm.group(1))
@@ -649,6 +717,10 @@ def scan_files(project_dir):
                         }
                         if ttype == "REQ" and current_section:
                             artifacts[tid]["section"] = current_section
+            if _is_nfr_file(frel):
+                nm = _NFR_ROW_RE.match(line_stripped)
+                if nm and nm.group(1) in artifacts:
+                    file_context_ids.append(nm.group(1))
 
             # 3. Extract all references on this line (expand ranges first)
             ref_ids = set()
@@ -663,6 +735,10 @@ def scan_files(project_dir):
                     continue
                 ref_ids.add(rid)
                 all_ref_ids.add(rid)
+            if nfr_ref_re is not None:
+                for rm in nfr_ref_re.finditer(line_stripped):
+                    ref_ids.add(rm.group(1))
+                    all_ref_ids.add(rm.group(1))
 
             # Build references: if this line has an ID definition, all other IDs on same line are references from that definition
             # Otherwise, use file context (the most recent heading-defined ID)
@@ -730,7 +806,7 @@ def _parse_validated_refs(raw_refs_str):
     if not raw_refs_str or not raw_refs_str.strip():
         return []
     raw = [r.strip() for r in raw_refs_str.split(",") if r.strip()]
-    return [r for r in raw if ARTIFACT_ID_RE.match(r)]
+    return [r for r in raw if ARTIFACT_ID_RE.match(r) or r in _NFR_TABLE_IDS]
 
 
 def scan_commits(project_dir):
@@ -791,7 +867,7 @@ def _tokens(value):
 def _commit_dict(full_sha, short_sha, subject, author, date, tasks, refs, files, legacy):
     """Graph commit record, or None when it carries neither a task nor an artifact ref."""
     task_id = next((t for t in tasks if _TASK_ID_RE.match(t)), None)
-    ref_ids = [r for r in refs if ARTIFACT_ID_RE.match(r)]
+    ref_ids = [r for r in refs if ARTIFACT_ID_RE.match(r) or r in _NFR_TABLE_IDS]
     if not ref_ids and not task_id:
         return None
     return {

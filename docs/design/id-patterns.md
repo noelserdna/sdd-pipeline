@@ -12,6 +12,7 @@ Extended regex patterns for extracting artifact IDs from real SDD projects. Supe
 | UC | `^#+\s*UC-(\d{3,4})` | UC-001, UC-041 | `spec/use-cases/` |
 | WF | `^#+\s*WF-(\d{3,4})` | WF-001, WF-015 | `spec/workflows/` |
 | API (operation, canonical) | `^#+\s*API-(\d{3,4}-\d{2})` or table row `^\|\s*API-(\d{3,4}-\d{2})\s*\|` | API-001-01, API-002-03 | `spec/contracts/API-{module}.md` (Templates 12/12b) |
+| API (module) | contract row `^\|\s*Module\s*\|\s*(API-\d{3,4})` | API-001, API-002 (`category: module`, defined in its `API-{module}.md`) | `spec/contracts/` (Templates 12/12b) |
 | API (numeric, legacy) | `^#+\s*API-(\d{3,4})` | API-001, API-020 | `spec/contracts/` |
 | API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` or filename `API-{module}.md` | API-tasks, API-auth | `spec/contracts/` (contract file / module) |
 | BDD (numeric) | `^#+\s*BDD-(\d{3,4})` or `Scenario:\s*BDD-(\d{3,4})` | BDD-001, BDD-042 | `spec/tests/`, `test/` |
@@ -21,6 +22,7 @@ Extended regex patterns for extracting artifact IDs from real SDD projects. Supe
 | INV (table) | `\|\s*INV-([A-Z]{0,6}-?\d{3,4})\s*\|` | table cells | `spec/` |
 | ADR | `^#+\s*ADR-(\d{3,4})` or filename `ADR-(\d{3,4})` | ADR-001 | `spec/adr/` |
 | NFR | `^#+\s*NFR-(\d{3,4})` or `\|\s*NFR-(\d{3,4})\s*\|` | NFR-001 | `spec/nfr/` |
+| NFR (table, any prefix) | in `spec/nfr/*.md`: first cell `^\|\s*([A-Z][A-Z0-9-]*-\d{2,4})\s*\|` or a heading with that id, when no other type claims the prefix | SEC-005, SPEC-MNT-001, SPEC-PERF-001 | `spec/nfr/` (Template 7) |
 | RN | `^#+\s*RN-(\d{3,4})` or `\|\s*RN-(\d{3,4})\s*\|` | RN-001 | `spec/` |
 | FASE | `^#+\s*FASE-(\d{1,2})` or filename `FASE-(\d{1,2})` | FASE-0, FASE-3 | `plan/fases/` |
 | TASK | `^#+\s*TASK-F(\d{1,2})-(\d{3,4})` | TASK-F0-001, TASK-F2-012 | `task/` |
@@ -58,6 +60,10 @@ Some documents use range notation. `scripts/sdd-graph.py` expands these:
 Only `..` accepts a bare end number. Every other separator needs the same prefix repeated on the end ID, so prose such
 as `NFR-001 — 150 ms p95` or `REQ-F-001 - 120 req/s` is left alone. Ranges wider than 200 IDs are not expanded.
 The category segment uses `[A-Z][A-Z0-9]*` to support `TASK-F1-`, `TASK-F10-`.
+
+**NFR ids with free prefixes** (`SEC-005`, `SPEC-MNT-001`) are not in the universal pattern: references to them (in
+any scanned file and in commit `Refs:`) count only when a `spec/nfr/` table defines the exact id, so audit finding ids
+such as `SEC-12` elsewhere stay out of the graph.
 
 **Digit rule**: a referenced ID needs a digit (`REQ-F-001`, `API-001-01`) unless some file defines it (named
 contracts such as `API-auth`); otherwise it is prose ("BDD-style", "API-first") and not a broken reference.

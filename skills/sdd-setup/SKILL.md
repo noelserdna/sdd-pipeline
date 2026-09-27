@@ -227,6 +227,17 @@ bash "$KIT_SH"                                           # refresh the installed
 - task_state: trailers
 ```
 
+Then add the test keys when the test runner is evident from the project files, because `sdd-acceptance` needs a JUnit report to turn test results into verdicts (full key list: `docs/stacks.md`):
+
+| Evidence | Lines to add |
+|---|---|
+| `package.json` script `test` runs `vitest` | `- test: npx vitest run` · `- test_file: npx vitest run {file}` · `- test_report: npx vitest run --reporter=junit --outputFile="$(git rev-parse --show-toplevel)/.sdd/junit/vitest.xml"` |
+| `package.json` script `test` runs `jest` | `- test: npx jest` · `- test_file: npx jest {file}` · `- test_report: JEST_JUNIT_OUTPUT_DIR="$(git rev-parse --show-toplevel)/.sdd/junit" npx jest --reporters=default --reporters=jest-junit` (needs `jest-junit`) |
+| `pytest` in `pyproject.toml` / `requirements*.txt` | `- test: pytest` · `- test_file: pytest {file}` · `- test_report: pytest --junitxml="$(git rev-parse --show-toplevel)/.sdd/junit/pytest.xml"` |
+| No runner detected yet (greenfield) | nothing: `sdd-plan-architect` or the implementer adds them once the stack exists |
+
+When the project already produces coverage (a `--coverage` flag or `c8`/`nyc`/`pytest-cov` in its config), append its output directory (`coverage/`, `.nyc_output/`, `htmlcov/`) to `.gitignore` below the managed block unless `git check-ignore -q <dir>` says it is already ignored: generated reports would otherwise show up as untracked files in every stage commit.
+
 Add `- default_branch: <name>` only when the user names a default branch that `origin/HEAD` does not reveal. An existing profile is never edited.
 
 ### Step 4c: Tracker, CI and PR templates (`--tracker`)

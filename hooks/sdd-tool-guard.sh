@@ -21,9 +21,11 @@
 # Además pide confirmación humana (permissionDecision "ask") para los registros de aceptación:
 #   - `sdd accept record …` (también `sdd.mjs accept record`, `$SDD accept record`, `node "${SDD}" accept record`):
 #     añade una exención, demo, medición, inspección o aceptación de FASE a acceptance/decisions.jsonl en nombre de
-#     una persona;
+#     una persona. Se busca en el texto FUERA de comillas: `jq '.summary="… accept record …"'` o
+#     `echo "sdd accept record"` no preguntan;
 #   - `git tag` que crea, mueve o borra `fase-N-accepted` o `requirements-vN`, también con el número en una variable
-#     (`fase-$N-accepted`, `requirements-v$V`); listarlos con -l/--list/--contains/--points-at/--verify no pregunta.
+#     (`fase-$N-accepted`, `requirements-v$V`), en un segmento de comando que empieza por `git … tag`; listarlos con
+#     -l/--list/--contains/--points-at/--verify no pregunta.
 # Evita la auto-aprobación accidental; no es una garantía: un tag con el nombre entero en una variable, un script
 # intermedio u otra herramienta no se detectan. La aprobación sigue siendo una decisión humana registrada.
 # Nunca falla: exit 0 siempre; sin salida = permitir.
@@ -76,25 +78,69 @@ is_plain_search() {
   return 1
 }
 
+# Texto fuera de comillas: cada cadena '…' o "…" pasa a ser un espacio, para que un texto que solo MENCIONA
+# `accept record` (un resumen persistido con jq, un echo) no cuente como invocación. Sale con 1 si queda una
+# comilla abierta (p. ej. un apóstrofo en un heredoc): entonces el llamante usa el texto sin quitar (conservador).
+unquoted_text() {
+  printf '%s' "$1" | awk -v sq="'" -v dq='"' 'BEGIN { RS = "\001" } {
+    s = $0; out = ""; q = ""; n = length(s)
+    for (i = 1; i <= n; i++) {
+      ch = substr(s, i, 1)
+      if (q == "") {
+        if (ch == sq || ch == dq) { q = ch; out = out " " }
+        else if (ch == "\\") { out = out ch substr(s, i + 1, 1); i++ }
+        else out = out ch
+      } else if (q == dq) { if (ch == "\\") i++; else if (ch == dq) q = "" }
+      else if (ch == sq) q = ""
+    }
+    printf "%s", out
+    if (q != "") exit 1
+  }'
+}
+
 # Registro de aceptación en nombre de una persona → "ask" (motivo en $ACCEPT_WHAT)
 ACCEPT_WHAT=""
 acceptance_action() {
-  local c="$1" seg
-  local re_rec='(^|[^A-Za-z0-9_-])(sdd(\.mjs)?|\$\{?SDD\}?)["'"'"']?[[:space:]]+accept[[:space:]]+record([[:space:]]|$)'
-  local re_tag='(^|[^A-Za-z0-9_-])git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+tag([[:space:]].*)?$'
+  local c="$1" norm plain seg line nl=$'\n'
+  local re_rec='(^|[^A-Za-z0-9_-])(sdd(\.mjs)?|\$\{?SDD\}?)[[:space:]]+accept[[:space:]]+record([[:space:]]|$)'
+  local re_tag='^git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+tag([[:space:]].*)?$'
   local re_name='(fase-([0-9]+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)-accepted|requirements-v([0-9]|\$))'
-  if [[ $c =~ $re_rec ]]; then
-    ACCEPT_WHAT="sdd accept record (writes a human decision to acceptance/decisions.jsonl)"; return 0
-  fi
+  case "$c" in
+    *accept*record*)
+      # 1. El token de invocación puede ir entre comillas ("$SDD", '${SDD}', "…/sdd.mjs"): se le quitan antes de
+      #    descartar el resto de cadenas entrecomilladas.
+      norm=$(printf '%s' "$c" | sed -E -e 's/"(\$\{?SDD\}?)"/\1/g' -e "s/'(\\\$\\{?SDD\\}?)'/\\1/g" \
+        -e 's/"[^"]*sdd\.mjs"/sdd.mjs/g' -e "s/'[^']*sdd\\.mjs'/sdd.mjs/g") || norm="$c"
+      plain=$(unquoted_text "$norm") || plain="$norm"
+      if [[ $plain =~ $re_rec ]]; then
+        ACCEPT_WHAT="sdd accept record (writes a human decision to acceptance/decisions.jsonl)"; return 0
+      fi
+      ;;
+  esac
   case "$c" in *tag*) ;; *) return 1 ;; esac
-  if [[ $c =~ $re_tag ]]; then
-    seg="${BASH_REMATCH[3]}"
-    [[ $seg =~ $re_name ]] || return 1
-    case " $seg " in
-      *" -l "*|*" --list "*|*" --list="*|*" --contains"*|*" --points-at"*|*" -v "*|*" --verify "*) return 1 ;;
+  # 2. git tag: sobre el texto sin quitar comillas (el nombre del tag suele ir entrecomillado), pero solo en un
+  #    segmento de comando que EMPIEZA por `git … tag` (no dentro de un echo o de una cadena).
+  seg="$c"
+  seg="${seg//;/$nl}"; seg="${seg//&/$nl}"; seg="${seg//|/$nl}"; seg="${seg//(/$nl}"
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    while :; do
+      case "$line" in
+        then[[:space:]]*|do[[:space:]]*|else[[:space:]]*|if[[:space:]]*|'!'[[:space:]]*|'{'[[:space:]]*|time[[:space:]]*)
+          line="${line#*[[:space:]]}"; line="${line#"${line%%[![:space:]]*}"}" ;;
+        *) break ;;
+      esac
+    done
+    [[ $line =~ $re_tag ]] || continue
+    local args="${BASH_REMATCH[2]}"
+    [[ $args =~ $re_name ]] || continue
+    case " $args " in
+      *" -l "*|*" --list "*|*" --list="*|*" --contains"*|*" --points-at"*|*" -v "*|*" --verify "*) continue ;;
     esac
     ACCEPT_WHAT="git tag ${BASH_REMATCH[1]} (an acceptance or requirements-approval tag)"; return 0
-  fi
+  done <<EOF
+$seg
+EOF
   return 1
 }
 

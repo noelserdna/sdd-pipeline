@@ -356,6 +356,17 @@ for (const file of docFiles) {
   }
 }
 
+// 12. Stage skills that write artifacts commit them (references/git-conventions.md § Stage outputs are committed).
+const STAGE_WRITERS = ["sdd-requirements-engineer", "sdd-specifications-engineer", "sdd-spec-auditor", "sdd-test-planner",
+  "sdd-plan-architect", "sdd-task-generator", "sdd-tech-designer", "sdd-ux-designer", "sdd-security-auditor",
+  "sdd-gap-detector", "sdd-req-change", "sdd-reverse-engineer", "sdd-import", "sdd-reconcile", "sdd-acceptance"];
+for (const s of STAGE_WRITERS) {
+  const f = path.join(skillsDir, s, "SKILL.md");
+  if (existsSync(f) && !readFileSync(f, "utf8").includes("Stage outputs are committed")) {
+    warnings.push(`skills/${s}/SKILL.md: no remite a "Stage outputs are committed" (references/git-conventions.md) en su paso Persist`);
+  }
+}
+
 for (const w of warnings) console.log(`WARN  ${w}`);
 for (const e of errors) console.log(`ERROR ${e}`);
 if (errors.length) { console.log(`${errors.length} errores`); process.exit(1); }

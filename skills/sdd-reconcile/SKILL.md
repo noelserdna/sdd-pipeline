@@ -111,7 +111,8 @@ Each divergence is applied independently; a failure in one does not block the ot
 
 1. Mark stages stale per the canonical rules (CLAUDE.md, `sdd-req-change/references/cascade-patterns.md`): a change in `requirements/` makes `specifications-engineer` and everything after it stale; a change in `spec/` makes `spec-auditor` and everything after it stale. Reconcile never writes `plan/` or `task/`, so it never originates a staleness from there. Record `staleReason: "reconcile {date}"`.
 2. Read [references/reconciliation-report-template.md](references/reconciliation-report-template.md) and write `reconciliation/RECONCILIATION-REPORT.md`.
-3. Do not invoke downstream skills; list the recommended next commands (normally `/sdd-spec-auditor`, then `/sdd-acceptance --check`).
+3. Commit the report and the CR file: `git add reconciliation/ changes/CR-RECONCILE-{date}.md`, then `docs(changes): reconciliation report {date}` with `Refs:` the affected REQ ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+4. Do not invoke downstream skills; list the recommended next commands (normally `/sdd-spec-auditor`, then `/sdd-acceptance --check`).
 
 ## 4. Pipeline Integration
 

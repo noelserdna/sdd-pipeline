@@ -322,8 +322,9 @@ After generating all output artifacts, update `pipeline-state.json`:
    - `nextStep`: `"Run /sdd-spec-auditor"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Display summary table to user (console output)
-7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+6. Commit the files this run wrote: `git add spec/`, then `docs(specs): …` with `Refs:` the REQ ids covered and the main UC/API ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+7. Display summary table to user (console output)
+8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 
 ## Output Language
 

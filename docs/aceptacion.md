@@ -49,15 +49,15 @@ El informe y `decisions.jsonl` los escribe solo la CLI. El upstream guard denieg
 ## Comandos
 
 ```bash
-SDD="node ${SDD_PLUGIN_ROOT}/scripts/sdd.mjs"          # en CI: node .claude/sdd/sdd.mjs
+SDD="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"   # en CI: SDD=.claude/sdd/sdd.mjs
 
-$SDD accept --junit-sha "$(git rev-parse HEAD)" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]
-$SDD gate [--mode off|warn|enforce] [--fase N] [--md]
-$SDD loop next [--reset] [--max-cycles 3]
-$SDD accept record waiver --req REQ-F-007 --reason "…" --follow-up '#31' --by "Ana Pérez" --role "Product owner"
-$SDD accept record demo --req REQ-F-002 --ac 1 --observed "…" --pass true --by … --role … [--paths src/cli]
-$SDD accept record measurement --req REQ-NF-001 --metric p95_ms --observed 84 --op le --threshold 100 --by … --role …
-$SDD accept record fase-acceptance --fase 1 --result accepted|observations|rejected --channel "demo 2026-09-27" --by … --role …
+node "$SDD" accept --junit-sha "$(git rev-parse HEAD)" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]
+node "$SDD" gate [--mode off|warn|enforce] [--fase N] [--md]
+node "$SDD" loop next [--reset] [--max-cycles 3]
+node "$SDD" accept record waiver --req REQ-F-007 --reason "…" --follow-up '#31' --by "Ana Pérez" --role "Product owner"
+node "$SDD" accept record demo --req REQ-F-002 --ac 1 --observed "…" --pass true --by … --role … [--paths src/cli]
+node "$SDD" accept record measurement --req REQ-NF-001 --metric p95_ms --observed 84 --op le --threshold 100 --by … --role …
+node "$SDD" accept record fase-acceptance --fase 1 --result accepted|observations|rejected --channel "demo 2026-09-27" --by … --role …
 ```
 
 ### La puerta: `sdd gate`

@@ -30,7 +30,20 @@ fi
 echo "proyecto: $WORK (from=$FROM until=$UNTIL)"
 fail=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; fail=1; }
 t0=$(date +%s); lap() { local now; now=$(date +%s); echo "     [$1: $(( (now - t0) / 60 )) min]"; t0=$now; }
-run() { echo; echo "== $1"; claude --plugin-dir "$ROOT" -p "$2" --output-format text 2>&1 | tail -15; lap "$1"; }
+# Las sesiones hijas cargan SOLO el plugin de este checkout: si hay una versión instalada, se desactiva para ellas
+# (dos versiones a la vez mezclarían skills y hooks). SDD_E2E_LOG_DIR guarda la salida completa de cada etapa.
+CHILD_SETTINGS=${SDD_E2E_SETTINGS:-'{"enabledPlugins":{"sdd-pipeline@noelserdna":false}}'}
+LOG_DIR=${SDD_E2E_LOG_DIR:-}
+run() {
+  echo; echo "== $1"
+  if [ -n "$LOG_DIR" ]; then mkdir -p "$LOG_DIR"
+    claude --plugin-dir "$ROOT" --settings "$CHILD_SETTINGS" -p "$2" --output-format text > "$LOG_DIR/$1.log" 2>&1 || true
+    tail -15 "$LOG_DIR/$1.log"
+  else claude --plugin-dir "$ROOT" --settings "$CHILD_SETTINGS" -p "$2" --output-format text 2>&1 | tail -15; fi
+  lap "$1"; }
+# Salidas de etapa versionadas (git-conventions.md § Stage outputs are committed): algo trackeado y nada pendiente
+committed() { local d; for d in "$@"; do [ -n "$(git ls-files -- "$d" | head -1)" ] && [ -z "$(git status --porcelain -- "$d")" ] || return 1; done; }
+check_committed() { if committed "$@"; then ok "$* commiteado"; else bad "$* sin commitear"; git status --porcelain -- "$@" | head -5; fi; }
 ignored() { local p; for p in "$@"; do git check-ignore -q --no-index "$p" || return 1; done; }
 stop_if_done() { finished_before "$1" && { echo; echo "B3 (hasta $UNTIL): $([ $fail -eq 0 ] && echo todo ok || echo hay fallos)"; exit $fail; }; true; }
 
@@ -48,11 +61,13 @@ stop_if_done specs
 if active specs; then
   run specs "/sdd-specifications-engineer --fanout — launching the requirement lanes is requested explicitly. requirements/REQUIREMENTS.md is approved. Generate spec/ completely without asking questions; take the recommended option for any clarification and record it in spec/CLARIFICATIONS.md."
   [ -d spec/use-cases ] && ok "spec/use-cases" || bad "spec/use-cases"
+  check_committed spec
 fi
 stop_if_done audit
 if active audit; then
   run audit "/sdd-spec-auditor --fanout — audit spec/ and apply Mode Fix for P0/P1 without asking; write audits/AUDIT-BASELINE.md. Launching the four dimension auditors is requested explicitly: they are part of this skill's contract."
   [ -f audits/AUDIT-BASELINE.md ] && ok "AUDIT-BASELINE.md" || bad "AUDIT-BASELINE.md"
+  check_committed audits spec
   grep -qiE 'gate.*(PASS|CONDITIONAL)' audits/AUDIT-BASELINE.md && ok "gate PASS/CONDITIONAL" || echo "WARN gate no PASS (revisar)"
   amode=$(jq -r '.stages["spec-auditor"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
   # prueba de fan-out: summary.metrics.mode que persiste la skill
@@ -62,6 +77,7 @@ stop_if_done test
 if active test; then
   run test "/sdd-test-planner --fanout — launching the matrix and E2E subagents is requested explicitly. generate test/ from spec/ without asking questions."
   [ -f test/TEST-PLAN.md ] && ok "TEST-PLAN.md" || bad "TEST-PLAN.md"
+  check_committed test
   tmode=$(jq -r '.stages["test-planner"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
   tagents=$(jq -r '.stages["test-planner"].summary.metrics.matrix_agents // 0' pipeline-state.json 2>/dev/null)
   if [ "$tmode" = fanout ] && [ "${tagents:-0}" -gt 0 ]; then ok "matrices en subagentes ($tagents lanzados)"; else echo "WARN matrices sin fan-out (mode=$tmode, matrix_agents=$tagents)"; fi
@@ -71,6 +87,7 @@ if active plan; then
   run plan "/sdd-plan-architect --skip-clarify — generate plan/ without asking questions; take the recommended option for every decision."
   [ -f plan/ARCHITECTURE.md ] && ok "ARCHITECTURE.md" || bad "ARCHITECTURE.md"
   ls plan/fases/FASE-*.md >/dev/null 2>&1 && ok "plan/fases" || bad "plan/fases"
+  check_committed plan
   # FASEs verticales (phase-assignment-rules.md): marca, esqueleto y lint mecánico V8/V9
   grep -qiE 'Plan-Style:?\**:? *vertical' plan/PLAN.md && ok "PLAN.md con Plan-Style: vertical" || bad "PLAN.md sin Plan-Style: vertical"
   if compgen -G 'plan/fases/FASE-0-[Ss][Kk][Ee][Ll][Ee][Tt][Oo][Nn]*.md' >/dev/null; then ok "FASE-0 es el esqueleto"; else echo "WARN FASE-0 no se llama *-SKELETON"; fi
@@ -87,6 +104,7 @@ stop_if_done tasks
 if active tasks; then
   run tasks "/sdd-task-generator --fanout — launching one subagent per FASE is requested explicitly. generate task/ for all FASEs without asking questions."
   [ -f task/TASK-ORDER.md ] && ok "TASK-ORDER.md" || bad "TASK-ORDER.md"
+  check_committed task
   grep -q "## Stream Ownership" task/TASK-FASE-0.md 2>/dev/null && ok "Stream Ownership en TASK-FASE-0" || echo "WARN sin tabla Stream Ownership"
   grep -q "Streams:" task/TASK-ORDER.md && ok "Streams: en TASK-ORDER" || echo "WARN sin línea Streams:"
   gmode=$(jq -r '.stages["task-generator"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)

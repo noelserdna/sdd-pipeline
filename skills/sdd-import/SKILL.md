@@ -138,6 +138,7 @@ Check: every item has an SDD ID; requirements are EARS or `[UNCONVERTED]`; use c
    - `specifications-engineer` → `done` only when the full canonical tree for the imported scope exists (domain 01–05, UC, contracts, BDD, NFR) and `spec/COVERAGE.md` shows every module `SPECIFIED`. Otherwise leave it `pending` with `staleReason: "partial import — run sdd-specifications-engineer to complete spec/"` (an OpenAPI-only import is partial).
    - Downstream stages stay `pending`; nothing runs automatically. Next step is `sdd-specifications-engineer` (partial) or `sdd-spec-auditor` (complete).
 3. Write `import/IMPORT-REPORT.md` from [references/import-report-template.md](references/import-report-template.md), including the Defects section for Jira bugs and the Items Needing Manual Review section.
+4. Commit what the import wrote: `git add requirements/ spec/ import/` (the paths that exist), then `docs(specs): import from {source}` with `Refs:` the imported REQ ids (`docs(requirements)` when only requirements were imported), skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
 
 ## 4. Pipeline Integration
 

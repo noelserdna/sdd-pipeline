@@ -163,7 +163,7 @@ Run the focused audit in `references/alignment-audit-checklist.md` on the docume
 
 ## Phase 8 — Change Report
 
-Read `references/change-report-template.md` and write `changes/CHANGE-REPORT-{CHG-ID}.md`. Move the applied deltas to `changes/applied/{YYYY-MM-DD}-CR-NNN-{slug}.md`. Commit the report, the plan and the archived deltas: `docs(specs): record {CHG-ID}` with `--trailer "Change: {CHG-ID}, CR-…" --trailer "Refs: {affected REQ ids}"`. This phase does not touch `pipeline-state.json`; Phase 9 owns stale marking. The change branch reaches the default branch through a merge commit (`git merge --no-ff`) or a PR, never squash or rebase; ask before merging or pushing.
+Read `references/change-report-template.md` and write `changes/CHANGE-REPORT-{CHG-ID}.md`. Move the applied deltas to `changes/applied/{YYYY-MM-DD}-CR-NNN-{slug}.md`. Commit the report, the plan, the archived deltas and, with `--file feedback/…`, that feedback file (its entries' `Status:` changed): `docs(specs): record {CHG-ID}` with `--trailer "Change: {CHG-ID}, CR-…" --trailer "Refs: {affected REQ ids}"`. This phase does not touch `pipeline-state.json`; Phase 9 owns stale marking. The change branch reaches the default branch through a merge commit (`git merge --no-ff`) or a PR, never squash or rebase; ask before merging or pushing.
 
 ## Phase 9 — Pipeline Cascade
 
@@ -206,5 +206,6 @@ bash "$S" set specifications-engineer done
    - `artifacts`: e.g. `{"file": "changes/CHANGE-REPORT-CHG-2026-03-04-001.md", "label": "Change Report"}`, plus the plan, the cascade report and the modified REQUIREMENTS.md (max 15)
    - `metrics`: `{ "change_requests", "applied", "skipped", "documents_modified", "invalidated_stages" }`
    - `highlights`: 3-5 lines; `nextStep`: the first cascade command (manual) or "Cascade complete" (auto); `generatedAt`
-4. Write the file, print the final console summary (`change-report-template.md`, last section).
-5. Handoff: follow the plugin-root `references/handoff-protocol.md` (station mode only; never from a subagent).
+4. Write the file. When Phase 9 wrote `changes/CASCADE-REPORT-{CHG-ID}.md`, commit it: `docs(changes): cascade report {CHG-ID}` with `--trailer "Change: {CHG-ID}"` and `Refs:` the affected REQ ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). The cascaded stages commit their own outputs.
+5. Print the final console summary (`change-report-template.md`, last section).
+6. Handoff: follow the plugin-root `references/handoff-protocol.md` (station mode only; never from a subagent).

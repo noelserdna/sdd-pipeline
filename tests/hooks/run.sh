@@ -499,13 +499,37 @@ git tag -l "fase-$N-accepted"
 git rev-parse -q --verify "refs/tags/requirements-v$V"
 EOF
 [ "$oka" = 1 ] && pass "H12 permite \$SDD accept/gate, \$SDD_PLUGIN_ROOT y consultar tags con variable" || bad "H12 pregunta de más con variables"
+# F7: el texto entre comillas solo MENCIONA el registro (resúmenes persistidos, echo): no pregunta
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+jq '.summary="use accept record later"' f
+echo "sdd accept record demo"
+jq --arg h 'run node "$SDD" accept record after the demo' '.highlights += [$h]' pipeline-state.json > t && mv t pipeline-state.json
+bash "$S" note "next: \$SDD accept record fase-acceptance --fase 1"
+echo 'git tag -a fase-1-accepted' && echo "git tag -s requirements-v2"
+printf '%s\n' "it's the accept record step"
+EOF
+[ "$oka" = 1 ] && pass "H12 ignora accept record / git tag dentro de cadenas entrecomilladas" || bad "H12 falso positivo con texto entrecomillado"
+oks=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = ask ] || { oks=0; echo "     no pregunta: $c"; }
+done <<'EOF'
+node "$SDD" accept record demo --req REQ-F-002 --ac 1 --observed "it works" --pass true --by "Ana" --role PO
+node '/Users/x/my plugins/scripts/sdd.mjs' accept record inspection --req REQ-C-001 --note ok --by A --role PO
+cd app && node "${SDD}" accept record waiver --req REQ-F-001 --reason "x; y" --follow-up '#3' --by A --role PO
+echo "recording" && git tag -a "fase-$N-accepted" -m "accepted; by Ana"
+if true; then git tag -s requirements-v4 -m ok; fi
+EOF
+[ "$oks" = 1 ] && pass "H12 sigue preguntando con el token entrecomillado, rutas con espacios y tags tras && / then" || bad "H12 deja de preguntar ante alguna invocación real"
 # Los bloques exactos de approval.md (tag requirements-v$V) y sign-off.md (registro y tag fase-$N-accepted)
 md_block() { awk -v m="$2" '/^```/ { if (inb) { if (hit) { printf "%s", buf; exit } inb = 0; buf = ""; hit = 0; next } inb = 1; next } inb { buf = buf $0 "\n"; if (index($0, m)) hit = 1 }' "$1"; }
 blk=$(md_block "$ROOT/skills/sdd-requirements-engineer/references/approval.md" 'git tag $SIGN "requirements-v$V"')
 [ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de aprobación de approval.md" || bad "H12 no pregunta ante el bloque de approval.md"
 blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" 'git tag $SIGN "fase-$N-accepted"')
 [ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de tag de sign-off.md" || bad "H12 no pregunta ante el bloque de tag de sign-off.md"
-blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" '$SDD accept record fase-acceptance')
+blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" 'accept record fase-acceptance')
 [ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de registro de sign-off.md" || bad "H12 no pregunta ante el bloque de registro de sign-off.md"
 [ "$(tg "" "$rroot" "$(printf '%s_AI_%s=1 sdd accept record waiver' FOO CONSENT)")" = deny ] && pass "H12 consentimiento IA fabricado gana a ask" || bad "H12 consentimiento + accept record no deniega"
 [ "$(guard "" "$repo" Write "$repo/acceptance/decisions.jsonl")" = deny ] && pass "H2 deniega Write en acceptance/decisions.jsonl sin stage running" || bad "H2 permite Write en decisions.jsonl"

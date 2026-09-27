@@ -1584,10 +1584,10 @@ Los trailers de los commits responden "¿qué commits implementan REQ-F-004?" si
 extra:
 
 ```bash
-SDD="node $SDD_PLUGIN_ROOT/scripts/sdd.mjs"
-$SDD trace req REQ-F-004            # commits cuyo Task/Refs/Change contiene ese ID exacto
-$SDD trace why src/api/add.ts:42    # blame → commit → trailers → IDs de spec
-$SDD trace delivered REQ-F-004      # tags y ramas que contienen ese trabajo
+SDD="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"
+node "$SDD" trace req REQ-F-004     # commits cuyo Task/Refs/Change contiene ese ID exacto
+node "$SDD" trace why src/api/add.ts:42 # blame → commit → trailers → IDs de spec
+node "$SDD" trace delivered REQ-F-004 # tags y ramas que contienen ese trabajo
 ```
 
 El servidor MCP (`sdd`) y los hooks leen además `dashboard/traceability-graph.json`, que

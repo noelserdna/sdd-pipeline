@@ -340,7 +340,7 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 |-------|------|----------|-------------|
 | `id` | string | Yes | Unique artifact ID (e.g., `"REQ-EXT-001"`) |
 | `type` | string | Yes | Artifact type: REQ, UC, WF, API, BDD, INV, ADR, NFR, RN, FASE, TASK |
-| `category` | string or null | No | Sub-category (EXT, CVA, SYS, SEC, F, NF) or null |
+| `category` | string or null | No | Sub-category (EXT, CVA, SYS, SEC, F, NF) or null; `"module"` for a contract module id (`API-002` from the `Module` row); the id prefix for NFR ids of `spec/nfr/` tables (`SEC`, `SPEC-MNT`) |
 | `title` | string | Yes | Artifact title or first line of definition |
 | `file` | string | Yes | Relative file path where defined |
 | `line` | number | Yes | Line number of definition |

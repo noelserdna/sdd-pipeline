@@ -60,6 +60,26 @@ over); on a work branch, keep working there; on a detached HEAD, stop and ask. `
 `default_branch` in the SDD Stack Profile, else `origin/HEAD`, else `init.defaultBranch`, else `main`/`master`.
 Stream worktrees (`--stream`) and their integration (`--integrate`) manage their own branches and skip this rule.
 
+## Stage outputs are committed
+
+`Refs:` trailers cite spec ids, branches carry the work, and acceptance is recorded against tagged files, so every
+artifact a stage writes must be in git; an untracked `spec/` makes all three point at nothing. At the end of each
+stage (its Persist step) the skill commits the files it wrote, and only those:
+
+```bash
+git add spec/                     # the paths this stage wrote; never pipeline-state.json, .sdd/ or dashboard/traceability-graph.json (ignored)
+git diff --cached --quiet || git commit -m "docs(specs): specifications v1 from requirements v1.0" --trailer "Refs: REQ-F-001, REQ-F-002, UC-001"
+```
+
+- Scope per stage: `requirements`, `specs`, `audit`, `test-plan`, `plan`, `tasks`, `design`, `ux`, `security`, `gaps`,
+  `acceptance`, `changes`, `feedback`; the bootstrap skills (`sdd-import`, `sdd-reverse-engineer`) use `specs`.
+  `Refs:` lists the main ids the output defines or covers (required for `docs(specs)`).
+- Branch: the branch rule above applies, with one exception: before any delivery (no `fase-*-accepted` tag) the
+  greenfield upstream stages may commit on the default branch; once such a tag exists, the skill starts a branch
+  first (`node "$SDD" branch start change <id> <slug>`).
+- `git diff --cached --quiet ||` skips the commit when nothing changed (a re-run that produced the same files).
+- Station/worktree mode: the stage commits in its own checkout, as its handoff already expects.
+
 ## Merges: merge commits only
 
 Squash and rebase merges rewrite the per-task commits into one, which erases every `Task:` trailer. Merge with a

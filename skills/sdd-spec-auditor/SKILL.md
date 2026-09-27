@@ -279,8 +279,9 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
    - `templateImprovements`: 1-3 recommendations for the spec engineer based on the most frequent finding categories (e.g., "UC template should require explicit error codes per step"). `sdd-specifications-engineer` reads them on its next run in this project (e.g. a re-run after a requirements change).
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Display summary table to user (console output)
-7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+6. Commit the files this run wrote: `git add audits/`, then `docs(audit): …` with `Refs:` the spec ids with P0/P1 findings (none → the audited REQ ids), skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Mode Fix already committed its corrections finding by finding; this commits the report and baseline.
+7. Display summary table to user (console output)
+8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 
 ## Output Language
 

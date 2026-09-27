@@ -178,5 +178,8 @@ After writing the report, update `pipeline-state.json` (if absent, create it fro
   `nextStep` (`"Resolve P0 security findings via /sdd-req-change before implementation"` or
   `"No P0 security findings — continue the pipeline"`), `generatedAt`.
 
+Commit the report (`git add audits/SECURITY-AUDIT-BASELINE.md`), then `docs(security): …` with `Refs:` the spec ids
+with P0/P1 findings, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+
 Show the summary table to the user. Handoff: follow the plugin-root `references/handoff-protocol.md` (station mode
 only; never from a subagent).

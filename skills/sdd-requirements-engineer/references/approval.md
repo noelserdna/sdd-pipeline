@@ -35,7 +35,8 @@ On Approve, set the header to `> **Status:** Approved` and `> **Approved by:** {
 ```bash
 # 1. Commit the approved text (header already updated). Refs: every REQ ID of this version (all of them at v1.0).
 git add requirements/REQUIREMENTS.md requirements/CUSTOMER-NEEDS.md
-git commit -m "docs(requirements): approve requirements v{Version}" --trailer "Refs: REQ-F-001, REQ-F-002, REQ-NF-001, REQ-C-001"
+git diff --cached --quiet || git commit -m "docs(requirements): approve requirements v{Version}" --trailer "Refs: REQ-F-001, REQ-F-002, REQ-NF-001, REQ-C-001"
+# (already committed and unchanged → nothing to commit; the tag goes on HEAD)
 
 # 2. Annotated tag carrying who, when and the hashes of the exact files (signed when a signing key is configured).
 V="$(sed -n 's/^> \*\*Version:\*\* *//p' requirements/REQUIREMENTS.md | head -1)"

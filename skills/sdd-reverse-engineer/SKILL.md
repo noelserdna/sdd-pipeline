@@ -122,6 +122,7 @@ Read [references/retroactive-task-template.md](references/retroactive-task-templ
 1. Build REQ → UC → WF → API → BDD → INV → ADR → TASK → CODE, marking gaps. Proposed `// Refs:` markers are listed in the report, not written into code.
 2. Compile `findings/FINDINGS-REPORT.md` with [references/findings-taxonomy.md](references/findings-taxonomy.md) (markers below).
 3. Update `pipeline-state.json`: set to `done` only the stages whose artifacts this run produced — `requirements-engineer`, `specifications-engineer`, and, when Phases 7-9 ran, `test-planner`, `plan-architect`, `task-generator` — with `lastRun`, `outputHash` and a `summary` (`highlights` includes "reverse-engineered, pending audit"). `spec-auditor` stays `pending` because no audit ran, and `task-implementer` is untouched. Set `currentStage` to `spec-auditor` and `summary.nextStep` to `Run /sdd-spec-auditor`. Fixes from that audit change `spec/` and will mark downstream stages stale through the normal cascade.
+4. Commit the artifacts this run wrote: `git add requirements/ spec/ reverse-engineering/ findings/` plus `test/`, `plan/`, `task/` when Phases 7-9 ran, then `docs(specs): reverse-engineer SDD artifacts from code` with `Refs:` the REQ ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Code is never part of this commit.
 
 ## 4. Findings Markers
 

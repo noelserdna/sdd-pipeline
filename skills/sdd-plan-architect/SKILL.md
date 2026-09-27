@@ -328,4 +328,5 @@ After writing the artifacts, update `pipeline-state.json` (create it with the de
    - `nextStep`: `"Run /sdd-task-generator"`
    - `generatedAt`: now
 3. Write the file and show the summary table.
-4. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+4. Commit the files this run wrote: `git add plan/` (plus `design/OPERATION-MAPPING.md` when written), then `docs(plan): …` with `Refs:` the FASE ids and the REQ ids they deliver, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+5. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).

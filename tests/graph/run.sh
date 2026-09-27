@@ -565,6 +565,34 @@ lg3, _, lerr3 = quiet(gen.build_graph, lp, os.path.join(lp, "dashboard"), "llm",
                       [], l_code, l_cstats, l_tests, l_tstats, lsp)
 check("llm-verified: sin gap-analysis.json → silencio", "gap-analysis" not in lerr3 and lg3["statistics"]["codeStats"]["llmVerifiedRefs"] == 0, lerr3)
 
+# F9/F10: module id of a contract (| Module | API-002 … |) and NFR ids of spec/nfr/*.md tables are defined artifacts
+nf = new_repo("nfr-module")
+commit(nf, {
+    "spec/contracts/API-api.md": "# API-api\n\n| Field | Value |\n|---|---|\n| Module | API-001 — module `api` (operation ids are `API-001-NN`) |\n| Style | operations |\n\n## Operations\n\n| ID | Operation |\n|---|---|\n| API-001-01 | createTask |\n",
+    "spec/contracts/API-cli.md": "# API-cli\n\n| Field | Value |\n|---|---|\n| Module | API-002 — module `cli`, code in `src/cli/` |\n\nModule `cli` imports module `api` (API-001), never the reverse.\n\n| ID | Operation |\n|---|---|\n| API-002-01 | todo add |\n",
+    "spec/nfr/SECURITY.md": "# NFR — Security\n\n| ID | Metric / Control | Target | Fail point | Measurement | Refs |\n|---|---|---|---|---|---|\n| SEC-005 | Input validation before file access | always | never | order | INV-CLI-003 |\n",
+    "spec/nfr/MAINTAINABILITY.md": "# NFR — Maintainability\n\n| ID | Metric / Control | Target | Fail point | Measurement | Refs |\n|---|---|---|---|---|---|\n| SPEC-MNT-001 | statement coverage | >= 80 | < 80 | vitest | REQ-NF-002 |\n",
+    "spec/use-cases/UC-001-add.md": "# UC-001: Add\n\nRefs: API-002, SEC-005, SPEC-MNT-001\n",
+    "audits/SECURITY-AUDIT-BASELINE.md": "SEC-12 finding\n",
+}, "docs(specs): specs", "Refs: UC-001, API-001-01", "2026-01-01T00:00:00")
+commit(nf, {"src/cli.ts": "export const x = 1\n"}, "feat(cli): validate input", "Task: TASK-F0-001\nRefs: SEC-005, SPEC-MNT-001", "2026-01-02T00:00:00")
+n_arts, n_refs, n_ids = quiet(gen.scan_files, nf)[0]
+n_commits = quiet(gen.scan_commits, nf)[0]
+ng, _, _ = quiet(gen.build_graph, nf, os.path.join(nf, "dashboard"), "nfr", n_arts, n_refs, n_ids,
+                 n_commits, [], {"files": [], "totalFiles": 0, "totalSymbols": 0, "filesWithRefs": 0}, [], {"totalTests": 0}, gen.resolve_scan_paths(nf))
+na = {a["id"]: a for a in ng["artifacts"]}
+nbroken = {b["ref"] for b in ng["statistics"]["brokenReferences"]}
+check("F9: fila Module de un contrato define API-001 / API-002 (módulo) en su fichero; sin refs rotas",
+      na.get("API-002", {}).get("category") == "module" and na["API-002"]["file"] == "spec/contracts/API-cli.md"
+      and na.get("API-001", {}).get("file") == "spec/contracts/API-api.md" and not ({"API-001", "API-002"} & nbroken), (nbroken, na.get("API-002")))
+check("F10: SEC-005 y SPEC-MNT-001 de spec/nfr/*.md son artefactos NFR con fichero y título",
+      na.get("SEC-005", {}).get("type") == "NFR" and na["SEC-005"]["file"] == "spec/nfr/SECURITY.md"
+      and na.get("SPEC-MNT-001", {}).get("title") == "statement coverage", (na.get("SEC-005"), na.get("SPEC-MNT-001")))
+check("F10: UC-001 → SEC-005 enlazado y los Refs del commit llegan al NFR",
+      any(r["source"] == "UC-001" and r["target"] == "SEC-005" for r in ng["relationships"])
+      and len(na.get("SPEC-MNT-001", {}).get("commitRefs", [])) == 1, na.get("SPEC-MNT-001", {}).get("commitRefs"))
+check("F10: SEC-NNN fuera de spec/nfr/ (hallazgos de auditoría) no se registra", "SEC-12" not in na and "SEC-12" not in nbroken)
+
 # End to end CLI
 r = subprocess.run([sys.executable, gen_path, "--project", proj], capture_output=True, text=True)
 check("cli: exit 0 con entradas corruptas y escribe solo el grafo (sin html)",

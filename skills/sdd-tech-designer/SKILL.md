@@ -117,5 +117,8 @@ After writing the outputs, update `pipeline-state.json` at the project root. If 
   `nextStep` = `"Run /sdd-plan-architect (design/ will be consumed automatically)"` — or `"Run /sdd-spec-auditor"`
   if an ADR was promoted — and `generatedAt`.
 
+Commit the files this run wrote (`git add design/`, plus promoted ADRs in `spec/adr/`), then `docs(design): …` with
+`Refs:` the REQ/ADR ids it addresses, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+
 Show the summary table to the user. Handoff: follow the plugin-root `references/handoff-protocol.md` (station
 mode only; never from a subagent).
