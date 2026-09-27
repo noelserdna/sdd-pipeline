@@ -472,6 +472,41 @@ if printf '%s' "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolU
      and (.permissionDecisionReason | contains("confirmed") and contains("not a guarantee"))' >/dev/null 2>&1; then
   pass "H12 ask con motivo (confirmación humana, sin prometer garantía)"
 else bad "H12 salida ask: $out"; fi
+# Formas que usan los skills: $SDD / ${SDD} / "$SDD" / node "$SDD" y nombres de tag con el número en una variable
+oks=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = ask ] || { oks=0; echo "     no pregunta: $c"; }
+done <<'EOF'
+$SDD accept record demo --req REQ-F-002 --ac 1 --observed ok --pass true --by Ana --role PO
+node "$SDD" accept record fase-acceptance --fase 1 --result accepted --channel call --by Ana --role PO
+node $SDD accept record waiver --req REQ-F-001 --reason x --follow-up #3 --by Ana --role PO
+node "${SDD}" accept record measurement --req REQ-NF-001 --metric p95 --observed 120 --op le --threshold 200 --by A --role QA
+${SDD} accept record inspection --req REQ-C-001 --note ok --by Ana --role PO
+node '$SDD' accept record demo --req REQ-F-002 --observed ok --pass false --by A --role QA
+git tag -a "fase-$N-accepted" -F msg.txt
+git tag -s "fase-${N}-accepted" -m ok
+git tag -a "requirements-v$V" -m ok
+EOF
+[ "$oks" = 1 ] && pass "H12 pregunta ante \$SDD, \${SDD}, node \"\$SDD\" accept record y tags con variable (fase-\$N-accepted, requirements-v\$V)" || bad "H12 no pregunta ante alguna forma con variable"
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+node "$SDD" accept --fase 1 --report acceptance/ACCEPTANCE-REPORT.md
+$SDD gate --fase 1 --md
+echo "$SDD_PLUGIN_ROOT accept record"
+git tag -l "fase-$N-accepted"
+git rev-parse -q --verify "refs/tags/requirements-v$V"
+EOF
+[ "$oka" = 1 ] && pass "H12 permite \$SDD accept/gate, \$SDD_PLUGIN_ROOT y consultar tags con variable" || bad "H12 pregunta de más con variables"
+# Los bloques exactos de approval.md (tag requirements-v$V) y sign-off.md (registro y tag fase-$N-accepted)
+md_block() { awk -v m="$2" '/^```/ { if (inb) { if (hit) { printf "%s", buf; exit } inb = 0; buf = ""; hit = 0; next } inb = 1; next } inb { buf = buf $0 "\n"; if (index($0, m)) hit = 1 }' "$1"; }
+blk=$(md_block "$ROOT/skills/sdd-requirements-engineer/references/approval.md" 'git tag $SIGN "requirements-v$V"')
+[ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de aprobación de approval.md" || bad "H12 no pregunta ante el bloque de approval.md"
+blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" 'git tag $SIGN "fase-$N-accepted"')
+[ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de tag de sign-off.md" || bad "H12 no pregunta ante el bloque de tag de sign-off.md"
+blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" '$SDD accept record fase-acceptance')
+[ -n "$blk" ] && [ "$(tg "" "$rroot" "$blk")" = ask ] && pass "H12 pregunta ante el bloque de registro de sign-off.md" || bad "H12 no pregunta ante el bloque de registro de sign-off.md"
 [ "$(tg "" "$rroot" "$(printf '%s_AI_%s=1 sdd accept record waiver' FOO CONSENT)")" = deny ] && pass "H12 consentimiento IA fabricado gana a ask" || bad "H12 consentimiento + accept record no deniega"
 [ "$(guard "" "$repo" Write "$repo/acceptance/decisions.jsonl")" = deny ] && pass "H2 deniega Write en acceptance/decisions.jsonl sin stage running" || bad "H2 permite Write en decisions.jsonl"
 [ "$(guard "" "$repo" Edit "$repo/acceptance/ACCEPTANCE-REPORT.md")" = deny ] && pass "H2 deniega Edit en acceptance/ACCEPTANCE-REPORT.md" || bad "H2 permite Edit en ACCEPTANCE-REPORT.md"

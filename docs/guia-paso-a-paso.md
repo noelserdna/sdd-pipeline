@@ -1327,7 +1327,9 @@ limpio y calcula el veredicto de cada requisito de la FASE con `sdd accept --fas
 ```
 
 Un requisito FAILING o MISSING hace fallar la FASE: se arregla el código, nunca el test
-(Art. 12).
+(Art. 12). La excepción es el requisito que se verifica por demo, medición o inspección: sin el
+registro de una persona sigue MISSING, así que el implementador lo deja "pendiente en la puerta
+de FASE", donde el cliente confirma esa evidencia antes de aceptar.
 
 ### La puerta de FASE: el cliente acepta el incremento
 

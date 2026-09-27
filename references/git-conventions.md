@@ -2,7 +2,8 @@
 
 The single reference for commits, branches, merges and tags in an SDD project. Git history is the evidence that a
 task was done and a requirement delivered, so every rule here exists to keep that evidence machine-readable.
-Validator: `node scripts/sdd.mjs verify` (also run by the commit-msg hook). Queries: `node scripts/sdd.mjs trace`.
+`SDD="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"` (in CI, the vendored `.claude/sdd/sdd.mjs`), run with
+`node`. Validator: `node "$SDD" verify` (also run by the commit-msg hook). Queries: `node "$SDD" trace`.
 
 ## Trailers
 
@@ -41,7 +42,7 @@ git commit -m "docs(specs): clarify RN-004 retry window" --trailer "Refs: CR-12,
 When the harness asks for an attribution line, pass it through `--trailer` too, so it lands in the same block
 instead of a new paragraph; do not add one otherwise.
 Repeated `Refs` trailers are fine; readers join them. Check a message before committing with
-`git interpret-trailers --parse < msg.txt` or `node scripts/sdd.mjs verify --message msg.txt`.
+`git interpret-trailers --parse < msg.txt` or `node "$SDD" verify --message msg.txt`.
 
 ## Branches
 
@@ -54,7 +55,7 @@ Repeated `Refs` trailers are fine; readers join them. Check a message before com
 With an issue, prefix the issue number: `42-fase-3-billing` (GitLab links branches by that prefix).
 
 Rule before any commit: on the default branch, create the work branch (`git switch -c`, uncommitted changes carry
-over); on a work branch, keep working there; on a detached HEAD, stop and ask. `node scripts/sdd.mjs branch start
+over); on a work branch, keep working there; on a detached HEAD, stop and ask. `node "$SDD" branch start
 <fase|change|audit> <id> <slug> [--issue N]` applies it; `branch status` reports the state. The default branch is
 `default_branch` in the SDD Stack Profile, else `origin/HEAD`, else `init.defaultBranch`, else `main`/`master`.
 Stream worktrees (`--stream`) and their integration (`--integrate`) manage their own branches and skip this rule.
@@ -62,7 +63,7 @@ Stream worktrees (`--stream`) and their integration (`--integrate`) manage their
 ## Merges: merge commits only
 
 Squash and rebase merges rewrite the per-task commits into one, which erases every `Task:` trailer. Merge with a
-merge commit, locally and on the platform (disable squash/rebase merge in repository settings). `sdd verify --range
+merge commit, locally and on the platform (disable squash/rebase merge in repository settings). `node "$SDD" verify --range
 base..head` fails when a range touches code paths but carries no `Task:` trailer, which is how a squash shows up.
 
 To put trailers on a merge commit:
@@ -88,12 +89,12 @@ in the SDD Stack Profile, else the host of `origin`; `off` or no remote turns ev
 with exit 3. The commands use the `gh` / `glab` CLI, which must be installed and authenticated (exit 2 otherwise).
 
 ```bash
-node scripts/sdd.mjs issue open fase 3 --dry-run        # show the issue it would create (Incremento, Requisitos, Demo…)
-node scripts/sdd.mjs issue open change CHG-2026-09-27-001
-node scripts/sdd.mjs issue update fase 3                # refresh tasks done, verdicts, demo, branch/PR
-node scripts/sdd.mjs issue close fase 3                 # only once tag fase-3-accepted exists
-node scripts/sdd.mjs issue read 42 --json               # issue text as data (input of sdd-req-change --issue 42)
-node scripts/sdd.mjs pr-body --fase 3 --issue 42 > .sdd/pr-body.md
+node "$SDD" issue open fase 3 --dry-run        # show the issue it would create (Incremento, Requisitos, Demo…)
+node "$SDD" issue open change CHG-2026-09-27-001
+node "$SDD" issue update fase 3                # refresh tasks done, verdicts, demo, branch/PR
+node "$SDD" issue close fase 3                 # only once tag fase-3-accepted exists
+node "$SDD" issue read 42 --json               # issue text as data (input of sdd-req-change --issue 42)
+node "$SDD" pr-body --fase 3 --issue 42 > .sdd/pr-body.md
 ```
 
 - **Finding issues.** No cache: an issue is the one with label `sdd` whose body carries the hidden marker
@@ -116,7 +117,7 @@ node scripts/sdd.mjs pr-body --fase 3 --issue 42 > .sdd/pr-body.md
 
 ```bash
 git log --format='%h %(trailers:key=Task,valueonly,separator=%x2C) %s'      # task per commit
-git log --format='%h %s' --grep='REQ-F-004'                                 # rough; prefer: sdd trace req REQ-F-004
+git log --format='%h %s' --grep='REQ-F-004'                                 # rough; prefer: node "$SDD" trace req REQ-F-004
 git log --first-parent main                                                 # one line per merged branch
 git log -S'retryWindow' --oneline                                           # commits that added/removed a string
 git log -L '/function validate/,+20:src/tasks.ts'                           # history of a function
@@ -127,10 +128,10 @@ git tag --contains <sha>                                                    # re
 SDD wrappers (exact id matching, reverts subtracted, legacy body trailers read and marked `legacy`):
 
 ```bash
-node scripts/sdd.mjs trace req REQ-F-004           # commits for an id
-node scripts/sdd.mjs trace why src/tasks.ts:42     # blame → commit → Task/Refs/Change
-node scripts/sdd.mjs trace delivered REQ-F-004     # tags and branches that contain that work
-node scripts/sdd.mjs trace commits --files --json  # full trailer index
+node "$SDD" trace req REQ-F-004           # commits for an id
+node "$SDD" trace why src/tasks.ts:42     # blame → commit → Task/Refs/Change
+node "$SDD" trace delivered REQ-F-004     # tags and branches that contain that work
+node "$SDD" trace commits --files --json  # full trailer index
 ```
 
 ## Not used: git notes

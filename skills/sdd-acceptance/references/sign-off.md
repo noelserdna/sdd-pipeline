@@ -10,7 +10,8 @@ Ask with `AskUserQuestion`, after showing the report path, the goal line and any
 
 - Question: "Accept FASE {N} at commit {sha7}? Must {v}/{t} verified{, {w} waived}."
   (release: "Accept release {NAME} at commit {sha7}? …")
-- Options: **Accept** · **Accept with observations (say which)** · **Reject (say why)**.
+- Options: **Accept** · **Accept with observations (say which)** · **Reject (say why)**. When the gate is not met
+  (exit 1 or 2), say so and offer only **Reject**: acceptance needs a met gate, a rejection does not.
 - Also ask, if unknown: the approver's name and role, the channel (e.g. "demo call 2026-09-27", "email") and the demo
   id when a demo was run.
 
@@ -33,11 +34,11 @@ the acceptance as no longer current.
 ## 3. Tag (FASE accepted, with or without observations)
 
 ```bash
-SHA=$(git rev-parse HEAD)
-git rev-parse -q --verify "refs/tags/fase-N-accepted" >/dev/null && echo "fase-N-accepted exists: stop"
+N={FASE number}; SHA=$(git rev-parse HEAD)
+git rev-parse -q --verify "refs/tags/fase-$N-accepted" >/dev/null && echo "fase-$N-accepted exists: stop"
 SIGN=-a; [ -n "$(git config user.signingkey)" ] && SIGN=-s
-git tag $SIGN "fase-N-accepted" -F - <<EOF
-FASE-N accepted
+git tag $SIGN "fase-$N-accepted" -F - <<EOF
+FASE-$N accepted
 
 Accepted-by: {name}
 Approver-role: {role}

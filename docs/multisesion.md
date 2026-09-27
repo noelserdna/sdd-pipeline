@@ -28,11 +28,15 @@ Roles por defecto (`templates/sdd-sessions.example.json`):
 
 | Rol | Posee | Etapas |
 |---|---|---|
-| `sdd-lead` | `requirements/*`, `changes/*`, `feedback/*`, `.claude/*`, `pipeline-state.json` **y el write-set de integración** (`src/*`, `tests/*`, `.github/*`, `package.json`, `*.config.*`, `task/TASK-FASE-*.md`, `.sdd/*`, `dashboard/*`), porque ejecuta `--integrate` en el principal | requirements-engineer, req-change, task-implementer (solo `--stream base` e `--integrate`) |
+| `sdd-lead` | `requirements/*`, `changes/*`, `feedback/*`, `.claude/*`, `pipeline-state.json` **y el write-set de integración** (`src/*`, `tests/*`, `.github/*`, `package.json`, `*.config.*`, `task/TASK-FASE-*.md`, `.sdd/*`, `dashboard/*`), porque ejecuta `--integrate` en el principal; también `acceptance/*` (compartido con `sdd-qa`), porque la firma escribe `acceptance/decisions.jsonl` y el informe | requirements-engineer, req-change, task-implementer (solo `--stream base` e `--integrate`), acceptance (solo `--sign-off`) |
 | `sdd-spec` | `spec/*`, `audits/AUDIT-*`, `audits/UPSTREAM-*`, `audits/CORRECTIONS-*`, `changes/*` | specifications-engineer, spec-auditor, req-change |
 | `sdd-plan` | `design/*`, `ux/*`, `test/*`, `plan/*`, `task/*`, `audits/SECURITY-*` | tech-designer, ux-designer, security-auditor, test-planner, plan-architect, task-generator |
 | `impl-f1a` | `src/*`, `tests/*`, `feedback/*`, `task/TASK-FASE-*.md`, `.sdd/*` | task-implementer (fase 1, stream A, worktree `../<proyecto>-f1a`) |
-| `sdd-qa` | `.sdd/*`, `audits/GAP-*`, `acceptance/*`, `dashboard/*` | gap-detector, acceptance (`/sdd-acceptance --check`/`--loop`; la firma del cliente, `--sign-off`, la hace el lead tras la puerta de FASE) |
+| `sdd-qa` | `.sdd/*`, `audits/GAP-*`, `acceptance/*`, `dashboard/*`, `feedback/*` | gap-detector, acceptance (`/sdd-acceptance --check`/`--loop`; la firma del cliente, `--sign-off`, la hace el lead tras la puerta de FASE) |
+
+Una ruta puede tener varios dueños (`src/*` es del lead y de cada `impl-*`; `acceptance/*` del lead y de `sdd-qa`): la guardia solo comprueba que el rol que escribe la posea.
+
+**El bucle de aceptación en multi-sesión.** `sdd-qa` no posee `task/` ni el código, así que su `/sdd-acceptance --loop` no ejecuta `sdd-task-generator` ni `sdd-task-implementer`: escribe las entradas de feedback del ciclo (`feedback/IMPL-FEEDBACK-FASE-N.md`) y envía un handoff `status=blocked` con la lista de rutas (`routes: REQ-F-004 implement-or-test FASE-2; …`). El lead despacha `task-generator --incremental` a `sdd-plan` y `task-implementer --new-tasks-only` a la estación de implementación, y luego devuelve el bucle a `sdd-qa`, que sigue desde `.sdd/acceptance-loop.json`. Lo que necesita a una persona (demo, medición, inspección, hueco de spec) llega al lead como pregunta en `.sdd/questions-sdd-qa.md`.
 
 `sdd-spec` y `sdd-plan` no aportan paralelismo (la cadena es secuencial); su valor es aislar el contexto de etapas largas y poder retomarlas. Las estaciones que sí se ejecutan en paralelo son las `impl-*`.
 

@@ -56,7 +56,7 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
 hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
-scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint), sdd-task-lint.mjs (alias),
+scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint, tracker), sdd-task-lint.mjs (alias),
                        sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
                        install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
 server/                src/{index,server,graph-loader,acceptance,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts

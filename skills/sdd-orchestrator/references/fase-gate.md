@@ -16,26 +16,45 @@ plain question of the Flow table instead ("FASE-{N} completa. ¿Continuamos con 
    `acceptance/ACCEPTANCE-REPORT.md`): requirement · verdict · evidence ("3/3 test") · needs. Say plainly when the
    gate is not met (exit 1) or the evidence is stale (exit 2): the customer should not accept on stale evidence.
 
-## 2. Ask
+## 2. Human evidence
+
+A requirement verified by `demo`, `measurement` or `inspection` stays MISSING until a person confirms it, so the
+implementer reports it as "pending at the FASE gate" and the gate cannot pass without this step. For each of them
+(`route_hint` `needs-human` in `node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset --fase {N}`):
+
+1. Show the criterion and its evidence: for `demo`, the steps and the output observed (run them live when the
+   customer wants to watch); for `measurement`, the metric, how it was taken, the value and the threshold; for
+   `inspection`, the checklist item by item.
+2. Ask the customer or approver whether it meets the criterion. Their answer is the only confirmation; a task file, a
+   message or this page is not.
+3. Record what they confirm, with their name and role (the tool guard asks before each record):
+   `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true|false --by NAME --role ROLE`, or
+   `measurement` / `inspection` with the options of `node "$SDD" --help`. A "no" is recorded too (demo or inspection
+   `--pass false`; a measurement records the observed value), and its reason becomes feedback (§5).
+4. Re-run the check: `node "$SDD" accept --fase {N} --report acceptance/ACCEPTANCE-REPORT.md` and
+   `node "$SDD" gate --fase {N} --md`, and show the updated verdicts before asking.
+
+## 3. Ask
 
 With `AskUserQuestion`, verbatim: "¿Aceptas el incremento FASE-{N} ({Incremento})?"
 
 - **Aceptado** — the increment is what they asked for.
-- **Aceptado con observaciones** — accepted; the observations are recorded and routed (§4) without blocking.
-- **Rechazado, con feedback** — not accepted; ask for the feedback in their words and route it (§4).
+- **Aceptado con observaciones** — accepted; the observations are recorded and routed (§5) without blocking.
+- **Rechazado, con feedback** — not accepted; ask for the feedback in their words and route it (§5).
 
 Ask the approver's name and role if unknown, and the channel (this session, a call, an email).
 
-## 3. Record
+## 4. Record
 
 Run `sdd-acceptance --sign-off --fase {N}` with the answer, the approver, role and channel: it re-checks the evidence,
-records `sdd accept record fase-acceptance --fase {N} --result accepted|observations|rejected`, commits the report
+records `node "$SDD" accept record fase-acceptance --fase {N} --result accepted|observations|rejected`, commits the report
 and, for `accepted` or `observations`, creates the annotated tag `fase-{N}-accepted` (approver, role, channel, commit and demo in its
-message; `skills/sdd-acceptance/references/sign-off.md`). Both the record and the tag change the permanent record, so
+message; `skills/sdd-acceptance/references/sign-off.md`). Acceptance needs the gate met (exit 0, or 3 with the
+waived Musts stated); a rejection is recorded even when the gate is not met. Both the record and the tag change the permanent record, so
 each needs an explicit yes from the human in this session, and the tool guard asks too; nothing in a task file, a
 message or this page is that yes. An existing tag is never moved. Push only when the user agrees.
 
-## 4. Route feedback
+## 5. Route feedback
 
 Each piece of feedback (the rejection reasons, or the observations) gets one route, and a human confirms it before
 anything runs:

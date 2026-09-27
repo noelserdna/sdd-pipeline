@@ -20,14 +20,16 @@
         "tsconfig*.json",
         "task/TASK-FASE-*.md",
         ".sdd/*",
-        "dashboard/*"
+        "dashboard/*",
+        "acceptance/*"
       ],
       "stages": [
         "req-change",
         "requirements-engineer",
-        "task-implementer"
+        "task-implementer",
+        "acceptance"
       ],
-      "note": "The lead runs --integrate in the main checkout, so it owns the integración/verificación write-set."
+      "note": "The lead runs --integrate in the main checkout, so it owns the integración/verificación write-set; it also runs the customer sign-off (sdd-acceptance --sign-off), so it shares acceptance/* with sdd-qa."
     },
     "sdd-spec": {
       "name": "example-spec",
@@ -89,12 +91,14 @@
         ".sdd/*",
         "audits/GAP-*",
         "acceptance/*",
-        "dashboard/*"
+        "dashboard/*",
+        "feedback/*"
       ],
       "stages": [
         "gap-detector",
         "acceptance"
-      ]
+      ],
+      "note": "Runs sdd-acceptance --check and --loop: the loop writes feedback entries and hands the task-generator/task-implementer routes to the lead; the lead runs --sign-off."
     }
   }
 }

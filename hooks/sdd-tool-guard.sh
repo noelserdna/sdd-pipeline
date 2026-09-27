@@ -19,11 +19,12 @@
 # incluya `NOMBRE=`.
 #
 # Además pide confirmación humana (permissionDecision "ask") para los registros de aceptación:
-#   - `sdd accept record …` (también `sdd.mjs accept record`): añade una exención, demo, medición, inspección o
-#     aceptación de FASE a acceptance/decisions.jsonl en nombre de una persona;
-#   - `git tag` que crea, mueve o borra `fase-N-accepted` o `requirements-vN` (listarlos con -l/--list/--contains/
-#     --points-at/--verify no pregunta).
-# Evita la auto-aprobación accidental; no es una garantía: un tag con el nombre en una variable, un script
+#   - `sdd accept record …` (también `sdd.mjs accept record`, `$SDD accept record`, `node "${SDD}" accept record`):
+#     añade una exención, demo, medición, inspección o aceptación de FASE a acceptance/decisions.jsonl en nombre de
+#     una persona;
+#   - `git tag` que crea, mueve o borra `fase-N-accepted` o `requirements-vN`, también con el número en una variable
+#     (`fase-$N-accepted`, `requirements-v$V`); listarlos con -l/--list/--contains/--points-at/--verify no pregunta.
+# Evita la auto-aprobación accidental; no es una garantía: un tag con el nombre entero en una variable, un script
 # intermedio u otra herramienta no se detectan. La aprobación sigue siendo una decisión humana registrada.
 # Nunca falla: exit 0 siempre; sin salida = permitir.
 
@@ -79,9 +80,9 @@ is_plain_search() {
 ACCEPT_WHAT=""
 acceptance_action() {
   local c="$1" seg
-  local re_rec='(^|[^A-Za-z0-9_-])sdd(\.mjs)?["'"'"']?[[:space:]]+accept[[:space:]]+record([[:space:]]|$)'
+  local re_rec='(^|[^A-Za-z0-9_-])(sdd(\.mjs)?|\$\{?SDD\}?)["'"'"']?[[:space:]]+accept[[:space:]]+record([[:space:]]|$)'
   local re_tag='(^|[^A-Za-z0-9_-])git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+tag([[:space:]].*)?$'
-  local re_name='(fase-[0-9]+-accepted|requirements-v[0-9]+)'
+  local re_name='(fase-([0-9]+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)-accepted|requirements-v([0-9]|\$))'
   if [[ $c =~ $re_rec ]]; then
     ACCEPT_WHAT="sdd accept record (writes a human decision to acceptance/decisions.jsonl)"; return 0
   fi

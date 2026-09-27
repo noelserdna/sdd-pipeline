@@ -28,7 +28,7 @@ Generation time is dominated by output tokens; reading the whole corpus only add
    | E2E (Mode 5) | WF step lists, UC input tables, the `Input (VO)` cells of the contract operations (or request-body schemas with `Style: http`), `ux/WIREFRAMES.md` interactive elements |
 
    Never open `01-GLOSSARY.md`, ADR bodies, runbooks or `CLARIFICATIONS.md` in full: grep the id you cite (`grep -n -A3 'RN-007' spec/CLARIFICATIONS.md`).
-3. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `sdd-dashboard`), use them for id lookups instead of grep.
+3. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `scripts/sdd-graph.py`), use them for id lookups instead of grep.
 
 ## Output Budget
 

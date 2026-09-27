@@ -37,7 +37,7 @@ The plan needs ids, titles, dependencies, decisions and invariants — not the f
    | 5B | per FASE: the sections its FASE file lists, the contracts of that FASE, `test/TEST-PLAN.md` §3 / §7 / §9 rows and the §5 rows of its use cases |
 
 3. Never open in full: `01-GLOSSARY.md`, runbooks, BDD files (scenario titles only), `CLARIFICATIONS.md` (grep the RN ids you cite), `test/E2E-SCENARIOS.md` and `test/TEST-MATRIX-*.md` (ids only).
-4. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `sdd-dashboard`), use them for id lookups instead of grep.
+4. If the `sdd_context` / `sdd_query` MCP tools are available (index built by `scripts/sdd-graph.py`), use them for id lookups instead of grep.
 
 ## Output Budget
 

@@ -37,7 +37,9 @@ skills/sdd-tech-designer/SKILL.md
 skills/sdd-test-planner/SKILL.md
 skills/sdd-ux-designer/SKILL.md
 scripts/sdd-jev.mjs and scripts/jev/*.json
-scripts/sdd.mjs and scripts/lib/acceptance*.mjs (accept, gate, loop next)
+scripts/sdd.mjs and scripts/lib/{git-log,acceptance,acceptance-cli,junit,plan-lint,tracker}.mjs (verify, trace, accept, gate, loop next, lint --plan, issue, pr-body)
+hooks/sdd-tool-guard.sh (which commands ask for human confirmation: accept record, acceptance/approval tags)
+hooks/sdd-upstream-guard.sh (role ownership and Art. 4 write rules)
 templates/stacks/*/{kit.json,profile.md,conventions.md,rules/*.md}
 skills/sdd-task-implementer/references/stack-profile.md
 skills/sdd-task-generator/references/task-template.md
