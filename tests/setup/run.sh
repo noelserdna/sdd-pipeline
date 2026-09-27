@@ -63,7 +63,13 @@ out="$(bash "$SCRIPTS/install-git-hooks.sh")"
 if contains "$out" "already installed"; then pass "install: idempotente"; else bad "install: idempotente ($out)"; fi
 echo a > a.txt; git add a.txt
 if git commit -q -m "feat: sin trailer" >/dev/null 2>&1; then bad "commit feat sin trailer debería fallar"; else pass "commit feat sin trailer rechazado"; fi
-if git commit -q -m "feat: con trailer" -m "Refs: REQ-001" >/dev/null 2>&1; then pass "commit feat con Refs: aceptado"; else bad "commit feat con Refs: rechazado"; fi
+check "install: vendoriza .claude/sdd/sdd.mjs y lib/git-log.mjs" sh -c 'grep -q "Vendored by sdd-pipeline" .claude/sdd/sdd.mjs && test -f .claude/sdd/lib/git-log.mjs'
+check "install: el sdd.mjs vendorizado funciona" node .claude/sdd/sdd.mjs branch status
+if git commit -q -m "feat: solo refs" -m "Refs: REQ-001" >/dev/null 2>&1; then bad "commit feat con solo Refs: debería fallar (feat exige Task)"; else pass "commit feat con solo Refs: rechazado"; fi
+if git commit -q -m "feat: con trailer" --trailer "Task: TASK-F1-001" --trailer "Refs: REQ-001" >/dev/null 2>&1; then pass "commit feat con --trailer Task/Refs aceptado"; else bad "commit feat con --trailer Task/Refs rechazado"; fi
+printf '%s\n' "// local edit" >> .claude/sdd/sdd.mjs
+bash "$SCRIPTS/install-git-hooks.sh" >/dev/null
+check "install: re-instalar sobrescribe la copia vendorizada" sh -c '! grep -q "// local edit" .claude/sdd/sdd.mjs'
 if git commit -q --allow-empty -m "docs: exento" >/dev/null 2>&1; then pass "commit docs sin trailer aceptado"; else bad "commit docs sin trailer rechazado"; fi
 
 # 3b. uninstall, backup de hook ajeno y restauración

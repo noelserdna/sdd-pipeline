@@ -54,7 +54,7 @@ Mode 1 on a FASE with a Stream Ownership table works sequentially in one checkou
 
 ### Mode 8: Integrate Streams
 
-Main checkout, clean tree, project base branch. For each lettered Stream: `git merge --no-ff feat/fase-1-x -m "Merge branch 'feat/fase-1-x' (FASE-1 Stream X)"` (never squash; a conflict → PAUSE with resolution instructions), then the `integración` tasks (Phases 3-7), `--verify --fase 1`, the `verificación` tasks, Phase 9 (tag `fase-1-verified` on PASS), post-merge checks, bench consolidation, Persist Summary (`metrics.streamsIntegrated`), `git push --follow-tags`, handoff and the suggested `git worktree remove` / `git branch -d` lines. Preconditions I-01..I-09 and the full procedure: `references/integration-protocol.md`.
+Main checkout, clean tree, on the branch that carries `fase-{N}-foundation`. For each lettered Stream: `git merge --no-ff feat/fase-1-x -m "Merge branch 'feat/fase-1-x' (FASE-1 Stream X)"` (never squash; a conflict → PAUSE with resolution instructions), then the `integración` tasks (Phases 3-7), `--verify --fase 1`, the `verificación` tasks, Phase 9 (tag `fase-1-verified` on PASS), post-merge checks, bench consolidation, Persist Summary (`metrics.streamsIntegrated`), `git push --follow-tags` only after asking, handoff and the suggested `git worktree remove` / `git branch -d` lines. Preconditions I-01..I-09 and the full procedure: `references/integration-protocol.md`.
 
 ## Output Artifacts
 
@@ -102,13 +102,14 @@ FASE-0 Context Map:
 | G-09 | (`--stream X`) the Stream Ownership table lists X | HALT: table missing → re-run `sdd-task-generator`; unknown name → list the Streams |
 | G-10 | (`--stream X`, X ≠ base) cwd is a worktree (`git rev-parse --git-dir` ≠ `--git-common-dir`) on `feat/fase-{N}-{x}` | WARN + `Question: Not in the Stream worktree. Continue here?  Options: [A] stop; create it with git worktree add ../<project>-f{N}{x} -b feat/fase-{N}-{x} fase-{N}-foundation (recommended)  [B] continue on the current branch (no isolation, no push)`. `--stream base`: HALT if cwd is a worktree |
 | G-11 | (`--stream X`) every `base` task is done in HEAD | HALT: "run base tasks in the main checkout first (`--fase {N} --stream base`)" |
-| G-12 | Task lines parse: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" lint --fase {N}` (grammar: `references/stack-profile.md` §6) | Legacy shapes → WARN, tolerant parse; 0 tasks → HALT |
+| G-12 | Task lines parse: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --fase {N}` (grammar: `references/stack-profile.md` §6) | Legacy shapes → WARN, tolerant parse; 0 tasks → HALT |
+| G-13 | (Modes 1, 2, 3, 6 and `--stream base`; not `--stream X` (X ≠ base), whose worktree branch is `feat/fase-{N}-{x}`, nor `--integrate`, which checks I-03) before the first task of the session, work is on a branch: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start fase {N} {slug}` (slug from the FASE title; branch rule in the plugin-root `references/git-conventions.md`) | Exit 1 (detached HEAD, or an existing branch with uncommitted changes) → HALT and show its message |
 
 The stale brake (Phase 3 step 0a) is not a gate: it runs before every task in every mode. `--integrate` has its own preconditions I-01..I-09.
 
 ### Phase 2: Task Selection & Ordering
 
-1. Parse the tasks with `sdd-task-lint.mjs json --fase {N}`; separate done and pending (Task state).
+1. Parse the tasks with `sdd.mjs tasks json --fase {N}`; separate done and pending (Task state).
 2. Order by explicit dependencies (`blocked-by`, Dependencies section), then by the internal phases emitted by `sdd-task-generator` — **Setup → Foundation → Slices → Integration → Verification** (legacy labels: Domain and Contracts count as Slices, Tests as Verification) — keeping `[P]` batches together.
 3. `--task`: check its dependencies. `--continue`: first pending task with dependencies done. `--stream X`: only Stream X; others are EXTERNAL; an EXTERNAL dependency not done in HEAD → `PAUSE: External dependency` (the task is marked `[!]` and skipped). `--integrate`: the `integración` tasks, then `verificación`.
 
@@ -120,7 +121,7 @@ Execution Plan — FASE-1 Stream A (branch feat/fase-1-a, base done in HEAD)
   · TASK-F1-004 [EXTERNAL, B]     · TASK-F1-009 [EXTERNAL, integración]
 ```
 
-**Task state** (`references/stack-profile.md` §6). `task_state: checkbox` (default): done = `[x]`, and *done in HEAD* = `[x]` in `git show HEAD:task/TASK-FASE-{N}.md`. `task_state: trailers`: nothing edits checkboxes; done and *done in HEAD* = `done` in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase {N} --json` (a `Task:` trailer reachable from HEAD, not reverted). Every done check in this skill (Modes 3, 6, 7, G-11, `--verify`, I-06/I-09, EXTERNAL dependencies) uses this definition; with trailers "mark `[!]`" means an OPEN BLOCKER entry in the feedback file, divergences are WARN, and the "keep both `[x]`" merge rule does not apply. `task_format: compact`: a task may lack Review/Revert (absent Revert = `SAFE`).
+**Task state** (`references/stack-profile.md` §6). `task_state: checkbox` (default): done = `[x]`, and *done in HEAD* = `[x]` in `git show HEAD:task/TASK-FASE-{N}.md`. `task_state: trailers`: nothing edits checkboxes; done and *done in HEAD* = `done` in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" tasks status --fase {N} --json` (a `Task:` trailer reachable from HEAD, not reverted). Every done check in this skill (Modes 3, 6, 7, G-11, `--verify`, I-06/I-09, EXTERNAL dependencies) uses this definition; with trailers "mark `[!]`" means an OPEN BLOCKER entry in the feedback file, divergences are WARN, and the "keep both `[x]`" merge rule does not apply. `task_format: compact`: a task may lack Review/Revert (absent Revert = `SAFE`).
 
 ### Phase 3: Pre-Implementation Design
 
@@ -162,19 +163,15 @@ Checkbox-first: the `[x]` goes into the task's own commit, so an interrupted ses
 
 1. `- [ ]` → `- [x]` for the task in `task/TASK-FASE-{N}.md`.
 2. Stage the task's files + the task document (never `git add -A`); verify the staged set is exactly that.
-3. Commit with the **Commit** message verbatim plus the trailers below. The commit-msg hook requires `Refs:` or `Task:` on `feat`/`fix`/`perf`/`test` and `Task:` on `refactor`; always write both.
+3. Commit with the **Commit** message verbatim as the subject and one `--trailer` per trailer: `Task:` always, `Refs:` with the task's Refs. `--trailer` makes git build a valid trailer block; a trailer typed into the message body is silently lost after a prose line or a blank line, and the task stops counting as done. When the harness asks for an attribution line, add it with `--trailer` too so it stays in the same block. The commit-msg hook applies the rules of the plugin-root `references/git-conventions.md` (`feat`/`test`/`refactor` need `Task:`).
 4. `COMMIT_SHA=$(git rev-parse --short HEAD)`; keep `TASK-ID → SHA` for the report.
 5. `sdd_bench_event task-commit "{TASK-ID}" "$COMMIT_SHA"`.
 
 ```bash
 git add src/middleware/auth.ts tests/middleware/auth.test.ts task/TASK-FASE-0.md
-git commit -m "$(cat <<'EOF'
-feat(auth): add JWT authentication middleware
-
-Refs: FASE-0, UC-002, ADR-003, INV-AUTH-001
-Task: TASK-F0-003
-EOF
-)"
+git commit -m "feat(auth): add JWT authentication middleware" \
+  --trailer "Task: TASK-F0-003" \
+  --trailer "Refs: FASE-0, UC-002, ADR-003, INV-AUTH-001"
 ```
 
 ### Phase 8: Progress & Task Loop
@@ -190,7 +187,7 @@ Main checkout only. The tag is placed last, and only when everything passes, so 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
 2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
-4. **All PASS** → `git tag -a fase-{N}-verified -m "FASE-{N} implementation complete and verified"` and `sdd_bench_event fase-verified "" "$(git rev-parse --short HEAD)"`. Any FAIL → no tag; report what failed and keep the stage `running`. An existing `fase-{N}-verified` tag → report instead of re-tagging.
+4. **All PASS** → `git tag -a fase-{N}-verified -m "FASE-{N} implementation complete and verified"` and `sdd_bench_event fase-verified "" "$(git rev-parse --short HEAD)"`. Any FAIL → no tag; report what failed and keep the stage `running`. An existing `fase-{N}-verified` tag → report instead of re-tagging. The FASE branch is finished by a merge commit into the default branch (`git merge --no-ff`, never squash or rebase, which drop the `Task:` trailers) or by a PR; ask before merging or pushing.
 5. Completion report:
 
 ```
@@ -207,7 +204,7 @@ Commits: 12 atomic (abc1234..xyz9012)
 
 1. `{test}` in the worktree (report the Stream's own test files separately). Failure → `PAUSE: Test regression`, no push.
 2. Report `Stream A complete: 2 tasks, commits 9f3c2a1..b71e0d4, branch feat/fase-1-a` with a `| Task | SHA | Message |` table (`git log fase-{N}-foundation..HEAD --format='%h %s'`) and `Next: /sdd-task-implementer --integrate --fase 1 (main checkout, once every Stream is complete)`.
-3. Push when a remote exists: `git remote get-url origin >/dev/null 2>&1 && git push -u origin feat/fase-{N}-{x}`.
+3. When a remote exists, ask before pushing: `git push -u origin feat/fase-{N}-{x}`.
 4. No Persist Summary (the hooks already recorded the stage as `running`).
 5. Handoff per `references/handoff-protocol.md`, with `stream={X}` right after `questions=<n>`: `stage=task-implementer status=done gate=n/a artifacts=<n> root=<STATE_ROOT> questions=0 stream=A; reread pipeline-state.json`, then the `Stream A complete: …` line. `status=blocked` when `[!]` tasks remain.
 6. Leave the worktree and branch: `--integrate` merges them and suggests the cleanup.

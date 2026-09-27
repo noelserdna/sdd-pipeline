@@ -37,6 +37,9 @@ Run after an audit whose findings have been triaged (SKILL.md § Triage) and who
    when applying a correction — not the report's prose.
 3. Count findings by severity and disposition and confirm the scope with the user (or apply a delegated scope, e.g.
    "P0/P1 without asking").
+4. Before the first correction commit, work on a branch: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"
+   branch start audit` (`audit/fix-{date}`; branch rule in the plugin-root `references/git-conventions.md`; exit 1 →
+   stop and show its message).
 
 ## Fix Phase 1: Corrections plan
 
@@ -75,13 +78,14 @@ After applying fixes, `grep -rn "OLD_TERM\|OLD_VALUE" spec/` for every changed t
 **Commits** (when `spec/` is versioned): one commit per correction, or per cascade group of findings that resolve
 together:
 
+```bash
+git commit -m "docs(specs): resolve {FINDING-ID} {brief description}" \
+  --trailer "Change: {FINDING-ID}" --trailer "Refs: {affected REQ/UC ids}"
 ```
-docs(specs): resolve {FINDING-ID} {brief description}
 
-Refs: {FINDING-ID}, {affected REQ/UC ids}
-```
-
-The commit-msg hook never blocks `docs`, and `Refs:` keeps the trace. Do not add attribution trailers by hand.
+`Change:` names the finding, `Refs:` the spec ids it touches (required on `docs(specs)`). `--trailer` keeps them in one
+block git can parse; when the harness asks for an attribution line, add it with `--trailer` too. The audit branch
+reaches the default branch through a merge commit (`git merge --no-ff`) or a PR; ask before merging or pushing.
 
 ## Fix Phase 3: Verification summary and baseline update
 

@@ -32,12 +32,12 @@ main checkout            worktree ../proj-f1a          worktree ../proj-f1b
   → tag fase-1-foundation
                          --fase 1 --stream A            --fase 1 --stream B
                            commits on feat/fase-1-a       commits on feat/fase-1-b
-                           Phase 9-S: push + handoff      Phase 9-S: push + handoff
+                           Phase 9-S: handoff             Phase 9-S: handoff
 --integrate --fase 1
   merge --no-ff feat/fase-1-a
   merge --no-ff feat/fase-1-b
   integración tasks → --verify → verificación tasks → tag fase-1-verified
-  Persist Summary → push --follow-tags → handoff → suggest worktree cleanup
+  Persist Summary → (ask) push --follow-tags → handoff → suggest worktree cleanup
 ```
 
 ### Creating the worktrees
@@ -63,13 +63,13 @@ shared state through the git common dir, so `pipeline-state.json` stays in the m
 |---|-------|---------|------------|
 | I-01 | cwd is the main checkout, not a worktree | `[ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]`; when `SDD_STATE_ROOT` is set it must equal `git rev-parse --show-toplevel` | HALT: `cd` to the main checkout |
 | I-02 | Working tree clean | `git status --porcelain` prints nothing | HALT: commit or stash first |
-| I-03 | Integration branch = project base branch | `git branch --show-current` equals the branch that carries `fase-N-foundation` (`git branch --contains fase-N-foundation`), normally `main` | WARN + Question: [A] switch to it (recommended) [B] integrate here |
+| I-03 | Integration branch carries the foundation | `git branch --show-current` is a branch that carries `fase-N-foundation` (`git branch --contains fase-N-foundation`): the `fase-N-{slug}` branch where `--stream base` ran (branch rule, plugin-root `references/git-conventions.md`), or the default branch for FASEs started before that rule | WARN + Question: [A] switch to it (recommended) [B] integrate here |
 | I-04 | Stream Ownership table present | `## Stream Ownership` in `task/TASK-FASE-N.md` with at least one lettered Stream | HALT: nothing to integrate; `--fase N` already covers this FASE |
 | I-05 | Stale brake | `stages["task-generator"].status` and `stages["plan-architect"].status` in `$SDD_STATE_ROOT/pipeline-state.json` are not `stale` | PAUSE `Stale upstream: re-run <skill> before continuing` |
-| I-06 | `base` tasks are done in HEAD and `fase-N-foundation` exists | checkbox: `[x]` in `git show HEAD:task/TASK-FASE-N.md`; trailers: done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase N --json`; `git rev-parse -q --verify refs/tags/fase-N-foundation` | HALT: run `--fase N --stream base` first |
+| I-06 | `base` tasks are done in HEAD and `fase-N-foundation` exists | checkbox: `[x]` in `git show HEAD:task/TASK-FASE-N.md`; trailers: done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" tasks status --fase N --json`; `git rev-parse -q --verify refs/tags/fase-N-foundation` | HALT: run `--fase N --stream base` first |
 | I-07 | Every lettered Stream has a branch | `git rev-parse -q --verify refs/heads/feat/fase-N-x`, else `git fetch origin feat/fase-N-x` and use `origin/feat/fase-N-x` | Question: [A] skip that Stream (partial integration, reported) [B] abort |
 | I-08 | Stream branch descends from the foundation tag | `git merge-base --is-ancestor fase-N-foundation feat/fase-N-x` | WARN: the branch was not created from the checkpoint; expect conflicts |
-| I-09 | Stream tasks complete on their branch | checkbox: every task of the Stream is `[x]` in `git show feat/fase-N-x:task/TASK-FASE-N.md`; trailers: every task of the Stream is done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase N --rev feat/fase-N-x --state trailers --json` (trailers reachable from the branch, reverts subtracted) | WARN + Question: [A] skip the Stream [B] integrate the partial Stream anyway |
+| I-09 | Stream tasks complete on their branch | checkbox: every task of the Stream is `[x]` in `git show feat/fase-N-x:task/TASK-FASE-N.md`; trailers: every task of the Stream is done in `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" tasks status --fase N --rev feat/fase-N-x --state trailers --json` (trailers reachable from the branch, reverts subtracted) | WARN + Question: [A] skip the Stream [B] integrate the partial Stream anyway |
 
 Read the tables and branches once; keep `STREAMS="A B …"` in session memory.
 
@@ -136,7 +136,7 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
 ## 4. Post-merge checks (all must hold before Persist Summary)
 
 ```bash
-# every task of the FASE is [x]   (task_state: trailers → sdd-task-lint.mjs status --fase $N --json: 0 pending,
+# every task of the FASE is [x]   (task_state: trailers → sdd.mjs tasks status --fase $N --json: 0 pending,
 # and no OPEN BLOCKER entry in feedback/IMPL-FEEDBACK-FASE-N.md)
 grep -cE '^- \[ \] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0
 grep -cE '^- \[!\] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0 (blocked tasks stop the FASE)
@@ -172,8 +172,9 @@ done
    - `highlights`: one line per merged branch (`Merged feat/fase-1-a (3 tasks) → 9f3c2a1`), one line per conflict
      (`Conflict in task/TASK-FASE-1.md resolved (both [x] kept)` — checkbox mode), `FASE-1 verified: fase-1-verified`
    - `nextStep`: `"Run /sdd-task-implementer --fase N+1"` (or `--fase N+1 --stream base` when FASE N+1 has Streams)
-4. `git push --follow-tags` when `git remote get-url origin` succeeds (the Stream branches were already pushed by
-   Phase 9-S; pushing the base branch publishes the merges and the tag).
+4. When `git remote get-url origin` succeeds, ask before `git push --follow-tags` (it publishes the merges and the
+   tag). The integration branch itself reaches the default branch through a merge commit (`git merge --no-ff`) or a
+   PR, never squash or rebase; ask before merging into the default branch.
 5. Handoff per `references/handoff-protocol.md` (`stage=task-implementer status=done gate=PASS`).
 6. Suggest — never run — the cleanup, one line per Stream:
 

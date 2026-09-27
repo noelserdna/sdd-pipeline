@@ -1,7 +1,7 @@
 ---
 name: sdd-pipeline-status
 description: "Pipeline status, artifact checks, staleness and next action; --diagnose plans SDD adoption for new or existing projects. Triggers: 'pipeline status', 'what stage', 'next step', 'check staleness', 'que sigue', 'estado del pipeline', 'onboard project', 'adopt SDD', 'start SDD', 'diagnose project', 'project assessment', 'SDD readiness'."
-allowed-tools: Read, Grep, Glob, Bash(git rev-parse:*), Bash(git log:*), Bash(git rev-list:*), Bash(git shortlog:*), Bash(git remote:*), Bash(git merge-base:*), Bash(ls:*)
+allowed-tools: Read, Grep, Glob, Bash(node:*), Bash(git rev-parse:*), Bash(git log:*), Bash(git rev-list:*), Bash(git shortlog:*), Bash(git remote:*), Bash(git merge-base:*), Bash(ls:*)
 ---
 
 # SDD Pipeline Status
@@ -81,7 +81,7 @@ the current directory.
 | History | `git rev-list --count HEAD`, `git shortlog -sn HEAD` (contributors), `git log -1 --format=%cI` |
 | Packages | workspaces (`package.json` `workspaces`, `pnpm-workspace.yaml`, `nx.json`, `turbo.json`, `lerna.json`, `go.work`, Cargo `[workspace]`) or several top-level dirs with their own manifest; CODEOWNERS teams |
 | Fork | `git remote -v` has `upstream` or another origin; README/CHANGELOG says "forked from"/"migrated from" |
-| Drift | with SDD dirs and code: commits under `code_paths` after the last commit touching `spec/`/`requirements/` (`git log --format='%h %s%n%b' <that commit>..HEAD -- <code_paths>`) without `Task:` trailers; `stale` stages; missing/orphan entries in `.sdd/gap-analysis.json` |
+| Drift | with SDD dirs and code: commits touching `code_paths` after the last commit touching `spec/`/`requirements/` without a `Task:` trailer (`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" verify --range <that commit>..HEAD --json`: results with `code: true` and an empty `trailers.Task`); `stale` stages; missing/orphan entries in `.sdd/gap-analysis.json` |
 
 **2. Classify.** Apply the rules top to bottom; the first match wins.
 

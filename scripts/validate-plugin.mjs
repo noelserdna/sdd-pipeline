@@ -116,6 +116,8 @@ if (claimH && Number(claimH[1]) !== hookScripts.size) errors.push(`plugin.json d
 const PROFILE_KEYS = ["stack", "app_dir", "code_paths", "test_paths", "install", "test", "test_file", "test_name",
   "typecheck", "lint_files", "lint", "build", "coverage", "db_reset_safe", "server", "port", "acceptance",
   "e2e_scaffold", "task_state", "task_format"];
+// Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md).
+const OPTIONAL_PROFILE_KEYS = ["default_branch"];
 const REQUIRED_KEYS = ["test", "test_file", "lint", "server", "port", "db_reset_safe"];
 const FORBIDDEN = [
   [/CONSENT/, "CONSENT"], [/migrate\s+reset/i, "migrate reset"], [/@restart/i, "@restart"],
@@ -165,7 +167,7 @@ if (existsSync(stacksDir)) {
     if (!defaults) errors.push(`${where}/kit.json: falta defaults`);
     else {
       for (const k of PROFILE_KEYS) if (typeof defaults[k] !== "string" || !defaults[k].trim()) errors.push(`${where}/kit.json: defaults.${k} ${REQUIRED_KEYS.includes(k) ? "(obligatoria) " : ""}falta o no es un string`);
-      for (const k of Object.keys(defaults)) if (!PROFILE_KEYS.includes(k)) warnings.push(`${where}/kit.json: defaults.${k} no es una clave del Stack Profile v1`);
+      for (const k of Object.keys(defaults)) if (!PROFILE_KEYS.includes(k) && !OPTIONAL_PROFILE_KEYS.includes(k)) warnings.push(`${where}/kit.json: defaults.${k} no es una clave del Stack Profile v1`);
       if (defaults.stack !== undefined && defaults.stack !== kit) errors.push(`${where}/kit.json: defaults.stack "${defaults.stack}" != ${kit}`);
       if (defaults.port !== undefined && !/^\d{1,5}$/.test(defaults.port)) errors.push(`${where}/kit.json: defaults.port debe ser un número ("3000")`);
       if (typeof defaults.app_dir === "string" && /[{}]/.test(defaults.app_dir)) errors.push(`${where}/kit.json: defaults.app_dir no admite marcadores`);
@@ -189,7 +191,7 @@ if (existsSync(stacksDir)) {
         else errors.push(`${where}/profile.md: línea fuera del contrato "${l}"`);
       }
       for (const k of PROFILE_KEYS) if (!(k in prof)) errors.push(`${where}/profile.md: falta la clave ${k}`);
-      for (const k of Object.keys(prof)) if (!PROFILE_KEYS.includes(k)) warnings.push(`${where}/profile.md: clave desconocida ${k}`);
+      for (const k of Object.keys(prof)) if (!PROFILE_KEYS.includes(k) && !OPTIONAL_PROFILE_KEYS.includes(k)) warnings.push(`${where}/profile.md: clave desconocida ${k}`);
       const expect = (k, ok, msg) => { if (k in prof && !ok(prof[k])) errors.push(`${where}/profile.md: ${k} ${msg}`); };
       expect("stack", (v) => v === kit, `debe ser ${kit}`);
       expect("app_dir", (v) => v === "{app_dir}", "debe ser {app_dir}");
@@ -320,6 +322,34 @@ const SKILL_MAX = 62000;
 for (const self of skillNames) {
   const size = readFileSync(path.join(skillsDir, self, "SKILL.md"), "utf8").length;
   if (size > SKILL_MAX) warnings.push(`skills/${self}/SKILL.md: ${size} chars (> ${SKILL_MAX}; muévelo a references/)`);
+}
+
+// 11. Commit templates in skills/** and references/**: trailers go through `git commit --trailer`
+// (git ≥ 2.32 builds a valid trailer block; a trailer typed in a heredoc or -m body is lost after any prose or blank
+// line) and only the SDD vocabulary is used. A fenced block counts as a commit template when it contains `git commit`.
+const TRAILER_KEYS = new Set(["task", "refs", "change", "co-authored-by", "signed-off-by"]);
+const docFiles = [...walk(skillsDir), ...(existsSync(path.join(ROOT, "references")) ? walk(path.join(ROOT, "references")) : [])]
+  .filter((f) => f.endsWith(".md"));
+for (const file of docFiles) {
+  const lines = readFileSync(file, "utf8").split("\n");
+  let start = -1;
+  const blocks = [];
+  lines.forEach((l, i) => {
+    if (!/^\s*(```|~~~)/.test(l)) return;
+    if (start < 0) start = i; else { blocks.push([start, i]); start = -1; }
+  });
+  for (const [a, b] of blocks) {
+    const body = lines.slice(a + 1, b);
+    const text = body.join("\n");
+    if (!/\bgit commit\b/.test(text)) continue;
+    const where = `${rel(file)}:${a + 1}`;
+    const handTyped = body.findIndex((l) => /^\s*(Task|Refs|Change)\s*:/i.test(l));
+    if (handTyped >= 0 && !/--trailer\b/.test(text)) {
+      errors.push(`${where}: commit template writes \`${body[handTyped].trim()}\` in the message body — use git commit --trailer (references/git-conventions.md)`);
+    }
+    const keys = [...text.matchAll(/--trailer[= ]+["']?([A-Za-z][A-Za-z-]*)\s*[:=]/g)].map((m) => m[1]);
+    for (const k of new Set(keys)) if (!TRAILER_KEYS.has(k.toLowerCase())) errors.push(`${where}: trailer \`${k}\` is not part of the SDD vocabulary (Task, Refs, Change, Co-Authored-By, Signed-off-by)`);
+  }
 }
 
 for (const w of warnings) console.log(`WARN  ${w}`);

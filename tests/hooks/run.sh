@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests de los hooks del plugin (dos raíces + lock + SDD_ROLE).
+# Tests de los hooks del plugin (dos raíces + lock + SDD_ROLE) y del hook git commit-msg (vía node vendorizada y bash).
 # Cada test alimenta el JSON de stdin que Claude Code enviaría y comprueba la salida/efectos.
 # Fixtures reproducibles en mktemp -d; HOME se aísla para no leer ~/.claude/sessions reales.
 # Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git, jq y node.
@@ -547,6 +547,67 @@ bash -c '. "$1"; sdd_lock_break "$2.lock"' _ "$LIB" "$lk"
 mkdir -p "$lk.lock.break" "$lk.lock"; touch -t 202001010000 "$lk.lock.break" "$lk.lock"
 bash -c '. "$1"; SDD_LOCK_RETRIES=5; sdd_lock "$2" && sdd_unlock "$2"' _ "$LIB" "$lk" && [ ! -d "$lk.lock" ] && [ ! -d "$lk.lock.break" ] \
   && pass "BUG-9 un mutex .break huérfano también se recupera" || bad "BUG-9 .break huérfano bloquea"
+
+# commit-msg: mismas reglas que `sdd verify --message`, por las dos vías, sobre cada fixture de tests/fixtures/git/messages
+MSGS="$ROOT/tests/fixtures/git/messages"
+cmr="$tmp/cmrepo"; mkdir -p "$cmr"; git -C "$cmr" init -q
+( cd "$cmr" && bash "$ROOT/scripts/install-git-hooks.sh" --quiet )
+check "commit-msg: install-git-hooks vendoriza sdd.mjs y lib/git-log.mjs con cabecera" \
+  sh -c "grep -q 'Vendored by sdd-pipeline' '$cmr/.claude/sdd/sdd.mjs' && grep -q 'Vendored by sdd-pipeline' '$cmr/.claude/sdd/lib/git-log.mjs'"
+cp "$cmr/.claude/sdd/sdd.mjs" "$tmp/sdd.mjs.real"
+printf '#!/usr/bin/env node\nconsole.log("STUB-NODE\\nverify: 1 message(s), 1 error(s), 0 warning(s)"); process.exit(1);\n' > "$cmr/.claude/sdd/sdd.mjs"
+out=$(cd "$cmr" && bash "$CM" "$MSGS/valid/fix-task.txt" 2>&1 || true)
+contains "$out" "STUB-NODE" && pass "commit-msg: con node y el sdd.mjs vendorizado, lo usa" || bad "commit-msg: no usa el sdd.mjs vendorizado ($out)"
+printf 'import "./lib/no-existe.mjs";\n' > "$cmr/.claude/sdd/sdd.mjs"
+rc1=0; out=$(cd "$cmr" && bash "$CM" "$MSGS/valid/fix-task.txt" 2>&1) || rc1=$?
+rc2=0; out2=$(cd "$cmr" && bash "$CM" "$MSGS/invalid/feat-no-task.txt" 2>&1) || rc2=$?
+if [ "$rc1" = 0 ] && [ "$rc2" = 1 ] && contains "$out" "validating with the bash rules" && contains "$out2" '`feat` needs a `Task:` trailer'; then
+  pass "commit-msg: un sdd.mjs vendorizado roto cae a las reglas bash (no bloquea ni deja pasar)"
+else bad "commit-msg: sdd.mjs roto ($rc1: $out | $rc2: $out2)"; fi
+cp "$tmp/sdd.mjs.real" "$cmr/.claude/sdd/sdd.mjs"
+# PATH sin node: enlaces a las herramientas que usa el hook
+nonode="$tmp/nonode"; mkdir -p "$nonode"
+for t in git awk sed tr cat head tail grep dirname basename env sh bash; do
+  p="$(command -v "$t" 2>/dev/null || true)"; [ -n "$p" ] && ln -sf "$p" "$nonode/$t"
+done
+if PATH="$nonode" bash -c 'command -v node' >/dev/null 2>&1; then bad "commit-msg: el PATH de prueba aún tiene node"; fi
+cm_run() { # cm_run node|bash FICHERO → rc en $cmrc, salida en $out
+  cmrc=0
+  if [ "$1" = node ]; then out=$(cd "$cmr" && bash "$CM" "$2" 2>&1) || cmrc=$?
+  else out=$(cd "$cmr" && PATH="$nonode" bash "$CM" "$2" 2>&1) || cmrc=$?; fi
+}
+for via in node bash; do
+  okv=1; for f in "$MSGS"/valid/*.txt; do
+    cm_run "$via" "$f"; [ "$cmrc" = 0 ] || { okv=0; echo "     $via rechaza valid/$(basename "$f"): $out"; }
+  done
+  [ "$okv" = 1 ] && pass "commit-msg ($via): acepta los $(ls "$MSGS"/valid/*.txt | wc -l | tr -d ' ') fixtures válidos" || bad "commit-msg ($via): rechaza fixtures válidos"
+  oki=1; for f in "$MSGS"/invalid/*.txt; do
+    name=$(basename "$f" .txt); cm_run "$via" "$f"
+    case "$name" in
+      prose-after-trailers|closes-in-block|coauthor-separate-paragraph) want='line 3: `Task: TASK-F2-003` is outside the trailer block' ;;
+      no-type) want='is not a conventional commit' ;;
+      unknown-type) want='unknown commit type `feature`' ;;
+      feat-no-task|test-no-task|refactor-no-task) want="needs a \`Task:\` trailer" ;;
+      fix-no-task-no-change|perf-no-trailer) want='needs a `Task:` or `Change:` trailer' ;;
+      docs-specs-no-refs) want='`docs(specs)` needs a `Refs:` trailer' ;;
+      bad-task-legacy-format) want='Task `TASK-FASE-1-002` does not match' ;;
+      bad-task-seq) want='Task `TASK-F1-02` does not match' ;;
+      bad-refs) want='Refs `#12` is not a spec id' ;;
+      bad-change) want='Change `change-1` does not match' ;;
+      empty) want='empty commit message' ;;
+      *) want='__sin expectativa__' ;;
+    esac
+    if [ "$cmrc" = 1 ] && contains "$out" "$want"; then :; else oki=0; echo "     $via invalid/$name → $cmrc: $out"; fi
+  done
+  [ "$oki" = 1 ] && pass "commit-msg ($via): rechaza los $(ls "$MSGS"/invalid/*.txt | wc -l | tr -d ' ') fixtures inválidos con el mensaje de verify" || bad "commit-msg ($via): fixtures inválidos"
+  cm_run "$via" "$MSGS/valid/lowercase-key.txt"
+  contains "$out" 'trailer key `task` should be written `Task`' && pass "commit-msg ($via): avisa de la clave en minúsculas" || bad "commit-msg ($via): sin aviso de clave ($out)"
+  cm_run "$via" "$MSGS/valid/fix-task.txt"
+  [ -z "$out" ] && pass "commit-msg ($via): un mensaje válido no imprime nada" || bad "commit-msg ($via): ruido en un commit válido ($out)"
+  cmrc=0; out=$(cd "$cmr" && SDD_SKIP_VERIFY=1 PATH="$nonode" bash "$CM" "$MSGS/invalid/feat-no-task.txt" 2>&1) || cmrc=$?
+done
+[ "$cmrc" = 0 ] && pass "commit-msg: SDD_SKIP_VERIFY=1 salta la validación" || bad "commit-msg: SDD_SKIP_VERIFY ignorado"
+grep -q 'TASK-FASE-' "$CM" && bad "commit-msg: ejemplos con el formato viejo TASK-FASE-N-NNN" || pass "commit-msg: sin ejemplos TASK-FASE-N-NNN"
 
 # scripts/sdd-state.sh: set/get bajo el lock de los hooks
 STATE_SH="$ROOT/scripts/sdd-state.sh"

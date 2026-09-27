@@ -105,7 +105,7 @@ Write only to `requirements/`, `spec/` (canonical tree of `sdd-specifications-en
 - **Option B (defect) and NOT_IMPLEMENTED:** no spec change. Record the item in the report and recommend `/sdd-task-generator --fase=N --incremental` for the FASE that owns the requirement (or `/sdd-gap-detector` for a full gap view).
 - **Option C:** leave the CR in `changes/` and recommend `/sdd-req-change --file changes/CR-RECONCILE-{date}.md`.
 
-Each divergence is applied independently; a failure in one does not block the others. Mark added or changed items `[RECONCILED]` / `[UPDATED]` with the CR ID. When committing the spec changes, use `docs(specs): reconcile spec-code drift` with a `Refs:` trailer listing the CR IDs and affected REQ/UC IDs.
+Each divergence is applied independently; a failure in one does not block the others. Mark added or changed items `[RECONCILED]` / `[UPDATED]` with the CR ID. Before the first commit, work on a branch when on the default one: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start change CR-RECONCILE-{date} reconcile` (branch rule in the plugin-root `references/git-conventions.md`). Commit the spec changes with `git commit -m "docs(specs): reconcile spec-code drift" --trailer "Change: {CR IDs}" --trailer "Refs: {affected REQ/UC IDs}"`; when the harness asks for an attribution line, add it with `--trailer` too. Ask before merging the branch (merge commit or PR) or pushing.
 
 ### Phase 8: Pipeline State and Report
 

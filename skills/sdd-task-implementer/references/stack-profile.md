@@ -32,6 +32,7 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - e2e_scaffold: allowed|never
 - task_state: checkbox|trailers
 - task_format: full|compact
+- default_branch: <branch>   # optional; see the table
 ```
 
 Parsing: one `- key: value` per line until the next `## ` heading; text after `#` preceded by whitespace is a comment;
@@ -57,6 +58,10 @@ detected/kit/legacy value (§3), then the default below.
 | `e2e_scaffold` | construction-protocol.md E2E step 2 | `allowed` |
 | `task_state` | Phase 2, Phase 7, Modes 3/6/7, G-11, `--verify`, I-06/I-09 (§6) | `checkbox` |
 | `task_format` | Phase 6 review, Revert (§6) | `full` |
+| `default_branch` | branch rule (G-13, `sdd.mjs branch start`), `--integrate` merge target | `origin/HEAD`, then `init.defaultBranch`, then `main`/`master` |
+
+`/sdd-setup` writes `task_state: trailers` for new projects: the commit is the evidence, so nothing has to keep a
+checkbox in sync. `checkbox` stays the default when the key is absent, for projects created before that.
 
 ## 2. Substituting placeholders
 
@@ -220,15 +225,16 @@ clean local database without any consent step.
 Regex: ``^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$``. Continuation lines (Acceptance,
 Commit, Refs, Review, Revert…) are indented two spaces.
 
-Tool (same plugin): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" lint|json|status [--fase N] [--json]|index`.
+Tool (same plugin): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint | tasks json|status|index [--fase N] [--json]`
+(`scripts/sdd-task-lint.mjs lint|json|status|index` remains as an alias).
 
 - `lint --fase N` — G-12. Its findings (V-19 grammar, legacy `### TASK-F0-001: …` headings, `**TASK-…**` bold ids,
   unindented fields) never stop the implementer: a non-zero exit is logged as `WARN G-12: <n> findings in
-  task/TASK-FASE-N.md` and the tasks are parsed tolerantly with `json` (which reads legacy shapes). **0 tasks from
-  `json` → HALT** (`task document has no parseable tasks: re-run sdd-task-generator`). When `node` or the script is
-  unavailable, parse with the regex above plus the legacy heading form and log `WARN G-12: sdd-task-lint.mjs unavailable`.
-- `json --fase N` — task list for Phase 2 (id, `[P]`, description, write-set, blocked-by, Stream).
-- `status --fase N --json [--rev <ref>] [--state checkbox|trailers]` — done-state per task: `Task:` trailers reachable
+  task/TASK-FASE-N.md` and the tasks are parsed tolerantly with `tasks json` (which reads legacy shapes). **0 tasks from
+  `tasks json` → HALT** (`task document has no parseable tasks: re-run sdd-task-generator`). When `node` or the script is
+  unavailable, parse with the regex above plus the legacy heading form and log `WARN G-12: sdd.mjs unavailable`.
+- `tasks json --fase N` — task list for Phase 2 (id, `[P]`, description, write-set, blocked-by, Stream).
+- `tasks status --fase N --json [--rev <ref>] [--state checkbox|trailers]` — done-state per task: `Task:` trailers reachable
   from `--rev` (default `HEAD`) minus reverted commits, the checkbox state, `[!]`, and divergences between both.
   `--state` defaults to the profile's `task_state`; with `trailers` an unchecked box is not a divergence.
   `--require-done` exits 1 when a selected task is not done (useful for G-11 / I-06 / I-09).
@@ -242,12 +248,12 @@ Current behaviour: Phase 7 marks `- [x]` before the commit and stages the task d
 
 - Phase 7 never edits checkboxes and never stages the task document: the `Task:` trailer of the commit *is* the
   done-state.
-- Every done check of the skill reads `status`: Phase 2 (done/pending), Mode 3 `--continue`, Mode 6 `--new-tasks-only`,
+- Every done check of the skill reads `tasks status`: Phase 2 (done/pending), Mode 3 `--continue`, Mode 6 `--new-tasks-only`,
   Mode 7 EXTERNAL dependencies and G-11 (run at the worktree's `HEAD`), `--verify` Completeness,
   integration-protocol I-06 (main checkout `HEAD`) and I-09 (the Stream branch — see integration-protocol.md).
 - `[!]` (blocked) is derived: a task is blocked while `feedback/IMPL-FEEDBACK-FASE-{N}.md` has an entry with
   `Severity: BLOCKER`, `Status: OPEN` and that `Task`. Wherever SKILL.md says "mark `[!]`", write or keep that entry.
-- Divergences reported by `status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
+- Divergences reported by `tasks status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
   auto-fixed; the trailer wins.
 - Merge conflicts in `task/TASK-FASE-{N}.md` cannot come from task progress, so the "keep both `[x]`" rule of
   integration-protocol.md §2 does not apply; any conflict there is a real content conflict → resolve by hand.

@@ -18,7 +18,7 @@ Lee el campo **Revert** de la task (con `task_format: compact` una task sin bloq
 | `MIGRATION` | Ejecutar down migration, luego revertir (base de datos local: `{db_reset_safe}`; nunca un reset que la herramienta rechace — SKILL.md → AI Tool Guardrails) |
 | `CONFIG` | Revertir, luego redeploy |
 
-With `task_state: trailers` the revert commit is enough: `sdd-task-lint.mjs status` subtracts reverted commits, so the
+With `task_state: trailers` the revert commit is enough: `sdd.mjs tasks status` subtracts reverted commits, so the
 task becomes pending again without touching the task document.
 
 ### Rollback to Checkpoint
@@ -27,6 +27,17 @@ task becomes pending again without touching the task document.
 # Rollback entire phase to last checkpoint
 git revert --no-commit HEAD..fase-{N}-{phase}
 git commit -m "revert: rollback to FASE-{N} {phase} checkpoint"
+```
+
+### Locate a regression
+
+When a test that passed at a checkpoint fails now, let git find the first bad commit; each step runs the test of the
+acceptance criterion (`{test_file}` of the Stack Profile), and the commit it names carries the `Task:` of the culprit:
+
+```bash
+git bisect start HEAD fase-{N}-verified      # bad, then last known good
+git bisect run {test_file with the failing test}
+git bisect reset
 ```
 
 ### Handling Failed Implementation

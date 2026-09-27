@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tests del grafo de trazabilidad: scripts/sdd-graph.py (commits, rangos, refs, Stack Profile, clasificador,
-# auditorías) y el parser de resultados (scripts/test-result-parser.py):
+# Tests del grafo de trazabilidad: scripts/sdd-graph.py (commits y su paridad con `sdd.mjs trace commits`, rangos,
+# refs, Stack Profile, clasificador, auditorías) y el parser de resultados (scripts/test-result-parser.py):
 # detección de runner (vitest, minitest, rspec; app_dir del SDD Stack Profile), parsers de Minitest verbose,
 # RSpec JSON y Vitest JSON, normalización de IDs con guiones bajos y la CLI de punta a punta.
-# Solo python3 (stdlib). Fixtures en tests/fixtures/test-results/. Compatible con bash 3.2.
+# python3 (stdlib); la paridad necesita node (se salta sin él). Fixtures en tests/fixtures/test-results/. Compatible con bash 3.2.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PARSER="$ROOT/scripts/test-result-parser.py"
@@ -294,6 +294,73 @@ fbt = {c["taskId"]: c for c in fb}
 check("commits body fallback: ficheros y refs por commit",
       len(fb) == 2 and fbt.get("TASK-F2-001", {}).get("files") == ["lib/g1.rb"]
       and fbt.get("TASK-F2-002", {}).get("refIds") == ["UC-012"], fb)
+
+# ── 2. paridad con `sdd.mjs trace commits` (mismas formas que tests/git: trailers, cuerpo legacy, revert,
+#       revert de revert, CR en Refs, clave en minúsculas, commit fuera de HEAD) ─────────────────────────────
+import shutil as _sh
+if _sh.which("node") and os.path.exists(gen.SDD_CLI):
+    par = new_repo("parity")
+    n_par = [0]
+
+    def pcommit(file, subject, body):
+        n_par[0] += 1
+        commit(par, {file: f"line {n_par[0]}\n"}, subject, body, f"2026-04-{n_par[0]:02d}T10:00:00")
+
+    def prevert():
+        n_par[0] += 1
+        d = f"2026-04-{n_par[0]:02d}T10:00:00 +0000"
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null",
+                        "-c", "commit.gpgsign=false", "revert", "--no-edit", "HEAD"], cwd=par, check=True,
+                       capture_output=True, env=dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=tmp,
+                                                     GIT_AUTHOR_DATE=d, GIT_COMMITTER_DATE=d))
+
+    pcommit("src/a.ts", "feat(a): a", "Task: TASK-F1-001\nRefs: REQ-F-01, UC-001")
+    pcommit("src/b.ts", "feat(b): b", "Task: TASK-F1-002\nRefs: REQ-F-012")
+    pcommit("src/c.ts", "feat(c): c", "Task: TASK-F1-003\nRefs: REQ-F-03")
+    prevert()
+    pcommit("src/d.ts", "feat(d): d", "Task: TASK-F1-004\nRefs: REQ-F-04")
+    prevert()
+    prevert()
+    pcommit("src/e.ts", "feat(e): e", "Task: TASK-F1-005\nRefs: REQ-F-05\n\nCo-Authored-By: Assistant <assistant@example.com>")
+    pcommit("src/f.ts", "docs(specs): f", "Refs: CR-7, REQ-F-01")
+    pcommit("src/g.ts", "fix(g): g", "change: CHG-2026-09-27-001\ntask: TASK-F1-006")
+    git(par, "switch", "-q", "-c", "side")
+    pcommit("src/s.ts", "feat(s): side", "Task: TASK-F9-001\nRefs: REQ-F-99")
+    git(par, "switch", "-q", "-")
+
+    raw = json.loads(subprocess.run(["node", gen.SDD_CLI, "trace", "commits", "--json", "--files", "--repo", par],
+                                    capture_output=True, text=True, check=True).stdout)["commits"]
+    expected = {}
+    for c in raw:
+        task = next((t for t in c["tasks"] if gen._TASK_ID_RE.match(t)), None)
+        refs = sorted(r for r in c["refs"] if gen.ARTIFACT_ID_RE.match(r))
+        if c["effective"] and (task or refs):
+            expected[c["sha"]] = (task, refs, c["files"])
+
+    def shape(commits):
+        return {c["fullSha"]: (c["taskId"], sorted(c["refIds"]), c["files"]) for c in commits}
+
+    via_node = quiet(gen._scan_commits_node, par)[0]
+    via_py = quiet(gen._scan_commits_git, par)[0]
+    os.environ["SDD_GRAPH_NO_NODE"] = "1"
+    via_scan_py = quiet(gen.scan_commits, par)[0]
+    del os.environ["SDD_GRAPH_NO_NODE"]
+    tasks_py = sorted(c["taskId"] or "-" for c in via_py)
+    check("paridad: sdd-graph.py (vía node) = sdd.mjs trace commits (commits, Task, Refs, ficheros)",
+          via_node is not None and shape(via_node) == expected, (shape(via_node or []), expected))
+    check("paridad: parser Python sin node = sdd.mjs trace commits", shape(via_py) == expected, (shape(via_py), expected))
+    check("paridad: scan_commits con SDD_GRAPH_NO_NODE=1 usa el parser Python y coincide",
+          shape(via_scan_py) == expected, shape(via_scan_py))
+    check("paridad: revert resta (F1-003 fuera), revert de revert restaura (F1-004 dentro), solo HEAD (F9-001 fuera)",
+          "TASK-F1-003" not in tasks_py and "TASK-F1-004" in tasks_py and "TASK-F9-001" not in tasks_py, tasks_py)
+    check("paridad: cuerpo legacy (Co-Authored-By en otro párrafo) y clave en minúsculas se leen",
+          {"TASK-F1-005", "TASK-F1-006"} <= set(tasks_py)
+          and any(c["legacy"] for c in via_py if c["taskId"] == "TASK-F1-005"), via_py)
+    check("paridad: REQ-F-01 no arrastra REQ-F-012; CR-7 no es un refId del grafo",
+          sorted(r for c in via_py for r in c["refIds"] if r.startswith("REQ-F-01")) == ["REQ-F-01", "REQ-F-01", "REQ-F-012"]
+          and not any("CR-7" in c["refIds"] for c in via_py), [c["refIds"] for c in via_py])
+else:
+    print("skip paridad sdd-graph.py / sdd.mjs: node no disponible")
 
 # ── 3. expand_ranges ────────────────────────────────────────────────────────
 er = gen.expand_ranges

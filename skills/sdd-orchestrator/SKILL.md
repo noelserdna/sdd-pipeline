@@ -11,7 +11,7 @@ In multi-session mode (`SDD_ROLE` set or `.claude/sdd-sessions.json` present), u
 
 ## Rules
 
-1. **Resume, don't restart.** Read `pipeline-state.json` first. Skip `done` stages, and re-run from the first `stale` one, explaining its `staleReason`.
+1. **Resume, don't restart.** Read `pipeline-state.json` first. Skip `done` stages, and re-run from the first `stale` one, explaining its `staleReason`. When a `fase-*-accepted` or `fase-*-verified` tag exists (`git tag -l 'fase-*-accepted' 'fase-*-verified'`), delivered work is on the default branch, so new work starts on a branch: each skill applies the branch rule of the plugin-root `references/git-conventions.md` before its first commit, and `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch status` shows where the session stands.
 2. **Skills produce the artifacts.** Invoke each stage with the Skill tool. Don't write requirements, specs, plans, tasks or code yourself, and don't pre-answer the questions a skill asks the user.
 3. **Ask at every gate.** Ask each gate question below with `AskUserQuestion`, give options, mark a recommended one, and wait for the answer. Never skip a stage or continue past a failed skill without the user's acknowledgement.
 4. **Specs drive code (Art. 12).** When a test fails, the code is fixed and the test is not. A spec that looks wrong is reported as a SPEC-DEVIATION and amended only through `sdd-req-change` after the user decides.

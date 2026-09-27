@@ -56,8 +56,9 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `port` | Puerto |
 | `acceptance` | Suite de aceptación compartida; se ejecuta desde la raíz y el filtro por ID se añade como `--grep <ID>`; `none` si no hay |
 | `e2e_scaffold` | `allowed` o `never`: si el implementer puede montar un proyecto E2E propio |
-| `task_state` | `trailers` (el trailer `Task:` del commit es el estado) o `checkbox` |
+| `task_state` | `trailers` (el trailer `Task:` del commit es el estado) o `checkbox`. Sin la clave vale `checkbox`; `/sdd-setup` escribe `trailers` en los proyectos nuevos, con kit o sin él |
 | `task_format` | `compact` (Review y Revert opcionales) o `full` |
+| `default_branch` | Opcional. Rama por defecto para la regla de rama (`sdd.mjs branch start`) y el destino del merge; sin la clave: `origin/HEAD`, luego `init.defaultBranch`, luego `main`/`master`. Los kits no la declaran |
 
 Reglas del contrato:
 
@@ -66,6 +67,8 @@ Reglas del contrato:
 - Marcadores en tiempo de ejecución: `{file}`, `{files}`, `{pattern}` y `{port}`. Las rutas que reciben son relativas a
   `app_dir`.
 - `{app_dir}` solo aparece en las plantillas de los kits y se resuelve al instalar.
+- Sin kit, `/sdd-setup` escribe un perfil mínimo con solo `- task_state: trailers`; el resto de claves toma los valores
+  detectados o por defecto.
 
 La referencia completa para el implementer (sustitución, cadencia de verificación, helper del servidor, `task_state`) está
 en `skills/sdd-task-implementer/references/stack-profile.md`.

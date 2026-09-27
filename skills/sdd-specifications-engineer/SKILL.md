@@ -268,6 +268,8 @@ sdd-task-implementer        → code/test paths from the SDD Stack Profile
 
 **Input:** `requirements/REQUIREMENTS.md`. **Output:** the complete `spec/` tree. **Next step:** `sdd-spec-auditor`.
 
+**Branch.** When `spec/` already exists on the default branch (a re-run after delivery), start a work branch before writing: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start change {CHG-ID or date} specs` (branch rule in the plugin-root `references/git-conventions.md`).
+
 ## Self-Validation Gate
 
 The last step of Mode 2, before Persist Summary. It runs on `grep` / `wc` output, not on re-reading the generated files.

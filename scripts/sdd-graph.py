@@ -17,6 +17,7 @@ import re
 import json
 import sys
 import argparse
+import shutil
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -733,13 +734,13 @@ def _parse_validated_refs(raw_refs_str):
 
 
 def scan_commits(project_dir):
-    """Scan git log for commits with Refs: and Task: trailers.
+    """Commits reachable from HEAD that carry SDD trailers, reverted ones subtracted.
 
-    Uses a single git log call with null-byte delimiters and --name-only
-    to get both metadata and changed files efficiently.
-    Returns list of commit dicts.
+    Same rules as `sdd.mjs trace commits` (scripts/lib/git-log.mjs): Task/Refs/Change trailers as git parses them;
+    a commit without any parsed id is read from `Task:|Refs:|Change:` body lines and marked legacy; a commit
+    reverted by an effective revert does not count (a revert of a revert restores it). Uses `node sdd.mjs trace
+    commits --json --files` when node is available, else the Python parser below. Returns list of commit dicts.
     """
-    # Check git availability
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
@@ -752,66 +753,20 @@ def scan_commits(project_dir):
         print("  Git not available — skipping commit scan.")
         return []
 
-    # Single git log call. The delimiter goes at the START of each record: with --name-only git prints the files
-    # after the formatted header, so a trailing delimiter would leave each commit's files at the head of the next
-    # chunk. Trailer values are joined with a comma (separator=%x2C) so they never add a newline to the header.
-    COMMIT_DELIM = "---SDD-COMMIT---"
-    fmt = (
-        f"--format={COMMIT_DELIM}%H%x00%h%x00%s%x00%an%x00%aI%x00"
-        "%(trailers:key=Refs,valueonly,separator=%x2C)%x00%(trailers:key=Task,valueonly,separator=%x2C)"
-    )
-    try:
-        result = subprocess.run(
-            ["git", "log", "--all", "--name-only", fmt],
-            capture_output=True, text=True, cwd=project_dir, timeout=60
-        )
-        if result.returncode != 0:
-            print(f"  Warning: git log failed (rc={result.returncode})")
-            return []
-    except Exception as e:
-        print(f"  Warning: git log scan failed: {e}")
-        return []
-
-    commits = []
-    for chunk in result.stdout.split(COMMIT_DELIM):
-        if not chunk.strip():
-            continue
-        lines = chunk.split("\n")
-        header = lines[0].split("\x00")
-        if len(header) < 7:
-            continue
-
-        full_sha, short_sha, subject, author, date = header[:5]
-        ref_ids = _parse_validated_refs(header[5])
-        task_id = _first_task_id(header[6])
-
-        # Skip commits without any trailer data
-        if not ref_ids and not task_id:
-            continue
-
-        commits.append({
-            "sha": short_sha,
-            "fullSha": full_sha,
-            "message": subject,
-            "author": author,
-            "date": date,
-            "taskId": task_id,
-            "refIds": ref_ids,
-            "files": [f.strip() for f in lines[1:] if f.strip()],
-        })
-
-    # Fallback: if %(trailers:...) found nothing, scan commit body for Refs:/Task: lines.
-    # This handles commits where Refs:/Task: are in the body but not detected as formal git trailers
-    # (e.g., wrong paragraph position, extra content after trailers, older git versions).
-    if not commits:
-        print("  Trailer-based scan found 0 commits. Trying body-based fallback...")
-        commits = _scan_commits_body_fallback(project_dir)
-
-    print(f"  Found {len(commits)} commits with Refs:/Task: trailers")
+    commits = _scan_commits_node(project_dir)
+    source = "sdd.mjs trace commits"
+    if commits is None:
+        commits = _scan_commits_git(project_dir)
+        source = "git log"
+    print(f"  Found {len(commits)} commits with Refs:/Task: trailers ({source})")
     return commits
 
 
 _TASK_ID_RE = re.compile(r'^TASK-F\d{1,2}-\d{3,4}$')
+_ANY_TASK_RE = re.compile(r'^TASK-F\d+-\d+$')
+_BODY_TRAILER_RE = re.compile(r'^(Task|Refs|Change)\s*:\s*(.*)$', re.IGNORECASE)
+_REVERTS_RE = re.compile(r'This reverts commit ([0-9a-f]{7,40})')
+SDD_CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdd.mjs")
 
 
 def _first_task_id(raw):
@@ -823,60 +778,146 @@ def _first_task_id(raw):
     return None
 
 
-# Regex for extracting Refs: and Task: from commit body text
-_BODY_REFS_RE = re.compile(r'^\s*Refs:\s*(.+)$', re.MULTILINE)
-_BODY_TASK_RE = re.compile(r'^\s*Task:\s*(TASK-F\d{1,2}-\d{3,4})\s*$', re.MULTILINE)
+def _tokens(value):
+    """Split a trailer value like sdd.mjs does: "REQ-F-01, UC-001 (CR-3)." → [REQ-F-01, UC-001, CR-3]."""
+    out = []
+    for t in re.split(r'[\s,;]+', value or ""):
+        t = re.sub(r'[.)\]]+$', '', re.sub(r'^[(\[]+', '', t))
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
+def _commit_dict(full_sha, short_sha, subject, author, date, tasks, refs, files, legacy):
+    """Graph commit record, or None when it carries neither a task nor an artifact ref."""
+    task_id = next((t for t in tasks if _TASK_ID_RE.match(t)), None)
+    ref_ids = [r for r in refs if ARTIFACT_ID_RE.match(r)]
+    if not ref_ids and not task_id:
+        return None
+    return {
+        "sha": short_sha,
+        "fullSha": full_sha,
+        "message": subject,
+        "author": author,
+        "date": date,
+        "taskId": task_id,
+        "refIds": ref_ids,
+        "files": files,
+        "legacy": legacy,
+    }
+
+
+def _effective(commits):
+    """Set of shas not undone by an effective revert (port of effectiveCommits in scripts/lib/git-log.mjs)."""
+    shas = [c["sha"] for c in commits]
+    known = set(shas)
+    reverted_by = {}
+    for c in commits:
+        for target in c["reverts"]:
+            full = target if target in known else next((x for x in shas if x.startswith(target)), None)
+            if full:
+                reverted_by.setdefault(full, []).append(c["sha"])
+    memo = {}
+
+    def eff(sha):
+        if sha in memo:
+            return memo[sha]
+        memo[sha] = True
+        memo[sha] = not any(eff(r) for r in reverted_by.get(sha, []))
+        return memo[sha]
+
+    return {s for s in shas if eff(s)}
+
+
+def _git_commits(project_dir, legacy_only=False):
+    """Python reading of HEAD, same rules as sdd.mjs trace commits (used when node is unavailable)."""
+    if subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD^{commit}"], capture_output=True,
+                      cwd=project_dir).returncode != 0:
+        return []
+    tr = lambda k: f"%(trailers:key={k},valueonly,separator=%x2C)"
+    fmt = f"--format=%x1e%H%x1f%h%x1f{tr('Task')}%x1f{tr('Refs')}%x1f{tr('Change')}%x1f%s%x1f%an%x1f%aI%x1f%b%x1f"
+    try:
+        result = subprocess.run(["git", "-c", "core.quotepath=off", "log", "--name-only", fmt, "HEAD"],
+                                capture_output=True, text=True, cwd=project_dir, timeout=60)
+        if result.returncode != 0:
+            print(f"  Warning: git log failed (rc={result.returncode})")
+            return []
+    except Exception as e:
+        print(f"  Warning: git log scan failed: {e}")
+        return []
+
+    raw = []
+    for rec in result.stdout.split("\x1e")[1:]:
+        parts = rec.split("\x1f")
+        if len(parts) < 10:
+            continue
+        full_sha, short_sha, t, r, c, subject, author, date, body = parts[:9]
+        tail = "\x1f".join(parts[9:])
+        tasks = [x for x in _tokens(t) if _ANY_TASK_RE.match(x)]
+        refs, changes = _tokens(r), _tokens(c)
+        legacy = False
+        if not (tasks or refs or changes):
+            found = {"task": [], "refs": [], "change": []}
+            for line in body.splitlines():
+                m = _BODY_TRAILER_RE.match(line)
+                if m:
+                    found[m.group(1).lower()].append(m.group(2))
+            tasks = [x for x in _tokens(",".join(found["task"])) if _ANY_TASK_RE.match(x)]
+            refs, changes = _tokens(",".join(found["refs"])), _tokens(",".join(found["change"]))
+            legacy = bool(tasks or refs or changes)
+        raw.append({"sha": full_sha, "short": short_sha, "subject": subject, "author": author, "date": date,
+                    "tasks": tasks, "refs": refs, "legacy": legacy, "reverts": _REVERTS_RE.findall(body),
+                    "files": [f.strip() for f in tail.split("\n") if f.strip()]})
+
+    effective = _effective(raw)
+    commits = []
+    for c in raw:
+        if c["sha"] not in effective or (legacy_only and not c["legacy"]):
+            continue
+        d = _commit_dict(c["sha"], c["short"], c["subject"], c["author"], c["date"], c["tasks"], c["refs"],
+                         c["files"], c["legacy"])
+        if d:
+            commits.append(d)
+    return commits
+
+
+def _scan_commits_git(project_dir):
+    return _git_commits(project_dir)
 
 
 def _scan_commits_body_fallback(project_dir):
-    """Fallback commit scan: search body text for Refs:/Task: patterns via --grep.
+    """Commits whose Task/Refs lines sit in the body but not in a parseable trailer block (legacy commits)."""
+    return _git_commits(project_dir, legacy_only=True)
 
-    Record layout: DELIM header fields NUL-separated, then the body, then a NUL; the --name-only file list
-    follows the NUL, so body lines are never mistaken for files.
-    """
-    COMMIT_DELIM = "---SDD-COMMIT-BODY---"
+
+def _scan_commits_node(project_dir):
+    """Commits from `node sdd.mjs trace commits --json --files`; None when node or the CLI is unavailable."""
+    if os.environ.get("SDD_GRAPH_NO_NODE") == "1" or not shutil.which("node") or not os.path.exists(SDD_CLI):
+        return None
     try:
-        result = subprocess.run(
-            [
-                "git", "log", "--all", "--name-only", "--grep=Refs:", "--grep=Task:",
-                f"--format={COMMIT_DELIM}%H%x00%h%x00%s%x00%an%x00%aI%x00%b%x00"
-            ],
-            capture_output=True, text=True, cwd=project_dir, timeout=60
-        )
+        result = subprocess.run(["node", SDD_CLI, "trace", "commits", "--json", "--files", "--repo", project_dir],
+                                capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
-            return []
+            return None
+        data = json.loads(result.stdout)
+        meta_out = subprocess.run(["git", "log", "--format=%H%x1f%h%x1f%an%x1f%aI", "HEAD"], capture_output=True,
+                                  text=True, cwd=project_dir, timeout=60).stdout
     except Exception:
-        return []
-
+        return None
+    meta = {}
+    for line in meta_out.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 4:
+            meta[parts[0]] = parts[1:]
     commits = []
-    for chunk in result.stdout.split(COMMIT_DELIM):
-        if not chunk.strip():
+    for c in data.get("commits", []):
+        if c.get("effective") is False:
             continue
-        parts = chunk.split("\x00")
-        if len(parts) < 7:
-            continue
-        full_sha, short_sha, subject, author, date, body = parts[:6]
-        files_text = "\x00".join(parts[6:])
-
-        refs_match = _BODY_REFS_RE.search(body)
-        ref_ids = _parse_validated_refs(refs_match.group(1)) if refs_match else []
-        task_match = _BODY_TASK_RE.search(body)
-        task_id = task_match.group(1) if task_match else None
-        if not ref_ids and not task_id:
-            continue
-
-        commits.append({
-            "sha": short_sha,
-            "fullSha": full_sha.strip(),
-            "message": subject,
-            "author": author,
-            "date": date,
-            "taskId": task_id,
-            "refIds": ref_ids,
-            "files": [f.strip() for f in files_text.split("\n") if f.strip()],
-        })
-
-    print(f"  Body fallback found {len(commits)} commits")
+        short_sha, author, date = meta.get(c["sha"], [c["sha"][:7], "", ""])
+        d = _commit_dict(c["sha"], short_sha, c.get("subject", ""), author, date, c.get("tasks", []),
+                         c.get("refs", []), c.get("files", []), bool(c.get("legacy")))
+        if d:
+            commits.append(d)
     return commits
 
 
@@ -890,7 +931,7 @@ def _build_rename_map(project_dir, old_paths):
         return {}
     try:
         result = subprocess.run(
-            ["git", "log", "--all", "-M", "--diff-filter=R", "--name-status", "--format="],
+            ["git", "log", "HEAD", "-M", "--diff-filter=R", "--name-status", "--format="],
             capture_output=True, text=True, cwd=project_dir, timeout=60
         )
         if result.returncode != 0:

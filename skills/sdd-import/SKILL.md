@@ -87,6 +87,8 @@ Proceed?
 
 Ask (skipped with `--yes`, see §2): confirm the mapping; for each duplicate Skip / Merge / Replace; resolve items that fit more than one artifact type or resist EARS; whether to include skipped items.
 
+When `requirements/` or `spec/` already exist on the default branch (importing into a delivered project), start a work branch before Phase 5: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start change IMPORT-{YYYY-MM-DD} {source-slug}` (branch rule in the plugin-root `references/git-conventions.md`).
+
 ### Phase 5: Generate Artifacts
 
 Write into the canonical tree owned by `sdd-specifications-engineer` ("Specification Folder Structure") and the requirement format owned by `sdd-requirements-engineer`. Never write flat files such as `spec/domain.md` or `spec/contracts.md`.

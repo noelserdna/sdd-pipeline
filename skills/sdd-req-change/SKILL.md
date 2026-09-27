@@ -47,6 +47,7 @@ Templates for every phase: `references/phase-templates.md`.
 2. Read `pipeline-state.json` (absent → fresh pipeline) and **remember the status of `requirements-engineer` and `specifications-engineer`**: this run's writes flip them to `running` through the H3 hook, and Persist restores them.
 3. Scan `changes/` for DRAFT/REVIEWED deltas. If any exist, offer **Resume** (continue at Phase 5 with them) or **Discard** (delete the drafts, start over).
 4. Parse `--file` if given. Build the forward (REQ → specs), backward (spec → REQs) and dependency (REQ → REQs) indexes in memory.
+5. **Branch.** This run commits on a work branch: as soon as Phase 1 allocates the CHG-ID, and before any commit, run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start change {CHG-ID} {slug}` (branch rule in the plugin-root `references/git-conventions.md`; exit 1 → stop and show its message).
 
 | Gate | Check | If it fails |
 |---|---|---|
@@ -88,7 +89,7 @@ Per CR:
 1. **Direct impact** — documents that must change: ADD → REQUIREMENTS.md, target UC/contract/BDD, possibly domain files and new INVs; MODIFY and DEPRECATE → every document in the REQ's chain (plus, for DEPRECATE, the REQs that depend on it).
 2. **Indirect impact** — documents to review: UCs sharing entities, dependent REQs, BDD scenarios asserting the old behaviour, FASE files that reference them.
 3. **Conflicts** — against INVs, accepted ADRs, BDD scenarios, CLARIFICATIONS rules and other CRs in the batch.
-4. **Commit impact** (git available): `git log --all --oneline --grep='Refs:.*{ID}'` per directly affected artifact, then `git diff-tree --no-commit-id --name-only -r {sha}` for the files; report commits, source files and test files touched. Without git, say so and skip.
+4. **Commit impact** (git available): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" trace req {ID} --json` per directly affected artifact (exact id match over `Task`/`Refs`/`Change` trailers of `HEAD`; reverted commits come with `effective: false`), then `git diff-tree --no-commit-id --name-only -r {sha}` on the effective ones; report commits, source files and test files touched. Without git, say so and skip.
 5. **Code intelligence** (when the `sdd_impact` MCP tool exists): `sdd_impact({artifact_id, direction: "downstream", maxDepth: 3})`, depth 1 = will break, 2 = likely affected, 3 = review.
 6. **Affected FASEs** — map REQs → UCs/APIs → tasks (`Refs:`) → FASEs; FASEs that depend on a directly affected one are indirectly affected.
 
@@ -139,15 +140,14 @@ For each APPROVED delta, in plan order:
 3. Bump document versions where a version header exists; use glossary terms only.
 4. Set the delta to `APPLIED` and commit that CR alone:
 
+```bash
+git commit -m "docs(specs): {add|modify|deprecate} REQ-F-012 {summary}" \
+  -m "{one or two lines: what changed and why}" \
+  --trailer "Change: CHG-2026-03-04-001, CR-003" \
+  --trailer "Refs: REQ-F-012, UC-007, API-002-03"
 ```
-docs(specs): {add|modify|deprecate} REQ-F-012 {summary}
 
-{one or two lines: what changed and why}
-
-Refs: CR-003, REQ-F-012, UC-007, API-002-03
-```
-
-`docs` commits pass the commit-msg hook without trailers, and `Refs:` keeps the trace (CR first, then the affected REQ/UC/API IDs). Attribution lines are added by the harness, not written here.
+`Change:` carries the CHG-ID and the CR, `Refs:` the affected REQ/UC/API IDs (the commit-msg hook requires `Refs:` on `docs(specs)`). `--trailer` keeps both in one block git can parse; when the harness asks for an attribution line, add it with `--trailer` too.
 
 Large batches (3+ CRs or 15+ documents) may fan out spec edits of a single CR to agents scoped by folder (DOM → `domain/`, UC-WF → `use-cases/` + `workflows/`, CON → `contracts/`, TEST-NFR → `tests/`, `nfr/`, `adr/`, `runbooks/`). The main thread applies the REQUIREMENTS.md part first, dispatches, then writes cross-references and the Traceability updates itself and makes the commit; two agents needing the same file means stop and resolve by hand.
 
@@ -155,11 +155,11 @@ Large batches (3+ CRs or 15+ documents) may fan out spec edits of a single CR to
 
 ## Phase 7 — Alignment Audit
 
-Run the focused audit in `references/alignment-audit-checklist.md` on the documents changed in Phase 6 plus REQUIREMENTS.md and CHANGELOG.md: AA-01..AA-08 always, AA-09/AA-10 when something was deprecated. Auto-fixable findings (broken reference, wrong term) are fixed, re-checked and committed as `docs(specs): fix alignment for {CHG-ID}` with `Refs: {CHG-ID}`; the rest become open items in the Change Report. Verdict and escalation rules: checklist §4-5. A failed check is never silently ignored.
+Run the focused audit in `references/alignment-audit-checklist.md` on the documents changed in Phase 6 plus REQUIREMENTS.md and CHANGELOG.md: AA-01..AA-08 always, AA-09/AA-10 when something was deprecated. Auto-fixable findings (broken reference, wrong term) are fixed, re-checked and committed as `docs(specs): fix alignment for {CHG-ID}` with `--trailer "Change: {CHG-ID}" --trailer "Refs: {ids of the fixed documents}"`; the rest become open items in the Change Report. Verdict and escalation rules: checklist §4-5. A failed check is never silently ignored.
 
 ## Phase 8 — Change Report
 
-Read `references/change-report-template.md` and write `changes/CHANGE-REPORT-{CHG-ID}.md`. Move the applied deltas to `changes/applied/{YYYY-MM-DD}-CR-NNN-{slug}.md`. Commit the report, the plan and the archived deltas: `docs(specs): record {CHG-ID}` with `Refs: {CHG-ID}, CR-…`. This phase does not touch `pipeline-state.json`; Phase 9 owns stale marking.
+Read `references/change-report-template.md` and write `changes/CHANGE-REPORT-{CHG-ID}.md`. Move the applied deltas to `changes/applied/{YYYY-MM-DD}-CR-NNN-{slug}.md`. Commit the report, the plan and the archived deltas: `docs(specs): record {CHG-ID}` with `--trailer "Change: {CHG-ID}, CR-…" --trailer "Refs: {affected REQ ids}"`. This phase does not touch `pipeline-state.json`; Phase 9 owns stale marking. The change branch reaches the default branch through a merge commit (`git merge --no-ff`) or a PR, never squash or rebase; ask before merging or pushing.
 
 ## Phase 9 — Pipeline Cascade
 

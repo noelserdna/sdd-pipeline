@@ -13,7 +13,7 @@ Verify that ALL tasks have been implemented with all required artifacts.
 ### Per-Task Completeness Check
 
 For each task marked `[x]` in `task/TASK-FASE-{N}.md` — with `task_state: trailers` (no checkboxes are edited), for each
-task reported done by `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" status --fase {N} --json`
+task reported done by `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" tasks status --fase {N} --json`
 (its `Task:` trailer reachable from `HEAD`, not reverted); checkbox/trailer divergences it reports are WARNING:
 
 ```
@@ -74,9 +74,9 @@ Detailed procedure for verifying that each task has a corresponding atomic commi
 
 1. **Extract expected commit message** from the task's **Commit** field in `task/TASK-FASE-{N}.md`.
 
-2. **Search by Task trailer** (preferred — most reliable):
+2. **Search by Task trailer** (preferred — exact id match, reverted commits marked, legacy body trailers read):
    ```bash
-   git log HEAD --oneline --grep='Task: TASK-F{N}-{SEQ}'
+   node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" trace req TASK-F{N}-{SEQ} --json
    ```
 
 3. **Fallback: search by subject match** if no Task trailer found:
@@ -302,7 +302,7 @@ CHECK-H09: Code duplication
 ### Severity Rules
 
 ```
-IF task done ([x], or done in sdd-task-lint status with task_state: trailers) but files don't exist → CRITICAL
+IF task done ([x], or done in `sdd.mjs tasks status` with task_state: trailers) but files don't exist → CRITICAL
 IF acceptance criterion not satisfied → CRITICAL
 IF invariant not enforced → CRITICAL
 IF security issue (PII leak, no auth) → CRITICAL
@@ -373,7 +373,7 @@ Verification adapts to available context:
 
 | Available Artifacts | Verification Scope |
 |--------------------|-------------------|
-| Only task/TASK-FASE-{N}.md | Completeness only (checkbox parsing, or `sdd-task-lint.mjs status` with `task_state: trailers`) |
+| Only task/TASK-FASE-{N}.md | Completeness only (checkbox parsing, or `sdd.mjs tasks status` with `task_state: trailers`) |
 | + source code | Completeness + basic correctness (files exist) |
 | + spec/ files | Full correctness (spec-implementation alignment) |
 | + plan/ artifacts | Full coherence (architecture adherence) |

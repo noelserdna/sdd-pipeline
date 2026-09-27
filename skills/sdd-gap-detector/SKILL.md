@@ -101,8 +101,10 @@ running `python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"`
 implement (performance, availability) are listed as "not checkable by code reading" instead.
 
 **S.2 Candidates** (at most 5 files per REQ, non-test, non-config, no barrel/index re-exports), in order:
-1. files on the task lines / `Files:` of tasks that reference the REQ or its UCs (`task/TASK-FASE-*.md`), and the
-   files of its weak codeRefs;
+1. files on the task lines / `Files:` of tasks that reference the REQ or its UCs (`task/TASK-FASE-*.md`), the files
+   of its weak codeRefs, and the files of commits whose `Task`/`Refs`/`Change` name the REQ, its UCs or those tasks
+   (one call: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" trace commits --files --json`; exact
+   ids, skip `effective: false`);
 2. keyword search in `code_paths`: significant terms of the statement (drop EARS keywords and stop words) plus the
    business domain; rank files by hits.
 No candidate → status `no-candidates`.

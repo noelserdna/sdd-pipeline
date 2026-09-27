@@ -13,10 +13,12 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 |------|------|-------------------|
 | `pipeline-state.json` | 1 (never overwritten) | No: per-checkout state, ignored |
 | git `commit-msg` hook | 2 | No: lives in the git dir, shared by all worktrees |
+| `.claude/sdd/sdd.mjs` and the modules it imports (`lib/*.mjs`, …): the validator the hook runs | 2 | Yes: CI and teammates without the plugin run it |
 | `# sdd-begin ... # sdd-end` block in `.gitignore` | 4 | Yes |
 | `.claude/sdd-sessions.json`, `.claude/sdd/sdd-up.sh` | 4 (`--multisession`) | Yes |
 | H7/H8 quality gates in `.claude/settings.json` | 5 (opt-in) | Yes |
 | `## SDD Stack Profile` + `## Stack Conventions` block in root `CLAUDE.md`, `.claude/rules/sdd-<kit>-*.md` | 4b (`--stack`) | Yes |
+| Minimal `## SDD Stack Profile` (`task_state: trailers`) in root `CLAUDE.md` when no kit is installed | 4b | Yes |
 
 ## Invocation
 
@@ -72,7 +74,7 @@ Run the checks and report them as a table:
 |-------|---------|----------|
 | Plugin | `claude plugin list 2>/dev/null` contains `sdd-pipeline@` | installed; version from `plugin.json` |
 | Platform | `uname -s` | `Darwin` / `Linux`. `MINGW*`, `MSYS*`, `CYGWIN*` or `$OS = Windows_NT`: warn that hooks and scripts need bash and recommend WSL |
-| git | `git --version`, `git rev-parse --is-inside-work-tree` | required for Steps 2 and 4 |
+| git >= 2.32 | `git --version`, `git rev-parse --is-inside-work-tree` | required for Steps 2 and 4; 2.32 added `git commit --trailer`, which every SDD commit uses. Older: warn and recommend upgrading |
 | node >= 18 | `node -v` | required (MCP server, hook fallbacks) |
 | jq | `jq --version` | optional: hooks and this skill fall back to node |
 | python3 | `python3 --version` | optional: only `/sdd-dashboard` needs it |
@@ -117,7 +119,7 @@ The template holds `sddVersion`, `hooksVersion: 3`, `currentStage: "requirements
 bash "$SDD_PLUGIN_ROOT/scripts/install-git-hooks.sh"
 ```
 
-Installs `hooks/sdd-commit-msg-hook.sh` into the hooks directory git actually uses: `core.hooksPath` when set, otherwise `$(git rev-parse --git-common-dir)/hooks`, which every linked worktree shares. A foreign hook is backed up with a timestamp and `--uninstall` restores it; re-running is a no-op. The hook requires `Refs:` and/or `Task:` trailers on `feat`, `fix`, `perf` and `test` commits (`Task:` on `refactor`); `docs`, `chore`, `ci`, `style`, `build` and merge commits are exempt; bypass with `[skip-sdd]` in the body or `SDD_SKIP_VERIFY=1`. If the project is not a git repository, skip with a warning.
+Installs `hooks/sdd-commit-msg-hook.sh` into the hooks directory git actually uses: `core.hooksPath` when set, otherwise `$(git rev-parse --git-common-dir)/hooks`, which every linked worktree shares. A foreign hook is backed up with a timestamp and `--uninstall` restores it; re-running is a no-op. The installer also vendors the validator into `.claude/sdd/sdd.mjs` (with the modules it imports), stamped with the plugin version and overwritten on every re-install; the hook runs it with node and falls back to the same rules in bash. The rules are those of the plugin-root `references/git-conventions.md`: `Task:` on `feat`/`test`/`refactor`, `Task:` or `Change:` on `fix`/`perf`, `Refs:` on `docs(specs)`, well-formed ids, and no trailer lines outside the trailer block; other `docs`, `chore`, `ci`, `style`, `build`, merges and reverts are exempt; bypass with `[skip-sdd]` in the message or `SDD_SKIP_VERIFY=1`. If the project is not a git repository, skip with a warning.
 
 ### Step 3: Upgrade cleanup of user-level status line files
 
@@ -167,7 +169,7 @@ bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --gitignore-only
 
 The script warns when `pipeline-state.json` is already tracked and prints the `git rm --cached pipeline-state.json` command: show it to the user, do not run it.
 
-**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.gitignore` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
+**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.gitignore`, the vendored `.claude/sdd/*.mjs` and `.claude/sdd/lib/` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
 
 **4.3 `--multisession`.** Instantiate the roles file from the plugin template, replacing its project name with the project slug (directory name in kebab-case), and copy the launcher:
 
@@ -199,7 +201,7 @@ The implementation skills never guess commands. Tests, lint, build, database res
 | `--stack=<kit\|auto>` given | Show the `--dry-run` output, then install (the flag is the consent) |
 | `CLAUDE.md` already has `<!-- sdd-stack-begin kit=` | Refresh without asking: run the installer without `--stack` (it keeps `app_dir`, `port` and `--set` overrides) |
 | No flag and no block, but `--stack auto --dry-run` detects a kit | Offer `[A] Install <kit> for <app_dir>` / `[B] Skip` |
-| Nothing detected, or no kit for this stack | Skip, and suggest writing the `## SDD Stack Profile` section by hand following `docs/stacks.md` |
+| Nothing detected, or no kit for this stack | No kit; write the minimal profile below, and suggest completing it by hand following `docs/stacks.md` |
 
 ```bash
 KIT_SH="$SDD_PLUGIN_ROOT/scripts/install-stack-kit.sh"
@@ -214,6 +216,15 @@ bash "$KIT_SH"                                           # refresh the installed
 - **Overrides.** `--set key=value` overrides one profile key and is remembered on refresh; `--set key=` drops the override. An `acceptance` other than `none` implies `e2e_scaffold: never`.
 - **Report and commit.** Show the `wiring:` and `layers:` lines it prints (`sdd-plan-architect` uses them) and recommend committing `CLAUDE.md` and `.claude/rules/sdd-*.md`.
 - **Never edit inside the block by hand.** `--uninstall` removes the block and the managed rules.
+
+**Minimal profile (no kit).** New projects keep task state in the commits (`task_state: trailers`): the `Task:` trailer is the evidence, so no checkbox has to be kept in sync. When no kit is installed and `CLAUDE.md` has no `## SDD Stack Profile` section, append this block — without asking when `CLAUDE.md` does not exist yet, after asking (`[A] Add it (recommended)` / `[B] Skip`) when it exists:
+
+```markdown
+## SDD Stack Profile
+- task_state: trailers
+```
+
+Add `- default_branch: <name>` only when the user names a default branch that `origin/HEAD` does not reveal. An existing profile is never edited.
 
 ### Step 5: Quality gates (opt-in)
 
@@ -233,6 +244,7 @@ Setup is not a pipeline stage: do not touch `stages`, only confirm the files are
 ```bash
 jq -e '.hooksVersion >= 3 and (.stages | length) >= 7' pipeline-state.json
 grep -q "SDD Commit" "$(git rev-parse --git-path hooks)/commit-msg"
+node .claude/sdd/sdd.mjs branch status                       # vendored validator runs
 git check-ignore -q pipeline-state.json && git check-ignore -q .sdd/x
 jq -e '.roles | length > 0' .claude/sdd-sessions.json        # if --multisession
 grep -q '^<!-- sdd-stack-begin kit=' CLAUDE.md && ls .claude/rules/sdd-*.md   # if Step 4b was applied
@@ -253,9 +265,9 @@ Report:
 | Legacy global status line (user-level) | Removed / Kept / Not found |
 | .gitignore policy | Applied / Already up to date; pipeline-state.json tracked: yes/no |
 | Multi-session | <n> roles in .claude/sdd-sessions.json + .claude/sdd/sdd-up.sh / Not requested |
-| Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Skipped (no kit detected) / Not requested |
+| Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Minimal profile written (task_state: trailers) / Profile already present |
 | Quality gates H7/H8 | Configured / Skipped |
-| Dependencies | node <v>, git <v>, jq yes/no (node fallback), python3 yes/no, tmux yes/no |
+| Dependencies | node <v>, git <v> (>= 2.32 for --trailer), jq yes/no (node fallback), python3 yes/no, tmux yes/no |
 
 ### Next steps
 1. Start a new Claude Code session (or run /reload-plugins) so the SessionStart hook picks up pipeline-state.json

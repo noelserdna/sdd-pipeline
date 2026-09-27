@@ -16,7 +16,7 @@
 - One line per task at column 0: `- [ ] TASK-F{N}-{SEQ} [P] {Description} | ` followed by the backticked paths, `, `-separated. `[ ]` pending · `[x]` done · `[!]` blocked.
 - Continuation lines indented two spaces (`  - **Commit:** …`); nested bullets four.
 - Forbidden: `### TASK-…` headings, `**TASK-…**` bold ids, indented task lines, paths outside backticks. `[PLAN GAP]` tasks may omit the path (WARN).
-- Checked by `scripts/sdd-task-lint.mjs lint --dir task` (V-19, V-09, V-05/V-06, V-16); `json`, `status` and `index` read the same lines.
+- Checked by `scripts/sdd.mjs lint --dir task` (V-19, V-09, V-05/V-06, V-16); `sdd.mjs tasks json|status|index` read the same lines.
 
 ---
 
@@ -189,7 +189,7 @@ TASK-F{N}-004 ──► TASK-F{N}-006
 
 ## Template: TASK-FASE-{N}.md (compact)
 
-With `--compact` or `task_format: compact`. Keeps only what the implementer and the global validations read; `sdd-task-lint.mjs json | index | status` derive the rest.
+With `--compact` or `task_format: compact`. Keeps only what the implementer and the global validations read; `sdd.mjs tasks json | index | status` derive the rest.
 
 ```markdown
 # Tasks: FASE-{N} — {Title}
@@ -243,11 +243,11 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 | Omitted in compact | Where it comes from |
 |---|---|
-| Summary, Traceability | `sdd-task-lint.mjs index` / `json` |
+| Summary, Traceability | `sdd.mjs tasks index` / `tasks json` |
 | Dependency graph, Parallel Execution Plan | `blocked-by` lines + Stream Ownership |
 | Review block | `references/review-checklist.md` |
 | `Revert: SAFE` | absent Revert line = SAFE (V-07; CLAUDE.md Revert strategies) |
-| `TASK-INDEX.md` | `sdd-task-lint.mjs index` (never templated by hand) |
+| `TASK-INDEX.md` | `sdd.mjs tasks index` (never templated by hand) |
 
 ### Stream Ownership Rules
 
