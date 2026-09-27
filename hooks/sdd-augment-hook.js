@@ -294,38 +294,10 @@ function matchByArtifactId(pattern, index) {
 }
 
 // ---------------------------------------------------------------------------
-// Code Intelligence helpers (Fase 5: merged SDD + GitNexus context)
+// Format context output
 // ---------------------------------------------------------------------------
 
-function findSymbolsForFile(filePath, codeIntel) {
-  if (!codeIntel || !codeIntel.symbols) return [];
-  const norm = filePath.replace(/\\/g, "/");
-  return codeIntel.symbols.filter(
-    (s) => s && typeof s.filePath === "string" && pathMatches(norm, s.filePath.replace(/\\/g, "/"))
-  );
-}
-
-function findSymbolsForArtifact(artifactId, codeIntel) {
-  if (!codeIntel || !codeIntel.symbols) return [];
-  return codeIntel.symbols.filter(
-    (s) =>
-      (s.artifactRefs || []).includes(artifactId) ||
-      (s.inferredRefs || []).includes(artifactId)
-  );
-}
-
-function findProcessesForArtifact(artifactId, codeIntel) {
-  if (!codeIntel || !codeIntel.processes) return [];
-  return codeIntel.processes.filter((p) =>
-    (p.artifactRefs || []).includes(artifactId)
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Format context output (with optional code intelligence)
-// ---------------------------------------------------------------------------
-
-function formatContext(matches, index, codeIntel) {
+function formatContext(matches, index) {
   if (matches.length === 0) return null;
 
   // Deduplicate by artifact ID; at most MAX_PER_FILE artifacts per code file (a hot file linked to
@@ -370,49 +342,7 @@ function formatContext(matches, index, codeIntel) {
       }
     }
 
-    // Code Intelligence (when codeIntelligence block is available)
-    if (codeIntel && codeIntel.indexed) {
-      const symbols = findSymbolsForArtifact(art.id, codeIntel);
-      if (symbols.length > 0) {
-        lines.push("  Code Intelligence:");
-        for (const sym of symbols.slice(0, 3)) {
-          const callersStr = (sym.callers || []).slice(0, 3).join(", ");
-          const calleesStr = (sym.callees || []).slice(0, 3).join(", ");
-          lines.push(`    ${sym.name}() [${sym.type}] @ ${sym.filePath}:${sym.startLine}`);
-          if (callersStr) lines.push(`    Called by: ${callersStr}`);
-          if (calleesStr) lines.push(`    Calls: ${calleesStr}`);
-        }
-
-        const processes = findProcessesForArtifact(art.id, codeIntel);
-        if (processes.length > 0) {
-          const procNames = processes.map((p) => p.name).join(", ");
-          lines.push(`    Flows: ${procNames}`);
-        }
-
-        if (symbols.length > 3) {
-          lines.push(`    ... and ${symbols.length - 3} more symbols`);
-        }
-      }
-    }
-
     lines.push("");
-  }
-
-  // File-level code intelligence (when searching by file path)
-  if (codeIntel && codeIntel.indexed && unique.length > 0) {
-    const filePatterns = unique
-      .filter((m) => m.ref)
-      .map((m) => m.ref.file);
-
-    if (filePatterns.length > 0) {
-      const fileSymbols = findSymbolsForFile(filePatterns[0], codeIntel);
-      const uncoveredInFile = fileSymbols.filter(
-        (s) => (s.artifactRefs || []).length === 0 && (s.inferredRefs || []).length === 0
-      );
-      if (uncoveredInFile.length > 0) {
-        lines.push(`  Uncovered symbols in file: ${uncoveredInFile.map((s) => s.name).slice(0, 5).join(", ")}`);
-      }
-    }
   }
 
   const more = Math.max(unique.length - 5, 0) + dropped;
@@ -444,7 +374,7 @@ async function main() {
       return;
     }
 
-    const { graph, index } = loaded;
+    const { index } = loaded;
     const pattern = extractSearchPattern(tool_name, tool_input);
     if (!pattern) {
       process.stdout.write(JSON.stringify({}));
@@ -457,9 +387,7 @@ async function main() {
       ...matchByArtifactId(pattern, index),
     ];
 
-    // Pass code intelligence data if available (Fase 5: merged context)
-    const codeIntel = graph.codeIntelligence || null;
-    const context = formatContext(matches, index, codeIntel);
+    const context = formatContext(matches, index);
     if (!context) {
       process.stdout.write(JSON.stringify({}));
       return;

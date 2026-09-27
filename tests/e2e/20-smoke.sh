@@ -55,15 +55,16 @@ if active audit; then
   [ -f audits/AUDIT-BASELINE.md ] && ok "AUDIT-BASELINE.md" || bad "AUDIT-BASELINE.md"
   grep -qiE 'gate.*(PASS|CONDITIONAL)' audits/AUDIT-BASELINE.md && ok "gate PASS/CONDITIONAL" || echo "WARN gate no PASS (revisar)"
   amode=$(jq -r '.stages["spec-auditor"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
-  nsub=$(grep -c '"event":"subagent-start"' .sdd/activity.jsonl 2>/dev/null || echo 0)
-  if [ "$amode" = fanout ] || [ "${nsub:-0}" -gt 0 ]; then ok "auditoría en fan-out (mode=$amode, $nsub subagentes)"; else echo "WARN auditoría secuencial (mode=$amode): el fan-out no se activó; ver docs/medidas.md"; fi
+  # prueba de fan-out: summary.metrics.mode que persiste la skill
+  if [ "$amode" = fanout ]; then ok "auditoría en fan-out (mode=$amode)"; else echo "WARN auditoría secuencial (mode=$amode): el fan-out no se activó; ver docs/medidas.md"; fi
 fi
 stop_if_done test
 if active test; then
   run test "/sdd-test-planner --fanout — launching the matrix and E2E subagents is requested explicitly. generate test/ from spec/ without asking questions."
   [ -f test/TEST-PLAN.md ] && ok "TEST-PLAN.md" || bad "TEST-PLAN.md"
-  nsub2=$(grep -c '"event":"subagent-start"' .sdd/activity.jsonl 2>/dev/null || echo 0)
-  [ "${nsub2:-0}" -gt "${nsub:-0}" ] && ok "matrices en subagentes ($((nsub2 - ${nsub:-0})) lanzados)" || echo "WARN matrices sin fan-out"
+  tmode=$(jq -r '.stages["test-planner"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
+  tagents=$(jq -r '.stages["test-planner"].summary.metrics.matrix_agents // 0' pipeline-state.json 2>/dev/null)
+  if [ "$tmode" = fanout ] && [ "${tagents:-0}" -gt 0 ]; then ok "matrices en subagentes ($tagents lanzados)"; else echo "WARN matrices sin fan-out (mode=$tmode, matrix_agents=$tagents)"; fi
 fi
 stop_if_done plan
 if active plan; then
@@ -84,6 +85,9 @@ if active tasks; then
   [ -f task/TASK-ORDER.md ] && ok "TASK-ORDER.md" || bad "TASK-ORDER.md"
   grep -q "## Stream Ownership" task/TASK-FASE-1.md 2>/dev/null && ok "Stream Ownership en TASK-FASE-1" || echo "WARN sin tabla Stream Ownership"
   grep -q "Streams:" task/TASK-ORDER.md && ok "Streams: en TASK-ORDER" || echo "WARN sin línea Streams:"
+  gmode=$(jq -r '.stages["task-generator"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
+  gagents=$(jq -r '.stages["task-generator"].summary.metrics.task_agents // 0' pipeline-state.json 2>/dev/null)
+  if [ "$gmode" = fanout ] && [ "${gagents:-0}" -gt 0 ]; then ok "tasks en fan-out ($gagents agentes de FASE)"; else echo "WARN tasks sin fan-out (mode=$gmode, task_agents=$gagents)"; fi
   if lint_out=$(node "$ROOT/scripts/sdd-task-lint.mjs" lint --dir task 2>&1); then ok "sdd-task-lint lint (V-19 gramática, V-09, V-05/V-06, V-16)"; else bad "sdd-task-lint lint"; printf '%s\n' "$lint_out" | tail -12; fi
 fi
 stop_if_done impl

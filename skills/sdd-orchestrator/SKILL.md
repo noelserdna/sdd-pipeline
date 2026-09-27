@@ -33,7 +33,7 @@ In multi-session mode (`SDD_ROLE` set or `.claude/sdd-sessions.json` present), u
 | 8 | Implementation | Per FASE, in order: `sdd-task-implementer --fase N` (`--parallel` when the FASE has `[P]` tasks). The implementer runs the tests and makes the commits with their trailers. | "FASE-{N} completa. ¿Continuamos con FASE-{N+1}?" |
 | 9 | E2E | If an E2E suite exists (Stack Profile `acceptance`, `acceptance/playwright.config.*`, `e2e/`, `test/system/`), run it with no question. Otherwise ask, and on yes have `sdd-task-implementer` write the E2E tests from `test/E2E-SCENARIOS.md` (never when `e2e_scaffold: never`) and run them. | "¿Escribo y ejecuto los tests E2E (Playwright)?" (only when there is no suite) |
 | 10 | Gaps | `sdd-gap-detector` (add `--semantic` to check requirement coverage in the code). Present `audits/GAP-ANALYSIS-REVIEW.md`. | Per finding: PROMOTE (new REQ through `sdd-req-change`) / REMOVE (code deletion as a task) / ACCEPT (record the rationale) / DEFER |
-| 11 | Verification | `sdd-pipeline-status`, then `sdd-traceability-check` | "¿Genero el dashboard de trazabilidad?" → `sdd-dashboard` |
+| 11 | Verification | Refresh the traceability graph with no question (`python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"`, skipped when python3 is missing), then `sdd-pipeline-status` and `sdd-traceability-check` | — |
 | 12 | Wrap-up | Summary: REQs implemented, tests and pass rate, traceability coverage, gap decisions. Then `sdd-session-summary`. | "¿Hay algo más que quieras ajustar?" |
 
 Skills are namespaced by the plugin (`sdd-pipeline:<skill>`) when invoked with the Skill tool.

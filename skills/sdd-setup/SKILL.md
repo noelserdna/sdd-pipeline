@@ -1,6 +1,6 @@
 ---
 name: sdd-setup
-description: "Initializes the SDD pipeline in the current project: checks the sdd-pipeline plugin and dependencies, creates pipeline-state.json, installs the git commit-msg hook, optional status line and quality gates, versioning policy, --multisession setup and pre-4.0 migration. Triggers: 'setup SDD', 'init pipeline', 'install SDD', 'upgrade SDD', 'iniciar SDD', 'configurar pipeline', 'migrar SDD'."
+description: "Initializes the SDD pipeline in the current project: checks the sdd-pipeline plugin and dependencies, creates pipeline-state.json, installs the git commit-msg hook, optional quality gates, versioning policy, --multisession setup, pre-4.0 migration and upgrade cleanup. Triggers: 'setup SDD', 'init pipeline', 'install SDD', 'upgrade SDD', 'iniciar SDD', 'configurar pipeline', 'migrar SDD'."
 ---
 
 # SDD Setup
@@ -13,8 +13,6 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 |------|------|-------------------|
 | `pipeline-state.json` | 1 (never overwritten) | No: per-checkout state, ignored |
 | git `commit-msg` hook | 2 | No: lives in the git dir, shared by all worktrees |
-| `.claude/sdd-status-line.sh` + `statusLine` in `.claude/settings.json` | 3 (optional) | Yes |
-| `~/.claude/sdd/status-line.sh` + `statusLine` in `~/.claude/settings.json` | 3b (optional) | No: user-level, outside the project |
 | `# sdd-begin ... # sdd-end` block in `.gitignore` | 4 | Yes |
 | `.claude/sdd-sessions.json`, `.claude/sdd/sdd-up.sh` | 4 (`--multisession`) | Yes |
 | H7/H8 quality gates in `.claude/settings.json` | 5 (opt-in) | Yes |
@@ -26,7 +24,6 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 /sdd-setup                               # interactive: asks about the optional steps
 /sdd-setup --multisession                # also creates .claude/sdd-sessions.json and .claude/sdd/sdd-up.sh
 /sdd-setup --quality-gates               # also merges the H7/H8 quality gates without asking
-/sdd-setup --no-status-line              # skips Steps 3 and 3b without asking
 /sdd-setup --stack=rails --app-dir web   # also installs the rails stack kit for the app in web/
 /sdd-setup --stack=auto --port 3001      # detects the kit (root and first-level directories)
 ```
@@ -37,7 +34,6 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 |------|------|---------|
 | `--multisession` | 4.3 | Roles file and tmux launcher |
 | `--quality-gates` | 5 | Merge H7/H8 without asking |
-| `--no-status-line` | 3, 3b | Skip the status lines |
 | `--stack=<kit\|auto>` | 4b | Install or refresh a stack kit (`rails`, `nextjs-prisma`, or `auto`) |
 | `--app-dir DIR` | 4b | Application directory relative to the repo root (`.` = root) |
 | `--port N` | 4b | Local server port written to the profile |
@@ -82,11 +78,12 @@ Run the checks and report them as a table:
 | python3 | `python3 --version` | optional: only `/sdd-dashboard` needs it |
 | tmux >= 3.2 | `tmux -V` | optional: only the `--multisession` launcher uses it |
 
-Then look for a **pre-4.0 installation** (hooks copied into the project by `install-sdd-automation.sh` or by the old `sdd` plugin). Any hit is a signal:
+Then look for a **previous installation**: hooks copied into the project before 4.0 (by `install-sdd-automation.sh` or the old `sdd` plugin), or the status lines, trace-map breadcrumbs and activity log that 4.x installed and 5.0 removed. Any hit is a signal:
 
 ```bash
 ls .claude/hooks/sdd-*.sh .claude/hooks/sdd-*.js .claude/agents/sdd-*.md 2>/dev/null   # copied hooks and agents
-grep -E 'sdd-(session-start|upstream-guard|pipeline-state-updater|augment-hook|trace-map-updater)' .claude/settings.json 2>/dev/null
+ls .claude/sdd-status-line.sh .claude/sdd-subagent-status.sh .sdd/current-task.json .sdd/trace-map.json .sdd/activity*.jsonl 2>/dev/null   # removed in 5.0
+grep -E 'sdd-(session-start|upstream-guard|pipeline-state-updater|augment-hook|trace-map-updater|activity-log|runs-line|status-line|subagent-status)' .claude/settings.json 2>/dev/null
 [ "$(jq -r '.hooksVersion // 0' pipeline-state.json 2>/dev/null)" -ge 3 ] || echo "old pipeline-state format"
 grep -oE '"(sdd@[^"]+|sdd-pipeline@sdd-pipeline-local)"' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json" 2>/dev/null   # old plugin ids
 ```
@@ -94,7 +91,7 @@ grep -oE '"(sdd@[^"]+|sdd-pipeline@sdd-pipeline-local)"' "${CLAUDE_CONFIG_DIR:-$
 If any signal is present:
 
 1. Show the signals table and run `bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --dry-run`; show its output verbatim.
-2. Ask the user to confirm. The migration backs everything up in `.claude/backups/`, removes the copied hooks/agents and their entries in `.claude/settings.json` (the plugin provides them now), keeps `statusLine` (moving the script to `.claude/sdd-status-line.sh`), reinstalls `commit-msg`, writes `sddVersion`/`hooksVersion: 3` into `pipeline-state.json` and applies the `.gitignore` policy.
+2. Ask the user to confirm. The migration backs everything up in `.claude/backups/`, removes the copied hooks/agents and their entries in `.claude/settings.json` (the plugin provides them now), removes the project status line scripts with their `statusLine`/`subagentStatusLine` entries and the legacy `.sdd/` runtime files, reinstalls `commit-msg`, writes `sddVersion`/`hooksVersion: 3` into `pipeline-state.json` and applies the `.gitignore` policy.
 3. On confirmation run it without `--dry-run`, then continue with Step 1 (every later step is idempotent). If declined, continue anyway and warn that the project hooks and the plugin hooks will both run until the migration is applied.
 4. Old plugin ids cannot be removed by a script: tell the user to run `/plugin uninstall <id>` (and `/plugin marketplace remove <name>` for the marketplace of `sdd@...`).
 
@@ -122,67 +119,35 @@ bash "$SDD_PLUGIN_ROOT/scripts/install-git-hooks.sh"
 
 Installs `hooks/sdd-commit-msg-hook.sh` into the hooks directory git actually uses: `core.hooksPath` when set, otherwise `$(git rev-parse --git-common-dir)/hooks`, which every linked worktree shares. A foreign hook is backed up with a timestamp and `--uninstall` restores it; re-running is a no-op. The hook requires `Refs:` and/or `Task:` trailers on `feat`, `fix`, `perf` and `test` commits (`Task:` on `refactor`); `docs`, `chore`, `ci`, `style`, `build` and merge commits are exempt; bypass with `[skip-sdd]` in the body or `SDD_SKIP_VERIFY=1`. If the project is not a git repository, skip with a warning.
 
-### Step 3: Pipeline status line (optional, recommended)
+### Step 3: Upgrade cleanup of user-level status line files
 
-Unless `--no-status-line`, offer:
-
-```
-| Step 3: Pipeline status line (display-only, no API cost) |
-|   [A] Install  <- recommended                            |
-|   [B] Skip                                               |
-```
-
-The script is **copied** into the project because `.claude/settings.json` cannot reference `${CLAUDE_PLUGIN_ROOT}` and the plugin path changes on every update; the copy is versioned with the project and refreshed whenever `/sdd-setup` runs again.
+Up to 4.3, setup could install a global status line into the user's own Claude config, fed by an activity hook. The plugin no longer ships it (live observation of multi-session runs is no longer part of the plugin, see [`docs/multisesion.md`](../../docs/multisesion.md)), so a leftover script would keep printing stale data in every session. The project-level copies are removed by the migration in Step 0; this step covers the user-level files, which sit outside the project:
 
 ```bash
-mkdir -p .claude
-cp "$SDD_PLUGIN_ROOT/scripts/sdd-status-line.sh" .claude/sdd-status-line.sh && chmod +x .claude/sdd-status-line.sh
-cp "$SDD_PLUGIN_ROOT/scripts/sdd-subagent-status.sh" .claude/sdd-subagent-status.sh && chmod +x .claude/sdd-subagent-status.sh
-[ -f .claude/settings.json ] || echo '{}' > .claude/settings.json
-jq -s '.[0] * .[1]' .claude/settings.json "$SDD_PLUGIN_ROOT/templates/settings.statusline.example.json" \
-  > .claude/settings.json.tmp && mv .claude/settings.json.tmp .claude/settings.json
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+ls "$CFG/sdd/status-line.sh" "$CFG/sdd/active-runs.json" 2>/dev/null
+jq -r '.statusLine.command // empty' "$CFG/settings.json" 2>/dev/null | grep -E 'sdd/status-line\.sh|sdd-status-line'
 ```
 
-Node fallback for the merge: `node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(".claude/settings.json","utf8"));s.statusLine={type:"command",command:"bash .claude/sdd-status-line.sh",refreshInterval:5};s.subagentStatusLine={type:"command",command:"bash .claude/sdd-subagent-status.sh"};fs.writeFileSync(".claude/settings.json",JSON.stringify(s,null,2)+"\n")'`.
-
-If `.claude/settings.json` already has a different `statusLine`, show it and ask before replacing it. Display format: `[<role>] SDD [4/7] audit !1stale > test · spec-auditor 8m · 4 agentes` (done/total, running stage, stale and error counts, next recommended stage; `[<role>]` prefix in multi-session mode; then the running skill with elapsed minutes and the number of active subagents, read from `.sdd/activity.jsonl`). `refreshInterval: 5` re-runs it every 5 s even while the session is idle waiting for subagents. The same step installs `subagentStatusLine` (`.claude/sdd-subagent-status.sh`): every subagent row in the agent panel shows `▶ <type> · <description> · <elapsed> · <tokens>k (<% of its context>)`. It reads `pipeline-state.json` on every refresh and needs `jq` or `node`.
-
-### Step 3b: Global status line (optional, **user-level**)
-
-Step 3 only sees the project of the session that paints it. When the pipeline runs in **other processes
-and other projects** (`claude -p` over another checkout — the usual setup while measuring or
-automating), that bar shows nothing. The global bar reads the run index the activity hook keeps in
-`~/.claude/sdd/active-runs.json` and shows the live run wherever the session sits:
+If nothing is found, skip silently. Otherwise show what was found and ask before touching it, because these are the user's own settings for every project on this machine:
 
 ```
-SDD ▸ todo-app  5/7 done · task-generator 12m 30s · 3 agentes
+| Step 3: Remove the legacy SDD global status line (user-level) |
+|   [A] Remove  <- recommended                                  |
+|   [B] Keep                                                    |
 ```
 
-Offer it when the user is likely to run the pipeline headless or across projects:
-
-```
-| Step 3b: Global status line (user-level, display-only)   |
-|   [A] Install                                            |
-|   [B] Skip  <- default                                   |
-```
+On `[A]`, back up the settings, drop only a `statusLine` that runs an SDD script, and delete the files:
 
 ```bash
-bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh"             # --force replaces another statusLine
-bash "$SDD_PLUGIN_ROOT/scripts/install-global-statusline.sh" --uninstall
+cp "$CFG/settings.json" "$CFG/settings.json.sdd-bak.$(date +%Y%m%d-%H%M%S)"
+jq 'if ((.statusLine.command // "") | test("sdd/status-line\\.sh|sdd-status-line")) then del(.statusLine) else . end' \
+  "$CFG/settings.json" > "$CFG/settings.json.tmp" && mv "$CFG/settings.json.tmp" "$CFG/settings.json"
+rm -f "$CFG/sdd/status-line.sh" "$CFG/sdd/active-runs.json"
+rmdir "$CFG/sdd/active-runs.json.lock" "$CFG/sdd" 2>/dev/null || true
 ```
 
-Say clearly what it touches, because it is **not** part of the project: it copies the script to
-`~/.claude/sdd/status-line.sh` (a stable path — the plugin directory changes on every update) and
-writes `statusLine` into **`~/.claude/settings.json`**, the user's own settings, so the bar appears in
-every session on this machine and prints nothing in projects without SDD. It backs the settings up
-first and asks before replacing an existing `statusLine`; `--print-only` prints the block to merge by
-hand, `--dry-run` changes nothing. The script asks on a terminal: run it so the user can answer, and
-pass `--force` only if they already agreed. Nothing here is committed to the project, and it coexists
-with the per-project bar of Step 3.
-
-Related, needing no installation: `/sdd-watch` (one line per live run) and the one-line reminder of the
-live runs that the `UserPromptSubmit` hook prints with every prompt. Details in
-[`docs/multisesion.md`](../../docs/multisesion.md).
+Node fallback for the settings edit: `node -e 'const fs=require("fs"),f=process.argv[1];const s=JSON.parse(fs.readFileSync(f,"utf8"));if(s.statusLine&&/sdd\/status-line\.sh|sdd-status-line/.test(s.statusLine.command||""))delete s.statusLine;fs.writeFileSync(f,JSON.stringify(s,null,2)+"\n")' "$CFG/settings.json"`.
 
 ### Step 4: Versioning policy
 
@@ -195,14 +160,14 @@ bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --gitignore-only
 | Ignored | Why |
 |---------|-----|
 | `pipeline-state.json` | Per-checkout state written by the hooks; committing it causes merge conflicts between developers |
-| `.sdd/` | Trace map, current-task breadcrumbs, async questions, bench events |
+| `.sdd/` | Async questions, bench events and other per-checkout runtime files |
 | `.claude/worktrees/` | Ephemeral worktrees created by Claude Code |
 | `.claude/settings.local.json` | Personal overrides |
 | `dashboard/traceability-graph.json` | Generated by `/sdd-dashboard` |
 
 The script warns when `pipeline-state.json` is already tracked and prints the `git rm --cached pipeline-state.json` command: show it to the user, do not run it.
 
-**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.claude/sdd-status-line.sh`, `.claude/sdd-subagent-status.sh`, `.gitignore` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
+**4.2 Versioned files.** Recommend committing `.claude/settings.json`, `.gitignore` and, with `--multisession`, `.claude/sdd-sessions.json` and `.claude/sdd/sdd-up.sh`. Report which of them are not yet tracked (`git ls-files --error-unmatch <file>`), without committing.
 
 **4.3 `--multisession`.** Instantiate the roles file from the plugin template, replacing its project name with the project slug (directory name in kebab-case), and copy the launcher:
 
@@ -269,7 +234,6 @@ Setup is not a pipeline stage: do not touch `stages`, only confirm the files are
 jq -e '.hooksVersion >= 3 and (.stages | length) >= 7' pipeline-state.json
 grep -q "SDD Commit" "$(git rev-parse --git-path hooks)/commit-msg"
 git check-ignore -q pipeline-state.json && git check-ignore -q .sdd/x
-jq -e '.statusLine.command' .claude/settings.json            # if Step 3 was applied
 jq -e '.roles | length > 0' .claude/sdd-sessions.json        # if --multisession
 grep -q '^<!-- sdd-stack-begin kit=' CLAUDE.md && ls .claude/rules/sdd-*.md   # if Step 4b was applied
 ls "$SDD_PLUGIN_ROOT/server/dist/server.js"                  # MCP bundle shipped with the plugin
@@ -286,8 +250,7 @@ Report:
 | Migration from pre-4.0 | Applied / Not needed / Declined |
 | pipeline-state.json | Created (hooksVersion 3) / Preserved (stage <currentStage>) |
 | Git hook: commit-msg | Installed at <path> / Skipped (not a git repo) |
-| Status line | Configured / Skipped |
-| Global status line (user-level) | Configured / Skipped / Not offered |
+| Legacy global status line (user-level) | Removed / Kept / Not found |
 | .gitignore policy | Applied / Already up to date; pipeline-state.json tracked: yes/no |
 | Multi-session | <n> roles in .claude/sdd-sessions.json + .claude/sdd/sdd-up.sh / Not requested |
 | Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Skipped (no kit detected) / Not requested |
@@ -304,7 +267,7 @@ Report:
 ## Constraints
 
 - Never overwrite `pipeline-state.json` or an existing `.claude/sdd-sessions.json`.
-- Never replace `.claude/settings.json`; merge, and ask before changing an existing `statusLine`.
+- Never replace `.claude/settings.json`; merge only. Ask before changing anything under the user's Claude config directory.
 - Run the migration only after showing `--dry-run` output and getting confirmation.
 - Do not commit, do not `git rm`, do not uninstall plugins: print the commands for the user.
 - Warn about missing `jq`, `python3` or `tmux`; only missing `git` or `node` block a step.

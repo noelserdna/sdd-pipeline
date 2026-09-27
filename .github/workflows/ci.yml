@@ -80,5 +80,5 @@ jobs:
       - run: bash tests/setup/run.sh
       - run: bash tests/bench/run.sh
       - run: bash tests/tasks/run.sh
-      - run: bash tests/dashboard/run.sh
+      - run: bash tests/graph/run.sh
       - run: bash tests/jev/run.sh

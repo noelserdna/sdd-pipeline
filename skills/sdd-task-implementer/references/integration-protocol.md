@@ -54,8 +54,8 @@ git worktree add ../<project>-f1a -b feat/fase-1-a fase-1-foundation
 Alternative: `claude -w <name>` creates `.claude/worktrees/<name>` inside the repository (ignored through the
 `# sdd-begin … # sdd-end` block of `.gitignore`). It branches from the default base ref (usually `origin/HEAD`), so
 inside it run `git checkout -B feat/fase-1-a fase-1-foundation` before starting `--stream A`. The hooks resolve the
-shared state through the git common dir, so `pipeline-state.json` and `.sdd/trace-map.json` stay in the main
-checkout either way; `.sdd/current-task.json` and `.sdd/bench/events.jsonl` are per worktree.
+shared state through the git common dir, so `pipeline-state.json` stays in the main checkout either way;
+`.sdd/bench/events.jsonl` is per worktree.
 
 ## 1. Preconditions (all HALT unless stated)
 
@@ -122,7 +122,7 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
 
 ## 3. After the merges
 
-1. **`integración` Stream**: implement its tasks with the normal Phases 3-7 (breadcrumb, test-first, one commit per
+1. **`integración` Stream**: implement its tasks with the normal Phases 3-7 (test-first, one commit per
    task with `Refs:`/`Task:`, checkbox-first — or no checkbox with `task_state: trailers`). These are the wiring tasks that touch files shared by several Streams
    (`src/index.ts`, route indexes, migration indexes).
 2. **`--verify --fase N`** (read-only, `references/verification-protocol.md`): every task of `base` and of the

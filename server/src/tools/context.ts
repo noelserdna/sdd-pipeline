@@ -97,38 +97,6 @@ export function executeContext(
   else if (hasUCLink) coverageStatus = "Specified";
   else coverageStatus = "Not Started";
 
-  // Code intelligence enrichment
-  let codeIntel: Record<string, unknown> | undefined;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const symbols = ci.symbols.filter(
-      (s) =>
-        s.artifactRefs.includes(artifact_id) ||
-        s.inferredRefs.includes(artifact_id)
-    );
-    if (symbols.length > 0) {
-      const processes = ci.processes.filter((p) =>
-        p.artifactRefs.includes(artifact_id)
-      );
-      codeIntel = {
-        symbols: symbols.map((s) => ({
-          name: s.name,
-          type: s.type,
-          file: s.filePath,
-          lines: `${s.startLine}-${s.endLine}`,
-          callers: s.callers,
-          callees: s.callees,
-          isInferred: s.inferredRefs.includes(artifact_id),
-        })),
-        processes: processes.map((p) => ({
-          name: p.name,
-          steps: p.steps,
-          entryPoint: p.entryPoint,
-        })),
-      };
-    }
-  }
-
   // Separate code refs by origin for clarity
   const allCodeRefs = artifact.codeRefs ?? [];
   const directCodeRefs = allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct");
@@ -159,7 +127,6 @@ export function executeContext(
     testRefs: artifact.testRefs ?? [],
     commitRefs: artifact.commitRefs ?? [],
     gaps,
-    ...(codeIntel ? { codeIntelligence: codeIntel } : {}),
   };
 
   return JSON.stringify(output) + getNextStepHint("sdd_context", args);

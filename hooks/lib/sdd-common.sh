@@ -1,5 +1,5 @@
 #!/bin/bash
-# sdd-common.sh — helpers compartidos por los hooks SDD y la status line.
+# sdd-common.sh — helpers compartidos por los hooks SDD y los scripts del plugin.
 #
 # Se carga con `. "$(dirname "${BASH_SOURCE[0]}")/lib/sdd-common.sh"`. Reglas:
 #   - Compatible con bash 3.2 (macOS): sin mapfile, sin declare -A, sin ${var,,}.
@@ -10,9 +10,8 @@
 # Dos raíces:
 #   PROJECT_DIR  toplevel git del fichero (o del cwd): clasifica REL_PATH. En un
 #                worktree (git worktree add ../x, claude -w, EnterWorktree) es el worktree.
-#   STATE_ROOT   directorio del `.git` común: allí viven pipeline-state.json y
-#                .sdd/trace-map.json, compartidos por todos los worktrees.
-#   .sdd/current-task.json vive en PROJECT_DIR (uno por worktree).
+#   STATE_ROOT   directorio del `.git` común: allí vive pipeline-state.json, compartido
+#                por todos los worktrees.
 #
 # Variables de entorno opcionales (no documentadas por Claude Code, degradables):
 #   SDD_STATE_ROOT  fija STATE_ROOT (solo dentro del mismo repositorio).  SDD_ROLE  fija el rol.  CLAUDE_PID  pid de la sesión.
@@ -336,12 +335,6 @@ sdd_unlock() {
   return 0
 }
 
-# ---------------------------------------------------------------- índice global de ejecuciones
-# <config>/sdd/active-runs.json: una entrada por checkout principal (clave `root`) que escribe
-# hooks/sdd-activity-log.sh. Lo leen hooks/sdd-runs-line.sh y scripts/sdd-watch.sh --brief.
-# scripts/sdd-status-line-global.sh NO usa estos helpers a propósito: se copia fuera del plugin.
-sdd_runs_file() { printf '%s\n' "${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}/sdd/active-runs.json"; }
-
 # ---------------------------------------------------------------- estado de las etapas
 # Orden canónico de las 7 etapas lineales. Las laterales (req-change, security-auditor, tech-designer,
 # ux-designer, gap-detector…) no cuentan para el progreso N/7.
@@ -392,7 +385,7 @@ sdd_stage_summary() {
 #   MODE=write (defecto; H3, escrituras bajo el directorio de una etapa): solo pending/stale/ausente →
 #     running. Nunca toca done, error ni running: req-change que escribe requirements/ no reabre
 #     requirements-engineer, y un stage done no queda en running para siempre.
-#   MODE=skill (H10, la skill de la etapa arranca explícitamente): además done → running (re-ejecución).
+#   MODE=skill (H3 en PreToolUse Skill / UserPromptExpansion: la skill de la etapa arranca): además done → running (re-ejecución).
 # No crea FILE (lo crea sdd-setup): sin él, no hace nada. Conserva `summary` y el resto de campos.
 # Siempre devuelve 0.
 sdd_mark_running() {

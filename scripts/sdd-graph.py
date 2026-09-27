@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-SDD Dashboard Generator
-Scans requirements/, spec/, plan/, task/, test/ for artifact definitions and cross-references,
-builds traceability-graph.json following the SDD graph schema,
-and generates index.html from the plugin HTML template.
+SDD traceability graph builder
+Scans requirements/, spec/, plan/, task/, test/, code, tests and git history for artifact
+definitions and cross-references, and writes dashboard/traceability-graph.json following the
+graph schema (docs/design/graph-schema.md). The MCP server, hooks/sdd-session-start.sh and
+hooks/sdd-augment-hook.js read that file.
 
 Usage:
-    python generate.py                          # CWD as project root
-    python generate.py --project /path/to/proj  # explicit project root
-    python generate.py --output /path/to/out    # explicit output directory
+    python3 sdd-graph.py                          # CWD as project root
+    python3 sdd-graph.py --project /path/to/proj  # explicit project root
+    python3 sdd-graph.py --output /path/to/out    # explicit output directory
 """
 
 import os
@@ -18,15 +19,8 @@ import sys
 import argparse
 import subprocess
 import tempfile
-from html import escape as html_escape
 from datetime import datetime, timezone
 from collections import OrderedDict
-
-# ──────────────────────────────────────────────────────────
-# Constants (static — do not depend on CLI args)
-# ──────────────────────────────────────────────────────────
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _safe_write_json(output_path, data):
@@ -40,23 +34,6 @@ def _safe_write_json(output_path, data):
         os.replace(tmp_path, output_path)
     except Exception:
         # Clean up temp file on failure
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
-def _safe_write_text(output_path, text):
-    """Write text atomically: write to temp file, then os.replace (Step 0.5)."""
-    out_dir = os.path.dirname(output_path)
-    os.makedirs(out_dir, exist_ok=True)
-    tmp_fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".tmp")
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp_path, output_path)
-    except Exception:
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -196,7 +173,7 @@ STAGE_COUNT_UNITS = {
 # antes de implementar y es por tanto una especificacion; VERIFICACION agrupa
 # solo la ejecucion real de tests.
 #
-# Esta tabla es el unico sitio donde se define la agrupacion: el HTML la lee del
+# Esta tabla es el unico sitio donde se define la agrupacion: los consumidores la leen del
 # JSON, asi que para recolocar una etapa basta con moverla aqui y regenerar.
 STAGE_GROUPS = [
     ("requisitos", "Requisitos", [
@@ -295,17 +272,6 @@ def detect_project_name(project_dir):
             except Exception:
                 continue
     return os.path.basename(os.path.abspath(project_dir))
-
-
-def resolve_template(project_dir):
-    """Find the HTML template. Priority: script-local > project dashboard > plugin cache."""
-    candidates = [
-        # 1. Relative to this script (when running from plugin or sdd-skills)
-        os.path.join(SCRIPT_DIR, "references", "html-template.md"),
-        # 2. Project's own dashboard/references (legacy)
-        os.path.join(project_dir, "dashboard", "references", "html-template.md"),
-    ]
-    return next((p for p in candidates if os.path.exists(p)), candidates[0])
 
 
 def infer_relationship_type(source_type, target_type):
@@ -1201,9 +1167,8 @@ def propagate_refs_to_req_artifacts(artifacts, req_ids, ref_map, incoming, outgo
 
     The existing propagate_refs_to_reqs() computes which REQs have transitive
     coverage (used for statistics), but does NOT populate the ref arrays on
-    the REQ artifact objects.  This function fills that gap so the HTML
-    template — which reads req.codeRefs / req.testRefs directly — can display
-    the correct indicators.
+    the REQ artifact objects.  This function fills that gap so consumers
+    that read req.codeRefs / req.testRefs directly see the correct indicators.
 
     Refs are copied with origin="propagated" and a propagatedFrom field
     identifying the intermediate artifact that owns the original ref.
@@ -1899,54 +1864,6 @@ def load_pipeline_state(project_dir):
     return data
 
 
-def trace_map_code_refs(trace_map):
-    """Pivot .sdd/trace-map.json into codeRef entries.
-
-    hooks/sdd-trace-map-updater.sh writes one mapping per (file, task):
-    {"file", "taskId", "fase", "refs": [...], "origin": "hook-captured", "firstSeen", "lastModified"}.
-    Each mapping becomes a file-level codeRef for its refs (and its TASK). The older
-    {"artifactId", "codeRefs": [...]} shape is still accepted.
-    """
-    if not isinstance(trace_map, dict):
-        return []
-    mappings = trace_map.get("mappings")
-    if not isinstance(mappings, list):
-        mappings = [{"artifactId": k, "codeRefs": v.get("codeRefs", [])}
-                    for k, v in trace_map.items() if isinstance(v, dict) and "codeRefs" in v]
-    out = []
-    for m in mappings:
-        if not isinstance(m, dict):
-            continue
-        if m.get("file"):
-            ref_ids = [r for r in (m.get("refs") or []) if isinstance(r, str) and classify_id(r)]
-            task_id = m.get("taskId")
-            if isinstance(task_id, str) and classify_id(task_id) == "TASK" and task_id not in ref_ids:
-                ref_ids.append(task_id)
-            if not ref_ids:
-                continue
-            fpath = str(m["file"]).replace("\\", "/")
-            out.append({
-                "file": fpath,
-                "line": 0,
-                "symbol": os.path.basename(fpath),
-                "symbolType": "file",
-                "refIds": ref_ids,
-                "origin": "hook-captured",
-                "confidence": 0.95,
-                "inferredFrom": {"commitSha": None, "taskId": task_id, "trailerRefs": []},
-            })
-        elif m.get("artifactId") and isinstance(m.get("codeRefs"), list):
-            for cr in m["codeRefs"]:
-                if isinstance(cr, dict) and cr.get("file"):
-                    ref = dict(cr)
-                    ref["refIds"] = [m["artifactId"]]
-                    ref.setdefault("line", 0)
-                    ref.setdefault("origin", "hook-captured")
-                    ref.setdefault("confidence", 0.95)
-                    out.append(ref)
-    return out
-
-
 def build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
                 commits=None, code_refs=None, code_stats=None, test_refs=None, test_stats=None,
                 scan_paths=None):
@@ -2154,8 +2071,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         pipeline_data["lateralStages"] = lateral_stages
 
     # Agrupacion en las cinco fases de ingenieria. Se emite como dato (no como
-    # maquetacion) para que el HTML solo tenga que recorrerlo, y para que
-    # cualquier consumidor del grafo pueda usar la misma agrupacion.
+    # maquetacion) para que cualquier consumidor del grafo pueda usar la misma agrupacion.
     by_name = {}
     for entry in pipeline_stages:
         by_name[entry["name"]] = entry
@@ -2371,12 +2287,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     inferred_code_refs = infer_code_refs_from_commits(commits, artifacts, incoming, outgoing,
                                                       project_dir=project_dir, scan_dirs=scan_dirs)
 
-    # 3. Hook-captured refs from .sdd/trace-map.json (merged here so statistics include them)
-    hook_refs = trace_map_code_refs(load_trace_map(project_dir))
-    if hook_refs:
-        print(f"  Trace map: {len(hook_refs)} hook-captured file mappings")
-
-    # 4. Deduplicate by (file, refId): direct > hook-captured > llm-verified > inferred
+    # 3. Deduplicate by (file, refId): direct > llm-verified > inferred
     def _dedup(refs, taken):
         kept = []
         for cr in refs:
@@ -2395,13 +2306,12 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         print(f"  Gap analysis: {len(llm_refs)} llm-verified requirement refs")
 
     taken = {(cr["file"], rid) for cr in code_refs for rid in cr.get("refIds", [])}
-    deduped_hook = _dedup(hook_refs, taken)
     deduped_llm = _dedup(llm_refs, taken)
     deduped_inferred = _dedup(inferred_code_refs, taken)
 
     # 5. Apply overrides (Step 1.5)
     overrides_path = os.path.join(project_dir, ".sdd", "overrides.json")
-    all_code_refs = code_refs + deduped_hook + deduped_llm + deduped_inferred
+    all_code_refs = code_refs + deduped_llm + deduped_inferred
     all_code_refs, override_count = apply_overrides(all_code_refs, overrides_path)
 
     # 5. Build artifact_code_refs map from merged refs
@@ -2427,7 +2337,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     reqs_with_commits_set = propagate_refs_to_reqs(req_ids, artifact_commit_refs, incoming, outgoing)
 
     # ── Propagate refs to REQ artifacts (Step 1.3b) ──────────
-    # Fill codeRefs/testRefs on REQ nodes so the HTML template can display them.
+    # Fill codeRefs/testRefs on REQ nodes so graph consumers see them directly.
     # Without this, REQs show ✗ even when downstream artifacts have refs.
     propagate_refs_to_req_artifacts(artifacts, req_ids, artifact_code_refs, incoming, outgoing, "codeRefs")
     propagate_refs_to_req_artifacts(artifacts, req_ids, artifact_test_refs, incoming, outgoing, "testRefs")
@@ -2459,10 +2369,9 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
     inferred_refs_count = sum(1 for cr in all_code_refs if cr.get("origin") in ("commit-inferred", "task-inferred", "blame-inferred"))
     code_stats["directRefs"] = direct_refs_count
     code_stats["inferredRefs"] = inferred_refs_count
-    code_stats["hookCapturedRefs"] = sum(1 for cr in all_code_refs if cr.get("origin") == "hook-captured")
     code_stats["llmVerifiedRefs"] = sum(1 for cr in all_code_refs if cr.get("origin") == "llm-verified")
     code_stats["manualOverrides"] = override_count
-    # Code files with no reference of any origin: what the dashboard lists as untraced code
+    # Code files with no reference of any origin: untraced code
     traced_files = {cr["file"] for cr in all_code_refs if cr.get("refIds")}
     code_stats["orphanFiles"] = sorted(f for f in code_files if f not in traced_files)
 
@@ -2557,103 +2466,7 @@ def build_graph(project_dir, output_dir, project_name, artifacts, references, al
         "adoption": adoption,
     }
 
-    # Preserve codeIntelligence from previous graph if it exists (Step 2.1)
-    graph_file = os.path.join(output_dir, "traceability-graph.json")
-    if os.path.exists(graph_file):
-        try:
-            with open(graph_file, "r", encoding="utf-8") as f:
-                prev_graph = json.load(f)
-            if "codeIntelligence" in prev_graph:
-                graph["codeIntelligence"] = prev_graph["codeIntelligence"]
-        except Exception:
-            pass
-
-    # Refine with code intelligence if available (Step 2.3)
-    if "codeIntelligence" in graph:
-        _refine_with_code_intelligence(graph)
-
     return graph
-
-
-def _refine_with_code_intelligence(graph):
-    """Refine file-level inferred codeRefs with symbol-level data from codeIntelligence (Step 2.3).
-
-    For each codeRef with origin "commit-inferred", "task-inferred", or "blame-inferred"
-    and symbolType "file", if codeIntelligence has symbols for that file, replace with
-    symbol-level refs.
-    """
-    ci = graph.get("codeIntelligence")
-    if not ci or not ci.get("indexed"):
-        return
-
-    # Build file→symbols index
-    file_symbols = {}
-    for sym in ci.get("symbols", []):
-        fp = sym.get("filePath", "")
-        file_symbols.setdefault(fp, []).append(sym)
-
-    for art in graph.get("artifacts", []):
-        refined = []
-        for cr in art.get("codeRefs", []):
-            if (cr.get("origin") in ("commit-inferred", "task-inferred", "blame-inferred")
-                    and cr.get("symbolType") == "file"
-                    and cr["file"] in file_symbols):
-                # Replace with symbol-level refs
-                refined_any = False
-                for sym in file_symbols[cr["file"]]:
-                    sym_ref_ids = list(set(sym.get("artifactRefs", []) + sym.get("inferredRefs", [])))
-                    # Only include if there's overlap with the inferred refIds
-                    overlap = set(sym_ref_ids) & set(cr["refIds"])
-                    if overlap:
-                        refined.append({
-                            "file": cr["file"],
-                            "line": sym.get("startLine", 0),
-                            "symbol": sym["name"],
-                            "symbolType": sym.get("type", "unknown").lower(),
-                            "refIds": list(overlap),
-                            "origin": "code-index",
-                            "inferredFrom": cr.get("inferredFrom"),
-                        })
-                    refined_any = refined_any or bool(overlap)
-                # If no symbol matched this ref, keep the original file-level ref
-                if not refined_any:
-                    refined.append(cr)
-            else:
-                refined.append(cr)
-        art["codeRefs"] = refined
-
-
-def generate_html(graph, template_file, html_file):
-    """Read the HTML template and inject the graph JSON."""
-    if not os.path.exists(template_file):
-        print(f"  Warning: HTML template not found at {template_file}")
-        print("  Skipping HTML generation.")
-        return False
-
-    with open(template_file, "r", encoding="utf-8") as f:
-        template_md = f.read()
-
-    # Extract HTML between ```html and ```
-    m = re.search(r'```html\s*\n(.*?)\n```', template_md, re.DOTALL)
-    if not m:
-        print("  Warning: could not find ```html block in template.")
-        return False
-
-    html = m.group(1)
-
-    # Serialize JSON for an inline <script>: "</" would close the script element early (a title such as
-    # "</script><script>..." in a spec would run as code). "<\/" is the same string in JSON/JS.
-    data_json = json.dumps(graph, ensure_ascii=False)
-    data_json = data_json.replace("</", "<\\/").replace("<!--", "<\\u0021--")
-    data_json = data_json.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-
-    # Replace placeholders (PROJECT_NAME first: DATA_JSON may legitimately contain the placeholder text)
-    html = html.replace("{{PROJECT_NAME}}", html_escape(str(graph.get("projectName") or "SDD Project")))
-    html = html.replace("{{DATA_JSON}}", data_json)
-
-    _safe_write_text(html_file, html)
-
-    return True
 
 
 # ──────────────────────────────────────────────────────────
@@ -2739,22 +2552,8 @@ def load_test_results(project_dir):
         return None
 
 
-def load_trace_map(project_dir):
-    """Load .sdd/trace-map.json if it exists. Returns parsed dict or None."""
-    trace_path = os.path.join(project_dir, ".sdd", "trace-map.json")
-    if not os.path.isfile(trace_path):
-        return None
-    try:
-        with open(trace_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
 def _enrich_graph_with_loaders(graph, project_dir):
     """Enrich graph with optional .sdd/ data files (gap analysis, test results).
-
-    .sdd/trace-map.json is merged earlier, in build_graph, so its refs count in the statistics.
 
     This is a post-processing step: if the files exist, they add data to the graph;
     if they don't exist, the graph remains unchanged.
@@ -2813,7 +2612,7 @@ def _enrich_graph_with_loaders(graph, project_dir):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SDD Dashboard Generator — scans pipeline artifacts and generates traceability dashboard"
+        description="SDD traceability graph — scans pipeline artifacts and writes dashboard/traceability-graph.json"
     )
     parser.add_argument(
         "--project", default=".",
@@ -2830,18 +2629,14 @@ def main():
     output_dir = os.path.abspath(args.output) if args.output else os.path.join(project_dir, "dashboard")
     project_name = detect_project_name(project_dir)
 
-    # Resolve template locations
-    template_file = resolve_template(project_dir)
     graph_file = os.path.join(output_dir, "traceability-graph.json")
-    html_file = os.path.join(output_dir, "index.html")
 
     print("=" * 60)
-    print("SDD Dashboard Generator")
+    print("SDD Traceability Graph")
     print("=" * 60)
     print(f"Project: {project_dir}")
     print(f"Name:    {project_name}")
     print(f"Output:  {output_dir}")
-    print(f"Template:{template_file}")
     print()
 
     # Extract artifacts and references
@@ -2869,7 +2664,7 @@ def main():
     graph = build_graph(project_dir, output_dir, project_name, artifacts, references, all_ref_ids,
                         commits, code_refs, code_stats, test_refs, test_stats, scan_paths)
 
-    # Enrich with optional .sdd/ data files (gap analysis, test results, trace map)
+    # Enrich with optional .sdd/ data files (gap analysis, test results)
     print("\nLoading optional enrichment data...")
     _enrich_graph_with_loaders(graph, project_dir)
 
@@ -2910,14 +2705,6 @@ def main():
         if ts2.get("functionalFiles", 0) > 0 or ts2.get("e2eFiles", 0) > 0:
             print(f"  Functional: {ts2.get('functionalFiles', 0)} files, {ts2.get('functionalTests', 0)} tests")
             print(f"  E2E:        {ts2.get('e2eFiles', 0)} files, {ts2.get('e2eTests', 0)} tests")
-
-    # Generate HTML
-    print(f"\nGenerating HTML dashboard...")
-    if generate_html(graph, template_file, html_file):
-        print(f"Wrote {html_file}")
-    else:
-        print("HTML generation failed.")
-
 
     print(f"\n{'='*60}")
     print("Done!")

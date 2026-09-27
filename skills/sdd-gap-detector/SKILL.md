@@ -93,11 +93,11 @@ decision rules below are applied by you; Jev only supplies probabilities.
 **S.1 Targets.** Read `requirements/REQUIREMENTS.md`: per `REQ-*` block take the statement and its acceptance
 criteria. Read `dashboard/traceability-graph.json` if present (`artifacts[]` with `codeRefs[]`,
 `classification.businessDomain`; `relationships[]` with `source`/`target`). A REQ is **covered** when a codeRef has
-origin `direct`, `manual-override` or `hook-captured`, or `commit-inferred`/`code-index` with confidence ≥ 0.8;
+origin `direct` or `manual-override`, or `commit-inferred` with confidence ≥ 0.8;
 **weakly covered** when its only refs are `task-inferred`, `blame-inferred`, `propagated` or lower-confidence
 inferred ones; **uncovered** with no refs. Targets = weakly covered + uncovered + covered REQs whose UCs lead to a
 MISSING endpoint or an uncovered BDD scenario. Without the graph every REQ is a target: say so, and suggest
-`/sdd-dashboard` first for a narrower pass. `REQ-C-*` constraints and `REQ-NF-*` that no single code location can
+running `python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` first for a narrower pass. `REQ-C-*` constraints and `REQ-NF-*` that no single code location can
 implement (performance, availability) are listed as "not checkable by code reading" instead.
 
 **S.2 Candidates** (at most 5 files per REQ, non-test, non-config, no barrel/index re-exports), in order:
@@ -163,9 +163,9 @@ surface and breaks traceability — but only a human can decide whether it becom
 
 ## Related skills
 
-`/sdd-dashboard` builds the graph used in S.1 and can load `.sdd/gap-analysis.json`; `/sdd-traceability-check`
-verifies ID chains across artifacts; `/sdd-reconcile` resolves drift using these findings; `/sdd-code-index` adds
-symbol-level refs; the MCP tool `sdd_gaps` serves `.sdd/gap-analysis.json`.
+`python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` builds the graph used in S.1 and loads `.sdd/gap-analysis.json`; `/sdd-traceability-check`
+verifies ID chains across artifacts; `/sdd-reconcile` resolves drift using these findings; the MCP tool `sdd_gaps`
+serves `.sdd/gap-analysis.json`.
 
 ## Persist summary
 

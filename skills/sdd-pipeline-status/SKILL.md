@@ -57,11 +57,6 @@ the current directory.
 ### Handoffs             (multi-session only)
 | Stage | To | Sent | Result |
 
-### Recent Activity      (only if $STATE_ROOT/.sdd/activity.jsonl exists)
-| Time (UTC) | Event | Detail | Session | Role |
-Running: skill `/sdd-security-auditor` since 10:12Z (session 3f1c9a2b); 1 subagent active.
-Live panel: `scripts/sdd-watch.sh --root <STATE_ROOT>`.
-
 ### Recommended Next Action
 > Run `/sdd-spec-auditor` to re-audit the updated specifications.
 
@@ -71,10 +66,6 @@ Live panel: `scripts/sdd-watch.sh --root <STATE_ROOT>`.
 
 - **Handoffs**: only when a stage has `summary.handoff` (plugin-root `references/handoff-protocol.md`); show `to`,
   `sentAt`, `result` (`sent`, `skipped:*`, `failed:*`). Print the session role when `SDD_ROLE` is set.
-- **Recent Activity**: `.sdd/activity.jsonl` is written by the `sdd-activity-log.sh` hook, one JSON line per event
-  (`ts`, `event`, `session`, `role`, `skill`, `agent_type`, `agent_id`, `stage`, `task`). Read at most the last
-  ~50 lines and show 8. A `skill-start` with no later `stop` in the same session is the running skill; a
-  `subagent-start` with no later `subagent-stop` for the same `agent_id` is an active subagent.
 - If `sddVersion` in pipeline-state is older than the installed plugin, add "run `/sdd-setup` to upgrade".
 
 ## Diagnose mode

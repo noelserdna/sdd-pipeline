@@ -51,8 +51,8 @@ gaps.ts in the same change.
 `semantic.requirements[].status`: `covered` · `partial` · `likely-missing` · `no-candidates`. `decidedBy`: `jev`
 (a threshold rule decided), `llm` (you decided after reading the chunks, or the whole pass ran in fallback) or
 `search` (nothing to judge). `origin`/`confidence`/`evidence` appear on `covered` entries; `origin` is always
-`"llm-verified"`: `sdd-dashboard` (generate.py) turns each `covered` entry with `path:start-end` evidence into a
-`llm-verified` codeRef on that REQ, below direct and hook-captured refs (`sdd-dashboard/references/graph-schema.md`). `reason` on
+`"llm-verified"`: `scripts/sdd-graph.py` turns each `covered` entry with `path:start-end` evidence into a
+`llm-verified` codeRef on that REQ, below direct refs (`docs/design/graph-schema.md` in the plugin). `reason` on
 LLM-decided entries: `split` (several chunks in the 0.3-0.6 band), `uncertain` (between the thresholds) or
 `fallback` (Jev disabled). `nearMatch` on a missing endpoint is optional: the closest route that failed the
 segment-aligned rule, for the human to judge.

@@ -30368,28 +30368,6 @@ function executeImpact(args, graph, index) {
   if ((byDepth[1]?.length ?? 0) > 5 || totalAffected > 20) risk = "HIGH";
   else if ((byDepth[1]?.length ?? 0) > 2 || totalAffected > 10) risk = "MEDIUM";
   else risk = "LOW";
-  let codeImpact;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const relatedSymbols = ci.symbols.filter(
-      (s) => s.artifactRefs.includes(artifact_id) || s.inferredRefs.includes(artifact_id)
-    );
-    if (relatedSymbols.length > 0) {
-      const callerSet = /* @__PURE__ */ new Set();
-      for (const sym of relatedSymbols) {
-        for (const caller of sym.callers) callerSet.add(caller);
-      }
-      codeImpact = {
-        directSymbols: relatedSymbols.map((s) => ({
-          name: s.name,
-          file: s.filePath,
-          type: s.type
-        })),
-        transitiveCallers: [...callerSet],
-        totalCallChainDepth: relatedSymbols.length + callerSet.size
-      };
-    }
-  }
   const output = {
     artifact: {
       id: root.id,
@@ -30410,8 +30388,7 @@ function executeImpact(args, graph, index) {
         }
       ])
     ),
-    affectedStages: [...affectedStages],
-    ...codeImpact ? { codeImpact } : {}
+    affectedStages: [...affectedStages]
   };
   return JSON.stringify(output) + getNextStepHint("sdd_impact", args);
 }
@@ -30478,34 +30455,6 @@ function executeContext(args, graph, index) {
     coverageStatus = "In Progress";
   else if (hasUCLink) coverageStatus = "Specified";
   else coverageStatus = "Not Started";
-  let codeIntel;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const symbols = ci.symbols.filter(
-      (s) => s.artifactRefs.includes(artifact_id) || s.inferredRefs.includes(artifact_id)
-    );
-    if (symbols.length > 0) {
-      const processes = ci.processes.filter(
-        (p) => p.artifactRefs.includes(artifact_id)
-      );
-      codeIntel = {
-        symbols: symbols.map((s) => ({
-          name: s.name,
-          type: s.type,
-          file: s.filePath,
-          lines: `${s.startLine}-${s.endLine}`,
-          callers: s.callers,
-          callees: s.callees,
-          isInferred: s.inferredRefs.includes(artifact_id)
-        })),
-        processes: processes.map((p) => ({
-          name: p.name,
-          steps: p.steps,
-          entryPoint: p.entryPoint
-        }))
-      };
-    }
-  }
   const allCodeRefs = artifact.codeRefs ?? [];
   const directCodeRefs = allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct");
   const inferredCodeRefs = allCodeRefs.filter((cr) => cr.origin && cr.origin !== "direct");
@@ -30531,8 +30480,7 @@ function executeContext(args, graph, index) {
     })),
     testRefs: artifact.testRefs ?? [],
     commitRefs: artifact.commitRefs ?? [],
-    gaps,
-    ...codeIntel ? { codeIntelligence: codeIntel } : {}
+    gaps
   };
   return JSON.stringify(output) + getNextStepHint("sdd_context", args);
 }
@@ -30604,32 +30552,14 @@ function executeCoverage(args, graph, index) {
     }
   }
   topGaps.sort((a, b) => a.missingLinks.length - b.missingLinks.length);
-  let codeIntelCoverage;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    codeIntelCoverage = {
-      totalSymbols: ci.stats.totalSymbols,
-      annotated: ci.stats.symbolsWithRefs,
-      inferred: ci.stats.symbolsWithInferredRefs,
-      uncoveredSymbols: ci.stats.uncoveredSymbols,
-      annotatedPercentage: ci.stats.totalSymbols > 0 ? Math.round(
-        ci.stats.symbolsWithRefs / ci.stats.totalSymbols * 100
-      ) : 0,
-      totalCoveredPercentage: ci.stats.totalSymbols > 0 ? Math.round(
-        (ci.stats.symbolsWithRefs + ci.stats.symbolsWithInferredRefs) / ci.stats.totalSymbols * 100
-      ) : 0
-    };
-  }
   const allCodeRefs = reqs.flatMap((r) => r.codeRefs ?? []);
   const codeInferenceBreakdown = {
     directRefs: allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct").length,
     commitInferred: allCodeRefs.filter((cr) => cr.origin === "commit-inferred").length,
     taskInferred: allCodeRefs.filter((cr) => cr.origin === "task-inferred").length,
     manualOverrides: allCodeRefs.filter((cr) => cr.origin === "manual-override").length,
-    codeIndex: allCodeRefs.filter((cr) => cr.origin === "code-index").length,
     blameInferred: allCodeRefs.filter((cr) => cr.origin === "blame-inferred").length,
     propagated: allCodeRefs.filter((cr) => cr.origin === "propagated").length,
-    hookCaptured: allCodeRefs.filter((cr) => cr.origin === "hook-captured").length,
     llmVerified: allCodeRefs.filter((cr) => cr.origin === "llm-verified").length,
     /** Every ref whose origin is not `direct` (the sum of the inferred kinds above and any new ones). */
     inferredTotal: allCodeRefs.filter((cr) => (cr.origin ?? "direct") !== "direct").length,
@@ -30652,8 +30582,7 @@ function executeCoverage(args, graph, index) {
       coveragePercent: stats.total > 0 ? Math.round(stats.covered / stats.total * 100) : 0
     })),
     uncovered: uncovered.slice(0, 20),
-    topGaps: topGaps.slice(0, 15),
-    ...codeIntelCoverage ? { codeIntelligence: codeIntelCoverage } : {}
+    topGaps: topGaps.slice(0, 15)
   };
   return JSON.stringify(output) + getNextStepHint("sdd_coverage", args);
 }
@@ -31102,16 +31031,14 @@ function readResource(uri, graph, index) {
           text: [
             "SDD Traceability Graph Schema v3",
             "",
-            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption?, codeIntelligence? }",
+            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption? }",
             "",
             "Artifact types: REQ, UC, WF, API, BDD, INV, ADR, NFR, RN, FASE, TASK",
             "Relationship types: implements, orchestrates, verifies, guarantees, decides, decomposes, implemented-by, implemented-by-code, tested-by, implemented-by-commit, reads-from, traces-to",
             "",
             "Each artifact has: id, type, category, title, file, line, priority, stage, classification?, codeRefs[], testRefs[], commitRefs[]",
             "",
-            "codeIntelligence (optional, from /sdd-code-index): symbols[], callGraph[], processes[], stats",
-            "",
-            "Full schema: see skills/dashboard/references/graph-schema.md"
+            "Full schema: see docs/design/graph-schema.md in the sdd-pipeline plugin"
           ].join("\n")
         }
       ]

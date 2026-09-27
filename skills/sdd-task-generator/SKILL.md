@@ -339,7 +339,7 @@ After writing all artifacts, update `pipeline-state.json` (create with the defau
      - revert counts cover all four categories (compact tasks without a Revert line count as SAFE)
      - `streamsPerFase` = work Streams per FASE (`1` = serial)
      - `mode` = mode actually used (`fanout` even when one FASE was regenerated sequentially after two failures — say so in `highlights`)
-     - `task_agents` = FASE agents actually launched (`0` sequential); the status line and `scripts/sdd-watch.sh` show it live
+     - `task_agents` = FASE agents actually launched (`0` sequential). Together with `mode` this is the record that the fan-out happened, so report the real count, not the planned one
    - `highlights`: 3-5 observations (e.g. "42 tasks across 7 FASEs", "65% parallelizable") plus one line per FASE with more than one work Stream ("FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)"). When the mode was degraded to sequential, the first highlight is the reason.
    - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
    - `generatedAt`: now

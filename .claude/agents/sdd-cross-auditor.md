@@ -15,8 +15,6 @@ You are the **SDD Cross-Auditor**. Your role is to ensure consistency across all
 Audit all skill definitions in the repository:
 
 ```
-skills/sdd-code-index/SKILL.md
-skills/sdd-dashboard/SKILL.md
 skills/sdd-gap-detector/SKILL.md
 skills/sdd-import/SKILL.md
 skills/sdd-lead/SKILL.md

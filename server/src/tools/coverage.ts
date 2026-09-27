@@ -125,32 +125,6 @@ export function executeCoverage(
   // Sort top gaps by fewest missing (closest to complete)
   topGaps.sort((a, b) => a.missingLinks.length - b.missingLinks.length);
 
-  // Code intelligence enrichment
-  let codeIntelCoverage: Record<string, unknown> | undefined;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    codeIntelCoverage = {
-      totalSymbols: ci.stats.totalSymbols,
-      annotated: ci.stats.symbolsWithRefs,
-      inferred: ci.stats.symbolsWithInferredRefs,
-      uncoveredSymbols: ci.stats.uncoveredSymbols,
-      annotatedPercentage:
-        ci.stats.totalSymbols > 0
-          ? Math.round(
-              (ci.stats.symbolsWithRefs / ci.stats.totalSymbols) * 100
-            )
-          : 0,
-      totalCoveredPercentage:
-        ci.stats.totalSymbols > 0
-          ? Math.round(
-              ((ci.stats.symbolsWithRefs + ci.stats.symbolsWithInferredRefs) /
-                ci.stats.totalSymbols) *
-                100
-            )
-          : 0,
-    };
-  }
-
   // Code inference breakdown
   const allCodeRefs = reqs.flatMap((r) => r.codeRefs ?? []);
   const codeInferenceBreakdown = {
@@ -158,10 +132,8 @@ export function executeCoverage(
     commitInferred: allCodeRefs.filter((cr) => cr.origin === "commit-inferred").length,
     taskInferred: allCodeRefs.filter((cr) => cr.origin === "task-inferred").length,
     manualOverrides: allCodeRefs.filter((cr) => cr.origin === "manual-override").length,
-    codeIndex: allCodeRefs.filter((cr) => cr.origin === "code-index").length,
     blameInferred: allCodeRefs.filter((cr) => cr.origin === "blame-inferred").length,
     propagated: allCodeRefs.filter((cr) => cr.origin === "propagated").length,
-    hookCaptured: allCodeRefs.filter((cr) => cr.origin === "hook-captured").length,
     llmVerified: allCodeRefs.filter((cr) => cr.origin === "llm-verified").length,
     /** Every ref whose origin is not `direct` (the sum of the inferred kinds above and any new ones). */
     inferredTotal: allCodeRefs.filter((cr) => (cr.origin ?? "direct") !== "direct").length,
@@ -192,7 +164,6 @@ export function executeCoverage(
     })),
     uncovered: uncovered.slice(0, 20),
     topGaps: topGaps.slice(0, 15),
-    ...(codeIntelCoverage ? { codeIntelligence: codeIntelCoverage } : {}),
   };
 
   return JSON.stringify(output) + getNextStepHint("sdd_coverage", args);

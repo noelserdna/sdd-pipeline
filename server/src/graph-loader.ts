@@ -2,8 +2,8 @@ import { readFileSync, existsSync, watchFile, unwatchFile } from "node:fs";
 import { join, dirname } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Types mirroring the traceability-graph-v6 schema emitted by skills/sdd-dashboard/generate.py
-// (skills/sdd-dashboard/references/graph-schema.md). Older v3-v5 graphs are a subset.
+// Types mirroring the traceability-graph-v6 schema emitted by scripts/sdd-graph.py
+// (docs/design/graph-schema.md). Older v3-v5 graphs are a subset.
 // ---------------------------------------------------------------------------
 
 export interface StageSummary {
@@ -42,9 +42,7 @@ export type CodeRefOrigin =
   | "task-inferred"
   | "blame-inferred"
   | "propagated"
-  | "hook-captured"
   | "llm-verified"
-  | "code-index"
   | "manual-override"
   | "gap-detected";
 
@@ -134,48 +132,6 @@ export interface Statistics {
   adoptionStats: Record<string, unknown> | null;
 }
 
-export interface CodeIntelligence {
-  indexed: boolean;
-  indexedAt: string;
-  engine: string;
-  engineVersion: string;
-  symbols: Array<{
-    id: string;
-    name: string;
-    type: string;
-    filePath: string;
-    startLine: number;
-    endLine: number;
-    isExported: boolean;
-    artifactRefs: string[];
-    inferredRefs: string[];
-    callers: string[];
-    callees: string[];
-    processes: string[];
-    community: string;
-  }>;
-  callGraph: Array<{
-    from: string;
-    to: string;
-    confidence: number;
-    type: string;
-  }>;
-  processes: Array<{
-    name: string;
-    steps: string[];
-    entryPoint: string;
-    artifactRefs: string[];
-  }>;
-  stats: {
-    totalSymbols: number;
-    symbolsWithRefs: number;
-    symbolsWithInferredRefs: number;
-    uncoveredSymbols: number;
-    totalProcesses: number;
-    processesWithRefs: number;
-  };
-}
-
 export interface TraceabilityGraph {
   $schema: string;
   generatedAt: string;
@@ -185,7 +141,6 @@ export interface TraceabilityGraph {
   relationships: Relationship[];
   statistics: Statistics;
   adoption?: Record<string, unknown>;
-  codeIntelligence?: CodeIntelligence;
 }
 
 // ---------------------------------------------------------------------------

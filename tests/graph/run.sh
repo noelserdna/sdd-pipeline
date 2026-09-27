@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Tests del dashboard: generate.py (commits, trace map, rangos, refs, Stack Profile, clasificador, auditorías,
-# escape HTML) y el parser de resultados (skills/sdd-dashboard/test-result-parser.py):
+# Tests del grafo de trazabilidad: scripts/sdd-graph.py (commits, rangos, refs, Stack Profile, clasificador,
+# auditorías) y el parser de resultados (scripts/test-result-parser.py):
 # detección de runner (vitest, minitest, rspec; app_dir del SDD Stack Profile), parsers de Minitest verbose,
 # RSpec JSON y Vitest JSON, normalización de IDs con guiones bajos y la CLI de punta a punta.
 # Solo python3 (stdlib). Fixtures en tests/fixtures/test-results/. Compatible con bash 3.2.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-PARSER="$ROOT/skills/sdd-dashboard/test-result-parser.py"
+PARSER="$ROOT/scripts/test-result-parser.py"
 FIX="$ROOT/tests/fixtures/test-results"
 unset SDD_STATE_ROOT SDD_PLUGIN_ROOT CLAUDE_PROJECT_DIR || true
 
-if ! command -v python3 >/dev/null 2>&1; then echo "skip tests/dashboard: python3 no disponible"; exit 0; fi
+if ! command -v python3 >/dev/null 2>&1; then echo "skip tests/graph: python3 no disponible"; exit 0; fi
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -198,8 +198,8 @@ else
   parser_ok=0
 fi
 
-# ── generate.py ──────────────────────────────────────────────────────────────
-GEN="$ROOT/skills/sdd-dashboard/generate.py"
+# ── sdd-graph.py ─────────────────────────────────────────────────────────────
+GEN="$ROOT/scripts/sdd-graph.py"
 if PYTHONDONTWRITEBYTECODE=1 python3 - "$GEN" "$tmp" <<'PY2'
 import importlib.util
 import io
@@ -397,14 +397,12 @@ check("refs: API-auth (definido, sin dígitos) sigue enlazado",
 check("ranges en el grafo: ningún NFR inventado", sorted(i for i in arts if i.startswith("NFR")) == ["NFR-001"]
       and not any(b.startswith("NFR-") for b in broken), broken)
 
-# 2. trace map merged before statistics
-uc2 = [c for c in arts["UC-002"]["codeRefs"] if c.get("origin") == "hook-captured"]
-check("trace map: mapping {file, taskId, refs} → codeRef hook-captured en UC-002",
-      [c["file"] for c in uc2] == ["web/app/models/session.rb"] and uc2[0]["confidence"] == 0.95, arts["UC-002"]["codeRefs"])
-check("trace map: cuenta en las estadísticas (REQ-F-002 con código, hookCapturedRefs)",
-      st["traceabilityCoverage"]["reqsWithCode"]["count"] == 2 and st["codeStats"]["hookCapturedRefs"] == 1,
-      (st["traceabilityCoverage"]["reqsWithCode"], st["codeStats"]))
-check("orphanFiles: solo el fichero sin ninguna referencia", st["codeStats"]["orphanFiles"] == ["web/app/models/untraced.rb"],
+# 2. a leftover .sdd/trace-map.json (retired hook) is ignored
+check("trace map retirado: .sdd/trace-map.json no aporta refs ni contadores",
+      not any(c.get("origin") == "hook-captured" for a in graph["artifacts"] for c in a["codeRefs"])
+      and "hookCapturedRefs" not in st["codeStats"], st["codeStats"])
+check("orphanFiles: solo los ficheros sin ninguna referencia",
+      st["codeStats"]["orphanFiles"] == ["web/app/models/session.rb", "web/app/models/untraced.rb"],
       st["codeStats"]["orphanFiles"])
 
 # 5. task-inferred BFS + confidence
@@ -445,25 +443,6 @@ check("audits: cifras del spec audit solo de AUDIT-*.md",
       ad["totalFindings"] == 5 and ad["bySeverity"] == {"critical": 0, "high": 2, "medium": 0, "low": 0}
       and ad["latestGate"] == "PASS" and ad["source"] == "audits/AUDIT-BASELINE.md", ad)
 check("audits: SECURITY-AUDIT aparte", ad["security"] and ad["security"]["totalFindings"] == 9 and ad["security"]["bySeverity"]["critical"] == 3, ad.get("security"))
-
-# 9. HTML escaping
-graph["artifacts"][0]["title"] = "</script><script>alert(1)</script>"
-html_out = os.path.join(tmp, "out.html")
-quiet(gen.generate_html, graph, gen.resolve_template(proj), html_out)
-html = open(html_out, encoding="utf-8").read()
-check("html: '</' escapado dentro del <script> de datos", "</script><script>alert(1)" not in html and "<\\/script><script>alert(1)" in html)
-check("html: PROJECT_NAME escapado", "<title>SDD Dashboard — &lt;b&gt;P&lt;/b&gt;</title>" in html)
-m = re.search(r"var DATA = (.*?);\n", html)
-check("html: DATA sigue siendo JSON válido", m is not None and json.loads(m.group(1))["artifacts"][0]["title"].startswith("</script>"))
-
-# 11. code intelligence refinement keeps unmatched file-level inferred refs
-g = {"codeIntelligence": {"indexed": True, "symbols": [{"filePath": "a.ts", "name": "fa", "artifactRefs": ["UC-009"]}]},
-     "artifacts": [{"id": "UC-001", "codeRefs": [
-         {"file": "a.ts", "line": 3, "symbolType": "function", "refIds": ["UC-001"], "origin": "direct"},
-         {"file": "a.ts", "line": 0, "symbolType": "file", "refIds": ["UC-001"], "origin": "commit-inferred"}]}]}
-gen._refine_with_code_intelligence(g)
-check("code-index: la ref inferida a nivel de fichero no se pierde si otra ref del mismo fichero existe",
-      [c["origin"] for c in g["artifacts"][0]["codeRefs"]] == ["direct", "commit-inferred"], g["artifacts"][0]["codeRefs"])
 
 # 13. llm-verified refs from .sdd/gap-analysis.json (sdd-gap-detector --semantic) + API-NNN-NN headings
 lp = new_repo("llm")
@@ -512,9 +491,9 @@ check("llm-verified: sin gap-analysis.json → silencio", "gap-analysis" not in 
 
 # End to end CLI
 r = subprocess.run([sys.executable, gen_path, "--project", proj], capture_output=True, text=True)
-check("cli: exit 0 con entradas corruptas y escribe grafo + html",
+check("cli: exit 0 con entradas corruptas y escribe solo el grafo (sin html)",
       r.returncode == 0 and os.path.exists(os.path.join(out_dir, "traceability-graph.json"))
-      and os.path.exists(os.path.join(out_dir, "index.html")), (r.stdout[-300:], r.stderr[-300:]))
+      and not os.path.exists(os.path.join(out_dir, "index.html")), (r.stdout[-300:], r.stderr[-300:]))
 
 sys.exit(1 if fails else 0)
 PY2
@@ -525,8 +504,8 @@ else
 fi
 
 if [ "$parser_ok" = 1 ] && [ "$gen_ok" = 1 ]; then
-  echo "tests/dashboard: todo ok"
+  echo "tests/graph: todo ok"
 else
-  echo "tests/dashboard: hay fallos"
+  echo "tests/graph: hay fallos"
   exit 1
 fi

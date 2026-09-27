@@ -15,12 +15,13 @@
 #
 # What it does (idempotent; a backup goes to .claude/backups/sdd-v3-<timestamp>/):
 #   1. removes every hooks[*][*].hooks[*] entry of .claude/settings.json whose command
-#      contains "sdd-" (H1-H3, H5, H6/H9 of the old installation); everything else in
-#      settings.json is preserved, including statusLine and the opt-in quality gates;
-#   2. deletes .claude/hooks/sdd-*.sh|.js and .claude/agents/sdd-*.md;
-#   3. keeps the status line: copies the current scripts/sdd-status-line.sh to
-#      .claude/sdd-status-line.sh and re-points statusLine.command when it still
-#      referenced .claude/hooks/;
+#      contains "sdd-" (H1-H3, H5, H6/H9/H10 of old installations, trace-map and activity log
+#      included); everything else in settings.json is preserved, including the opt-in quality gates;
+#   2. deletes .claude/hooks/sdd-*.sh|.js, .claude/agents/sdd-*.md, the copied status lines
+#      .claude/sdd-status-line.sh and .claude/sdd-subagent-status.sh, and the legacy runtime
+#      files .sdd/current-task.json, .sdd/trace-map.json and .sdd/activity*.jsonl;
+#   3. removes statusLine / subagentStatusLine entries that run an SDD script (sdd-status-line*,
+#      sdd-subagent-status, ~/.claude/sdd/status-line.sh): the plugin no longer ships them;
 #   4. reinstalls the git commit-msg hook from the plugin (install-git-hooks.sh);
 #   5. sets sddVersion (from plugin.json) and hooksVersion: 3 in pipeline-state.json;
 #   6. adds the "# sdd-begin ... # sdd-end" block of templates/gitignore.sdd to .gitignore.
@@ -62,7 +63,6 @@ PROJECT_DIR="$(pwd)"
 SETTINGS="$PROJECT_DIR/.claude/settings.json"
 PIPELINE_STATE="$PROJECT_DIR/pipeline-state.json"
 GITIGNORE="$PROJECT_DIR/.gitignore"
-SL_DST="$PROJECT_DIR/.claude/sdd-status-line.sh"
 
 # ── Plugin root: exported by the SessionStart hook, else this script's own checkout ──
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -71,7 +71,6 @@ if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; 
   PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 [ -f "$PLUGIN_ROOT/hooks/hooks.json" ] || die "plugin files not found under $PLUGIN_ROOT (hooks/hooks.json missing)"
-SL_SRC="$PLUGIN_ROOT/scripts/sdd-status-line.sh"
 GI_TPL="$PLUGIN_ROOT/templates/gitignore.sdd"
 
 HAS_JQ=false;   command -v jq   >/dev/null 2>&1 && HAS_JQ=true
@@ -201,34 +200,37 @@ if [ -f "$SETTINGS" ]; then
   fi
 fi
 
-# 2. Copied hook and agent files
+# 2. Copied hook, agent and status line files; legacy runtime files of removed hooks
 OLD_FILES=()
 shopt -s nullglob
-for f in "$PROJECT_DIR"/.claude/hooks/sdd-*.sh "$PROJECT_DIR"/.claude/hooks/sdd-*.js "$PROJECT_DIR"/.claude/agents/sdd-*.md; do
-  OLD_FILES+=("$f")
+for f in "$PROJECT_DIR"/.claude/hooks/sdd-*.sh "$PROJECT_DIR"/.claude/hooks/sdd-*.js "$PROJECT_DIR"/.claude/agents/sdd-*.md \
+         "$PROJECT_DIR"/.claude/sdd-status-line.sh "$PROJECT_DIR"/.claude/sdd-subagent-status.sh \
+         "$PROJECT_DIR"/.sdd/current-task.json \
+         "$PROJECT_DIR"/.sdd/trace-map.json "$PROJECT_DIR"/.sdd/activity*.jsonl; do
+  [ -f "$f" ] && OLD_FILES+=("$f")
 done
 shopt -u nullglob
 if [ "${#OLD_FILES[@]}" -gt 0 ]; then
-  log_found "${#OLD_FILES[@]} copied hook/agent file(s) under .claude/ (will be deleted):"
+  log_found "${#OLD_FILES[@]} legacy SDD file(s) under .claude/ or .sdd/ (will be deleted):"
   for f in ${OLD_FILES[@]+"${OLD_FILES[@]}"}; do echo "          ${f#"$PROJECT_DIR"/}"; done
   add_fix "old-files"
 fi
 
-# 3. Status line
+# 3. Status lines: the plugin no longer ships them; drop entries that run an SDD script
 SL_CMD="$(json_get "$SETTINGS" '.statusLine.command' 's.statusLine&&s.statusLine.command')"
+SUB_CMD="$(json_get "$SETTINGS" '.subagentStatusLine.command' 's.subagentStatusLine&&s.subagentStatusLine.command')"
 SL_ACTION=""
 case "$SL_CMD" in
-  *".claude/hooks/sdd-status-line.sh"*)
-    SL_ACTION="move"
-    log_found "statusLine points to .claude/hooks/sdd-status-line.sh (will move to .claude/sdd-status-line.sh)"
-    add_fix "status-line-move" ;;
-  *".claude/sdd-status-line.sh"*)
-    if [ -f "$SL_SRC" ] && ! cmp -s "$SL_SRC" "$SL_DST" 2>/dev/null; then
-      SL_ACTION="refresh"
-      log_found ".claude/sdd-status-line.sh differs from the plugin copy (will refresh)"
-      add_fix "status-line-refresh"
-    fi ;;
+  *sdd-status-line*|*"/sdd/status-line.sh"*)
+    SL_ACTION="remove"
+    log_found "statusLine runs a legacy SDD status line (will be removed): $SL_CMD" ;;
 esac
+case "$SUB_CMD" in
+  *sdd-subagent-status*)
+    SL_ACTION="remove"
+    log_found "subagentStatusLine runs a legacy SDD script (will be removed): $SUB_CMD" ;;
+esac
+[ -z "$SL_ACTION" ] || add_fix "status-line-remove"
 
 # 4. commit-msg hook
 COMMIT_MSG_ACTION=""
@@ -316,21 +318,8 @@ echo ""
 # ── Phase 3: apply ───────────────────────────────────────────────────────────
 CHANGED=()
 
-# 3a. status line (copy before deleting .claude/hooks/)
-if [ -n "$SL_ACTION" ]; then
-  if [ -f "$SL_SRC" ]; then
-    mkdir -p "$(dirname "$SL_DST")"
-    cp "$SL_SRC" "$SL_DST"
-    chmod +x "$SL_DST"
-    log_fix "status line script copied to .claude/sdd-status-line.sh"
-    CHANGED+=("status-line")
-  else
-    log_warn "$SL_SRC not found — status line script not refreshed"
-  fi
-fi
-
-# 3b. settings.json: strip sdd- hooks, re-point statusLine, keep everything else
-if [ -n "$SDD_HOOK_LINES" ] || [ "$SL_ACTION" = "move" ]; then
+# 3b. settings.json: strip sdd- hooks and an SDD statusLine, keep everything else
+if [ -n "$SDD_HOOK_LINES" ] || [ -n "$SL_ACTION" ]; then
   tmp="$SETTINGS.tmp.$$"
   if [ "$HAS_JQ" = true ]; then
     jq '
@@ -346,8 +335,10 @@ if [ -n "$SDD_HOOK_LINES" ] || [ "$SL_ACTION" = "move" ]; then
         )
         | if (.hooks | length) == 0 then del(.hooks) else . end
       else . end)
-      | if ((.statusLine.command // "") | test("\\.claude/hooks/sdd-status-line\\.sh"))
-        then .statusLine.command = "bash .claude/sdd-status-line.sh" else . end
+      | if ((.statusLine.command // "") | test("sdd-status-line|/sdd/status-line\\.sh"))
+        then del(.statusLine) else . end
+      | if ((.subagentStatusLine.command // "") | test("sdd-subagent-status"))
+        then del(.subagentStatusLine) else . end
     ' "$SETTINGS" > "$tmp"
   else
     node -e '
@@ -363,21 +354,23 @@ if [ -n "$SDD_HOOK_LINES" ] || [ "$SL_ACTION" = "move" ]; then
         }
         if(Object.keys(s.hooks).length===0) delete s.hooks;
       }
-      if(s.statusLine&&/\.claude\/hooks\/sdd-status-line\.sh/.test(s.statusLine.command||""))
-        s.statusLine.command="bash .claude/sdd-status-line.sh";
+      if(s.statusLine&&/sdd-status-line|\/sdd\/status-line\.sh/.test(s.statusLine.command||""))
+        delete s.statusLine;
+      if(s.subagentStatusLine&&/sdd-subagent-status/.test(s.subagentStatusLine.command||""))
+        delete s.subagentStatusLine;
       fs.writeFileSync(process.argv[2],JSON.stringify(s,null,2)+"\n");' "$SETTINGS" "$tmp"
   fi
   mv "$tmp" "$SETTINGS"
-  log_fix "settings.json: sdd- hooks removed${SL_ACTION:+, statusLine re-pointed}; other settings preserved"
+  log_fix "settings.json: sdd- hooks removed${SL_ACTION:+, SDD status lines removed}; other settings preserved"
   CHANGED+=("settings")
 fi
 
-# 3c. delete copied hooks and agents
+# 3c. delete copied hooks, agents, status line and legacy runtime files
 if [ "${#OLD_FILES[@]}" -gt 0 ]; then
   for f in ${OLD_FILES[@]+"${OLD_FILES[@]}"}; do rm -f "$f"; done
   rmdir "$PROJECT_DIR/.claude/hooks" 2>/dev/null || true
   rmdir "$PROJECT_DIR/.claude/agents" 2>/dev/null || true
-  log_fix "deleted ${#OLD_FILES[@]} copied hook/agent file(s) from .claude/"
+  log_fix "deleted ${#OLD_FILES[@]} legacy SDD file(s) from .claude/ and .sdd/"
   CHANGED+=("old-files")
 fi
 

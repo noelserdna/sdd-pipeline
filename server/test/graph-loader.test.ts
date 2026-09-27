@@ -30,7 +30,7 @@ test("sdd_coverage cuenta como inferido todo origin distinto de direct (grafo v6
     codeRefs: [{ file: "src/a.ts", line: 1, symbol: "a", symbolType: "function", refIds: [id], ...(origin ? { origin } : {}) }],
   });
   const artifacts = [req("REQ-F-001"), req("REQ-F-002", "blame-inferred"), req("REQ-F-003", "propagated"),
-    req("REQ-F-004", "hook-captured"), req("REQ-F-005", "llm-verified")];
+    req("REQ-F-004", "task-inferred"), req("REQ-F-005", "llm-verified")];
   const g = { ...emptyGraph(), artifacts } as unknown as import("../src/graph-loader.js").TraceabilityGraph;
   const index = {
     byId: new Map(artifacts.map((a) => [a.id, a])), byType: new Map([["REQ", artifacts]]), byFile: new Map(),
@@ -43,5 +43,7 @@ test("sdd_coverage cuenta como inferido todo origin distinto de direct (grafo v6
   assert.equal(b.inferredTotal, 4);
   assert.equal(b.reqsWithDirectCode, 1);
   assert.equal(b.reqsWithInferredCodeOnly, 4);
-  assert.equal(b.blameInferred + b.propagated + b.hookCaptured + b.llmVerified, 4);
+  assert.equal(b.blameInferred + b.propagated + b.taskInferred + b.llmVerified, 4);
+  assert.ok(!("hookCaptured" in b) && !("codeIndex" in b), "retired origins are not counted");
+  assert.ok(!("codeIntelligence" in out), "no codeIntelligence block");
 });

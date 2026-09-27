@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sdd-pipeline",
   "version": "4.3.0",
-  "description": "Specification-Driven Development pipeline (SWEBOK v4): 23 skills, 8 hooks (14 event registrations) and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation; optional Jev (TypeSafe) bulk judgments.",
+  "description": "Specification-Driven Development pipeline (SWEBOK v4): 21 skills, 5 hooks (7 event registrations) and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation; optional Jev (TypeSafe) bulk judgments.",
   "author": {
     "name": "Andres Leon",
     "url": "https://github.com/noelserdna"

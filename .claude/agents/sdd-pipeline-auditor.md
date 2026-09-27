@@ -80,7 +80,6 @@ Skill: sdd-pipeline:sdd-ux-designer              → ux/
 Skill: sdd-pipeline:sdd-security-auditor         → audits/SECURITY-AUDIT-BASELINE.md
 Skill: sdd-pipeline:sdd-pipeline-status          → (console output)
 Skill: sdd-pipeline:sdd-traceability-check       → (console output)
-Skill: sdd-pipeline:sdd-dashboard                → dashboard/
 Skill: sdd-pipeline:sdd-gap-detector             → .sdd/gap-analysis.json
 Skill: sdd-pipeline:sdd-req-change               → changes/, updated specs
 Skill: sdd-pipeline:sdd-session-summary          → (console output)
@@ -102,7 +101,7 @@ Launch background agents for independent tasks:
 **Parallel group 2 — Verification (Phase 6):**
 - Agent: "Run traceability-check + pipeline-status"
 - Agent: "Run gap-detector --semantic"
-- Agent: "Generate dashboard"
+- Agent: "Build the traceability graph (scripts/sdd-graph.py)"
 
 **Parallel group 3 — Onboarding (Phase 9):**
 - Agent: "Run sdd-pipeline-status --diagnose"
@@ -224,7 +223,7 @@ If gap-detector is not available (e.g., no source code yet), skip with a note.
 ### Phase 6: Utility Skills
 1. `Skill: sdd-pipeline:sdd-pipeline-status` — verify 7/7 done
 2. `Skill: sdd-pipeline:sdd-traceability-check` — chain, orphans, broken refs
-3. `Skill: sdd-pipeline:sdd-dashboard` — graph JSON + HTML
+3. `python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` — writes `dashboard/traceability-graph.json` (read by the MCP server and the hooks); verify it exists and has artifacts
 4. `Skill: sdd-pipeline:sdd-session-summary` — session delta
 
 ### Phase 7: Change Cycle
@@ -234,7 +233,6 @@ If gap-detector is not available (e.g., no source code yet), skip with a note.
 
 ### Phase 8: Verification Skills
 1. `sdd-gap-detector --semantic` — requirement coverage in the code (Jev judge when TYPESAFE_API_KEY is set, LLM otherwise)
-2. `sdd-code-index` — enrich traceability graph with codeRefs
 
 ### Phase 9: Onboarding Skills (parallel agents)
 1. `sdd-pipeline-status --diagnose` — classify the completed project

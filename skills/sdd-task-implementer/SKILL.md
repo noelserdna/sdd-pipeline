@@ -43,7 +43,6 @@ Implements only the tasks of one Stream of the `## Stream Ownership` table in `t
 
 - **Universe** = the Stream's tasks. Every other task of the FASE is `EXTERNAL`: never selected by Phase 2, Phase 8 or `--continue`, never marked. A `blocked-by` on an EXTERNAL task is satisfied only when that task is *done in HEAD* (Task state), i.e. committed before the branch point; otherwise → `PAUSE: External dependency`.
 - **Gates** G-09..G-11 run in addition to G-01..G-08, G-12.
-- **Breadcrumb** `.sdd/current-task.json` carries `"stream"` and, when set, `"role": "$SDD_ROLE"`.
 - **No tags** in a Stream worktree: a tag is repository-wide and worktrees would race for it; milestones are only logged (`checkpoint fase-1-slices reached (not tagged in Stream mode)`).
 - **Commits** as always, on `feat/fase-{N}-{x}`, checkbox inside the same commit.
 - **Phase 9-S** replaces Phase 9; no Persist Summary (a worktree never writes the main checkout's `pipeline-state.json`).
@@ -64,7 +63,6 @@ Main checkout, clean tree, project base branch. For each lettered Stream: `git m
 | `{code_paths}` / `{test_paths}` | CREATE/MODIFY | From the SDD Stack Profile (defaults `src/`, `tests/`) |
 | `task/TASK-FASE-{N}.md` | MODIFY (checkboxes only) | `- [ ]` → `- [x]` in the task's own commit; never with `task_state: trailers` |
 | `feedback/IMPL-FEEDBACK-FASE-{N}.md` | CREATE/APPEND | Spec-level issues, deviations, coverage gaps |
-| `.sdd/current-task.json` | CREATE/DELETE | Per-task breadcrumb (per worktree) |
 | `.sdd/bench/events.jsonl` | APPEND | Bench events (per worktree; consolidated by `--integrate`) |
 | Git tags / commits / merges | CREATE | Tags only in the main checkout; one commit per task; `--integrate`: one `--no-ff` merge per Stream |
 
@@ -129,8 +127,7 @@ Execution Plan — FASE-1 Stream A (branch feat/fase-1-a, base done in HEAD)
 For each task:
 
 0a. **Stale brake**: read `$SDD_STATE_ROOT/pipeline-state.json` (else `./pipeline-state.json`). If `stages["task-generator"].status` or `stages["plan-architect"].status` is `"stale"` → `PAUSE: Stale upstream` and do not start the task: the task document may no longer match the plan or the specs.
-0b. **Breadcrumb**: write `.sdd/current-task.json` = `{ "taskId", "fase", "refs", "startedAt" }` (+ `"stream"`, `"role"` when applicable) so the trace-map hook (H9) maps files to the task. One per checkout.
-0c. **Bench**: `sdd_bench_event task-start "{TASK-ID}"`.
+0b. **Bench**: `sdd_bench_event task-start "{TASK-ID}"`.
 1. Read every spec in **Refs**; extract input/output contracts, applicable invariants, state machines, exception flows, and how the task connects to the previous and next ones.
 2. `[DECISION PENDIENTE]` or vagueness → PAUSE.
 3. Plan files, imports and dependencies (a mental note, not a file).
@@ -167,7 +164,7 @@ Checkbox-first: the `[x]` goes into the task's own commit, so an interrupted ses
 2. Stage the task's files + the task document (never `git add -A`); verify the staged set is exactly that.
 3. Commit with the **Commit** message verbatim plus the trailers below. The commit-msg hook requires `Refs:` or `Task:` on `feat`/`fix`/`perf`/`test` and `Task:` on `refactor`; always write both.
 4. `COMMIT_SHA=$(git rev-parse --short HEAD)`; keep `TASK-ID → SHA` for the report.
-5. `rm -f .sdd/current-task.json`; `sdd_bench_event task-commit "{TASK-ID}" "$COMMIT_SHA"`.
+5. `sdd_bench_event task-commit "{TASK-ID}" "$COMMIT_SHA"`.
 
 ```bash
 git add src/middleware/auth.ts tests/middleware/auth.test.ts task/TASK-FASE-0.md

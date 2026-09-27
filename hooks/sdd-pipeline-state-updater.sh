@@ -1,9 +1,14 @@
 #!/bin/bash
 # H3: SDD Pipeline State Auto-Updater
-# Hook type: PostToolUse (Write) | async: true | Timeout: 10s
-# Detects writes to pipeline artifact directories and updates pipeline-state.json.
-# Only marks pending/stale stages as "running" (never "done" — that's the skill's responsibility —
-# and never reopens a done stage). Does nothing when pipeline-state.json does not exist.
+# Hook type: PreToolUse (Skill) | UserPromptExpansion | PostToolUse (Write) — async: true | Timeout: 5-10s
+# Marks a stage "running" in pipeline-state.json in two situations:
+#   - its skill starts: PreToolUse Skill (tool_input.skill) or a typed /command (UserPromptExpansion
+#     command_name, which does not go through PreToolUse). Mode `skill`: pending/stale/done → running,
+#     because an explicitly started skill is a (re-)run. A skill that writes through Bash heredocs
+#     (common in `claude -p`) never triggers the Write path, so this is what marks its stage.
+#   - a file under its directory is written (PostToolUse Write). Mode `write`: only pending/stale →
+#     running (never "done" — that's the skill's responsibility — and never reopens a done stage).
+# Does nothing when pipeline-state.json does not exist, and never fails (exit 0).
 # NOTE: The "summary" field in each stage is EXCLUSIVELY managed by skills on completion.
 # This hook must NOT modify or remove the "summary" field. The jq/node updates below
 # only touch status/lastRun/staleReason/currentStage/lastUpdated, preserving summary intact.
@@ -21,7 +26,44 @@ if [ ! -f "$SDD_LIB" ]; then echo "sdd-pipeline-state-updater: falta $SDD_LIB" >
 . "$SDD_LIB"
 
 INPUT=$(cat)
+[ -n "$INPUT" ] || exit 0
 
+# ── Skill start: PreToolUse Skill / UserPromptExpansion ─────────────────────────────────────────
+# The event and skill name come out of the JSON with a bash regex (no jq/node process); names with
+# escapes are not pipeline skills anyway. `plugin:` prefix and a leading `/` are dropped.
+EVENT=""
+if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then EVENT="${BASH_REMATCH[1]}"; fi
+if [ "$EVENT" = "PreToolUse" ] || [ "$EVENT" = "UserPromptExpansion" ]; then
+  SKILL_NAME=""
+  if [ "$EVENT" = "UserPromptExpansion" ]; then
+    if [[ "$INPUT" =~ \"command_name\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then SKILL_NAME="${BASH_REMATCH[1]}"; fi
+  elif [[ "$INPUT" =~ \"skill\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then
+    SKILL_NAME="${BASH_REMATCH[1]}"
+  fi
+  SKILL_NAME=${SKILL_NAME#/}; SKILL_NAME=${SKILL_NAME##*:}
+  case "$SKILL_NAME" in
+    sdd-requirements-engineer)   STAGE=requirements-engineer ;;
+    sdd-specifications-engineer) STAGE=specifications-engineer ;;
+    sdd-spec-auditor)            STAGE=spec-auditor ;;
+    sdd-test-planner)            STAGE=test-planner ;;
+    sdd-plan-architect)          STAGE=plan-architect ;;
+    sdd-task-generator)          STAGE=task-generator ;;
+    sdd-task-implementer)        STAGE=task-implementer ;;
+    sdd-acceptance)              STAGE=acceptance ;;
+    sdd-security-auditor)        STAGE=security-auditor ;;
+    sdd-tech-designer)           STAGE=tech-designer ;;
+    sdd-ux-designer)             STAGE=ux-designer ;;
+    sdd-gap-detector)            STAGE=gap-detector ;;
+    sdd-req-change)              STAGE=req-change ;;
+    *) exit 0 ;;
+  esac
+  sdd_roots "$INPUT"
+  # An explicitly started skill reopens its done stage (re-run); error and running are left alone.
+  sdd_mark_running "$STATE_ROOT/pipeline-state.json" "$STAGE" skill
+  exit 0
+fi
+
+# ── File write: PostToolUse Write ────────────────────────────────────────────────────────────────
 # Check if the write was successful
 TOOL_SUCCESS=$(printf '%s' "$INPUT" | sdd_json_get - '.toolResponse.success // .tool_response.success // "true"') || TOOL_SUCCESS="true"
 if [ "$TOOL_SUCCESS" = "false" ]; then

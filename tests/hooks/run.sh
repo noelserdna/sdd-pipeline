@@ -8,7 +8,6 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HOOKS="$ROOT/hooks"
 LIB="$HOOKS/lib/sdd-common.sh"
 FIX="$ROOT/tests/hooks/fixtures"
-STATUS_LINE="$ROOT/scripts/sdd-status-line.sh"
 TEMPLATE="$ROOT/templates/sdd-sessions.example.json"
 fail=0
 pass() { echo "ok   $1"; }
@@ -53,11 +52,19 @@ h3() {
   # shellcheck disable=SC2086
   post_json "$cwd" "$path" | env $envs bash "$HOOKS/sdd-pipeline-state-updater.sh" 2>/dev/null
 }
-# h9 ENV cwd path
-h9() {
-  local envs="$1" cwd="$2" path="$3"
+# skill_start ENV cwd skill → PreToolUse Skill (Claude invoca la skill)
+skill_start() {
+  local envs="$1" cwd="$2" skill="$3"
   # shellcheck disable=SC2086
-  post_json "$cwd" "$path" | env $envs bash "$HOOKS/sdd-trace-map-updater.sh" 2>/dev/null
+  printf '{"session_id":"t","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"%s","args":"x"}}' "$cwd" "$skill" \
+    | env $envs bash "$HOOKS/sdd-pipeline-state-updater.sh" 2>/dev/null
+}
+# prompt_expand ENV cwd command_name → UserPromptExpansion (el humano teclea /skill)
+prompt_expand() {
+  local envs="$1" cwd="$2" cmd="$3"
+  # shellcheck disable=SC2086
+  printf '{"session_id":"t","cwd":"%s","hook_event_name":"UserPromptExpansion","expansion_type":"slash_command","command_name":"%s","command_args":"","prompt":"/%s"}' "$cwd" "$cmd" "$cmd" \
+    | env $envs bash "$HOOKS/sdd-pipeline-state-updater.sh" 2>/dev/null
 }
 # h1 ENV cwd → stdout
 h1() {
@@ -70,7 +77,7 @@ reset_state() { cp "$FIX/$1" "$repo/pipeline-state.json"; }
 no_lock() { [ ! -d "$1.lock" ]; }
 
 # ---------------------------------------------------------------- 1. sintaxis
-for f in "$HOOKS"/*.sh "$HOOKS"/lib/*.sh "$STATUS_LINE" "$ROOT/tests/hooks/run.sh"; do
+for f in "$HOOKS"/*.sh "$HOOKS"/lib/*.sh "$ROOT/tests/hooks/run.sh"; do
   check "bash -n $(basename "$f")" bash -n "$f"
 done
 check "node --check sdd-augment-hook.js" node --check "$HOOKS/sdd-augment-hook.js"
@@ -83,8 +90,6 @@ out=$(h1 "" "$nogit")
 [ "$(guard "" "$nogit" Write "$nogit/spec/x.md")" = allow ] && pass "H2 sin pipeline-state permite" || bad "H2 sin pipeline-state deniega"
 start=$(date +%s)
 if printf '{"session_id":"t","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"%s/a.md"}}' "$nogit" "$nogit" | CLAUDE_PROJECT_DIR="$nogit" node "$HOOKS/sdd-augment-hook.js" >/dev/null 2>&1; then pass "H5 sin grafo (exit 0, $(( $(date +%s) - start ))s)"; else bad "H5 sin grafo falla"; fi
-out=$(printf '{"cwd":"%s","workspace":{"current_dir":"%s"}}' "$nogit" "$nogit" | bash "$STATUS_LINE" 2>/dev/null || true)
-[ "$out" = "SDD: no pipeline" ] && pass "statusLine sin pipeline" || bad "statusLine sin pipeline: '$out'"
 
 # ---------------------------------------------------------------- 3. repo git con task-implementer running
 repo="$tmp/repo"
@@ -236,47 +241,6 @@ out=$(h1 "SDD_ROLE=sdd-spec" "$nogit")
 if contains "$out" "No pipeline-state.json" && contains "$out" "Rol: sdd-spec"; then pass "H1 con rol y sin pipeline: Fresh pipeline + Rol"; else bad "H1 con rol y sin pipeline: $out"; fi
 rm -f "$HOME"/.claude/sessions/*.json
 
-# ---------------------------------------------------------------- 11. statusLine (con y sin librería)
-sl() { printf '{"cwd":"%s","workspace":{"current_dir":"%s","project_dir":"%s"}}' "$1" "$1" "$1" | env "$@" bash "$STATUS_LINE" 2>/dev/null || true; }
-reset_state pipeline-state.impl-running.json
-out=$(printf '{"cwd":"%s","workspace":{"current_dir":"%s"}}' "$wt" "$wt" | bash "$STATUS_LINE" 2>/dev/null || true)
-[ "$out" = "SDD [6/7] impl" ] && pass "statusLine desde worktree lee el estado del principal" || bad "statusLine desde worktree: '$out'"
-out=$(printf '{"workspace":{"current_dir":"%s"}}' "$wt" | bash "$STATUS_LINE" 2>/dev/null || true)
-[ "$out" = "SDD [6/7] impl" ] && pass "statusLine acepta workspace.current_dir sin cwd" || bad "statusLine workspace.current_dir: '$out'"
-out=$(printf '{"cwd":"%s"}' "$repo" | SDD_ROLE=sdd-spec bash "$STATUS_LINE" 2>/dev/null || true)
-[ "$out" = "[sdd-spec] SDD [6/7]" ] && pass "statusLine con rol: prefijo [rol] y stage ∩ rol (impl no es suyo)" || bad "statusLine rol sdd-spec: '$out'"
-out=$(printf '{"cwd":"%s"}' "$repo" | SDD_ROLE=impl-f1a bash "$STATUS_LINE" 2>/dev/null || true)
-[ "$out" = "[impl-f1a] SDD [6/7] impl" ] && pass "statusLine con rol impl-f1a muestra impl" || bad "statusLine rol impl-f1a: '$out'"
-mkdir -p "$tmp/old"; cp "$STATUS_LINE" "$tmp/old/sdd-status-line.sh"
-out=$(printf '{"cwd":"%s"}' "$wt" | CLAUDE_PROJECT_DIR="$repo" bash "$tmp/old/sdd-status-line.sh" 2>/dev/null || true)
-[ "$out" = "SDD [6/7] impl" ] && pass "statusLine sin librería degrada a CLAUDE_PROJECT_DIR" || bad "statusLine sin librería: '$out'"
-out=$(printf '{"cwd":"%s"}' "$wt" | SDD_PLUGIN_ROOT="$ROOT" CLAUDE_PROJECT_DIR="$nogit" bash "$tmp/old/sdd-status-line.sh" 2>/dev/null || true)
-[ "$out" = "SDD [6/7] impl" ] && pass "statusLine copiado encuentra la librería vía SDD_PLUGIN_ROOT" || bad "statusLine vía SDD_PLUGIN_ROOT: '$out'"
-# script copiado a .claude/ (instalación real): encuentra la librería vía installed_plugins.json
-mkdir -p "$HOME/.claude/plugins"
-printf '{"version":2,"plugins":{"sdd-pipeline@test":[{"scope":"user","installPath":"%s","version":"x"}]}}' "$ROOT" > "$HOME/.claude/plugins/installed_plugins.json"
-out=$(printf '{"cwd":"%s"}' "$wt" | SDD_ROLE=sdd-spec CLAUDE_PROJECT_DIR="$nogit" bash "$tmp/old/sdd-status-line.sh" 2>/dev/null || true)
-[ "$out" = "[sdd-spec] SDD [6/7]" ] && pass "statusLine copiado encuentra la librería vía installed_plugins.json" || bad "statusLine vía installed_plugins.json: '$out'"
-rm -f "$HOME/.claude/plugins/installed_plugins.json"
-out=$(printf '{"cwd":"%s"}' "$wt" | SDD_STATE_ROOT="$repo" SDD_ROLE=impl-f1a CLAUDE_PROJECT_DIR="$nogit" bash "$tmp/old/sdd-status-line.sh" 2>/dev/null || true)
-[ "$out" = "[impl-f1a] SDD [6/7] impl" ] && pass "statusLine sin librería respeta SDD_STATE_ROOT/SDD_ROLE (sdd-up.sh)" || bad "statusLine sin librería con env: '$out'"
-out=$(printf '{"cwd":"%s"}' "$wt" | CLAUDE_PROJECT_DIR="$nogit" bash "$tmp/old/sdd-status-line.sh" 2>/dev/null || true)
-[ "$out" = "SDD: no pipeline" ] && pass "statusLine sin librería ni env: comportamiento anterior (no ve el principal)" || bad "statusLine sin librería ni env: '$out'"
-unset -f sl
-
-# ---------------------------------------------------------------- 12. H9 trace-map compartido, breadcrumb por worktree
-mkdir -p "$wt/.sdd"; cp "$FIX/current-task.json" "$wt/.sdd/current-task.json"
-h9 "" "$wt" "$wt/src/x.ts"
-tm="$repo/.sdd/trace-map.json"
-check "H9 crea <principal>/.sdd/trace-map.json" test -f "$tm"
-[ ! -e "$wt/.sdd/trace-map.json" ] && pass "H9 no crea trace-map en el worktree" || bad "H9 creó trace-map en el worktree"
-check "H9 entrada file=src/x.ts taskId=TASK-F1-003 stream=A role=impl-f1a" jq -e '.mappings[0] | .file == "src/x.ts" and .taskId == "TASK-F1-003" and .stream == "A" and .role == "impl-f1a" and .fase == 1 and (.refs | length == 2)' "$tm"
-h9 "" "$wt" "$wt/src/x.ts"
-[ "$(jq '.mappings | length' "$tm")" = 1 ] && pass "H9 no duplica entradas" || bad "H9 duplicó entradas"
-check "H9 no deja .lock" no_lock "$tm"
-h9 "" "$repo" "$repo/src/y.ts"
-[ "$(jq '.mappings | length' "$tm")" = 1 ] && pass "H9 sin breadcrumb en el principal no traza" || bad "H9 trazó sin breadcrumb"
-
 # ---------------------------------------------------------------- 13. lock huérfano y lock vivo
 reset_state pipeline-state.pending.json
 mkdir -p "$repo/pipeline-state.json.lock"; touch -t 202001010000 "$repo/pipeline-state.json.lock"
@@ -307,280 +271,49 @@ if PATH="$bin" git --version >/dev/null 2>&1 && PATH="$bin" node --version >/dev
   check "sin jq: H3 no deja .lock" no_lock "$repo/pipeline-state.json"
   out=$(h1 "PATH=$bin SDD_ROLE=sdd-spec" "$wt")
   if contains "$out" "RUNNING: security-auditor" && contains "$out" "Rol: sdd-spec (posee: spec/*"; then pass "sin jq: H1 contexto + rol"; else bad "sin jq: H1: $out"; fi
-  out=$(printf '{"cwd":"%s"}' "$wt" | PATH="$bin" SDD_ROLE=sdd-plan bash "$STATUS_LINE" 2>/dev/null || true)
-  [ "$out" = "[sdd-plan] SDD [0/7] sec" ] && pass "sin jq: statusLine con rol y stage fuera de las 7 (sec)" || bad "sin jq: statusLine: '$out'"
-  rm -f "$repo/.sdd/trace-map.json"
-  h9 "PATH=$bin" "$wt" "$wt/src/nojq.ts"
-  check "sin jq: H9 traza con stream/role" jq -e '.mappings[0] | .file == "src/nojq.ts" and .stream == "A"' "$tm"
+  reset_state pipeline-state.pending.json
+  skill_start "PATH=$bin" "$wt" "sdd-pipeline:sdd-plan-architect"
+  [ "$(status_of plan-architect "$repo/pipeline-state.json")" = running ] && pass "sin jq: H3 skill-start marca plan-architect en el principal (fallback node)" || bad "sin jq: H3 skill-start"
 else
   echo "skip sin jq: git/node no operativos con PATH mínimo en esta máquina"
 fi
 
-# ---------------------------------------------------------------- 15. H10 activity log (.sdd/activity.jsonl) + sdd-watch.sh
-ACT_HOOK="$HOOKS/sdd-activity-log.sh"
-WATCH="$ROOT/scripts/sdd-watch.sh"
-check "bash -n sdd-watch.sh" bash -n "$WATCH"
-# h10 ENV json  → alimenta el hook con el JSON tal cual
-h10() {
-  local envs="$1" json="$2"
-  # shellcheck disable=SC2086
-  printf '%s' "$json" | env $envs bash "$ACT_HOOK" 2>/dev/null
-}
-# ev cwd session event extra-json(",k":v...)
-ev() { printf '{"session_id":"%s","cwd":"%s","hook_event_name":"%s"%s}' "$2" "$1" "$3" "${4:-}"; }
-act="$tmp/act"; git init -q "$act" && git -C "$act" commit -q --allow-empty -m init
-cp "$FIX/pipeline-state.impl-running.json" "$act/pipeline-state.json"
-mkdir -p "$act/.sdd"; cp "$FIX/current-task.json" "$act/.sdd/current-task.json"
-alog="$act/.sdd/activity.jsonl"
-h10 "" "$(ev "$act" a1a1a1a1-0001 SessionStart ',"source":"startup"')"
-h10 "SDD_ROLE=sdd-spec" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-spec-auditor","args":"--fix"}')"
-h10 "" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Agent","tool_input":{"subagent_type":"Explore","description":"Buscar usos de X","prompt":"..."}')"
-h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStart ',"agent_id":"agent-1","agent_type":"Explore"')"
-h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStart ',"agent_id":"agent-2","agent_type":"general-purpose"')"
-h10 "" "$(ev "$act" a1a1a1a1-0001 SubagentStop ',"agent_id":"agent-2","agent_type":"general-purpose","last_assistant_message":"ok"')"
-h10 "" "$(ev "$act" a1a1a1a1-0001 PreToolUse ',"tool_name":"Bash","tool_input":{"command":"ls"}')"
-h10 "" "$(ev "$act" b2b2b2b2-0002 UserPromptExpansion ',"expansion_type":"slash_command","command_name":"sdd-task-implementer","command_args":"--fase 1"')"
-h10 "" "$(ev "$act" b2b2b2b2-0002 Stop ',"stop_hook_active":false,"last_assistant_message":"done"')"
-check "H10 crea <principal>/.sdd/activity.jsonl" test -f "$alog"
-check "H10 activity.jsonl: JSON válido línea a línea" jq -e . "$alog"
-check "H10 no deja .lock" no_lock "$alog"
-[ "$(wc -l < "$alog" | tr -d ' ')" = 8 ] && pass "H10 8 líneas (PreToolUse Bash no se registra)" || bad "H10 líneas: $(wc -l < "$alog")"
-check "H10 session-start: session(8), role -, cwd ., stage running, task del breadcrumb, source" \
-  jq -e -s '.[0] | .event == "session-start" and .session == "a1a1a1a1" and .role == "-" and .cwd == "." and .stage == "task-implementer" and .task == "TASK-F1-003" and .source == "startup" and (.ts | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' "$alog"
-check "H10 skill-start (PreToolUse Skill): skill, args, via=tool, role SDD_ROLE" \
-  jq -e -s '.[1] | .event == "skill-start" and .skill == "sdd-spec-auditor" and .args == "--fix" and .via == "tool" and .role == "sdd-spec"' "$alog"
-check "H10 agent-start (PreToolUse Agent): agent_type=subagent_type, description" \
-  jq -e -s '.[2] | .event == "agent-start" and .agent_type == "Explore" and .description == "Buscar usos de X" and (has("agent_id") | not)' "$alog"
-check "H10 subagent-start/stop: agent_id, agent_type" \
-  jq -e -s '(.[3] | .event == "subagent-start" and .agent_id == "agent-1" and .agent_type == "Explore") and (.[5] | .event == "subagent-stop" and .agent_id == "agent-2")' "$alog"
-check "H10 UserPromptExpansion → skill-start via=prompt (command_name/command_args)" \
-  jq -e -s '.[6] | .event == "skill-start" and .skill == "sdd-task-implementer" and .args == "--fase 1" and .via == "prompt" and .session == "b2b2b2b2"' "$alog"
-check "H10 stop: sin campos de tool" jq -e -s '.[7] | .event == "stop" and (has("skill") | not)' "$alog"
-# desde un worktree: se escribe en el principal, cwd absoluto (fuera de STATE_ROOT), task del worktree
-awt="$tmp/act-wt"; git -C "$act" worktree add -q "$awt" >/dev/null 2>&1
-mkdir -p "$awt/.sdd"; sed 's/TASK-F1-003/TASK-F1-009/' "$FIX/current-task.json" > "$awt/.sdd/current-task.json"
-h10 "" "$(ev "$awt" c3c3c3c3-0003 SubagentStart ',"agent_id":"agent-3","agent_type":"Plan"')"
-[ ! -e "$awt/.sdd/activity.jsonl" ] && pass "H10 desde worktree NO crea activity.jsonl en el worktree" || bad "H10 creó activity.jsonl en el worktree"
-check "H10 desde worktree: línea en el principal con cwd absoluto y task del worktree" \
-  jq -e -s --arg wt "$awt" '.[8] | .event == "subagent-start" and .cwd == $wt and .task == "TASK-F1-009"' "$alog"
-# proyectos sin SDD: ni .sdd/ ni pipeline-state.json → no se escribe nada
-plain="$tmp/plain"; git init -q "$plain" && git -C "$plain" commit -q --allow-empty -m init
-h10 "" "$(ev "$plain" e9e9e9e9-0009 Stop '')"
-h10 "" "$(ev "$nogit" e9e9e9e9-0009 SubagentStart ',"agent_id":"a","agent_type":"Explore"')"
-[ ! -e "$plain/.sdd" ] && [ ! -e "$nogit/.sdd" ] && pass "H10 sin .sdd/ ni pipeline-state.json no escribe nada" || bad "H10 escribió en un proyecto sin SDD"
-# entrada rota / vacía → exit 0
-printf '{not json' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 JSON roto → exit 0" || bad "H10 JSON roto falla"
-printf '' | bash "$ACT_HOOK" >/dev/null 2>&1 && pass "H10 stdin vacío → exit 0" || bad "H10 stdin vacío falla"
-# sdd-watch.sh --once
-wout=$(bash "$WATCH" --once --root "$act" 2>&1) && pass "sdd-watch --once exit 0" || bad "sdd-watch --once falla: $wout"
-contains "$wout" "/sdd-spec-auditor --fix" && pass "sdd-watch muestra la skill en curso (skill-start sin cierre)" || bad "sdd-watch sin skill en curso: $wout"
-# `stop` NO cierra la skill (Stop se dispara en cada turno): la de b2b2b2b2 sigue en curso pese a su stop
-contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: un stop no cierra la skill (sigue en Ahora)" || bad "sdd-watch: el stop cerró la skill: $wout"
-# sí la cierra el skill-end que emite el Stop de una sesión headless (`claude -p`)
-h10 "SDD_HEADLESS=1" "$(ev "$act" b2b2b2b2-0002 Stop '')"
-wout=$(bash "$WATCH" --once --root "$act" 2>&1) || true
-contains "$wout" "sdd-task-implementer" && ! contains "$wout" "skill  /sdd-task-implementer" && pass "sdd-watch: skill cerrada por skill-end no aparece en Ahora (sí en Actividad)" || bad "sdd-watch: skill cerrada por skill-end: $wout"
-check "H10 skill-end: skill, seconds y reason" \
-  jq -e -s '[ .[] | select(.event == "skill-end") ] | length == 1 and (.[0] | .skill == "sdd-task-implementer" and (.seconds | type) == "number" and .reason == "headless-stop" and .session == "b2b2b2b2")' "$alog"
-contains "$wout" "2 activo(s)" && pass "sdd-watch: 2 subagentes activos (agent-1 y agent-3; agent-2 parado)" || bad "sdd-watch agentes: $wout"
-asec=$(printf '%s\n' "$wout" | awk '/^Agentes/{f=1; next} /^Sesiones/{f=0} f')   # solo la sección Agentes
-contains "$asec" "agent-1" && contains "$asec" "Buscar usos de X" && contains "$asec" "agent-3" && ! contains "$asec" "agent-2" && pass "sdd-watch: agentes activos con descripción del agent-start previo; agent-2 (parado) fuera" || bad "sdd-watch agente activo: $asec"
-# el skill-start de /sdd-spec-auditor marca spec-auditor running (venía done): 5/7 done y esa es la etapa en curso
-contains "$wout" "5/7 done" && contains "$wout" "etapa  spec-auditor" && pass "sdd-watch: Pipeline N/7 y etapa running" || bad "sdd-watch pipeline: $wout"
-[ "$(jq -r '.stages["spec-auditor"].status' "$act/pipeline-state.json")" = "running" ] && pass "H10: el skill-start marcó spec-auditor running en el estado" || bad "H10 no marcó spec-auditor running"
-contains "$wout" "TASK-F1-003" && contains "$wout" "TASK-F1-009" && pass "sdd-watch: task del principal y del worktree" || bad "sdd-watch tasks: $wout"
-contains "$wout" "example-lead" && contains "$wout" "skipped:lead-absent" && pass "sdd-watch: handoffs (to, result)" || bad "sdd-watch handoffs: $wout"
-printf '# Questions — sdd-spec\n\n## Q-sdd-spec-001 [OPEN] skill=x context=y\nQuestion: ?\nAnswer:\n\n## Q-sdd-spec-002 [ANSWERED] skill=x context=y\nAnswer: A\n' > "$act/.sdd/questions-sdd-spec.md"
-wout=$(bash "$WATCH" --once --root "$act" 2>&1) || true
-contains "$wout" "questions-sdd-spec.md" && contains "$wout" "1 [OPEN]" && pass "sdd-watch: preguntas [OPEN] por fichero" || bad "sdd-watch preguntas: $wout"
-wout=$(bash "$WATCH" --once --root "$nogit" 2>&1) && contains "$wout" "sin actividad registrada" && contains "$wout" "sin pipeline-state.json" && pass "sdd-watch sin SDD: exit 0 y 'sin actividad registrada'" || bad "sdd-watch sin SDD: $wout"
-# rotación > 5 MB → activity.1.jsonl
-mv "$alog" "$tmp/alog.bak"
-awk 'BEGIN { for (i = 0; i < 100000; i++) print "{\"ts\":\"2026-01-01T00:00:00Z\",\"event\":\"stop\",\"session\":\"a1a1a1a1\"}" }' > "$alog"   # ~5,9 MB (sin `yes | head`: SIGPIPE + pipefail)
-h10 "" "$(ev "$act" a1a1a1a1-0001 Stop '')"
-[ -f "$act/.sdd/activity.1.jsonl" ] && [ "$(wc -l < "$alog" | tr -d ' ')" = 1 ] && pass "H10 rota activity.jsonl → activity.1.jsonl al superar 5 MB" || bad "H10 no rotó"
-check "H10 tras rotar: JSON válido" jq -e . "$alog"
-mv "$tmp/alog.bak" "$alog"; rm -f "$act/.sdd/activity.1.jsonl"
-# sin jq (PATH mínimo con node): hook y watch por node
-if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
-  h10 "PATH=$bin SDD_ROLE=sdd-plan" "$(ev "$act" d4d4d4d4-0004 SubagentStart ',"agent_id":"agent-4","agent_type":"Explore"')"
-  check "sin jq: H10 escribe la línea con node (role, stage, task)" \
-    jq -e -s 'last | .event == "subagent-start" and .agent_id == "agent-4" and .role == "sdd-plan" and .stage == "spec-auditor" and .task == "TASK-F1-003"' "$alog"
-  wout=$(PATH="$bin" bash "$WATCH" --once --root "$act" 2>&1) && contains "$wout" "3 activo(s)" && contains "$wout" "/sdd-spec-auditor --fix" && contains "$wout" "5/7 done" && pass "sin jq: sdd-watch --once por node" || bad "sin jq: sdd-watch: $wout"
-  wout2=$(bash "$WATCH" --once --root "$act" 2>&1) || true
-  # misma salida salvo la cabecera (hora) y las duraciones (la pasada con node tarda ~1 s más)
-  wnorm() { grep -v '^SDD watch' | sed -E 's/[0-9]+h [0-9]{2}m/DUR/g; s/[0-9]+m [0-9]{2}s/DUR/g; s/ [0-9]+s$/ DUR/; s/ [0-9]+s  / DUR  /g'; }
-  [ "$(printf '%s\n' "$wout" | wnorm)" = "$(printf '%s\n' "$wout2" | wnorm)" ] && pass "sdd-watch: salida idéntica con jq y con node (salvo hora/duraciones)" || bad "sdd-watch: jq y node difieren: $(diff <(printf '%s\n' "$wout" | wnorm) <(printf '%s\n' "$wout2" | wnorm) 2>&1 | head -5)"
-else
-  echo "skip sin jq (H10/watch): node no operativo con PATH mínimo"
-fi
-git -C "$act" worktree remove --force "$awt" >/dev/null 2>&1 || true
-
-
-# 16. subagentStatusLine del plugin: una fila JSON por subagente con tipo, descripción, tiempo y tokens
-sub_out=$(printf '{"columns":80,"tasks":[{"id":"t1","name":"general-purpose","status":"running","description":"Audit spec/domain (DOM)","startTime":%d,"tokenCount":31450,"contextWindowSize":200000}]}' "$(( $(date +%s) * 1000 - 65000 ))" | bash "$ROOT/scripts/sdd-subagent-status.sh")
-if printf '%s' "$sub_out" | jq -e 'select(.id=="t1") | .content | test("general-purpose · Audit spec/domain \\(DOM\\) · 1m[0-9]+s · 31k tok \\(15%\\)")' >/dev/null 2>&1; then pass "subagent-status: fila con tipo, descripción, tiempo y tokens"; else bad "subagent-status: $sub_out"; fi
-[ -z "$(printf '' | bash "$ROOT/scripts/sdd-subagent-status.sh")" ] && pass "subagent-status: sin entrada no imprime" || bad "subagent-status: imprime sin entrada"
-
-
-# 17. activity-log marca la etapa running al arrancar su skill (las skills escriben con Bash, H3 solo ve Write)
-act2="$(mktemp -d)"; ( cd "$act2" && git init -q . )
-printf '{"sddVersion":"t","hooksVersion":3,"currentStage":"requirements-engineer","stages":{"requirements-engineer":{"status":"done"}}}' > "$act2/pipeline-state.json"
-mkdir -p "$act2/.sdd"
-printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-spec-auditor","args":"audit"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
-if [ "$(jq -r '.stages["spec-auditor"].status' "$act2/pipeline-state.json")" = running ] && [ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ]; then pass "activity-log: marca la etapa running al arrancar la skill"; else bad "activity-log: etapa no marcada ($(jq -c .stages "$act2/pipeline-state.json"))"; fi
-[ "$(jq -r '.stages["requirements-engineer"].status' "$act2/pipeline-state.json")" = "done" ] && pass "activity-log: no toca otras etapas" || bad "activity-log: pisó otra etapa"
-printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-pipeline-status"}}' "$act2" | bash "$HOOKS/sdd-activity-log.sh"
-[ "$(jq -r .currentStage "$act2/pipeline-state.json")" = spec-auditor ] && pass "activity-log: una skill de solo lectura no cambia la etapa" || bad "activity-log: pipeline-status cambió la etapa"
-rm -rf "$act2"
-
-
-# ---------------------------------------------------------------- 18. skill-end, índice global (<config>/sdd) y barra global
-G_LINE="$ROOT/scripts/sdd-status-line-global.sh"
-RUNS_HOOK="$HOOKS/sdd-runs-line.sh"
-INSTALL_G="$ROOT/scripts/install-global-statusline.sh"
-for f in "$G_LINE" "$RUNS_HOOK" "$INSTALL_G"; do check "bash -n $(basename "$f")" bash -n "$f"; done
-
-gcfg="$tmp/cfg-global"; mkdir -p "$gcfg/sessions"
-runs="$gcfg/sdd/active-runs.json"
-grepo="$tmp/grepo"; git init -q "$grepo" && git -C "$grepo" commit -q --allow-empty -m init
-cp "$FIX/pipeline-state.impl-running.json" "$grepo/pipeline-state.json"   # 6/7 done (el skill-start de task-generator la vuelve a marcar running → 5/7)
-galog="$grepo/.sdd/activity.jsonl"
-# g10 ENV json → hook de actividad con el directorio de configuración aislado ($gcfg, no el ~/.claude real)
-g10() {
-  local envs="$1" json="$2"
-  # shellcheck disable=SC2086
-  printf '%s' "$json" | env CLAUDE_CONFIG_DIR="$gcfg" $envs bash "$ACT_HOOK" 2>/dev/null
-}
-# gstatus CWD → lo que pintaría la barra global en una sesión abierta en CWD
-gstatus() {
-  printf '{"cwd":"%s","workspace":{"current_dir":"%s"}}' "$1" "$1" | env CLAUDE_CONFIG_DIR="$gcfg" bash "$G_LINE" 2>/dev/null || true
-}
-runs_line() {
-  printf '{"session_id":"z","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"hola"}' "$nogit" \
-    | env CLAUDE_CONFIG_DIR="$gcfg" bash "$RUNS_HOOK" 2>/dev/null || true
-}
-count_ev() { jq -s --arg e "$1" '[ .[] | select(.event == $e) ] | length' "$galog" 2>/dev/null || echo -1; }
-
-# sin runs: silencio absoluto en la barra y en UserPromptSubmit
-out=$(gstatus "$nogit")
-[ -z "$out" ] && pass "barra global sin runs ni pipeline local: no imprime nada" || bad "barra global imprime sin runs: '$out'"
-out=$(runs_line)
-[ -z "$out" ] && pass "UserPromptSubmit sin índice: no imprime nada" || bad "UserPromptSubmit imprime sin runs: '$out'"
-
-# skill-start + 2 subagentes → entrada en el índice, con clave = root
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-pipeline:sdd-task-generator","args":"--fanout"}')"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 SubagentStart ',"agent_id":"g1","agent_type":"general-purpose"')"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 SubagentStart ',"agent_id":"g2","agent_type":"general-purpose"')"
-check "índice global: se crea <config>/sdd/active-runs.json" test -f "$runs"
-check "índice: clave root, project, skill sdd-* normalizada, state running, 2 agentes, sesión" \
-  jq -e --arg r "$grepo" '.runs[$r] | .root == $r and .project == "grepo" and .skill == "sdd-task-generator"
-     and .state == "running" and .agents == 2 and ((.sessions | index("b7b7b7b7")) != null)' "$runs"
-check "índice: nada de proyectos sin SDD" jq -e --arg r "$plain" '(.runs | has($r)) | not' "$runs"
-
-# la barra global ve el run aunque la sesión esté en OTRO directorio sin pipeline (el problema que resuelve)
-out=$(gstatus "$nogit")
-if contains "$out" "SDD ▸ grepo" && contains "$out" "5/7 done" && contains "$out" "task-generator" && contains "$out" "2 agentes"; then
-  pass "barra global: run remoto desde un cwd sin pipeline ($out)"
-else bad "barra global con run: '$out'"; fi
-out=$(runs_line)
-contains "$out" '"systemMessage"' && contains "$out" "SDD ▸ grepo 5/7 · task-generator" && contains "$out" "último evento" \
-  && pass "UserPromptSubmit: una línea de systemMessage por run" || bad "UserPromptSubmit con run: '$out'"
-
-# Stop de una sesión interactiva: NO cierra (Stop se dispara en cada turno)
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
-[ "$(count_ev skill-end)" = 0 ] && pass "skill-end: un Stop interactivo (sin entrada headless) no cierra" || bad "skill-end: el Stop interactivo cerró la skill"
-check "índice: la skill sigue en curso tras el Stop" jq -e --arg r "$grepo" '.runs[$r] | .skill == "sdd-task-generator" and .state == "running"' "$runs"
-
-# Stop de una sesión headless (`claude -p`): el registro <config>/sessions la marca con entrypoint sdk-cli
-printf '{"pid":424242,"sessionId":"b7b7b7b7-0007","cwd":"%s","kind":"interactive","entrypoint":"sdk-cli"}\n' "$grepo" > "$gcfg/sessions/424242.json"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
-[ "$(count_ev skill-end)" = 1 ] && pass "skill-end: el Stop headless (entrypoint sdk-cli) cierra la skill" || bad "skill-end: el Stop headless no cerró ($(count_ev skill-end))"
-check "skill-end: skill, seconds numérico y reason=headless-stop" \
-  jq -e -s '[ .[] | select(.event == "skill-end") ] | last | .skill == "sdd-pipeline:sdd-task-generator" and (.seconds | type) == "number" and .reason == "headless-stop"' "$galog"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 Stop '')"
-[ "$(count_ev skill-end)" = 1 ] && pass "skill-end: una sola vez, no uno por turno" || bad "skill-end repetido por turno ($(count_ev skill-end))"
-check "índice: skill a null y state idle tras el cierre (la entrada sigue)" \
-  jq -e --arg r "$grepo" '.runs[$r] | .skill == null and .started_at == null and .state == "idle" and .agents == 2' "$runs"
-out=$(gstatus "$nogit")
-contains "$out" "5/7 done" && ! contains "$out" "task-generator" && pass "barra global: sin skill en curso solo etapas y agentes ($out)" || bad "barra global tras el cierre: '$out'"
-
-# sin latido (>90s): skill en curso cuyo último evento es viejo
-jq --arg r "$grepo" '(now - 130 | todateiso8601) as $old
-  | .runs[$r] |= (.skill = "sdd-task-generator" | .started_at = $old | .last_seen = $old | .state = "running")' \
-  "$runs" > "$runs.t" && mv "$runs.t" "$runs"
-out=$(gstatus "$nogit")
-contains "$out" "sin latido (>90s)" && contains "$out" "2m 10s" && pass "barra global: · sin latido (>90s) ($out)" || bad "barra global sin latido: '$out'"
-# terminado
-jq --arg r "$grepo" '.runs[$r] |= (.skill = null | .started_at = null | .state = "done" | .last_seen = (now | todateiso8601))' \
-  "$runs" > "$runs.t" && mv "$runs.t" "$runs"
-out=$(gstatus "$nogit")
-contains "$out" "· terminado" && pass "barra global: · terminado ($out)" || bad "barra global terminado: '$out'"
-
-# watch-target manda sobre el índice
-mkdir -p "$tmp/otro-proj"; cp "$FIX/pipeline-state.pending.json" "$tmp/otro-proj/pipeline-state.json"
-printf '%s\n' "$tmp/otro-proj" > "$gcfg/sdd/watch-target"
-out=$(gstatus "$nogit")
-contains "$out" "SDD ▸ otro-proj" && pass "barra global: respeta <config>/sdd/watch-target ($out)" || bad "barra global watch-target: '$out'"
-rm -f "$gcfg/sdd/watch-target"
-# cwd con pipeline: gana el local sobre el índice
-out=$(gstatus "$tmp/otro-proj")
-contains "$out" "SDD ▸ otro-proj" && pass "barra global: el pipeline del cwd tiene prioridad sobre el índice remoto" || bad "barra global local: '$out'"
-
-# varias sesiones sobre el mismo root: la entrada solo desaparece con la última
-g10 "" "$(ev "$grepo" c8c8c8c8-0008 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-task-implementer"}')"
-g10 "" "$(ev "$grepo" d9d9d9d9-0009 SubagentStart ',"agent_id":"g3","agent_type":"Explore"')"
-g10 "" "$(ev "$grepo" c8c8c8c8-0008 SessionEnd ',"reason":"exit"')"
-check "índice: con otra sesión viva del mismo root la entrada se conserva" \
-  jq -e --arg r "$grepo" '.runs[$r] | .skill == null and ((.sessions | index("c8c8c8c8")) == null) and ((.sessions | index("d9d9d9d9")) != null)' "$runs"
-g10 "" "$(ev "$grepo" b7b7b7b7-0007 SessionEnd ',"reason":"exit"')"
-g10 "" "$(ev "$grepo" d9d9d9d9-0009 SessionEnd ',"reason":"clear"')"
-check "índice: la entrada se borra cuando no queda ninguna sesión viva del root" \
-  jq -e --arg r "$grepo" '(.runs | has($r)) | not' "$runs"
-out=$(gstatus "$nogit")
-[ -z "$out" ] && pass "barra global: silencio otra vez cuando el índice se vacía" || bad "barra global tras borrar el run: '$out'"
-check "skill-end: SessionEnd cierra siempre (la skill de c8c8c8c8)" \
-  jq -e -s '[ .[] | select(.event == "skill-end" and .reason == "session-end") ] | length >= 1' "$galog"
-
-# /sdd-watch: sdd-watch.sh --brief sin ruta recorre el índice; con una ruta suelta, ese proyecto
-g10 "" "$(ev "$grepo" e1e1e1e1-0001 PreToolUse ',"tool_name":"Skill","tool_input":{"skill":"sdd-task-generator"}')"
-wout=$(env CLAUDE_CONFIG_DIR="$gcfg" bash "$WATCH" --brief 2>/dev/null) || true
-contains "$wout" "grepo  5/7 done" && pass "sdd-watch --brief sin argumentos: una línea por run del índice" || bad "sdd-watch --brief global: '$wout'"
-wout=$(env CLAUDE_CONFIG_DIR="$gcfg" bash "$WATCH" --brief "$grepo" 2>/dev/null) || true
-contains "$wout" "grepo  5/7 done" && pass "sdd-watch --brief <ruta>: acepta la ruta suelta que pasa /sdd-watch" || bad "sdd-watch --brief ruta: '$wout'"
-
-# sin jq (PATH mínimo con node): índice y barra global por node
-ln -s "$(command -v tail)" "$bin/tail" 2>/dev/null || true
-if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
-  g10 "PATH=$bin" "$(ev "$grepo" f2f2f2f2-0002 SubagentStart ',"agent_id":"g9","agent_type":"Explore"')"
-  check "sin jq: el índice se actualiza con node" \
-    jq -e --arg r "$grepo" '.runs[$r] | .agents >= 1 and ((.sessions | index("f2f2f2f2")) != null)' "$runs"
-  out=$(printf '{"cwd":"%s"}' "$nogit" | env CLAUDE_CONFIG_DIR="$gcfg" PATH="$bin" bash "$G_LINE" 2>/dev/null || true)
-  contains "$out" "SDD ▸ grepo" && pass "sin jq: barra global por node ($out)" || bad "sin jq: barra global: '$out'"
-  out=$(printf '{"hook_event_name":"UserPromptSubmit"}' | env CLAUDE_CONFIG_DIR="$gcfg" PATH="$bin" bash "$RUNS_HOOK" 2>/dev/null || true)
-  contains "$out" "SDD ▸ grepo" && pass "sin jq: UserPromptSubmit por node" || bad "sin jq: UserPromptSubmit: '$out'"
-else
-  echo "skip sin jq (índice global): node no operativo con PATH mínimo"
-fi
-
-# install-global-statusline.sh: instala en el settings del usuario, avisa de una statusLine ajena y revierte
-icfg="$tmp/cfg-install"; mkdir -p "$icfg"
-env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" >/dev/null 2>&1 < /dev/null || true
-check "install-global-statusline: copia la barra a <config>/sdd/status-line.sh (ruta estable)" test -x "$icfg/sdd/status-line.sh"
-check "install-global-statusline: escribe statusLine con refreshInterval 5" \
-  jq -e '.statusLine.type == "command" and (.statusLine.command | endswith("sdd/status-line.sh")) and .statusLine.refreshInterval == 5' "$icfg/settings.json"
-printf '{"statusLine":{"type":"command","command":"bash otra.sh"},"env":{"A":"1"}}' > "$icfg/settings.json"
-env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" >/dev/null 2>&1 < /dev/null || true
-check "install-global-statusline: no pisa una statusLine ajena sin --force" \
-  jq -e '.statusLine.command == "bash otra.sh"' "$icfg/settings.json"
-env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" --force >/dev/null 2>&1 < /dev/null || true
-check "install-global-statusline: --force reemplaza y conserva el resto del settings" \
-  jq -e '(.statusLine.command | endswith("sdd/status-line.sh")) and .env.A == "1"' "$icfg/settings.json"
-check "install-global-statusline: deja copia de seguridad" sh -c "ls '$icfg'/settings.json.bak-* >/dev/null 2>&1"
-env CLAUDE_CONFIG_DIR="$icfg" bash "$INSTALL_G" --uninstall >/dev/null 2>&1 < /dev/null || true
-check "install-global-statusline: --uninstall quita statusLine y el script" \
-  sh -c "jq -e '(.statusLine // null) == null and .env.A == \"1\"' '$icfg/settings.json' >/dev/null && [ ! -f '$icfg/sdd/status-line.sh' ]"
+# ---------------------------------------------------------------- 15. H3 marca la etapa running al arrancar su skill
+# Las skills escriben a menudo con Bash (heredocs en `claude -p`), que PostToolUse Write no ve: el
+# arranque de la skill (PreToolUse Skill o /comando tecleado → UserPromptExpansion) marca su etapa.
+ss="$tmp/skillstart"; git init -q "$ss"
+ss_state() { printf '{"sddVersion":"t","hooksVersion":3,"currentStage":"requirements-engineer","stages":{"requirements-engineer":{"status":"done","summary":{"nextStep":"x"}},"test-planner":{"status":"done"}}}' > "$ss/pipeline-state.json"; }
+ss_state
+skill_start "" "$ss" "sdd-pipeline:sdd-spec-auditor"
+if [ "$(status_of spec-auditor "$ss/pipeline-state.json")" = running ] && [ "$(jq -r .currentStage "$ss/pipeline-state.json")" = spec-auditor ]; then
+  pass "H3 PreToolUse Skill sdd-pipeline:sdd-spec-auditor marca spec-auditor running"
+else bad "H3 skill-start: etapa no marcada ($(jq -c .stages "$ss/pipeline-state.json"))"; fi
+[ "$(status_of requirements-engineer "$ss/pipeline-state.json")" = "done" ] && [ "$(jq -r '.stages["requirements-engineer"].summary.nextStep' "$ss/pipeline-state.json")" = x ] \
+  && pass "H3 skill-start no toca otras etapas ni su summary" || bad "H3 skill-start pisó otra etapa"
+prompt_expand "" "$ss" "sdd-test-planner"
+[ "$(status_of test-planner "$ss/pipeline-state.json")" = running ] && [ "$(jq -r .currentStage "$ss/pipeline-state.json")" = test-planner ] \
+  && pass "H3 UserPromptExpansion /sdd-test-planner marca test-planner running (done → running: re-ejecución)" || bad "H3 UserPromptExpansion: $(jq -c .stages "$ss/pipeline-state.json")"
+prompt_expand "" "$ss" "/sdd-pipeline:sdd-acceptance"
+[ "$(status_of acceptance "$ss/pipeline-state.json")" = running ] && pass "H3 /sdd-pipeline:sdd-acceptance crea y marca la etapa acceptance" || bad "H3 sdd-acceptance no marcada"
+jq '.stages["plan-architect"] = {status: "error"}' "$ss/pipeline-state.json" > "$ss/x.json" && mv "$ss/x.json" "$ss/pipeline-state.json"
+skill_start "" "$ss" "sdd-plan-architect"
+[ "$(status_of plan-architect "$ss/pipeline-state.json")" = error ] && pass "H3 skill-start no toca una etapa en error" || bad "H3 skill-start cambió error"
+before=$(cat "$ss/pipeline-state.json")
+skill_start "" "$ss" "sdd-pipeline:sdd-pipeline-status"
+prompt_expand "" "$ss" "compact"
+skill_start "" "$ss" "other-plugin:sdd-spec-auditor-extra"
+[ "$(cat "$ss/pipeline-state.json")" = "$before" ] && pass "H3 skill desconocida o de solo lectura: no-op (ni lastUpdated)" || bad "H3 skill desconocida cambió el estado"
+check "H3 skill-start no deja .lock" no_lock "$ss/pipeline-state.json"
+ssn="$tmp/skillstart-nostate"; git init -q "$ssn"
+rc=0; skill_start "" "$ssn" "sdd-pipeline:sdd-spec-auditor" || rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$ssn/pipeline-state.json" ] && [ ! -d "$ssn/.sdd" ] && pass "H3 skill-start sin pipeline-state.json: no-op, exit 0, no crea nada" || bad "H3 skill-start sin estado (rc=$rc)"
+printf 'not json' | bash "$HOOKS/sdd-pipeline-state-updater.sh" >/dev/null 2>&1 && pass "H3 entrada rota: exit 0" || bad "H3 entrada rota: exit != 0"
+printf '' | bash "$HOOKS/sdd-pipeline-state-updater.sh" >/dev/null 2>&1 && pass "H3 entrada vacía: exit 0" || bad "H3 entrada vacía: exit != 0"
+# desde un worktree: la etapa se marca en el estado del checkout principal
+reset_state pipeline-state.pending.json
+skill_start "" "$wt" "sdd-pipeline:sdd-task-generator"
+[ "$(status_of task-generator "$repo/pipeline-state.json")" = running ] && [ ! -e "$wt/pipeline-state.json" ] && pass "H3 skill-start desde worktree: marca en el principal" || bad "H3 skill-start desde worktree"
+unset -f ss_state
 
 # ---------------------------------------------------------------- 19. SDD Stack Profile (CLAUDE.md): app en web/ y Minitest en la raíz
 # prof DIR KEY → sdd_profile_get con PROJECT_DIR=STATE_ROOT=DIR
@@ -623,16 +356,6 @@ h3 "" "$rroot" "$rroot/test/TEST-PLAN.md"
 h3 "" "$rroot" "$rroot/test/models/x_test.rb"
 [ "$(status_of task-implementer "$rroot/pipeline-state.json")" = running ] && pass "H3 perfil raíz: test/models/x_test.rb → task-implementer" || bad "H3 perfil raíz no mapeó test/models/x_test.rb"
 check "H3 perfil: no deja .lock" no_lock "$rroot/pipeline-state.json"
-
-# H9: trace-map registra rutas del perfil y no los documentos de test-planner
-mkdir -p "$rweb/.sdd"; cp "$FIX/current-task.json" "$rweb/.sdd/current-task.json"
-h9 "" "$rweb" "$rweb/web/app/models/task.rb"
-h9 "" "$rweb" "$rweb/README.md"
-check "H9 perfil web: registra web/app/models/task.rb (y no README.md)" jq -e '[.mappings[].file] == ["web/app/models/task.rb"]' "$rweb/.sdd/trace-map.json"
-mkdir -p "$rroot/.sdd"; cp "$FIX/current-task.json" "$rroot/.sdd/current-task.json"
-h9 "" "$rroot" "$rroot/test/TEST-PLAN.md"
-h9 "" "$rroot" "$rroot/test/models/x_test.rb"
-check "H9 perfil raíz: registra test/models/x_test.rb, no test/TEST-PLAN.md" jq -e '[.mappings[].file] == ["test/models/x_test.rb"]' "$rroot/.sdd/trace-map.json"
 
 # H2: task-implementer running
 cp "$FIX/pipeline-state.impl-running.json" "$rweb/pipeline-state.json"

@@ -1,4 +1,4 @@
-# Extended ID Patterns for Dashboard
+# Extended ID Patterns for the Traceability Graph
 
 Extended regex patterns for extracting artifact IDs from real SDD projects. Superset of `traceability-check/references/traceability-patterns.md` — covers compound IDs, named IDs, and range expansions.
 
@@ -45,7 +45,7 @@ Single regex to match **any** ID reference in running text:
 
 ## Range Expansion
 
-Some documents use range notation. The dashboard must expand these:
+Some documents use range notation. `scripts/sdd-graph.py` expands these:
 
 | Pattern | Example | Expansion |
 |---------|---------|-----------|

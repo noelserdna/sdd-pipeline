@@ -1,6 +1,6 @@
 # Traceability Graph JSON Schema
 
-Schema for `dashboard/traceability-graph.json` — the structured representation of all SDD artifacts, code references, test references, classifications, and their relationships.
+Schema for `dashboard/traceability-graph.json`, written by `scripts/sdd-graph.py` and read by the MCP server, `hooks/sdd-session-start.sh` and `hooks/sdd-augment-hook.js` — the structured representation of all SDD artifacts, code references, test references, classifications, and their relationships.
 
 ## Full Schema
 
@@ -332,7 +332,7 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `nextStep` | string | Yes | Recommended next action. |
 | `generatedAt` | string (ISO-8601) | Yes | When this summary was generated. |
 
-**Lifecycle**: `null`/absent when stage never completed. Preserved (rendered dimmed) when stage is `stale`. Overwritten on re-run.
+**Lifecycle**: `null`/absent when stage never completed. Preserved when stage is `stale`. Overwritten on re-run.
 
 ### artifacts[]
 
@@ -355,11 +355,11 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `businessDomain` | string | Yes | Business domain inferred from REQ prefix (see `id-patterns-extended.md` Classification Taxonomy) |
+| `businessDomain` | string | Yes | Business domain inferred from REQ prefix (see `id-patterns.md` Classification Taxonomy) |
 | `technicalLayer` | string | Yes | Technical layer inferred from FASE mapping: `"Infrastructure"`, `"Backend"`, `"Frontend"`, `"Integration/Deployment"`, `"Unknown"` |
 | `functionalCategory` | string | Yes | Functional category inferred from section headers: `"Functional"`, `"Non-Functional"`, `"Security"`, `"Data"`, `"Integration"` |
 
-**Applies to**: REQ artifacts only. Other artifact types inherit classification from their linked REQs (not stored in JSON — resolved at render time by the HTML dashboard).
+**Applies to**: REQ artifacts only. Other artifact types inherit classification from their linked REQs (not stored in JSON — consumers resolve it through the relationships).
 
 ### artifacts[].codeRefs[]
 
@@ -370,17 +370,16 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 | `symbol` | string | Yes | Nearest symbol name (function, class, const, etc.) or `"filename:line"` fallback |
 | `symbolType` | string | Yes | Symbol type: `"function"`, `"class"`, `"const"`, `"interface"`, `"type"`, `"method"`, `"variable"`, `"file"` (file-level ref), `"range"` (llm-verified line range), `"unknown"` |
 | `refIds` | array of strings | Yes | Artifact IDs referenced in the Ref comment (e.g., `["UC-001", "INV-EXT-005"]`) |
-| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"code-index"` (from codeIntelligence symbol mapping), `"blame-inferred"` (commit-inferred refs carried to the current path of a renamed file), `"hook-captured"` (captured in real-time by SDD hooks during development), `"llm-verified"` (a `covered` verdict of `sdd-gap-detector --semantic`, see below), `"gap-detected"` (detected as missing coverage by gap analysis) |
-| `confidence` | number | No | Confidence score 0.0-1.0 for this reference. `1.0` for `origin: "direct"` (`// Refs:` comments), `0.95` for `"hook-captured"`, varies for `"llm-verified"`, `0.6-0.9` for `"blame-inferred"` and `"commit-inferred"` (based on commit recency), `0.5` for `"task-inferred"`. Default: `1.0` |
+| `origin` | string | No | Source of this reference: `"direct"` (default, from `// Refs:` comment), `"commit-inferred"` (from commit Refs: trailer), `"task-inferred"` (transitively from Task: trailer), `"manual-override"` (from `.sdd/overrides.json`), `"blame-inferred"` (commit-inferred refs carried to the current path of a renamed file), `"llm-verified"` (a `covered` verdict of `sdd-gap-detector --semantic`, see below), `"gap-detected"` (detected as missing coverage by gap analysis) |
+| `confidence` | number | No | Confidence score 0.0-1.0 for this reference. `1.0` for `origin: "direct"` (`// Refs:` comments), varies for `"llm-verified"`, `0.6-0.9` for `"blame-inferred"` and `"commit-inferred"` (based on commit recency), `0.5` for `"task-inferred"`. Default: `1.0` |
 | `inferredFrom` | object or null | No | Inference provenance when origin is not `"direct"`: `{ "commitSha": "abc1234", "taskId": "TASK-F1-003", "trailerRefs": ["UC-001"] }`. Default: `null` |
 | `lines` | [number, number] | No | `llm-verified` only: `[start, end]` of the evidence range (`line` = start) |
 | `judge` | string | No | `llm-verified` only: `"jev"` or `"llm"`, the gap detector's `decidedBy` |
 
-**llm-verified ingestion.** `generate.py` reads `.sdd/gap-analysis.json` → `semantic.requirements[]` (written by `sdd-gap-detector --semantic`, schema in its `references/output-formats.md` §1). Each entry with `status: "covered"`, `decidedBy` `jev` or `llm`, a REQ id and `evidence` of the form `path:start-end` (or `path:line`) becomes one codeRef on that REQ: `{ file, line, lines, symbol: "file:start-end", symbolType: "range", origin: "llm-verified", confidence, judge }` (`confidence` from the entry, default 0.85). Deduplication by `(file, refId)` keeps `direct` and `hook-captured` refs first, then `llm-verified`, then the commit/task/blame inferences. The refs count in `traceabilityCoverage.reqsWithCode` and in `codeStats.llmVerifiedRefs`. A missing file or section is ignored silently; malformed JSON prints a warning on stderr and the graph is built without them.
+**llm-verified ingestion.** `sdd-graph.py` reads `.sdd/gap-analysis.json` → `semantic.requirements[]` (written by `sdd-gap-detector --semantic`, schema in its `references/output-formats.md` §1). Each entry with `status: "covered"`, `decidedBy` `jev` or `llm`, a REQ id and `evidence` of the form `path:start-end` (or `path:line`) becomes one codeRef on that REQ: `{ file, line, lines, symbol: "file:start-end", symbolType: "range", origin: "llm-verified", confidence, judge }` (`confidence` from the entry, default 0.85). Deduplication by `(file, refId)` keeps `direct` refs first, then `llm-verified`, then the commit/task/blame inferences. The refs count in `traceabilityCoverage.reqsWithCode` and in `codeStats.llmVerifiedRefs`. A missing file or section is ignored silently; malformed JSON prints a warning on stderr and the graph is built without them.
 
 **Origin states and visual mapping**:
 - **linked** (`origin: "direct"`): `// Refs:` comment in code — green solid badge
-- **hook-captured** (`origin: "hook-captured"`): Captured in real-time by SDD hooks — green solid badge (near-direct)
 - **llm-verified** (`origin: "llm-verified"`): Verified by LLM analysis — blue solid badge (confidence varies)
 - **blame-inferred** (`origin: "blame-inferred"`): Inferred from git blame authorship — yellow dashed badge
 - **inferred** (`origin: "commit-inferred"`): Commit has Refs: + Task: trailers — yellow dashed badge
@@ -390,7 +389,7 @@ Optional array for lateral pipeline skills (`security-auditor`, `req-change`, `t
 
 **Origin confidence hierarchy** (used for prioritization when multiple origins exist for the same symbol):
 ```
-direct (1.0) > hook-captured (0.95) > llm-verified (varies) > blame-inferred (0.6-0.9) > commit-inferred (0.6-0.9) > task-inferred (0.5)
+direct (1.0) > llm-verified (varies) > blame-inferred (0.6-0.9) > commit-inferred (0.6-0.9) > task-inferred (0.5)
 ```
 When a symbol has multiple codeRefs with different origins, the highest-confidence origin determines the displayed badge. The `confidence` field enables consumers to filter low-confidence refs or set thresholds for traceability reporting.
 
@@ -487,7 +486,7 @@ When a symbol has multiple codeRefs with different origins, the highest-confiden
 
 Base coverage object: `{ "count": N, "total": M, "percentage": P }`
 
-Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, "functionalTotal": M, "functionalPercentage": P }` — metrics computed over functional REQs only. NFR/constraint REQs are excluded since they don't produce UCs, tasks, or code by design. The HTML dashboard uses `functionalPercentage` as the primary display and falls back to `percentage` for backwards compatibility.
+Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, "functionalTotal": M, "functionalPercentage": P }` — metrics computed over functional REQs only. NFR/constraint REQs are excluded since they don't produce UCs, tasks, or code by design. Consumers use `functionalPercentage` as the primary figure and fall back to `percentage` for backwards compatibility.
 
 ### codeStats
 
@@ -498,7 +497,6 @@ Extended coverage object (coverage+): base fields plus `{ "functionalCount": N, 
 | `symbolsWithRefs` | number | Symbols that have at least one SDD artifact reference |
 | `directRefs` | number | Total code refs from `// Refs:` comments (origin: direct) |
 | `inferredRefs` | number | Total code refs inferred from commits (origin: commit-inferred, task-inferred or blame-inferred) |
-| `hookCapturedRefs` | number | File-level refs merged from `.sdd/trace-map.json` (origin: hook-captured) |
 | `llmVerifiedRefs` | number | Line-range refs from `.sdd/gap-analysis.json` `semantic.requirements[]` (origin: llm-verified) |
 | `manualOverrides` | number | Total overrides applied from `.sdd/overrides.json` |
 | `orphanFiles` | string[] | Code files without a reference of any origin |
@@ -567,7 +565,7 @@ Array of relative file paths (forward slashes) for source files that have zero t
 
 ### adoption
 
-Top-level block for adoption data (reverse-engineer, reconcile, import reports), written by the dashboard skill to `dashboard/adoption-data.json`. Defaults to `{ "present": false }` when no adoption data exists.
+Top-level block for adoption data (reverse-engineer, reconcile, import reports), read from `dashboard/adoption-data.json`. Defaults to `{ "present": false }` when no adoption data exists.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -641,13 +639,13 @@ All v2 fields remain unchanged. v3 is a backward-compatible extension. When no a
 | v3 Field | v4 Change |
 |----------|-----------|
 | `$schema: "traceability-graph-v3"` | Changed to `"traceability-graph-v4"` |
-| `codeIntelligence` | **New**: top-level code intelligence block from `/sdd-code-index` |
+| `codeIntelligence` | **New**: top-level code intelligence block from `/sdd-code-index` (retired in plugin 5.0: no longer written or read) |
 | `codeRefs[].inferred` | **New**: boolean flag for transitively inferred refs |
 | `codeRefs[].confidence` | **New**: 0.0-1.0 confidence for inferred refs |
 | `statistics.codeStats.symbolsWithInferredRefs` | **New**: count of symbols with inferred refs |
 | Relationship type `inferred-implements` | **New**: transitively inferred code→artifact link |
 
-All v3 fields remain unchanged. v4 is a backward-compatible extension. When no code index has been run, `codeIntelligence` is absent (not null).
+All v3 fields remain unchanged. v4 is a backward-compatible extension. 
 
 ## Migration from v4
 
@@ -679,76 +677,14 @@ All v5 fields remain unchanged. v6 is a backward-compatible extension. The `orig
 |----------|-----------|
 | `$schema: "traceability-graph-v6"` | Changed to `"traceability-graph-v7"` |
 | `codeRefs[].confidence` | **New**: confidence score 0.0-1.0 for data reliability |
-| `codeRefs[].origin` | **Extended**: added `"blame-inferred"`, `"hook-captured"`, `"llm-verified"`, `"gap-detected"` alongside existing values |
+| `codeRefs[].origin` | **Extended**: added `"blame-inferred"`, `"hook-captured"` (retired in plugin 5.0 with the trace-map hook), `"llm-verified"`, `"gap-detected"` alongside existing values |
 | `testRefs[].lastRunStatus` | **New**: last test execution result (`"pass"`, `"fail"`, `"skip"`, `"never-run"`, null) |
 | `testRefs[].lastRunDate` | **New**: ISO-8601 timestamp of last test execution |
 | `statistics.gapAnalysis` | **New**: spec-to-code gap analysis (endpoints implemented/missing/orphan/mismatch) |
 | `statistics.testResults` | **New**: aggregated test execution results with BDD breakdown |
 | `statistics.codeOrphans` | **New**: list of source files with zero traceability |
 
-All v6 fields remain unchanged. v7 is a **backward-compatible** extension -- all new fields are optional or nullable. Consumers built for v6 will continue to work without modification. The HTML dashboard checks for field existence before using any v7 field (`if (ref.confidence !== undefined)`, `if (statistics.gapAnalysis)`, etc.).
-
-### codeIntelligence (v4)
-
-Top-level block added by `/sdd-code-index`. Absent by default.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `indexed` | boolean | Whether code has been indexed |
-| `indexedAt` | string (ISO-8601) | When the index was last generated |
-| `engine` | string | Analysis engine: `"gitnexus"` or `"regex-lite"` |
-| `engineVersion` | string | Engine version |
-| `symbols` | array | Symbol table (see below) |
-| `callGraph` | array | Call relationships between symbols |
-| `processes` | array | Detected execution flows |
-| `stats` | object | Aggregate statistics |
-
-### codeIntelligence.symbols[]
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique symbol ID (e.g., `"sym-validate-user-a3f2"`) |
-| `name` | string | Symbol name |
-| `type` | string | `"Function"`, `"Class"`, `"Method"`, `"Const"`, `"Interface"` |
-| `filePath` | string | Relative file path |
-| `startLine` | number | Start line of definition |
-| `endLine` | number | End line of definition |
-| `isExported` | boolean | Whether the symbol is exported/public |
-| `artifactRefs` | array of strings | Direct Refs: annotation artifact IDs |
-| `inferredRefs` | array of strings | Transitively inferred artifact IDs |
-| `callers` | array of strings | Symbol names that call this symbol |
-| `callees` | array of strings | Symbol names called by this symbol |
-| `processes` | array of strings | Execution flow names this symbol participates in |
-| `community` | string | Community/cluster name from graph analysis |
-
-### codeIntelligence.callGraph[]
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `from` | string | Caller symbol name |
-| `to` | string | Callee symbol name |
-| `confidence` | number | Edge confidence 0.0-1.0 |
-| `type` | string | `"CALLS"`, `"IMPORTS"`, `"INHERITS"` |
-
-### codeIntelligence.processes[]
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Process/flow name |
-| `steps` | array of strings | Ordered symbol names in the flow |
-| `entryPoint` | string | First symbol in the flow |
-| `artifactRefs` | array of strings | SDD artifacts this flow implements |
-
-### codeIntelligence.stats
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `totalSymbols` | number | Total symbols indexed |
-| `symbolsWithRefs` | number | Symbols with direct Refs: annotations |
-| `symbolsWithInferredRefs` | number | Symbols with transitive inferred refs |
-| `uncoveredSymbols` | number | Symbols with no refs (direct or inferred) |
-| `totalProcesses` | number | Total execution flows detected |
-| `processesWithRefs` | number | Flows linked to SDD artifacts |
+All v6 fields remain unchanged. v7 is a **backward-compatible** extension -- all new fields are optional or nullable. Consumers built for v6 will continue to work without modification. Consumers check for field existence before using any v7 field (`if (ref.confidence !== undefined)`, `if (statistics.gapAnalysis)`, etc.).
 
 ## Notes
 
