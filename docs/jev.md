@@ -17,6 +17,7 @@ El texto de specs y de código viaja a `api.typesafe.ai`, así que no conviene a
 | Comando | Qué hace | Quién lo usa |
 |---|---|---|
 | `req-lint [REQUIREMENTS.md]` | Por requisito: término vago, compuesto, no verificable, fuga de implementación y patrón EARS (las restricciones `REQ-C-*` no pasan por EARS ni por fuga de implementación) | `sdd-requirements-engineer` Mode 2 |
+| `needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md]` | Cobertura de necesidades del cliente. Primero la comprobación mecánica, sin red (con `--mechanical` se queda ahí: exit 1 si hay errores). Después, con Jev, dos pasadas de Choice: por necesidad sobre los IDs de requisito más `none`, y por cada requisito que ninguna necesidad eligió, sobre las necesidades más `none` | `sdd-requirements-engineer` Mode 1 y puerta 1 (`references/approval.md`) |
 | `judge --questions scripts/jev/spec-triage.json --items hits.jsonl` | Triaje de los hits de los patrones de detección: CAT-01/02/03/04/06/07/09 o `not_a_defect` | `sdd-spec-auditor` Fase 1 |
 | `judge --questions scripts/jev/coverage.json --items pares.jsonl` | ¿Este trozo de código implementa este requisito? (`implements`, `partial`, `related`) | `sdd-gap-detector --semantic` |
 | `chunks FICHERO…` | Parte el código en fronteras de nivel superior (≤24k chars) para `judge` | `sdd-gap-detector --semantic` |
@@ -33,6 +34,19 @@ Los conjuntos de preguntas están en `scripts/jev/*.json`. Si cambias una pregun
 | Cribado de código (hooks, scripts, servidor, dashboard) | 171 trozos | 3,4 s | 296k | Cero marcas de inyección, coste en ruta caliente o portabilidad. Las marcas de "error silenciado" eran en su mayoría fail-open intencionado. |
 | Requisitos con defectos sembrados (8 limpios de `examples/todo-app` + 12 mutantes) | 20 requisitos | 0,75 s | 14k | 0 falsos positivos en los limpios. Recall del 100 % en vago, compuesto, no verificable y fuga de implementación. |
 | `req-lint` sobre el REQUIREMENTS.md real del ejemplo | 10 requisitos | 0,42 s | 7k | Marcó `REQ-F-006` como compuesto (p = 0,92). Es correcto: tiene dos cláusulas WHEN independientes (persistir y cargar). |
+
+### Cobertura de necesidades (`needs`)
+
+La comprobación que decide es mecánica: toda necesidad `N-NNN` de `CUSTOMER-NEEDS.md` está citada en algún `Needs:` o está `out-of-scope` con su decisión, todo `REQ-F`/`REQ-NF` activo cita una necesidad (los `REQ-C` de equipo pueden llevar `Needs: —`), todo requisito tiene `Verification: test | demo | measurement | inspection`, y se avisa si más del 60 % son Must sin la lista Must confirmada. `parseRequirements` y `checkNeedCoverage` están exportados para que otras herramientas (`sdd lint --needs`) usen el mismo parser.
+
+Jev solo sugiere. Las opciones de la Choice dependen del documento, así que las construye el código: la clave de cada opción es el ID del requisito y su criterio es el enunciado. Las instrucciones estáticas y el umbral de confianza (0,5) están en `scripts/jev/need-coverage.json`. La primera prueba, con una sola pasada, marcaba como gold plating requisitos legítimos: una necesidad suele repartirse entre varios requisitos (ver y filtrar la lista) y una Choice elige solo uno. Por eso hay una segunda pasada inversa, solo para los requisitos que nadie eligió.
+
+Resultado sobre `examples/todo-app` (6 necesidades, una fuera de alcance; 10 requisitos), `jev-1.13.0`, 8,5k tokens:
+
+| Pasada | Resultado |
+|---|---|
+| Por necesidad | 4 de 5 con confianza ≥ 0,84. `N-003` ("marcar hechas y tirar las añadidas por error") queda en 0,49 entre `REQ-F-004` y `REQ-F-003`: la necesidad es compuesta y los dos la cubren |
+| Inversa | `REQ-F-002` → `N-002` (1,00) y `REQ-F-003` → `N-003` (0,77), bien. `REQ-NF-002` (cobertura de tests del 90 %) → `none` (0,89): candidato a gold plating. Es discutible, porque la cita "no rompáis lo que ya funciona" lo justifica solo de forma indirecta. Es justo la conversación que la herramienta debe provocar |
 
 ### Límites observados
 

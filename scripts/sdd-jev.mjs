@@ -21,6 +21,14 @@
 //       Parses `### REQ-…` blocks and screens each statement: vague terms, compound behaviour, unverifiable
 //       wording, implementation leak and EARS pattern (question set: scripts/jev/req-lint.json). REQ-C-* constraints
 //       skip the EARS and implementation-leak questions. Prints the flagged requirements; --json prints the JSON.
+//   node sdd-jev.mjs needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md] [--mechanical] [--out FILE.json] [--json]
+//       Need coverage. Always runs the mechanical check first (no network): every need covered by a `Needs:` line or
+//       out-of-scope with a decision, every REQ-F/REQ-NF traced to a need, a verification method per requirement,
+//       Must ratio. Then, with Jev on, one Choice per need over the requirement IDs plus "none" (instructions and
+//       thresholds: scripts/jev/need-coverage.json) and prints needs whose top choice is none, low-confidence or not
+//       declared in `Needs:`; then one reverse Choice (over the need IDs plus "none") for each requirement no need
+//       picked as top, and prints it as a gold-plating candidate when that answer is none or low-confidence.
+//       --mechanical skips Jev and exits 1 when the check has errors; without it, exit 3 means Jev is off.
 //   node sdd-jev.mjs chunks [--max-chars N] FILE...
 //       Splits source files at top-level boundaries into JSONL items {id, path, start, end, code} (default 24000
 //       chars, well under Jev's 32k-token state budget) for `judge`.
@@ -135,24 +143,138 @@ function emit(result, outFile) {
   } else process.stdout.write(json + "\n");
 }
 
-// ── req-lint ─────────────────────────────────────────────────────────────────
+// ── requirements / needs parsing ─────────────────────────────────────────────
+// Field lines look like `- **Name:** value`; Spanish labels are accepted as aliases.
+const FIELD = /^\s*[-*]?\s*\*\*([^*]+?)\s*:?\s*\*\*\s*:?\s*(.*)$/;
+const REQ_FIELDS = {
+  statement: "statement", enunciado: "statement", requirement: "statement", requisito: "statement",
+  priority: "priority", prioridad: "priority",
+  needs: "needs", necesidades: "needs",
+  verification: "verification", "verificación": "verification", verificacion: "verification",
+  status: "status", estado: "status",
+  "examples reviewed by": "examplesReviewedBy", "ejemplos revisados por": "examplesReviewedBy",
+};
+export const VERIFICATION_METHODS = ["test", "demo", "measurement", "inspection"];
+const NEED_ID = /\bN-\d{3,}\b/g;
+
+function normPriority(v) {
+  const t = (v || "").toLowerCase();
+  if (/^(must|debe|imprescindible)/.test(t)) return "Must";
+  if (/^(should|deber[ií]a|importante)/.test(t)) return "Should";
+  if (/^(nice|could|could have|deseable|opcional)/.test(t)) return "Nice";
+  return v ? v.trim() : null;
+}
+
+// Returns one object per `### REQ-…` block: {id, type (F|NF|C|other), title, statement, criteria[], priority
+// (Must|Should|Nice|raw|null), needs (array of N-ids, [] for "—", null when the field is absent), verification
+// (one of VERIFICATION_METHODS, the raw text when unknown, null when absent), deprecated, examplesReviewedBy}.
 export function parseRequirements(text) {
   const reqs = [];
   let cur = null;
   for (const line of text.split("\n")) {
     const h = line.match(/^#{2,4}\s+(REQ-[A-Z]+(?:-[A-Z0-9]+)*-\d+)\s*[:—-]?\s*(.*)$/);
-    if (h) { cur = { id: h[1], title: h[2].trim(), statement: "", criteria: [] }; reqs.push(cur); continue; }
+    if (h) {
+      const type = (h[1].match(/^REQ-(F|NF|C)-\d+$/) || [])[1] || "other";
+      cur = { id: h[1], type, title: h[2].trim(), statement: "", criteria: [], priority: null, needs: null,
+        verification: null, deprecated: /\[deprecated\]|\(deprecated\)|\[obsoleto\]|^~~/i.test(h[2]), examplesReviewedBy: null };
+      reqs.push(cur); continue;
+    }
     if (!cur) continue;
     if (/^#{1,3}\s/.test(line)) { cur = null; continue; }
-    const s = line.match(/^\s*[-*]?\s*\*\*(Statement|Enunciado|Requirement|Requisito)\s*:?\*\*\s*:?\s*(.+)$/i);
-    if (s) { cur.statement = s[2].trim(); continue; }
     const g = line.match(/^\s{2,}[-*]\s+(GIVEN|DADO|Given|Dado)\b(.+)$/);
-    if (g) cur.criteria.push((g[1] + g[2]).trim());
+    if (g) { cur.criteria.push((g[1] + g[2]).trim()); continue; }
+    const f = line.match(FIELD);
+    if (!f) continue;
+    const key = REQ_FIELDS[f[1].trim().toLowerCase()];
+    if (key !== "statement" && /^\s{2,}/.test(line)) continue; // nested bullets are not requirement fields
+    const val = f[2].trim();
+    if (key === "statement") cur.statement = val;
+    else if (key === "priority") cur.priority = normPriority(val);
+    else if (key === "needs") cur.needs = val.match(NEED_ID) || [];
+    else if (key === "verification") {
+      const m = val.toLowerCase().match(/^[a-z]+/);
+      cur.verification = m && VERIFICATION_METHODS.includes(m[0]) ? m[0] : val || null;
+    } else if (key === "status") { if (/deprecated|obsoleto/i.test(val)) cur.deprecated = true; }
+    else if (key === "examplesReviewedBy") cur.examplesReviewedBy = val || null;
   }
   for (const r of reqs) if (!r.statement) r.statement = r.title;
   return reqs;
 }
 
+const NEED_FIELDS = { quote: "quote", cita: "quote", who: "who", "quién": "who", quien: "who",
+  when: "when", "cuándo": "when", cuando: "when", status: "status", estado: "status" };
+
+// Parses requirements/CUSTOMER-NEEDS.md: `### N-NNN: title` blocks with Quote, Who, When and Status fields.
+// status is captured | confirmed | out-of-scope (or the raw text); decision is the text after "decision:".
+export function parseNeeds(text) {
+  const needs = [];
+  let cur = null;
+  for (const line of text.split("\n")) {
+    const h = line.match(/^#{2,4}\s+(N-\d{3,})\s*[:—-]?\s*(.*)$/);
+    if (h) { cur = { id: h[1], title: h[2].trim(), quote: "", who: null, when: null, status: null, decision: null }; needs.push(cur); continue; }
+    if (!cur) continue;
+    if (/^#{1,3}\s/.test(line)) { cur = null; continue; }
+    const f = line.match(FIELD);
+    if (!f) continue;
+    const key = NEED_FIELDS[f[1].trim().toLowerCase()];
+    const val = f[2].trim();
+    if (key === "quote") cur.quote = val.replace(/^["“«]|["”»]$/g, "").trim();
+    else if (key === "status") {
+      const t = val.toLowerCase();
+      cur.status = /^out[- ]of[- ]scope|^fuera de alcance/.test(t) ? "out-of-scope"
+        : /^confirm/.test(t) ? "confirmed" : /^captur/.test(t) ? "captured" : val || null;
+      const d = val.match(/(?:decision|decisión)\s*:\s*([^)]*)/i);
+      if (d && d[1].trim()) cur.decision = d[1].trim();
+    } else if (key) cur[key] = val || null;
+  }
+  return needs;
+}
+
+// Mechanical need coverage: the check that decides (Jev only suggests). errors block approval; warnings are
+// shown at the gate. Deprecated requirements are ignored. REQ-C may carry `Needs: —` (team/architecture source).
+export function checkNeedCoverage(needs, reqs, reqText = "") {
+  const errors = [], warnings = [];
+  const byId = new Map(needs.map((n) => [n.id, n]));
+  const active = reqs.filter((r) => !r.deprecated);
+  const fnf = active.filter((r) => r.type === "F" || r.type === "NF");
+  const covered = new Map();
+  for (const r of active) for (const n of r.needs || []) {
+    if (!byId.has(n)) errors.push({ code: "unknown-need", id: r.id, need: n, msg: `${r.id} cites ${n}, which is not in CUSTOMER-NEEDS.md` });
+    else if (byId.get(n).status === "out-of-scope") errors.push({ code: "out-of-scope-need", id: r.id, need: n, msg: `${r.id} cites ${n}, which is out-of-scope` });
+    else covered.set(n, [...(covered.get(n) || []), r.id]);
+  }
+  const seen = new Set();
+  for (const n of needs) {
+    if (seen.has(n.id)) errors.push({ code: "duplicate-need", id: n.id, msg: `${n.id} is defined twice` });
+    seen.add(n.id);
+    if (!n.quote) errors.push({ code: "no-quote", id: n.id, msg: `${n.id} has no Quote` });
+    if (n.status === "out-of-scope") {
+      if (!n.decision) errors.push({ code: "no-decision", id: n.id, msg: `${n.id} is out-of-scope without "decision: …"` });
+    } else if (!covered.has(n.id)) errors.push({ code: "uncovered-need", id: n.id, msg: `${n.id} is covered by no requirement and not out-of-scope` });
+    if (n.status !== "confirmed" && n.status !== "out-of-scope")
+      warnings.push({ code: "unconfirmed-need", id: n.id, msg: `${n.id} status is ${n.status || "missing"}; read it back to the customer` });
+  }
+  for (const r of fnf) {
+    if (r.needs === null) errors.push({ code: "no-needs-field", id: r.id, msg: `${r.id} has no Needs: line` });
+    else if (!r.needs.length) errors.push({ code: "gold-plating", id: r.id, msg: `${r.id} traces to no customer need (only REQ-C may use "Needs: —")` });
+  }
+  for (const r of active) {
+    if (!r.verification) errors.push({ code: "no-verification", id: r.id, msg: `${r.id} has no Verification: line` });
+    else if (!VERIFICATION_METHODS.includes(r.verification)) errors.push({ code: "bad-verification", id: r.id, msg: `${r.id} Verification "${r.verification}" is not ${VERIFICATION_METHODS.join(" | ")}` });
+  }
+  const docReviewed = /^>?\s*\*\*(Examples reviewed by|Ejemplos revisados por)\s*:?\*\*\s*:?\s*\S/im.test(reqText);
+  for (const r of fnf) if (!r.examplesReviewedBy && !docReviewed)
+    warnings.push({ code: "examples-not-reviewed", id: r.id, msg: `${r.id} has no "Examples reviewed by:" (nor a document-level one)` });
+  const must = fnf.filter((r) => r.priority === "Must").length;
+  const mustRatio = fnf.length ? Math.round((must / fnf.length) * 100) / 100 : 0;
+  const mustConfirmed = /^>?\s*\*\*(Must list confirmed by|Lista Must confirmada por)\s*:?\*\*\s*:?\s*\S/im.test(reqText);
+  if (mustRatio > 0.6 && !mustConfirmed)
+    warnings.push({ code: "must-ratio", id: null, msg: `${Math.round(mustRatio * 100)} % of REQ-F/REQ-NF are Must (> 60 %); confirm the Must list with the customer` });
+  return { errors, warnings, needs: needs.length, outOfScope: needs.filter((n) => n.status === "out-of-scope").length,
+    requirements: active.length, must, mustRatio, mustConfirmed, coveredBy: Object.fromEntries(covered) };
+}
+
+// ── req-lint ─────────────────────────────────────────────────────────────────
 async function reqLint(opts) {
   const file = opts._[1] || "requirements/REQUIREMENTS.md";
   if (!existsSync(file)) die(`${file} not found`);
@@ -185,6 +307,85 @@ async function reqLint(opts) {
   process.stdout.write(`req-lint: ${res.items.length} requirements, ${flagged.length} flagged, ${res.errors.length} errors, ` +
     `${res.usage.input_tokens} tokens (${res.model || MODEL})\n`);
   return res;
+}
+
+// ── needs (need coverage) ────────────────────────────────────────────────────
+// Mechanical check always (no network). With Jev on, one Choice per in-scope need over the active requirement IDs
+// (criteria = statement) plus "none", built here because the options depend on the document.
+async function needsCmd(opts) {
+  const needsFile = opts._[1] || "requirements/CUSTOMER-NEEDS.md";
+  const reqFile = opts._[2] || "requirements/REQUIREMENTS.md";
+  for (const f of [needsFile, reqFile]) if (!existsSync(f)) die(`${f} not found`);
+  const reqText = readFileSync(reqFile, "utf8");
+  const needs = parseNeeds(readFileSync(needsFile, "utf8"));
+  const reqs = parseRequirements(reqText);
+  if (!needs.length) die(`no "### N-…" blocks found in ${needsFile}`);
+  if (!reqs.length) die(`no "### REQ-…" blocks found in ${reqFile}`);
+  const mech = checkNeedCoverage(needs, reqs, reqText);
+  const res = { source: { needs: needsFile, requirements: reqFile }, mechanical: mech };
+  const say = (s) => { if (!opts.json) process.stdout.write(s + "\n"); };
+  for (const e of mech.errors) say(`error\t${e.code}\t${e.msg}`);
+  for (const w of mech.warnings) say(`warn\t${w.code}\t${w.msg}`);
+  say(`mechanical: ${mech.needs} needs (${mech.outOfScope} out-of-scope), ${mech.requirements} requirements, ` +
+    `${mech.errors.length} errors, ${mech.warnings.length} warnings, Must ${Math.round(mech.mustRatio * 100)} %`);
+  const off = disabledReason();
+  if (opts.mechanical || off) {
+    if (opts.out) emit(res, opts.out);
+    if (opts.json) emit(res);
+    if (opts.mechanical) return mech.errors.length ? 1 : 0;
+    process.stderr.write(`sdd-jev: disabled (${off}); Jev suggestions skipped\n`);
+    return 3;
+  }
+  const cfg = JSON.parse(readFileSync(path.join(HERE, "jev", "need-coverage.json"), "utf8"));
+  const minConf = cfg.thresholds?.confidence ?? THRESHOLD;
+  const options = reqs.filter((r) => !r.deprecated && (r.type === "F" || r.type === "NF" || (r.needs || []).length));
+  const inScope = needs.filter((n) => n.status !== "out-of-scope" && n.quote);
+  if (options.length > 254 || inScope.length > 254) die("more than 254 requirements or needs exceed Jev's 255 options; run per section");
+  const withOptions = (q, opts_) => ({ ...q, criteria: { ...opts_, ...q.criteria } });
+  // Pass 1: which requirement delivers each need.
+  const requirements = Object.fromEntries(options.map((r) => [r.id, r.statement]));
+  const q1 = { covered_by: withOptions(cfg.questions.covered_by, requirements) };
+  const j = await judgeAll(inScope.map((n) => ({ id: n.id, state: { need: { id: n.id, quote: n.quote }, requirements } })),
+    () => q1, Number(opts.concurrency) || 16);
+  const top = new Set();
+  for (const it of j.items) {
+    const a = it.answers.covered_by;
+    it.flags = [];
+    if (a.choice === "none") it.flags.push("none");
+    if (a.confidence < minConf) it.flags.push("low-confidence");
+    if (a.choice !== "none" && !(mech.coveredBy[it.id] || []).includes(a.choice)) it.flags.push("not-declared");
+    top.add(a.choice);
+  }
+  // Pass 2: requirements no need picked as top — which need, if any, do they serve?
+  const needMap = Object.fromEntries(inScope.map((n) => [n.id, n.quote]));
+  const q2 = { serves: withOptions(cfg.questions.serves, needMap) };
+  const rest = options.filter((r) => !top.has(r.id));
+  const j2 = await judgeAll(rest.map((r) => ({ id: r.id, state: { requirement: { id: r.id, statement: r.statement }, needs: needMap } })),
+    () => q2, Number(opts.concurrency) || 16);
+  const neverTop = j2.items.map((it) => {
+    const a = it.answers.serves;
+    const declared = (options.find((r) => r.id === it.id).needs || []);
+    const flags = [];
+    if (a.choice === "none" || a.confidence < minConf) flags.push("gold-plating-candidate");
+    if (a.choice !== "none" && !declared.includes(a.choice)) flags.push("not-declared");
+    return { id: it.id, serves: a.choice, confidence: a.confidence, p: a.p, declared, flags };
+  });
+  const errors = [...j.errors, ...j2.errors];
+  const usage = { input_tokens: j.usage.input_tokens + j2.usage.input_tokens, requests: j.usage.requests + j2.usage.requests };
+  Object.assign(res, { model: j.model || j2.model, thresholds: { confidence: minConf }, items: j.items, neverTop, errors, usage });
+  if (opts.out) emit(res, opts.out);
+  if (opts.json) { emit(res); return errors.length ? 1 : 0; }
+  for (const it of j.items.filter((i) => i.flags.length)) {
+    const a = it.answers.covered_by;
+    const top3 = Object.entries(a.p || {}).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => `${k}=${v.toFixed(2)}`).join(" ");
+    say(`need\t${it.id}\t${it.flags.join(",")}\ttop=${a.choice}(${a.confidence.toFixed(2)}) ${top3}`);
+  }
+  for (const r of neverTop) say(`req\t${r.id}\tnever-top${r.flags.length ? "," + r.flags.join(",") : ""}\tserves=${r.serves}(${r.confidence.toFixed(2)}) declared=${r.declared.join(",") || "-"}`);
+  const cand = neverTop.filter((r) => r.flags.includes("gold-plating-candidate")).length;
+  say(`jev: ${j.items.length} needs judged, ${j.items.filter((i) => i.flags.length).length} flagged, ` +
+    `${neverTop.length} never-top requirements (${cand} gold-plating candidates), ${errors.length} errors, ` +
+    `${usage.input_tokens} tokens (${res.model || MODEL})`);
+  return errors.length ? 1 : 0;
 }
 
 // ── chunks ───────────────────────────────────────────────────────────────────
@@ -220,6 +421,7 @@ async function main() {
     for (const f of opts._.slice(1)) for (const c of chunkText(readFileSync(f, "utf8"), f, max)) process.stdout.write(JSON.stringify(c) + "\n");
     return 0;
   }
+  if (cmd === "needs") return needsCmd(opts);
   const off = disabledReason();
   if (cmd === "status") {
     process.stdout.write(off ? `disabled: ${off}\n` : `enabled ${MODEL}\n`);

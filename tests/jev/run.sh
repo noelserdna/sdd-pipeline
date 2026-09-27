@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests de scripts/sdd-jev.mjs sin red ni API key: un servidor mock local (SDD_JEV_URL) responde como la API de
 # TypeSafe. Cubre opt-in (exit 3), req-lint (parseo, REQ-C sin EARS, flags), judge (JSONL, estado demasiado grande,
-# reintento tras 429), chunks y que los conjuntos de preguntas de scripts/jev/*.json son JSON válido.
+# reintento tras 429), needs (parseRequirements, comprobación mecánica de necesidades, Choice por necesidad), chunks y que los conjuntos de preguntas de scripts/jev/*.json son JSON válido.
 # Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -34,7 +34,13 @@ const srv = http.createServer((req, res) => {
       if (q.type === "noul") answers[k] = { type: "noul", noul: k === "vague" && /quickly/.test(s) ? 0.9 : 0.1 };
       else if (q.type === "choice") {
         const opts = Object.keys(q.criteria);
-        const choice = /should/.test(s) && opts.includes("not_ears") ? "not_ears" : opts[0];
+        let choice = /should/.test(s) && opts.includes("not_ears") ? "not_ears" : opts[0];
+        if (opts.includes("none")) { // need coverage: the option sharing most words (4+ letters) with the item wins; none without overlap
+          const words = (t) => new Set(t.toLowerCase().match(/[a-z]{4,}/g) || []);
+          const src = words(r.state.need ? r.state.need.quote : r.state.requirement.statement);
+          let best = 0; choice = "none";
+          for (const o of opts) { if (o === "none") continue; const n = [...words(q.criteria[o])].filter((w) => src.has(w)).length; if (n > best) { best = n; choice = o; } }
+        }
         answers[k] = { type: "choice", choice, confidence: 0.95, probabilities: Object.fromEntries(opts.map((o) => [o, o === choice ? 0.95 : 0.05 / (opts.length - 1)])) };
       } else answers[k] = { type: "score", score: 1, confidence: 0.9, probabilities: { 0: 0.05, 1: 0.9, 2: 0.05 } };
     }
@@ -105,6 +111,99 @@ run chunks --max-chars 200 "$tmp/a.js"
 n="$(printf '%s\n' "$out" | grep -c '"path"' || true)"
 [ "$n" -gt 3 ] && pass "chunks: parte el fichero ($n trozos)" || bad "chunks: parte el fichero ($n)"
 expect "chunks: el primer trozo empieza en la línea 1" "$(printf '%s\n' "$out" | head -1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s).start)))')" "1"
+
+# ── needs (need coverage) ────────────────────────────────────────────────────
+cat > "$tmp/NEEDS.md" <<'EOF'
+# Customer Needs
+### N-001: Add groceries
+- **Quote:** "I want to add groceries to my shopping list from the terminal."
+- **Who:** Ana, customer
+- **When:** 2026-09-01
+- **Status:** confirmed
+### N-002: Spreadsheet
+- **Quote:** "Export everything into a spreadsheet for my accountant."
+- **Who:** Ana, customer
+- **When:** 2026-09-01
+- **Status:** confirmed
+### N-003: Phone
+- **Quote:** "Maybe a phone version."
+- **Who:** Ana, customer
+- **When:** 2026-09-01
+- **Status:** out-of-scope
+### N-004: Show groceries
+- **Quote:** "Show my shopping groceries."
+- **Who:** Ana, customer
+- **When:** 2026-09-01
+- **Status:** captured
+EOF
+cat > "$tmp/REQN.md" <<'EOF'
+# Requirements
+## Functional Requirements
+### REQ-F-001: Add item
+- **Statement:** WHEN the user runs `shop add <item>` THE system SHALL add the groceries item to the shopping list.
+- **Priority:** Must have
+- **Needs:** N-001, N-004
+- **Verification:** test
+- **Examples reviewed by:** Ana, 2026-09-02
+- **Acceptance criteria:**
+  - GIVEN an empty list WHEN the user runs `shop add milk` THEN the list holds "milk"
+  - GIVEN a list with "milk" WHEN the user runs `shop add eggs` THEN the list holds "milk" and "eggs"
+### REQ-F-002: Weather
+- **Statement:** WHEN the user runs `shop weather` THE system SHALL print the forecast.
+- **Priority:** Must have
+- **Needs:** —
+- **Verification:** demo
+### REQ-F-003: Remove item
+- **Statement:** WHEN the user runs `shop rm <item>` THE system SHALL remove the item.
+- **Priority:** Should have
+- **Needs:** N-009
+- **Verification:** tested by hand
+### REQ-F-004: Old sync [DEPRECATED]
+- **Statement:** WHEN the user runs `shop sync` THE system SHALL upload the list.
+- **Priority:** Must have
+- **Status:** Deprecated (2026-09-03) — replaced by nothing
+## Nonfunctional Requirements
+### REQ-NF-001: Latency
+- **Statement:** THE system SHALL answer any command in less than 100 ms.
+- **Priority:** Must have
+- **Needs:** N-001
+## Constraints
+### REQ-C-001: Runtime
+- **Statement:** Node.js 20.
+- **Needs:** —
+- **Verification:** inspection
+EOF
+# rutas por entorno: con argumentos, process.argv[1] sería sdd-jev.mjs y su main() se ejecutaría al importarlo
+out="$(M="$JEV" F="$tmp/REQN.md" node -e 'import(process.env.M).then((m)=>{const r=m.parseRequirements(require("fs").readFileSync(process.env.F,"utf8"));process.stdout.write(JSON.stringify(r))})')"
+expect "parseRequirements: priority" "$(js 'j[0].priority+","+j[2].priority')" "Must,Should"
+expect "parseRequirements: needs" "$(js 'JSON.stringify(j.map(r=>r.needs))')" '[["N-001","N-004"],[],["N-009"],null,["N-001"],[]]'
+expect "parseRequirements: verification" "$(js 'j.map(r=>r.verification).join()')" "test,demo,tested by hand,,,inspection"
+expect "parseRequirements: deprecated" "$(js 'j.map(r=>r.deprecated?1:0).join("")')" "000100"
+expect "parseRequirements: criteria" "$(js 'j[0].criteria.length')" "2"
+expect "parseRequirements: type" "$(js 'j.map(r=>r.type).join()')" "F,F,F,F,NF,C"
+expect "parseRequirements: examples reviewed" "$(js 'j[0].examplesReviewedBy')" "Ana, 2026-09-02"
+unset TYPESAFE_API_KEY
+run needs "$tmp/NEEDS.md" "$tmp/REQN.md"
+expect "needs sin key → exit 3" "$rc" "3"
+contains "$out" "mechanical:" && pass "needs sin key imprime la comprobación mecánica" || bad "needs sin key imprime la comprobación mecánica ($out)"
+run needs "$tmp/NEEDS.md" "$tmp/REQN.md" --mechanical --json
+expect "needs --mechanical con errores → exit 1" "$rc" "1"
+expect "needs: códigos de error" "$(js 'j.mechanical.errors.map(e=>e.code+":"+e.id).sort().join()')" \
+  "bad-verification:REQ-F-003,gold-plating:REQ-F-002,no-decision:N-003,no-verification:REQ-NF-001,uncovered-need:N-002,unknown-need:REQ-F-003"
+expect "needs: avisos" "$(js 'j.mechanical.warnings.map(e=>e.code+":"+(e.id||"")).sort().join()')" \
+  "examples-not-reviewed:REQ-F-002,examples-not-reviewed:REQ-F-003,examples-not-reviewed:REQ-NF-001,must-ratio:,unconfirmed-need:N-004"
+run needs "$ROOT/examples/todo-app/requirements/CUSTOMER-NEEDS.md" "$ROOT/examples/todo-app/requirements/REQUIREMENTS.md" --mechanical
+expect "needs: el ejemplo todo-app pasa la comprobación mecánica" "$rc" "0"
+contains "$out" "0 errors, 0 warnings" && pass "needs: ejemplo sin avisos (lista Must confirmada)" || bad "needs: ejemplo sin avisos ($out)"
+export TYPESAFE_API_KEY=test
+run needs "$tmp/NEEDS.md" "$tmp/REQN.md" --json
+expect "needs con Jev → exit 0" "$rc" "0"
+expect "needs: una Choice por necesidad en alcance" "$(js 'j.items.map(i=>i.id).join()')" "N-001,N-002,N-004"
+expect "needs: necesidad sin requisito → none" "$(js 'j.items.find(i=>i.id==="N-002").flags.join()')" "none"
+expect "needs: opciones = REQ-F/NF activos + REQ-C con necesidad + none" "$(js 'Object.keys(j.items[0].answers.covered_by.p).join()')" "REQ-F-001,REQ-F-002,REQ-F-003,REQ-NF-001,none"
+expect "needs: requisito sin necesidad → candidato a gold plating" "$(js 'j.neverTop.filter(r=>r.flags.includes("gold-plating-candidate")).map(r=>r.id).join()')" "REQ-F-002,REQ-F-003,REQ-NF-001"
+run needs "$tmp/NEEDS.md" "$tmp/REQN.md"
+contains "$out" "gold-plating candidates" && pass "needs: resumen legible" || bad "needs: resumen legible ($out)"
 
 # ── question sets ────────────────────────────────────────────────────────────
 for f in "$ROOT"/scripts/jev/*.json; do

@@ -1,11 +1,11 @@
 ---
 name: sdd-requirements-engineer
-description: "Requirements engineering (SWEBOK v4): elicit, write (user stories, use cases, BDD), audit quality, prioritize and trace requirements. Triggers: 'gather requirements', 'write requirements', 'review requirements', 'audit requirements', 'user stories', 'use cases', 'acceptance criteria', 'requirements specification', 'requirements quality'."
+description: "Requirements engineering (SWEBOK v4): capture customer needs verbatim, write EARS requirements with reviewed examples, verification and priority, audit quality, approve with a git tag. Triggers: 'gather requirements', 'customer needs', 'write requirements', 'audit requirements', 'user stories', 'acceptance criteria', 'approve requirements', 'necesidades del cliente', 'aprobar requisitos'."
 ---
 
 # Requirements Engineer (SWEBOK v4)
 
-Requirements engineering based on SWEBOK v4 Chapter 1. First stage of the SDD pipeline: its output, `requirements/REQUIREMENTS.md`, is the input of `sdd-specifications-engineer`.
+Requirements engineering based on SWEBOK v4 Chapter 1. First stage of the SDD pipeline: its outputs, `requirements/CUSTOMER-NEEDS.md` and `requirements/REQUIREMENTS.md`, are the input of `sdd-specifications-engineer`.
 
 ## Modes of Operation
 
@@ -13,14 +13,14 @@ Pick the mode from the user's intent.
 
 ### Mode 1: Elicit Requirements
 
-Use when the user wants help gathering, discovering, or creating requirements.
+Use when the user wants help gathering, discovering, or creating requirements. The order matters: needs first, in the customer's words, confirmed by the customer, and only then requirements, so that every requirement can be traced to something the customer actually asked for and nothing they asked for gets lost in translation.
 
-1. Read [references/elicitation-guide.md](references/elicitation-guide.md) (stakeholder classes, 5-Whys).
-2. Ask about the project context: problem being solved, stakeholders, constraints.
-3. Walk through stakeholder identification and pick elicitation techniques that fit them.
-4. For each requirement surfaced, apply the 5-Whys so it states the true need, not a premature solution.
-5. Categorize each one: functional (policies/processes) vs. nonfunctional (technology constraints / quality of service) vs. constraint.
-6. Write them into `requirements/REQUIREMENTS.md` (Output Artifacts below), with source, priority, rationale and acceptance criteria.
+1. Read [references/elicitation-guide.md](references/elicitation-guide.md) (stakeholder classes, 5-Whys) and ask about the project context: problem being solved, stakeholders, constraints.
+2. **Capture needs verbatim** in `requirements/CUSTOMER-NEEDS.md` following [references/customer-needs-template.md](references/customer-needs-template.md): `N-NNN`, the exact quote, who, when, `Status: captured`.
+3. **Read them back** to the customer (`AskUserQuestion`, one question per need, at most 4 per call) and mark each `confirmed`, reworded, or `out-of-scope` with the decision. Do not write requirements from unconfirmed needs.
+4. **Derive requirements** from the confirmed needs. Apply the 5-Whys where a need sounds like a solution, categorize each requirement (functional / nonfunctional / constraint), and write it with the template in [references/requirements-template.md](references/requirements-template.md): EARS statement, `Needs:`, `Verification:`, priority, source, rationale and acceptance criteria with concrete data.
+5. **Check coverage** mechanically: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" needs requirements/CUSTOMER-NEEDS.md requirements/REQUIREMENTS.md --mechanical` must report 0 errors (orphan needs, requirements without needs, missing verification method).
+6. Write the document with `Status: Review`, then run the approval gate in [references/approval.md](references/approval.md): examples review, priority validation, optional UI walkthrough, explicit approval, commit and tag `requirements-v{Version}`. When `sdd-orchestrator` or `sdd-lead` drives the pipeline, or you run as a subagent, stop at `Review`: their gate 1 runs that procedure with the customer.
 
 ### Mode 2: Audit Requirements
 
@@ -28,8 +28,9 @@ Use when the user provides existing requirements for review.
 
 1. Read [references/audit-checklist.md](references/audit-checklist.md).
 2. Evaluate each requirement against the individual checklist and the whole set against the collection checklist. With many requirements, screen them first when Jev is enabled (opt-in, sends the statements to TypeSafe): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" req-lint requirements/REQUIREMENTS.md --out .sdd/jev/req-lint.json` flags vague, compound, unverifiable and implementation-leaking statements and non-EARS patterns (probability > 0.5). Read the flagged ones first; the flags are hints, so still confirm each one and apply the checklist to the rest. Exit code 3 means Jev is off: review every requirement yourself.
-3. Produce the audit report (template in the checklist) with FAIL / WARN / PASS per issue, a concrete recommendation and, when possible, a rewritten statement.
-4. Identify gaps: missing stakeholder perspectives, uncovered edge cases, absent security or error handling.
+3. When `requirements/CUSTOMER-NEEDS.md` exists, run the `needs --mechanical` check of Mode 1 step 5 and report its errors and warnings; without it, report the missing needs traceability as a gap.
+4. Produce the audit report (template in the checklist) with FAIL / WARN / PASS per issue, a concrete recommendation and, when possible, a rewritten statement.
+5. Identify gaps: missing stakeholder perspectives, uncovered edge cases, absent security or error handling.
 
 The audit report is the deliverable. Write or update `requirements/REQUIREMENTS.md` only when the user accepts the rewrites.
 
@@ -50,7 +51,9 @@ In `REQUIREMENTS.md` the **Statement** of every REQ-F / REQ-NF is always EARS (b
 - **Perfect Technology Filter**: a requirement that would still exist with infinitely fast, free, failure-free computing is functional; everything else is nonfunctional.
 - **Quality gates**: every requirement is unambiguous, testable, atomic, binding and stakeholder-aligned; flag and fix the ones that are not. The vague-term list lives in `references/audit-checklist.md` §1.1.
 - **Quality-of-service economics**: for each QoS target, identify the perfection point (better brings no value) and the fail point (worse makes the product unusable).
-- **Prioritization (Kano-aware)**: weigh both the satisfaction from having a feature and the dissatisfaction from lacking it; a missing basic feature hurts more than a missing delighter. Scale: Must have / Should have / Nice to have (or 1-10).
+- **Prioritization (Kano-aware)**: weigh both the satisfaction from having a feature and the dissatisfaction from lacking it; a missing basic feature hurts more than a missing delighter. Scale: Must have / Should have / Nice to have. More than 60 % Must means priorities no longer discriminate; the customer confirms the Must list explicitly (approval step 4).
+- **Specification by example**: every acceptance criterion carries at least one example with real data, and the customer reviews the examples; a concrete example exposes a misunderstanding that an abstract criterion hides.
+- **Verification method**: each requirement states how its acceptance will be proven (`test | demo | measurement | inspection`), decided now with the customer rather than discovered at the end.
 
 ## EARS Syntax
 
@@ -67,78 +70,33 @@ The statement format of the SDD pipeline (`sdd-specifications-engineer`, `sdd-sp
 
 ## Output Artifacts
 
-### Primary Output: `requirements/REQUIREMENTS.md`
+Mode 1 writes both files; Mode 3 updates `REQUIREMENTS.md`; Mode 2 writes only after the user accepts rewrites.
 
-Modes 1 and 3 write or update this document (Mode 2 only after the user accepts rewrites):
-
-```markdown
-# Requirements Document
-
-> **Project:** {project name}
-> **Version:** {X.Y}
-> **Last updated:** {YYYY-MM-DD}
-> **Status:** Draft | Review | Approved
-
-## Functional Requirements
-
-### REQ-F-001: {Title}
-- **Statement:** WHEN {trigger} THE {system} SHALL {behavior}
-- **Category:** Functional
-- **Priority:** Must have | Should have | Nice to have
-- **Source:** {stakeholder or document}
-- **Rationale:** {why this requirement exists}
-- **Acceptance criteria:**
-  - GIVEN {context} WHEN {action} THEN {outcome}
-  - GIVEN {context} WHEN {action} THEN {outcome}
-- **Dependencies:** {REQ-F-NNN, or "None"}
-
-## Nonfunctional Requirements
-
-### REQ-NF-001: {Title}
-- **Statement:** THE {system} SHALL {behavior} {quantified constraint}
-- **Category:** Performance | Security | Scalability | Availability | Usability
-- **Priority:** Must have | Should have | Nice to have
-- **Metric:** {measurable target, e.g., "p99 < 200ms"}
-- **Acceptance criteria:**
-  - GIVEN {load condition} WHEN {action} THEN {measurable outcome}
-
-## Constraints
-
-### REQ-C-001: {Title}
-- **Statement:** {constraint description}
-- **Type:** Technical | Business | Regulatory
-- **Source:** {origin of constraint}
-
-## Traceability
-
-| REQ ID | Type | Priority | Source | Dependencies |
-|--------|------|----------|--------|--------------|
-| REQ-F-001 | Functional | Must | {source} | None |
-| REQ-NF-001 | Nonfunctional | Must | {source} | REQ-F-001 |
-```
+- `requirements/CUSTOMER-NEEDS.md` — template and rules in [references/customer-needs-template.md](references/customer-needs-template.md).
+- `requirements/REQUIREMENTS.md` — template and field rules in [references/requirements-template.md](references/requirements-template.md). Read it before writing; downstream skills and scripts parse its labels.
 
 ### Rules for Output
 
 1. IDs: `REQ-F-NNN` (functional), `REQ-NF-NNN` (nonfunctional), `REQ-C-NNN` (constraint), unique across the document.
-2. Every REQ-F and REQ-NF has an EARS statement and BDD acceptance criteria (Given/When/Then). Constraints (REQ-C) are plain statements with Type and Source; they need neither.
-3. No vague terms; every quality metric is quantified.
-4. The Traceability table lists every requirement.
-5. **Re-runs keep IDs stable.** Never renumber or reuse an ID; new requirements take the next free number, removed ones are marked deprecated rather than deleted, because specs, tests and commits reference them. Once `spec/` exists, changes to requirements go through `sdd-req-change` (it classifies the change and cascades staleness) instead of re-running this skill.
+2. Every REQ-F and REQ-NF has an EARS statement, BDD acceptance criteria (Given/When/Then) with concrete data, `Needs:` citing at least one need, and `Verification:`. Constraints (REQ-C) are plain statements with Type, Source and `Verification:` (usually `inspection`); `Needs: —` is allowed when the source is the team or the architecture.
+3. No vague terms; every quality metric is quantified, and a `measurement` requirement states metric, threshold and how it is measured.
+4. Every need is covered by some requirement or `out-of-scope` with its decision; the Traceability table lists every requirement with its needs and verification method.
+5. **Re-runs keep IDs stable.** Never renumber or reuse an ID; new requirements take the next free number, removed ones are marked deprecated rather than deleted, because specs, tests and commits reference them. After approval (tag `requirements-v{Version}`), changes go through `sdd-req-change` (it classifies the change, cascades staleness and leads to a new approval and tag) instead of re-running this skill.
 
-**Next step:** after writing `requirements/REQUIREMENTS.md`, tell the user: "Requirements document generated. Next step: run `sdd-specifications-engineer` to transform these requirements into formal specifications."
+**Next step:** once approved, tell the user: "Requirements approved (tag `requirements-v{Version}`). Next step: run `sdd-specifications-engineer` to transform them into formal specifications." If the gate is still pending, say what is missing instead.
 
 ## Persist Summary
 
-After writing `requirements/REQUIREMENTS.md` (an audit-only Mode 2 run leaves the state untouched), update `pipeline-state.json`:
+After writing `requirements/REQUIREMENTS.md` (an audit-only Mode 2 run leaves the state untouched), update `pipeline-state.json`. `metrics.approved_tag` stays `null` until the approval gate creates the tag; the gate (here or in the orchestrator) then sets it and `nextStep`:
 
 1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
 2. Set `stages["requirements-engineer"].status` = `"done"`
 3. Set `stages["requirements-engineer"].lastRun` = current ISO-8601
 4. Set `stages["requirements-engineer"].summary`:
-   - `artifacts`: list of files created/modified with labels (e.g., `{"file": "requirements/REQUIREMENTS.md", "label": "Requirements Document"}`)
-   - `metrics`: `{ "total_requirements": N, "functional": N, "nonfunctional": N, "constraints": N }`
+   - `artifacts`: list of files created/modified with labels (e.g., `{"file": "requirements/REQUIREMENTS.md", "label": "Requirements Document"}`, `{"file": "requirements/CUSTOMER-NEEDS.md", "label": "Customer Needs"}`)
+   - `metrics`: `{ "total_requirements": N, "functional": N, "nonfunctional": N, "constraints": N, "needs": N, "needs_out_of_scope": N, "must_ratio": 0.NN, "approved_tag": "requirements-v1.0" | null }`
    - `highlights`: top 3-5 notable observations (e.g., "85 requirements across 6 domains", "12 security requirements identified")
-   - `nextStep`: `"Run /sdd-specifications-engineer"`
+   - `nextStep`: `"Run /sdd-specifications-engineer"` once approved, otherwise `"Approve requirements (gate 1)"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
 6. Display summary table to user (console output)
