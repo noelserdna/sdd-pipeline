@@ -1,0 +1,24 @@
+{
+  "description": "sdd-requirements-engineer Mode 2 pre-pass: one item per requirement, state = {requirement: <statement>}. Validated on seeded defects (examples/todo-app + mutants): 0 false positives on clean EARS statements.",
+  "questions": {
+    "vague": {"type": "noul",
+      "instructions": "Does `requirement` use a vague or unmeasurable term (like fast, quickly, user-friendly, appropriate, efficient, intuitive, many, where possible) whose pass/fail meaning is not defined in the text?"},
+    "compound": {"type": "noul",
+      "instructions": "Does `requirement` bundle two or more independent behaviors that could be implemented, tested or changed separately (not just several fields of the same result)?",
+      "criteria": {"true": "Two or more separable behaviors, e.g. create a task AND send an email",
+                   "false": "One behavior, even if its result has several attributes"}},
+    "unverifiable": {"type": "noul",
+      "instructions": "Would a tester be unable to write an objective pass/fail test for `requirement` as written, because it describes a feeling, opinion or quality with no observable outcome?"},
+    "impl_leak": {"type": "noul",
+      "instructions": "Does `requirement` prescribe how to build it (specific database tables, libraries, classes, functions or UI frameworks) instead of the observable behavior the user needs?"},
+    "ears": {"type": "choice",
+      "instructions": "Which EARS pattern does `requirement` follow?",
+      "criteria": {
+        "ubiquitous": "THE <system> SHALL <response>, with no trigger or condition",
+        "event_driven": "Starts with WHEN <trigger> THE <system> SHALL",
+        "state_driven": "Starts with WHILE <state> THE <system> SHALL",
+        "unwanted": "Starts with IF <unwanted condition> THEN THE <system> SHALL",
+        "optional": "Starts with WHERE <feature or setting is present> THE <system> SHALL",
+        "not_ears": "Does not use the EARS keywords (THE ... SHALL with WHEN/WHILE/IF/WHERE or none); plain prose, 'should', 'can', 'must'"}}
+  }
+}
