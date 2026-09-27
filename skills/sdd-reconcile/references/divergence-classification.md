@@ -1,224 +1,61 @@
 # Divergence Classification Rules
 
-> Algoritmo y reglas para clasificar divergencias entre especificaciones SDD y código. Utilizado por la Fase 4 de `sdd-reconcile`.
+> Used by Phase 4 of `sdd-reconcile`. Each divergence gets one type and one confidence level, both justified by cited evidence.
 
----
-
-## 1. Classification Algorithm
+## 1. Algorithm
 
 ```
-FUNCTION classify_divergence(spec_artifact, code_feature):
+classify(spec_artifact, code_feature):
 
-    IF code_feature EXISTS and spec_artifact NOT EXISTS:
-        # Code has something specs don't mention
-        IF code_feature.has_tests AND tests_pass:
-            RETURN NEW_FUNCTIONALITY (confidence: HIGH)
-        ELIF code_feature.is_actively_used (called by other modules):
-            RETURN NEW_FUNCTIONALITY (confidence: MEDIUM)
-        ELIF code_feature.recent_commits (< 90 days):
-            RETURN NEW_FUNCTIONALITY (confidence: MEDIUM)
-        ELSE:
-            RETURN AMBIGUOUS (confidence: LOW)
-            # Could be dead code, experimental feature, or undocumented feature
+  code exists, spec does not:
+    tests exist and pass (run this session)        → NEW_FUNCTIONALITY
+    called by other modules, or added in a commit  → NEW_FUNCTIONALITY
+    otherwise (dead code? experiment?)             → AMBIGUOUS
 
-    ELIF spec_artifact EXISTS and code_feature NOT EXISTS:
-        # Specs describe something code doesn't have
-        IF spec_artifact.was_previously_implemented (git history shows removal):
-            RETURN REMOVED_FEATURE (confidence: HIGH)
-        ELIF no_code_ever_existed (no git history of implementation):
-            RETURN REMOVED_FEATURE (confidence: MEDIUM)
-            # Spec describes planned but never-implemented feature
-        ELSE:
-            RETURN AMBIGUOUS (confidence: LOW)
-            # Could be bug (accidental removal) or intentional removal
+  spec exists, code does not:
+    git history shows the implementation was removed      → REMOVED_FEATURE
+    no implementation ever existed in history             → NOT_IMPLEMENTED
+    history unclear (accidental removal vs. intentional)  → AMBIGUOUS
 
-    ELIF both_exist AND behavior_differs:
-        # Both exist but do different things
-        IF tests_exist AND tests_pass_with_current_code:
-            IF tests_match_code_behavior (not spec):
-                RETURN BEHAVIORAL_CHANGE (confidence: HIGH)
-                # Code and tests agree, spec is outdated
-            ELSE:
-                RETURN AMBIGUOUS (confidence: LOW)
-        ELIF tests_exist AND tests_fail:
-            RETURN BUG_OR_DEFECT (confidence: HIGH)
-            # Tests enforce spec behavior, code violates it
-        ELIF no_tests:
-            IF code_change_is_recent (< 30 days):
-                RETURN BEHAVIORAL_CHANGE (confidence: MEDIUM)
-            ELSE:
-                RETURN AMBIGUOUS (confidence: LOW)
+  both exist, behaviour differs:
+    tests pass and assert the code's behaviour     → BEHAVIORAL_CHANGE
+    tests fail against the spec'd behaviour        → BUG_OR_DEFECT
+    no tests, recent commit explains the change    → BEHAVIORAL_CHANGE
+    otherwise                                      → AMBIGUOUS
 
-    ELIF both_exist AND behavior_equivalent:
-        # Structure changed but outcome is the same
-        IF api_path_changed OR method_renamed OR file_moved:
-            RETURN REFACTORING (confidence: HIGH)
-        ELIF internal_structure_changed BUT api_contract_same:
-            RETURN REFACTORING (confidence: HIGH)
-        ELSE:
-            RETURN REFACTORING (confidence: MEDIUM)
+  both exist, behaviour equivalent:
+    path/name/file moved, or internals changed with the same contract → REFACTORING
 ```
 
----
+`NOT_IMPLEMENTED` is a missing implementation, not drift: code never drives specs (Art. 12). It is never deprecated or auto-resolved; the report lists it as a gap for `sdd-task-generator --fase=N --incremental`.
 
-## 2. Signal Details by Type
+## 2. Confidence — evidence rules
 
-### NEW_FUNCTIONALITY
+Confidence comes from which evidence is present, not from arithmetic.
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Code feature has passing tests | 3 | Strong evidence of intentional feature |
-| Feature is imported/called by other modules | 2 | It's integrated into the system |
-| Recent git commits added this feature | 2 | Actively developed |
-| Feature has error handling | 1 | Developer cared about quality |
-| Feature has documentation comments | 1 | Developer intended it to stay |
-| No spec mentions this feature at all | Required | Base condition |
+| Level | Rule | Effect |
+|---|---|---|
+| **HIGH** | Decisive evidence for the type is present and nothing contradicts it. Decisive = a test result from a run in this session, or a commit that shows the addition / removal / rename / change | Auto types apply after the summary |
+| **MEDIUM** | Only indirect evidence (usage by other modules, naming, recency, comments) and nothing contradicts it | Auto types are listed individually in the summary so the user can veto |
+| **LOW** | Evidence conflicts, or is missing | Becomes `AMBIGUOUS` and is asked |
 
-**Auto-resolution:** Update specs to document the new functionality.
+Counter-signals lower the level by one: a TODO/FIXME at the divergence, a feature flag or A/B variant around it, signals pointing to different types. Tests that were not run are not evidence.
 
-### REMOVED_FEATURE
+Useful evidence per type:
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Git history shows code deletion | 3 | Clear evidence of intentional removal |
-| No code references the spec artifact | 2 | Nothing implements it |
-| Related tests were also removed | 2 | Removal was deliberate |
-| Spec references a deprecated API/library | 1 | Feature became impossible |
-| Time since last code for this feature > 180 days | 1 | Long-abandoned |
+- **NEW_FUNCTIONALITY:** passing tests; imported/called elsewhere; error handling and doc comments (intended to stay).
+- **REMOVED_FEATURE:** deletion commit; related tests removed in the same change; the spec depends on a library or API that no longer exists.
+- **NOT_IMPLEMENTED:** no symbol, route or test ever matched in `git log -S`/`git log --follow`; the REQ has no `Refs:` in any commit.
+- **BEHAVIORAL_CHANGE:** tests updated to the new behaviour; commit message states the change; the spec was not touched in the same period.
+- **REFACTORING:** tests pass unmodified; git records a rename; same signature under a new name.
+- **BUG_OR_DEFECT:** failing tests; validation weaker than the spec; missing error handling the spec requires; crashes.
 
-**Auto-resolution:** Mark spec artifacts as deprecated.
+## 3. Edge Cases
 
-### BEHAVIORAL_CHANGE
-
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Tests pass with current (changed) behavior | 3 | Tests were updated to match new behavior |
-| Change was in a recent commit with clear message | 2 | Intentional modification |
-| Change affects API response shape | 2 | Contract change |
-| Change affects validation rules | 2 | Business rule change |
-| Spec was not updated in same timeframe | 1 | Spec lagged behind |
-
-**User decision required.** Present both spec and code versions.
-
-### REFACTORING
-
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| API response/behavior unchanged | 3 | Black-box equivalent |
-| Tests still pass without modification | 3 | Behavioral preservation confirmed |
-| File renamed/moved (git tracks rename) | 2 | Structural change only |
-| Method/function renamed but signature equivalent | 2 | Naming change |
-| Internal implementation changed, interface same | 2 | Encapsulation respected |
-
-**Auto-resolution:** Update technical references in specs (paths, names).
-
-### BUG_OR_DEFECT
-
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Tests exist and FAIL | 3 | Regression detected |
-| Code contradicts spec in data-critical area | 2 | Data integrity risk |
-| Error handling missing where spec requires it | 2 | Reliability gap |
-| Validation weaker than spec requires | 2 | Security/data risk |
-| Code crashes or throws unexpected errors | 3 | Obvious defect |
-
-**User decision required.** Ask whether to fix code or update spec.
-
-### AMBIGUOUS
-
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Could be new feature OR dead code | — | No tests, unclear usage |
-| Could be removal OR bug | — | No git history of removal |
-| Behavioral difference but no tests to confirm | — | Unclear intent |
-| Feature flag involved | — | May be experimental |
-| A/B test variant | — | May be temporary |
-
-**User decision required.** Present evidence and ask for classification.
-
----
-
-## 3. Auto-Resolution Rules
-
-### Rules for `NEW_FUNCTIONALITY` (auto-resolve)
-
-1. Generate a new requirement in EARS syntax
-2. Add to the appropriate requirement group based on:
-   - Directory/module → business domain
-   - Feature type → functional/non-functional
-3. Generate corresponding use case entry
-4. If it's an API endpoint, add to contracts
-5. Mark with `[RECONCILED]` tag and source reference
-
-### Rules for `REMOVED_FEATURE` (auto-resolve)
-
-1. Mark requirement as: `[DEPRECATED] — Code removed, detected {date}`
-2. Update use case status to `deprecated`
-3. Do NOT delete the spec entry — preserve for traceability
-4. Add note: "Feature no longer present in codebase as of reconciliation {date}"
-5. If requirement has downstream traces (UC, WF, BDD), mark those as deprecated too
-
-### Rules for `REFACTORING` (auto-resolve)
-
-1. Update file path references: `src/old/path.ts` → `src/new/path.ts`
-2. Update method/function name references
-3. Update API path if it changed (but behavior is same)
-4. Preserve all traceability links (just update the target)
-5. Do NOT change requirement text or use case description (behavior unchanged)
-
----
-
-## 4. Edge Cases
-
-### Partial Implementation
-
-**Scenario:** Spec describes 5 fields on an entity, code only implements 3.
-**Classification:** `BEHAVIORAL_CHANGE` if the missing fields were once present, `NEW_FUNCTIONALITY` + `REMOVED_FEATURE` split if code has extra fields not in spec.
-**Resolution:** Present to user — may be incomplete implementation.
-
-### Feature Flags
-
-**Scenario:** Code has a feature behind a feature flag that's currently OFF.
-**Classification:** If spec describes the feature as active → `BEHAVIORAL_CHANGE` (feature is disabled).
-**Resolution:** Ask user — is the flag temporary or is the feature being rolled out?
-
-### A/B Tests
-
-**Scenario:** Code has two implementations of the same feature (variant A and B).
-**Classification:** `BEHAVIORAL_CHANGE` if spec only describes one variant.
-**Resolution:** Ask user — document both variants or just the winner?
-
-### Database Migration Pending
-
-**Scenario:** Spec describes a new field, migration exists but hasn't run, code references it.
-**Classification:** Not a divergence — spec and code agree, migration is an operational concern.
-**Resolution:** Skip (note as operational TODO if migration detection is possible).
-
-### Third-Party API Change
-
-**Scenario:** External API changed, code adapted, spec still references old API contract.
-**Classification:** `BEHAVIORAL_CHANGE` with external trigger.
-**Resolution:** Auto-resolve toward code (external change is authoritative).
-
----
-
-## 5. Confidence Thresholds
-
-| Confidence | Action |
-|-----------|--------|
-| **HIGH** (>80%) | Apply classification and resolution rule automatically |
-| **MEDIUM** (50-80%) | Apply classification but flag for review in report |
-| **LOW** (<50%) | Classify as `AMBIGUOUS` and ask user |
-
-### Upgrading Confidence
-
-- If test evidence exists → +20% confidence
-- If git history confirms the pattern → +15% confidence
-- If multiple signals agree → +10% per additional signal
-- If naming/comments explain the change → +10% confidence
-
-### Downgrading Confidence
-
-- If conflicting signals exist → -20% confidence
-- If the change is in a complex area (many dependencies) → -10% confidence
-- If the code has TODO/FIXME near the divergence → -15% confidence
+| Case | Classification |
+|---|---|
+| Entity partially implemented (spec 5 fields, code 3) | Missing fields never existed → `NOT_IMPLEMENTED`; removed → `REMOVED_FEATURE` or ask; extra code fields → `NEW_FUNCTIONALITY` |
+| Feature behind a flag that is off, spec says active | `BEHAVIORAL_CHANGE`; ask whether the flag is temporary |
+| Two variants (A/B) where the spec describes one | `BEHAVIORAL_CHANGE`; ask whether to document both or the winner |
+| Migration exists but not applied | Not a divergence; note as operational |
+| Third-party API changed, code adapted, spec references the old contract | `BEHAVIORAL_CHANGE` with external trigger; ask the user and recommend option (A) |

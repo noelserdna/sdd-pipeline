@@ -21,11 +21,11 @@ Each task file follows the `task/TASK-FASE-{N}.md` format, identical to forward-
 ## TASK-F{N}-001: {Task Title} [RETROACTIVE]
 
 - [x] **Status:** Completed (retroactive)
-- **Refs:** REQ-{GROUP}-{NNN}, UC-{NNN}
+- **Refs:** REQ-F-NNN, UC-{NNN}
 - **Phase:** FASE-{N}
 - **Files:**
-  - Source: `{src/path/file.ext}`
-  - Test: `{tests/path/file.test.ext}` (or `[NO-TEST]` if missing)
+  - Source: `{code_path}/file.ext`
+  - Test: `{test_path}/file.test.ext` (or `[NO-TEST]` if missing)
 - **Commit:** `{SHA}` (or `[NO-COMMIT]` if not traceable)
 - **Revert strategy:** `RETROACTIVE — already in production`
 
@@ -52,7 +52,7 @@ Then {postcondition/assertion from tests or code behavior}
 ### Review Checklist (Retroactive)
 
 - [x] Code exists and functions
-- [ ] Requirements extracted and validated — `REQ-{GROUP}-{NNN}`
+- [ ] Requirements extracted and validated — `REQ-F-NNN`
 - [ ] Specification coverage verified
 - [ ] Test coverage adequate (or gap documented)
 - [ ] Findings documented (dead code, tech debt, workarounds)
@@ -174,7 +174,7 @@ When retroactive analysis reveals gaps, generate forward (pending) tasks:
 ## TASK-F{N}-{NNN}: Add tests for {module} [FORWARD]
 
 - [ ] **Status:** Pending
-- **Refs:** REQ-{GROUP}-{NNN}
+- **Refs:** REQ-F-NNN
 - **Reason:** Gap detected during reverse engineering
 - **Gap type:** {NO-TEST | LOW-COVERAGE | MISSING-VALIDATION | MISSING-ERROR-HANDLING}
 - **Priority:** {based on severity from findings}

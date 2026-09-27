@@ -1,6 +1,6 @@
 # Import Report Template
 
-> Template del informe de importación generado por `sdd-import`. Utilizado por la Fase 7 para generar `import/IMPORT-REPORT.md`.
+> Template for `import/IMPORT-REPORT.md` (sdd-import Phase 7). Omit empty sections.
 
 ---
 
@@ -11,7 +11,7 @@
 
 > Generated: {ISO-8601}
 > Project: {project-name}
-> Mode: {default | format | target | merge}
+> Mode: {default | --format | --target | --merge | --yes}
 
 ---
 
@@ -46,7 +46,7 @@
 
 | Group | Count | Source | EARS Converted |
 |-------|-------|--------|---------------|
-| {GROUP-ID} | {N} | {format: section/sheet} | {N}/{total} |
+| {group} | {N} | {format: section/sheet} | {N}/{total} |
 | ... | ... | ... | ... |
 
 **Total requirements:** {N}
@@ -55,11 +55,13 @@
 
 | Document | Items Added | Source |
 |----------|------------|--------|
-| `spec/domain.md` | {N} entities | {format: schemas/tables} |
-| `spec/use-cases.md` | {N} use cases | {format: stories/pages} |
-| `spec/contracts.md` | {N} endpoints | {format: paths/API docs} |
-| `spec/nfr.md` | {N} NFRs | {format: security/config} |
-| `spec/workflows.md` | {N} workflows | {format: sequences/flows} |
+| `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md` | {N} entities / value objects | {schemas/tables} |
+| `spec/use-cases/UC-NNN-*.md` | {N} use cases | {stories/pages} |
+| `spec/tests/BDD-UC-NNN.md` | {N} scenarios | {acceptance criteria} |
+| `spec/contracts/API-{module}.md` (`Style: http`) | {N} operations | {OpenAPI paths} |
+| `spec/nfr/*.md` | {N} rows | {security/config} |
+| `spec/workflows/WF-NNN-*.md` | {N} workflows | {ordered lists} |
+| `spec/COVERAGE.md` | {N} modules ({N} SPECIFIED, {N} IMPORTED) | — |
 
 ---
 
@@ -69,7 +71,7 @@
 
 | # | Original (Source) | SDD Artifact | Conversion |
 |---|-------------------|-------------|-----------|
-| 1 | {original text/title} | REQ-{ID}: {EARS statement} | {auto/manual/unconverted} |
+| 1 | {original text/title} | REQ-F-NNN: {EARS statement} | {auto/manual/unconverted} |
 | 2 | ... | ... | ... |
 | ... | ... | ... | ... |
 
@@ -79,10 +81,9 @@ _(Showing first 10 mappings. Full mapping in generated artifacts.)_
 
 | Priority | Count | Percentage |
 |----------|-------|-----------|
-| CRITICAL | {N} | {X}% |
-| HIGH | {N} | {X}% |
-| MEDIUM | {N} | {X}% |
-| LOW | {N} | {X}% |
+| Must have | {N} | {X}% |
+| Should have | {N} | {X}% |
+| Nice to have | {N} | {X}% |
 
 ---
 
@@ -95,7 +96,15 @@ _(Showing first 10 mappings. Full mapping in generated artifacts.)_
 
 ---
 
-## 6. Parse Errors
+## 6. Defects (Jira bugs)
+
+| # | Source key | Summary | Status | Became requirement? |
+|---|-----------|---------|--------|---------------------|
+| 1 | {key} | {summary} | {open/resolved} | {REQ-F-NNN or No} |
+
+---
+
+## 7. Parse Errors
 
 | # | File | Line/Row | Error | Item |
 |---|------|---------|-------|------|
@@ -104,25 +113,25 @@ _(Showing first 10 mappings. Full mapping in generated artifacts.)_
 
 ---
 
-## 7. Merge Report (if --merge)
+## 8. Merge Report (if --merge)
 
 ### Duplicates Handled
 
 | # | Imported Item | Existing Artifact | Action | Confidence |
 |---|-------------|------------------|--------|-----------|
-| 1 | {imported title} | REQ-{ID} | {Skip/Merge/Replace} | {X}% |
+| 1 | {imported title} | REQ-F-NNN | {Skip/Merge/Replace} | {X}% |
 | ... | ... | ... | ... | ... |
 
 ### New Items Added
 
 | # | Artifact ID | Title | Source |
 |---|------------|-------|--------|
-| 1 | REQ-{ID} | {title} | {source ref} |
+| 1 | REQ-F-NNN | {title} | {source ref} |
 | ... | ... | ... | ... |
 
 ---
 
-## 8. Quality Assessment
+## 9. Quality Assessment
 
 ### Completeness
 
@@ -154,39 +163,29 @@ _(Showing first 10 mappings. Full mapping in generated artifacts.)_
 
 ---
 
-## 9. Items Needing Manual Review
+## 10. Items Needing Manual Review
 
 | # | Artifact ID | Issue | Recommended Action |
 |---|------------|-------|-------------------|
-| 1 | REQ-{ID} | EARS conversion failed | Convert to EARS syntax manually |
-| 2 | REQ-{ID} | Ambiguous priority | Confirm priority with stakeholder |
-| 3 | UC-{ID} | Missing actor | Identify the primary actor |
+| 1 | REQ-F-NNN | EARS conversion failed | Convert to EARS syntax manually |
+| 2 | REQ-F-NNN | Ambiguous priority | Confirm priority with stakeholder |
+| 3 | UC-NNN | Missing actor | Identify the primary actor |
 | ... | ... | ... | ... |
 
 ---
 
-## 10. Pipeline State Impact
+## 11. Pipeline State Impact
 
 | Stage | Previous Status | New Status | Reason |
 |-------|----------------|-----------|--------|
 | requirements-engineer | {status} | {status} | {requirements imported} |
-| specifications-engineer | {status} | {status} | {specs imported} |
+| specifications-engineer | {status} | {done \| pending} | {full tree + COVERAGE all SPECIFIED, or "partial import"} |
 | spec-auditor | {status} | {status} | {needs audit} |
 | ... | ... | ... | ... |
 
 ### Recommended Next Steps
 
 1. {First action — e.g., "Review UNCONVERTED requirements and convert to EARS syntax"}
-2. {Second action — e.g., "Run `sdd-spec-auditor` to audit imported specifications"}
+2. {Second action — e.g., "Run `sdd-specifications-engineer` to complete spec/" (partial) or "Run `sdd-spec-auditor`" (complete)}
 3. {Third action — e.g., "Run `sdd-reverse-engineer` to fill gaps from code analysis"}
 ```
-
----
-
-## Usage Notes
-
-1. Replace all `{placeholders}` with actual values during report generation
-2. Omit empty sections (e.g., if no parse errors, skip section 6)
-3. The Quality Assessment section helps users understand import reliability
-4. The "Items Needing Manual Review" section is critical — users should address these before proceeding
-5. For `--merge` mode, section 7 is especially important

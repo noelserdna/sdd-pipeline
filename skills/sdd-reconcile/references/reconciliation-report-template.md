@@ -1,6 +1,6 @@
 # Reconciliation Report Template
 
-> Template del informe de reconciliación generado por `sdd-reconcile`. Utilizado por la Fase 8 para generar `reconciliation/RECONCILIATION-REPORT.md`.
+> Used by Phase 8 of `sdd-reconcile` to write `reconciliation/RECONCILIATION-REPORT.md`.
 
 ---
 
@@ -14,6 +14,9 @@
 > Mode: {default | dry-run | code-wins | scoped}
 > Scope: {full | paths}
 > Previous reconciliation: {date or "None"}
+> Gap input: {.sdd/gap-analysis.json {generatedAt} | code scan}
+> Tests: {command run | not run}
+> Change requests: changes/CR-RECONCILE-{date}.md
 
 ---
 
@@ -25,7 +28,8 @@
 | Auto-resolved | {N} |
 | User-decided | {N} |
 | Deferred | {N} |
-| Defects flagged | {N} |
+| Defects recorded | {N} |
+| Not implemented (gaps) | {N} |
 
 ### By Type
 
@@ -33,9 +37,10 @@
 |------|-------|-----------|
 | NEW_FUNCTIONALITY | {N} | Specs updated |
 | REMOVED_FEATURE | {N} | Specs deprecated |
-| BEHAVIORAL_CHANGE | {N} | {N} code wins, {N} spec wins, {N} deferred |
+| NOT_IMPLEMENTED | {N} | Reported as gaps |
+| BEHAVIORAL_CHANGE | {N} | {N} A (spec amended), {N} B (defect), {N} C (req-change), {N} D (deferred) |
 | REFACTORING | {N} | Technical refs updated |
-| BUG_OR_DEFECT | {N} | {N} defect tasks created |
+| BUG_OR_DEFECT | {N} | {N} defects recorded |
 | AMBIGUOUS | {N} | {N} resolved, {N} deferred |
 
 ### Health Impact
@@ -54,7 +59,7 @@
 
 | # | Feature | Code Location | New Requirement | Confidence |
 |---|---------|--------------|-----------------|-----------|
-| 1 | {name} | `{file}:{line}` | REQ-{ID} | {HIGH/MEDIUM} |
+| 1 | {name} | `{file}:{line}` | REQ-F-{NNN} (CR-{NNN}) | {HIGH/MEDIUM} |
 | ... | ... | ... | ... | ... |
 
 ### 2.2 Removed Features (specs deprecated)
@@ -85,7 +90,7 @@
 - **Code does:** {observed behavior}
 - **Code location:** `{file}:{lines}`
 - **Test status:** {pass/fail/missing}
-- **Decision:** {Code wins / Spec wins / Deferred}
+- **Decision:** {A spec amended (CR-NNN) / B defect / C req-change / D deferred}
 - **Action taken:** {description of change applied}
 
 ### 3.2 Potential Bugs/Defects
@@ -97,8 +102,8 @@
 - **Spec says:** {EARS statement}
 - **Code does:** {observed behavior}
 - **Test status:** FAILING — `{test_file}:{line}`
-- **Decision:** {Defect task created / Spec updated / Deferred}
-- **Task:** {TASK-ID if created}
+- **Decision:** {A spec amended (CR-NNN) / B defect / C req-change / D deferred}
+- **Next:** {/sdd-task-generator --fase=N --incremental}
 
 ### 3.3 Ambiguous Cases
 
@@ -112,7 +117,13 @@
 
 ---
 
-## 4. Deferred Items
+## 4. Implementation Gaps (NOT_IMPLEMENTED)
+
+| # | Requirement | Spec artifact | Evidence of absence | Next |
+|---|-------------|---------------|---------------------|------|
+| 1 | REQ-F-{NNN} | UC-{NNN} / API-{NNN}-{NN} | {no symbol/route/commit ever matched} | /sdd-task-generator --fase={N} --incremental |
+
+## 5. Deferred Items
 
 | # | Title | Type | Reason for Deferral | Revisit Recommendation |
 |---|-------|------|--------------------|-----------------------|
@@ -121,7 +132,7 @@
 
 ---
 
-## 5. Artifacts Modified
+## 6. Artifacts Modified
 
 ### Requirements Changes
 
@@ -133,31 +144,30 @@
 
 | File | Changes | Lines Modified |
 |------|---------|---------------|
-| `spec/domain.md` | {description} | {N} |
-| `spec/use-cases.md` | {description} | {N} |
-| `spec/contracts.md` | {description} | {N} |
-| `spec/workflows.md` | {description} | {N} |
-| `spec/nfr.md` | {description} | {N} |
+| `spec/use-cases/UC-{NNN}-{slug}.md` | {description} | {N} |
+| `spec/contracts/API-{module}.md` | {description} | {N} |
+| `spec/domain/02-ENTITIES.md` | {description} | {N} |
+| `spec/tests/BDD-UC-{NNN}.md` | {description} | {N} |
+| `spec/TRACEABILITY-MATRIX.md` | {description} | {N} |
 
-### Other Artifacts
+### Artifacts to Regenerate (not edited by reconcile)
 
-| File | Changes | Lines Modified |
-|------|---------|---------------|
-| `plan/ARCHITECTURE.md` | {if path refs updated} | {N} |
-| `task/TASK-FASE-*.md` | {if path refs updated} | {N} |
+| File | Stale reference | Owner |
+|------|-----------------|-------|
+| `plan/ARCHITECTURE.md` | `{old_path}` → `{new_path}` | sdd-plan-architect |
+| `task/TASK-FASE-{N}.md` | `{old_path}` → `{new_path}` | sdd-task-generator |
+| `test/TEST-PLAN.md` | `{old_path}` → `{new_path}` | sdd-test-planner |
 
 ---
 
-## 6. Pipeline Cascade Impact
+## 7. Pipeline Cascade Impact
 
 ### Stages Invalidated
 
 | Stage | Reason | Recommended Action |
 |-------|--------|--------------------|
-| `spec-auditor` | {requirements/specs changed} | Re-run audit |
-| `test-planner` | {specs changed} | Update test plan |
-| `plan-architect` | {specs changed} | Review architecture |
-| `task-generator` | {plan changed} | Regenerate tasks |
+| `specifications-engineer` | {only if requirements/ changed} | Re-run specifications |
+| `spec-auditor` … `task-implementer` | {spec/ changed} | Re-run from spec-auditor |
 
 ### Recommended Next Steps
 
@@ -167,7 +177,7 @@
 
 ---
 
-## 7. Traceability Impact
+## 8. Traceability Impact
 
 ### New Traceability Links
 
@@ -200,6 +210,6 @@
 
 1. Replace all `{placeholders}` with actual values during report generation
 2. Omit empty sections (e.g., if no defects found, skip section 3.2)
-3. In `--dry-run` mode, sections 2 and 5 show "Would apply" instead of "Applied"
-4. In `--code-wins` mode, section 3 is empty (all resolved as auto)
+3. In `--dry-run` mode, sections 2 and 6 show "Would apply" instead of "Applied"
+4. In `--code-wins` mode, section 3 lists only BUG_OR_DEFECT items with failing tests
 5. The Executive Summary should be sufficient for a quick review — details below for deep dive
