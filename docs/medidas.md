@@ -1,5 +1,7 @@
 # Medidas del smoke real del pipeline (`tests/e2e/20-smoke.sh`)
 
+> **Nota (5.0):** medidas históricas con el plan horizontal de 4.x (FASE-0 de infraestructura, FASE-1 por Streams). `sdd-watch`, el dashboard HTML y las status lines que se citan ya no existen; hoy las FASEs son verticales y el cierre es `sdd-acceptance`.
+
 Proyecto: `examples/todo-app` (10 requisitos aprobados). Plugin cargado con `--plugin-dir`, modelo por defecto de la sesión, sin intervención humana (`without asking questions`).
 
 ## Ejecución 2026-08-24/25 · plugin 4.0.0-beta.1 (+ descripciones recortadas)

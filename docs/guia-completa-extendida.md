@@ -1,9 +1,9 @@
 # Guia Completa Extendida: Todas las Opciones de SDD
 
-> **La guia definitiva** — Cubre las 23 skills, los hooks del plugin, el servidor MCP,
-> el dashboard y todos los escenarios posibles (greenfield, brownfield, drift, multi-equipo).
+> **La guia definitiva** — Cubre las 21 skills, los 5 hooks del plugin, el servidor MCP,
+> la aceptacion por requisito y todos los escenarios posibles (greenfield, brownfield, drift, multi-equipo).
 >
-> **Nota (4.x):** la instalacion vigente esta en [instalacion.md](instalacion.md). Algunos diagramas de esta guia
+> **Nota (5.0):** la instalacion vigente esta en [instalacion.md](instalacion.md). Algunos diagramas de esta guia
 > simplifican la estructura real de `spec/` (que es `domain/01..05-*.md`, `use-cases/UC-NNN-*.md`, `workflows/`,
 > `contracts/API-*.md`, `tests/BDD-UC-NNN.md`, `nfr/*.md`, `adr/ADR-NNN-*.md`) y los IDs de ejemplo; ante la duda
 > manda el `SKILL.md` de cada skill.
@@ -24,7 +24,7 @@
 10. [Importar documentacion externa](#10-importar-documentacion-externa)
 11. [Reconciliar specs con codigo](#11-reconciliar-specs-con-codigo)
 12. [Herramientas de utilidad](#12-herramientas-de-utilidad)
-13. [Dashboard y servidor en vivo](#13-dashboard-y-servidor-en-vivo)
+13. [Aceptacion por requisito y git](#13-aceptacion-por-requisito-y-git)
 14. [Servidor MCP (consultas de trazabilidad)](#14-servidor-mcp-consultas-de-trazabilidad)
 15. [Automatizacion: hooks](#15-automatizacion-hooks)
 16. [La Constitucion SDD (12 articulos)](#16-la-constitucion-sdd-12-articulos)
@@ -44,17 +44,15 @@
 │  Obligatorio                                             │
 │                                                          │
 │  ✓ Claude Code CLI  (claude.ai/code)                    │
-│  ✓ Git              (control de versiones)              │
-│  ✓ Node.js 18+      (servidor MCP + dashboard)          │
+│  ✓ Git 2.32+        (git commit --trailer)              │
+│  ✓ Node.js 18+      (servidor MCP + CLI sdd)            │
 │  ✓ jq               (procesamiento JSON en hooks)       │
 │                                                          │
 │  Opcional (desbloquea funcionalidades extra)             │
 │                                                          │
-│  ○ GitHub CLI (gh)   Para PRs automaticos               │
-│  ○ GitNexus          Code intelligence profundo          │
-│    npm i -g gitnexus   (call graph, clusters, flows)    │
+│  ○ gh / glab         Issues y PRs (tracker)              │
 │  ○ Notion API key    Sync bidireccional con Notion       │
-│  ○ Python 3          Fast path del dashboard             │
+│  ○ Python 3          Grafo JSON (scripts/sdd-graph.py)   │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -75,17 +73,18 @@ claude
 │                                                                      │
 │  Que se instala globalmente:                                         │
 │                                                                      │
-│  23 skills como comandos /sdd-*                                      │
+│  21 skills como comandos /sdd-*                                      │
 │  ├── 7 pipeline       (requirements → implementation)               │
 │  ├── 4 laterales      (tech-designer, ux-designer, security, change)│
 │  ├── 3 brownfield     (reverse-engineer, reconcile, import)         │
-│  ├── 6 utilidades     (status [--diagnose], traceability, dashboard,│
-│  │                      code-index, session-summary, gap-detector)  │
+│  ├── 4 utilidades     (status [--diagnose], acceptance,             │
+│  │                      gap-detector, session-summary)              │
 │  ├── 1 setup          (sdd-setup)                                   │
 │  └── 2 conduccion     (sdd-orchestrator, sdd-lead)                  │
 │                                                                      │
 │  Automatizacion incluida:                                            │
-│  ├── Hooks del plugin (H1-H3, H5, H9-H12; ver Seccion 15)           │
+│  ├── 5 hooks del plugin, 7 registros de evento (ver Seccion 15)     │
+│  ├── CLI scripts/sdd.mjs (lint, trace, verify, branch, accept, gate)│
 │  ├── Quality gates opcionales (H7-H8)                               │
 │  ├── Sin agentes: el plugin no distribuye agentes                   │
 │  └── Servidor MCP     (herramientas de consulta)                    │
@@ -115,19 +114,22 @@ claude
 │  └── Listo para rastrear progreso                                    │
 │                                                                      │
 │  Paso 2: Detecta upgrades                                            │
-│  ├── Si tienes hooks v1 → migra automaticamente a v2                │
+│  ├── Hooks copiados (pre-4.0) → migrate-hooks-v3.sh                 │
+│  ├── Status lines y restos de 4.x → los elimina                     │
 │  └── Preserva estado existente                                       │
 │                                                                      │
-│  Paso 3: Verifica dependencias                                       │
-│  ├── jq instalado?                                                   │
-│  ├── Node.js 18+?                                                    │
-│  └── Compila servidor MCP si necesario                              │
+│  Paso 3: Hook git commit-msg + validador                             │
+│  ├── Instala commit-msg (= sdd verify)                              │
+│  ├── Copia el validador a .claude/sdd/sdd.mjs (versionable)         │
+│  └── Comprueba git >= 2.32 (git commit --trailer)                   │
 │                                                                      │
-│  Paso 4: Instala hooks opcionales (te pregunta)                      │
+│  Paso 4: Stack Profile minimo (task_state: trailers) o kit --stack   │
+│                                                                      │
+│  Paso 5: Instala quality gates opcionales (te pregunta)              │
 │  ├── H7: Stop Quality Gate (verifica pipeline al cerrar)            │
 │  └── H8: Task Traceability Gate (verifica trailers en commits)      │
 │                                                                      │
-│  Paso 5: Genera reporte de verificacion                              │
+│  Paso 6: Genera reporte de verificacion                              │
 │  ┌──────────────────────────────────────────────────┐               │
 │  │  Componente              │ Estado                 │               │
 │  │──────────────────────────│────────────────────────│               │
@@ -136,7 +138,9 @@ claude
 │  │  Hook H2 (upstream-guard)│ ✅ Activo              │               │
 │  │  Hook H3 (state-updater) │ ✅ Activo              │               │
 │  │  Hook H5 (context-augm.) │ ✅ Activo              │               │
-│  │  Servidor MCP            │ ✅ Compilado           │               │
+│  │  Hook H12 (tool-guard)   │ ✅ Activo              │               │
+│  │  commit-msg + validador  │ ✅ Instalado           │               │
+│  │  Servidor MCP            │ ✅ Registrado          │               │
 │  │  Hook H7 (quality gate)  │ ⚪ No instalado (opt.) │               │
 │  │  Hook H8 (task gate)     │ ⚪ No instalado (opt.) │               │
 │  └──────────────────────────────────────────────────┘               │
@@ -213,11 +217,11 @@ Si tu proyecto es nuevo (Escenario 1), el camino es directo:
 │       ↓                                                              │
 │  /sdd-task-generator               ← Tareas atomicas por FASE      │
 │       ↓                                                              │
-│  /sdd-task-implementer             ← Codigo con TDD + commits      │
+│  /sdd-task-implementer --fase N    ← Codigo con TDD + commits + demo│
 │       ↓                                                              │
-│  /sdd-code-index       (opcional)  ← Indexar codigo implementado    │
-│  /sdd-dashboard                    ← Dashboard visual               │
-│  /sdd-traceability-check           ← Verificar cadena completa     │
+│  Puerta de FASE: el cliente acepta el incremento                     │
+│  /sdd-acceptance --loop            ← Bucle hasta que todo Must pase │
+│  /sdd-acceptance --sign-off        ← Aceptacion + tag fase-N-accepted│
 │  /sdd-session-summary              ← Resumir sesion                 │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -595,7 +599,34 @@ reconciliation/
 # - Multiples fuentes
 ```
 
-Genera: `requirements/REQUIREMENTS.md` con requisitos EARS (WHEN/THE/SHALL).
+Genera dos ficheros:
+
+- `requirements/CUSTOMER-NEEDS.md`: las palabras del cliente, literales, como necesidades `N-NNN` (cita, quien y
+  cuando). Se releen con el cliente **antes** de escribir ningun requisito.
+- `requirements/REQUIREMENTS.md`: requisitos EARS (WHEN/THE/SHALL). Cada uno lleva:
+  - `Needs:` con las necesidades que sirve (los `REQ-C` de equipo pueden llevar `Needs: —`);
+  - `Verification: test | demo | measurement | inspection`, el metodo con el que se aceptara;
+  - criterios de aceptacion con un ejemplo con datos reales, revisado con el cliente (`Examples reviewed by:`).
+
+```
+### REQ-F-001: Create a task
+- **Statement:** WHEN the user runs `todo add <title>` THE system SHALL create a task ...
+- **Priority:** Must have
+- **Needs:** N-001
+- **Verification:** test
+- **Acceptance criteria:**
+  - GIVEN an empty task list WHEN the user runs `todo add "Buy milk"` THEN a task with id 1 ... is stored
+```
+
+**Puerta 1 (aprobacion):**
+
+1. `node scripts/sdd.mjs lint --needs` comprueba de forma mecanica que toda necesidad esta cubierta o fuera de
+   alcance con su decision, que todo `REQ-F`/`REQ-NF` cita una necesidad (lo contrario es gold plating) y que todo
+   requisito tiene un `Verification:` valido.
+2. Si mas del 60 % de los requisitos son Must, avisa; en cualquier caso el cliente confirma la lista Must.
+3. Opcional, con Jev: `sdd-jev.mjs needs` sugiere necesidades sin cubrir y candidatos a gold plating. Solo sugiere.
+4. Solo con un "Apruebo" explicito: commit `docs(requirements)` y tag anotado `requirements-v{N}` con aprobador, rol,
+   fecha y el sha256 de `REQUIREMENTS.md` y `CUSTOMER-NEEDS.md`. El tool guard pide confirmacion antes del tag.
 
 ### Paso 2: Especificaciones
 
@@ -603,8 +634,8 @@ Genera: `requirements/REQUIREMENTS.md` con requisitos EARS (WHEN/THE/SHALL).
 /sdd-specifications-engineer
 ```
 
-Genera 6 documentos en `spec/`: DOMAIN-MODEL, USE-CASES, WORKFLOWS,
-API-CONTRACTS, NFR, y ADRs.
+Genera el arbol `spec/`: `domain/`, `use-cases/UC-NNN-*.md`, `workflows/`, `contracts/API-*.md`,
+`tests/BDD-UC-NNN.md` (escenarios con ID `AC-NNN-NN`), `nfr/` y `adr/`.
 
 ### Paso 3: Auditoria de especificaciones
 
@@ -682,7 +713,11 @@ solo reportan hallazgos NUEVOS y REGRESIONES (no repite los ya conocidos).
 /sdd-test-planner
 ```
 
-Genera: `test/TEST-PLAN.md`, `test/TEST-MATRIX-*.md`, `test/PERF-SCENARIOS.md`
+Genera: `test/TEST-PLAN.md`, `test/TEST-MATRIX-*.md`, `test/PERF-SCENARIOS.md`, con objetivos por caso de uso.
+
+**Regla de nombres:** cada test lleva en su nombre el ID del escenario que verifica (`AC-001-03`, o `REQ-NF-002 AC1`
+para un NFR sin escenario BDD). Asi el resultado JUnit se ata a un criterio de aceptacion; un `Refs:` a nivel de
+fichero no cuenta como evidencia.
 
 ### Paso 5: Arquitectura y plan
 
@@ -690,7 +725,52 @@ Genera: `test/TEST-PLAN.md`, `test/TEST-MATRIX-*.md`, `test/PERF-SCENARIOS.md`
 /sdd-plan-architect
 ```
 
-Genera: `plan/PLAN.md`, `plan/ARCHITECTURE.md`, `plan/fases/FASE-*.md`
+Genera: `plan/PLAN.md` (con `> **Plan-Style:** vertical`), `plan/ARCHITECTURE.md`, `plan/fases/FASE-*.md`
+y `plan/fase-plans/PLAN-FASE-{N}.md`.
+
+**FASEs verticales.** Cada FASE es un incremento que el cliente puede ver funcionando, no una capa:
+
+| Regla | Contenido |
+|---|---|
+| Orden | Las dependencias mandan; MoSCoW desempata |
+| FASE-0 (esqueleto) | `FASE-0-SKELETON.md`: el camino minimo escribir → observar → persistir del caso de uso central, con solo la infraestructura que ese camino necesita |
+| Incrementos | Un recorrido de usuario por FASE (el CRUD de una entidad es uno). Maximo 3 casos de uso y unas 15 tareas |
+| Seguridad | Autenticacion y validacion en la primera FASE que expone el recurso; un rol entra con su primera capacidad |
+| NFR | `FASE-N-HARDENING` solo para NFR medidos (rendimiento, disponibilidad), y solo si existen |
+| Streams | Excepcion: solo con conjuntos de escritura disjuntos |
+| Planes mixtos | Un plan horizontal previo conserva sus FASEs; las nuevas van en vertical despues de la ultima verificada |
+
+Ejemplo del todo-app:
+
+| FASE | Incremento | Requisitos |
+|------|-----------|------------|
+| FASE-0-SKELETON | Apuntar tareas y verlas en otra ejecucion | REQ-F-001, REQ-F-002, REQ-F-006, REQ-NF-002 |
+| FASE-1-LIFECYCLE | Completar y borrar tareas | REQ-F-003, REQ-F-004 |
+| FASE-2-FILTER | Filtrar por estado | REQ-F-005 |
+| FASE-3-HARDENING | Latencia con 1 000 tareas | REQ-NF-001 |
+
+Cabecera de cada FASE y su demo (maximo 10 pasos desde un checkout limpio, cada uno citando su escenario y sus
+necesidades):
+
+```markdown
+# FASE 0: Esqueleto — apuntar tareas y verlas de nuevo
+
+> **Incremento:** Apuntar tareas y verlas en otra ejecucion
+> **Requisitos:** REQ-F-001, REQ-F-002, REQ-F-006, REQ-NF-002
+> **Escenarios:** AC-001-01, AC-001-03, AC-002-01, AC-002-04, REQ-NF-002 AC1
+> **Necesidades:** N-001, N-002, N-004, N-005
+> **Dependencias:** Ninguna (fase inicial)
+
+## Demo
+| # | Accion | Resultado esperado | Escenario |
+|---|--------|--------------------|-----------|
+| 1 | `rm -rf data && todo list` | `No tasks`, exit 0 | AC-002-02 · N-002 |
+| 2 | `todo add "Buy milk"` | tarea 1 pending; `data/todos.json` creado | AC-001-01, AC-001-04 · N-001, N-004 |
+```
+
+`node scripts/sdd.mjs lint --plan` lo comprueba: cada FASE con `Requisitos` y `Escenarios`, criterios y demo
+respaldados por IDs REQ/AC existentes (V8) y todo requisito Must asignado a alguna FASE (V9). Un plan sin
+`Plan-Style: vertical` se trata como horizontal y sigue funcionando.
 
 > Si ejecutaste `/sdd-tech-designer` y/o `/sdd-ux-designer` antes,
 > el arquitecto los consume automaticamente en su Phase 0.
@@ -701,7 +781,7 @@ Genera: `plan/PLAN.md`, `plan/ARCHITECTURE.md`, `plan/fases/FASE-*.md`
 /sdd-task-generator
 ```
 
-Genera: `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` y, en formato completo, `task/TASK-INDEX.md` (opcional desde 4.3.0: `scripts/sdd-task-lint.mjs index` lo deriva)
+Genera: `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` y, en formato completo, `task/TASK-INDEX.md` (opcional: `node scripts/sdd.mjs tasks index` lo deriva). Con un plan vertical, Foundation minima y slices agrupados por caso de uso (`### UC-NNN`); cada escenario de la cabecera de la FASE lo cita alguna tarea.
 
 ### Paso 7: Implementacion
 
@@ -709,8 +789,32 @@ Genera: `task/TASK-FASE-*.md`, `task/TASK-ORDER.md` y, en formato completo, `tas
 /sdd-task-implementer
 ```
 
-Implementa tarea por tarea con TDD (Red → Green → Refactor → Commit).
-Cada commit tiene trailers `Refs:` y `Task:` para trazabilidad.
+Implementa tarea por tarea con TDD (Red → Green → Refactor → Commit), en una **rama de trabajo**: en la rama por
+defecto crea `fase-{N}-{slug}` con `node scripts/sdd.mjs branch start fase N <slug>` (en otra rama sigue ahi; con HEAD
+suelto se para). Una tarea = un commit, con los trailers escritos por git:
+
+```bash
+git commit -m "feat(tasks): create task with server-side validation" \
+  --trailer "Task: TASK-F0-003" \
+  --trailer "Refs: UC-001, API-001-01, AC-001-03"
+```
+
+- `feat`/`test`/`refactor` exigen `Task`; `fix`/`perf` exigen `Task` **o** `Change` (`CHG-…`, `CR-…` o un hallazgo),
+  para que un hotfix no quede bloqueado; `docs(specs)` exige `Refs`.
+- El hook git `commit-msg` ejecuta las mismas reglas que `sdd verify` (validador copiado a `.claude/sdd/sdd.mjs`).
+- Merge solo con merge commit (`git merge --no-ff`), nunca squash ni rebase: borrarian los trailers.
+- Detalle en `references/git-conventions.md` del plugin.
+
+Al terminar la FASE (Phase 9) ejecuta la **demo** de la FASE y `sdd accept --fase N`. Despues llega la **puerta de
+FASE**: se presenta la demo y el veredicto por requisito y el cliente responde:
+
+| Respuesta | Que pasa |
+|---|---|
+| Aceptado | `sdd-acceptance --sign-off --fase N` registra la decision y crea el tag anotado `fase-N-accepted` |
+| Aceptado con observaciones | Igual, con tag; cada observacion se enruta sin bloquear |
+| Rechazado, con feedback | Sin tag; cada punto se clasifica (defecto → tareas incrementales; peticion de cambio → `/sdd-req-change`; pregunta → se responde). Jev `feedback-route` puede proponer la ruta; una persona confirma |
+
+Si faltan requisitos por verificar, `/sdd-acceptance --loop` itera hasta el objetivo (ver Seccion 13).
 
 ---
 
@@ -1159,18 +1263,19 @@ en requisitos con propagacion automatica por todo el pipeline.
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                      │
-│  Fase 0:  Inventario y carga de contexto                             │
+│  Fase 0:  Inventario, contexto y rama change/{CHG-ID}-{slug}         │
 │  Fase 1:  Recepcion del cambio + clasificacion ISO 14764            │
 │  Fase 2:  Analisis de impacto                                        │
 │           ├── Impacto directo e indirecto                            │
 │           ├── Conflictos detectados                                  │
-│           ├── Blast radius en codigo                                 │
+│           ├── Codigo afectado (sdd trace req <ID>)                   │
 │           └── Riesgo de regresion                                    │
 │  Fase 3:  Clarificacion (7 propiedades SWEBOK)                      │
 │           └── Genera EARS + criterios de aceptacion                 │
 │  Fase 4:  Plan de cambio (antes/despues por artefacto)              │
 │  Fase 5:  Revision y aprobacion del usuario                         │
-│  Fase 6:  Ejecucion atomica (1 commit por CR)                       │
+│  Fase 6:  Ejecucion atomica (1 commit docs(specs) por CR,           │
+│           con --trailer "Change: CHG-..." y --trailer "Refs: ...")    │
 │  Fase 7:  Auditoria focalizada (8 checks)                           │
 │  Fase 8:  Generacion del Change Report                               │
 │  Fase 9:  Cascada del pipeline                                       │
@@ -1197,6 +1302,9 @@ en requisitos con propagacion automatica por todo el pipeline.
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+Un MODIFY escribe `Needs:`/`Verification:`, reabre la aceptacion del requisito (las decisiones de
+`acceptance/decisions.jsonl` estan atadas al hash de su texto) y pide una nueva aprobacion `requirements-v{N}`.
 
 ### Ciclo de vida de un Change Request
 
@@ -1281,91 +1389,28 @@ changes/
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 12.2 Verificacion de trazabilidad
+### 12.2 Integridad de la cadena de trazabilidad
+
+La antigua `sdd-traceability-check` forma parte de `sdd-acceptance`:
 
 ```
-/sdd-traceability-check
+/sdd-acceptance --check
 ```
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Traceability Check                                                  │
-│                                                                      │
-│  Cadena: REQ → UC → WF → API → BDD → INV → ADR                     │
-│                                                                      │
-│  REQ-F-001     ✅ → UC-TASK-001 ✅ → WF-TASK-CREATE ✅ → API-TASK-001│
-│  REQ-F-002     ✅ → UC-TASK-002 ✅ → WF-TASK-LIST   ✅ → API-TASK-002│
-│  REQ-F-003     ✅ → UC-TASK-003 ⚠️ → (sin workflow)                 │
-│  REQ-NF-002    ✅ → UC-AUTH-001 ✅ → WF-AUTH-LOGIN  ✅ → API-AUTH-001│
-│                                                                      │
-│  Problemas encontrados:                                              │
-│  ⚠️ REQ-F-003 → UC-TASK-003: Falta workflow WF-TASK-DONE           │
-│  ⚠️ ADR-002 no referenciado por ningun UC                           │
-│  ⚠️ INV-005 no referenciado por ningun use case                     │
-│                                                                      │
-│  Huerfanos: 2 (ADR-002, INV-005)                                    │
-│  Links rotos: 1 (WF-TASK-DONE referenciado pero no definido)       │
-│  Cobertura: 92% (23/25 links verificados)                            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+Ademas del veredicto por requisito (Seccion 13), el paso de integridad de cadena informa de referencias rotas (un ID
+citado y nunca definido), definiciones huerfanas, requisitos que no llegan a ningun caso de uso o escenario, tareas
+marcadas como hechas sin commit y commits cuyo `Refs:` cita IDs inexistentes. Usa
+`dashboard/traceability-graph.json` (lo construye `scripts/sdd-graph.py` cuando hay python3) y, para la parte de git,
+`sdd tasks status` y `sdd trace`. Estos hallazgos son defectos a corregir en su origen; nunca cambian un veredicto.
 
-### 12.3 Code intelligence
+### 12.3 De una linea de codigo a su requisito
 
-```
-/sdd-code-index
-```
+La antigua `sdd-code-index` (puente con GitNexus) ya no existe. La pregunta "¿por que existe esta linea?" la responde
+git: blame → commit → trailers → IDs.
 
-Indexa el codigo fuente y lo conecta con artefactos SDD.
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Dos motores disponibles:                                            │
-│                                                                      │
-│  Sin GitNexus (Lite):                                                │
-│  ├── Descubrimiento de simbolos via regex                           │
-│  ├── Mapeo directo de Refs: comments                                │
-│  ├── Commits con trailers Refs:/Task:                               │
-│  └── Sin call graph ni inferencia transitiva                        │
-│                                                                      │
-│  Con GitNexus (Full):                                                │
-│  ├── Todo lo anterior +                                              │
-│  ├── AST analysis completo                                          │
-│  ├── Call graph (quien llama a quien)                               │
-│  ├── Clusters de codigo relacionado                                 │
-│  ├── Flujos de ejecucion (execution flows)                          │
-│  ├── Inferencia transitiva (max depth 2, confidence > 0.7)         │
-│  └── Commit-symbol bridge (a nivel de funcion, no archivo)         │
-│                                                                      │
-│  4 estados de origen (inference engine):                             │
-│                                                                      │
-│  Estado     Color     Significado                                    │
-│  ─────────  ────────  ──────────────────────────────────────        │
-│  direct     ■ verde   Tiene // Refs: comment en el codigo           │
-│  inferred   ◧ amarillo Inferido de commits con Refs: trailers       │
-│  suggested  ? gris    Inferencia de baja confianza (< 0.7)         │
-│  uncovered  ○ rojo    Sin ninguna referencia encontrada             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Modos de ejecucion
-
-```
-/sdd-code-index                 # Full (con GitNexus si disponible)
-/sdd-code-index --lite          # Solo regex (sin GitNexus)
-/sdd-code-index --status        # Verificar si el index esta actualizado
-/sdd-code-index --refresh       # Re-indexar solo archivos cambiados
-```
-
-### Archivos generados
-
-```
-dashboard/traceability-graph.json     ← Enriquecido con codeIntelligence
-code-intelligence/
-└── CODE-INDEX-REPORT.md              ← Estadisticas, simbolos uncovered
+```bash
+node scripts/sdd.mjs trace why src/tasks.ts:42     # Task/Refs/Change del commit que escribio esa linea
+node scripts/sdd.mjs trace req REQ-F-004           # commits cuyo Task/Refs/Change contiene ese ID exacto
 ```
 
 ### 12.4 Resumen de sesion
@@ -1432,73 +1477,91 @@ Resume decisiones de la sesion y separa contexto formal del informal.
 
 ---
 
-## 13. Dashboard y servidor en vivo
+## 13. Aceptacion por requisito y git
 
-### 13.1 Generar dashboard
+La pregunta que el resto del pipeline no responde: **¿esta satisfecho cada requisito, y con que evidencia?** La
+responde la skill `sdd-acceptance` sobre la CLI `scripts/sdd.mjs` (Node, sin dependencias; en CI basta con Node y git,
+usando el validador copiado en `.claude/sdd/sdd.mjs`).
 
-```
-/sdd-dashboard
-```
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Dashboard HTML interactivo con 5 vistas:                            │
-│                                                                      │
-│  1. Resumen ejecutivo                                                │
-│     ├── Health score global                                         │
-│     ├── Metricas clave (artefactos, cobertura, orphans)            │
-│     └── Alertas activas                                              │
-│                                                                      │
-│  2. Trazabilidad                                                     │
-│     ├── Grafo interactivo (nodos = artefactos, edges = refs)        │
-│     ├── Click en nodo para ver detalle                              │
-│     └── Filtro por tipo de artefacto                                │
-│                                                                      │
-│  3. Cobertura                                                        │
-│     ├── Gap analysis por dominio y capa tecnica                     │
-│     ├── REQs con/sin code refs                                      │
-│     ├── REQs con/sin test refs                                      │
-│     └── Estados: linked (verde), inferred (amarillo),               │
-│         suggested (gris), uncovered (rojo)                          │
-│                                                                      │
-│  4. Pipeline                                                         │
-│     ├── Estado de cada etapa con timestamps                         │
-│     ├── Resumen de metricas por etapa                               │
-│     └── Dependencias y flujo                                        │
-│                                                                      │
-│  5. Adopcion                                                         │
-│     ├── Progreso de adopcion SDD                                    │
-│     ├── Skills ejecutados vs pendientes                             │
-│     └── Health score over time                                       │
-│                                                                      │
-│  Metricas reportadas:                                                │
-│  ├── Total artefactos por tipo (REQ, UC, WF, API, BDD, INV, ADR)  │
-│  ├── Cobertura de trazabilidad (% REQs con UCs, code, tests)      │
-│  ├── Artefactos huerfanos (0 incoming refs)                        │
-│  ├── Referencias rotas (mencionadas pero no definidas)              │
-│  ├── Code stats (archivos, simbolos con refs, uncovered)           │
-│  ├── Test stats (archivos de test, tests con refs)                 │
-│  └── Commit stats (commits con Refs: trailers, Task: trailers)    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Archivos generados
+### 13.1 Modos de la skill
 
 ```
-dashboard/
-├── index.html                  ← Dashboard interactivo (abrir en navegador)
-├── guide.html                  ← Guia de interpretacion
-├── traceability-graph.json     ← Datos del grafo (schema v3/v4)
-└── live-status.js              ← Seed JSONP para activity feed
+/sdd-acceptance --check                 # captura tests (JUnit), libro de aceptacion + informe, integridad de cadena
+/sdd-acceptance --fase N                # lo mismo, limitado a los Requisitos de la FASE N
+/sdd-acceptance --loop [--max-cycles 3] # bucle hasta que todo Must este VERIFIED o WAIVED
+/sdd-acceptance --sign-off [--fase N | --release NAME]   # puerta + aceptacion humana + tag
+/sdd-acceptance --publish [--fase N]    # bloque para PR/issue y, opcional, pagina de estado
 ```
 
-### 13.2 Estado en vivo
+Los resultados de tests salen del comando `test_report` del Stack Profile, que escribe JUnit XML (por defecto en
+`.sdd/junit/`). El nombre de cada test lleva el ID del escenario (`AC-NNN-NN`).
 
-No hay servidor HTTP de dashboard (el antiguo hook H6 ya no existe). El dashboard abierto como archivo local
-refresca el feed de actividad por JSONP (`live-status.js`); para ver en vivo que skill corre y cuantos subagentes
-hay, usa la status line (`/sdd-setup`) o `/sdd-watch` (ver [multisesion.md](multisesion.md#ver-qué-está-pasando)).
+### 13.2 Veredictos
+
+| Veredicto | Regla |
+|---|---|
+| VERIFIED | Cada criterio tiene evidencia valida y fresca segun su metodo; el informe dice cuantos ("3/5") |
+| FAILING | Alguna evidencia falla |
+| MISSING | Algun criterio sin evidencia (sin implementar, sin test o test sin el ID en su nombre) |
+| WAIVED | Exencion humana vigente para el texto actual del requisito; un Must exento exige motivo, rol e issue de seguimiento |
+
+Los requisitos deprecados se listan aparte y nunca bloquean. La evidencia depende del `Verification:` del requisito:
+`test` (test JUnit que pasa), `demo` (salida observada que una persona confirma), `measurement` (valor registrado que
+la CLI compara con su umbral) e `inspection` (revision humana registrada). Los registros humanos se hacen con
+`sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NOMBRE --role ROL …` y viven en
+`acceptance/decisions.jsonl`, atados al hash del texto del requisito: un MODIFY con `sdd-req-change` los reabre.
+
+Salidas: `.sdd/acceptance.json` (ignorado por git; lo leen `sdd-pipeline-status`, el hook de sesion y el servidor MCP)
+y `acceptance/ACCEPTANCE-REPORT.md`, legible por el cliente, con el SHA evaluado. El upstream guard deniega editar a
+mano `decisions.jsonl` y el informe; el tool guard pide confirmacion antes de `sdd accept record` y de los tags
+`fase-N-accepted` y `requirements-vN`. Evita la auto-aprobacion accidental; no es una garantia.
+
+### 13.3 Puerta y bucle
+
+```bash
+node scripts/sdd.mjs gate [--mode off|warn|enforce] [--fase N] [--md]
+```
+
+| Salida | Significado |
+|---|---|
+| 0 | Objetivo cumplido: todo Must VERIFIED o WAIVED |
+| 1 | Objetivo no cumplido |
+| 2 | Evidencia obsoleta (o error de uso) |
+| 3 | Objetivo cumplido con Musts exentos |
+
+`warn` imprime y sale con 0; `off` sale con 0 en silencio. El modo por defecto es `acceptance_gate` del Stack Profile
+(o `enforce`); en proyectos brownfield conviene `warn`. `--md` imprime el bloque para el cuerpo de un PR.
+
+`sdd loop next` da un paso del bucle de `--loop` como JSON: ciclo, progreso, objetivos con su `route_hint` y la
+condicion de parada, que decide el codigo: `goal`, `regression`, `no-progress`, `max-cycles` (3 por defecto, tope 5)
+o `needs-human`. Enrutado: lo que falta va a tareas incrementales; un test que falla se arregla en el codigo, nunca
+en el test (Art. 12); una spec dudosa va a una persona y a `/sdd-req-change`. Todo test modificado dentro del bucle se
+lista y lo aprueba una persona. Jev (`test-adequacy`, `evidence`) es solo informativo y nunca decide un veredicto.
+
+### 13.4 Git como evidencia
+
+```bash
+node scripts/sdd.mjs trace commits [--files] [--json]   # commits con sus IDs Task/Refs/Change (reverts marcados)
+node scripts/sdd.mjs trace req REQ-F-004                # commits de un ID (REQ-F-01 no casa con REQ-F-012)
+node scripts/sdd.mjs trace why src/tasks.ts:42          # blame → commit → trailers
+node scripts/sdd.mjs trace delivered REQ-F-004          # tags y ramas que contienen ese trabajo
+node scripts/sdd.mjs verify --range main..HEAD          # valida cada commit y detecta squash
+node scripts/sdd.mjs branch status                      # rama actual, rama por defecto, HEAD suelto
+```
+
+Tags anotados (firmados si hay clave): `requirements-v{N}` (aprobacion de requisitos), `fase-{N}-accepted`
+(aceptacion del cliente) y, con Streams, `fase-N-foundation` y `fase-N-verified`. Para una regresion,
+`git bisect run <comando de test>`. No se usan `git notes`: no se sincronizan por defecto y GitHub no las muestra.
+
+### 13.5 Pagina de estado y grafo
+
+- `sdd-acceptance --publish` puede publicar una pagina de estado como Claude Artifact (pregunta antes, porque saca
+  titulos de requisitos de la maquina). Sin la herramienta Artifact (por ejemplo `claude -p`), la vista compartible es
+  `acceptance/ACCEPTANCE-REPORT.md`. Sustituye al antiguo dashboard HTML.
+- `scripts/sdd-graph.py` sigue construyendo `dashboard/traceability-graph.json` para el servidor MCP y los hooks (sin
+  pagina HTML).
+- La observacion en vivo (status lines, `sdd-watch`, log de actividad) ya no forma parte del plugin; ver
+  [multisesion.md](multisesion.md#ver-qué-está-pasando).
 
 ---
 
@@ -1507,7 +1570,7 @@ hay, usa la status line (`/sdd-setup`) o `/sdd-watch` (ver [multisesion.md](mult
 El servidor MCP permite hacer consultas en tiempo real sobre la trazabilidad
 del proyecto. Se activa automaticamente si el plugin esta instalado.
 
-### 5 herramientas de consulta
+### 6 herramientas de consulta
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1531,14 +1594,16 @@ del proyecto. Se activa automaticamente si el plugin esta instalado.
 │                 code refs, test refs, commit refs,                           │
 │                 coverage gaps.                                               │
 │                                                                              │
-│  sdd_coverage   Gap analysis por dominio de          "¿Que dominios        │
-│                 negocio y capa tecnica.              tienen menos            │
-│                 Identifica areas sin cobertura.      cobertura?"             │
+│  sdd_coverage   Con .sdd/acceptance.json: veredicto  "¿Estan verificados   │
+│                 por requisito y si todo Must esta     todos los Must?"       │
+│                 verificado. Sin el: gaps de links.                          │
 │                                                                              │
 │  sdd_trace      Cadena de trazabilidad completa:    "Traza REQ-NF-002      │
 │                 REQ → UC → WF → API → BDD → INV     de punta a punta"      │
 │                 → ADR → TASK → COMMIT → CODE → TEST                        │
 │                 Detecta rupturas en la cadena.                               │
+│                                                                              │
+│  sdd_gaps       Hallazgos de sdd-gap-detector.      "¿Que endpoints faltan?"│
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1552,7 +1617,7 @@ sdd://graph/schema            ← Schema del grafo de trazabilidad
 sdd://graph/stats             ← Estadisticas del grafo
 sdd://coverage/gaps           ← Gaps de cobertura
 sdd://artifacts/{type}        ← Artefactos por tipo
-sdd://artifact/{id}           ← Detalle de un artefacto
+sdd://artifacts/{type}/{id}   ← Detalle de un artefacto
 ```
 
 ### 2 prompts de workflow
@@ -1578,30 +1643,31 @@ sdd://artifact/{id}           ← Detalle de un artefacto
 Los hooks corren desde el plugin (`${CLAUDE_PLUGIN_ROOT}/hooks/hooks.json`); `/sdd-setup` no los copia al proyecto.
 Todos salen en silencio en un repositorio sin `pipeline-state.json` ni `.sdd/`.
 
+5 hooks, 7 registros de evento:
+
 | Hook | Script | Evento | Que hace |
 |------|--------|--------|----------|
-| H1 | `sdd-session-start.sh` | SessionStart (startup, resume, compact) | Inyecta el estado del pipeline (`N/7` sobre las 7 etapas ordenadas); callado en proyectos sin SDD |
-| H2 | `sdd-upstream-guard.sh` | PreToolUse (Edit, Write) | Bloquea que una skill downstream modifique artefactos upstream (Art. 4) |
-| H3 | `sdd-pipeline-state-updater.sh` | PostToolUse (Write, async) | Actualiza `pipeline-state.json` al escribir artefactos; no lo crea (eso es de `/sdd-setup`) |
-| H5 | `sdd-augment-hook.js` | PreToolUse (Read, Edit, Write) | Enriquece el contexto con datos de trazabilidad |
-| H9 | `sdd-trace-map-updater.sh` | PostToolUse (Write, Edit, async) | Actualiza el mapa de trazabilidad al escribir specs o codigo |
-| H10 | `sdd-activity-log.sh` | SessionStart, PreToolUse (Skill, Agent), SubagentStart/Stop, Stop, SessionEnd | Log `.sdd/activity.jsonl` e indice global de runs |
-| H11 | `sdd-runs-line.sh` | UserPromptSubmit | Una linea por run vivo |
-| H12 | `sdd-tool-guard.sh` | PreToolUse (Bash) | Deniega asignar variables de consentimiento humano para acciones de IA |
+| H1 | `sdd-session-start.sh` | SessionStart (startup, resume, compact) | Inyecta el estado del pipeline (`N/7` sobre las 7 etapas ordenadas) y el resumen de aceptacion; callado en proyectos sin SDD |
+| H2 | `sdd-upstream-guard.sh` | PreToolUse (Edit, Write) | Bloquea que una skill downstream modifique artefactos upstream (Art. 4); deniega editar a mano `acceptance/decisions.jsonl` y el informe |
+| H3 | `sdd-pipeline-state-updater.sh` | PreToolUse (Skill), UserPromptExpansion, PostToolUse (Write) — todos async | Marca `running` la etapa cuando arranca su skill o se escribe un fichero bajo su directorio; no crea el fichero (eso es de `/sdd-setup`) |
+| H5 | `sdd-augment-hook.js` | PreToolUse (Read, Edit, Write) | Enriquece el contexto con datos de trazabilidad del grafo |
+| H12 | `sdd-tool-guard.sh` | PreToolUse (Bash) | Deniega asignar variables de consentimiento humano para acciones de IA; pide confirmacion (`ask`) antes de `sdd accept record` y de los tags `fase-N-accepted` / `requirements-vN` |
 
 Las skills que cambian el estado de una etapa usan `scripts/sdd-state.sh set <etapa> <estado>`, que escribe bajo el
 mismo lock que los hooks.
 
-**Hook git `commit-msg`** (lo instala `/sdd-setup`): exige `Refs:`/`Task:` en `feat|fix|perf|test` (en `refactor`
-basta `Task:`); deja pasar `docs|chore|ci|style|build`, merges, `Revert "..."` y los `fixup!`/`squash!`/`amend!`.
-Los commits que editan specs usan `docs(specs): ...` con `Refs:`.
+**Hook git `commit-msg`** (lo instala `/sdd-setup`, que copia el validador a `.claude/sdd/sdd.mjs`): aplica las mismas
+reglas que `sdd verify`. `Task:` en `feat|test|refactor`, `Task:` o `Change:` en `fix|perf`, `Refs:` en
+`docs(specs)`, IDs bien formados y ninguna linea de trailer fuera del bloque. Deja pasar el resto de `docs`, `chore`,
+`ci`, `style`, `build`, merges, `Revert "..."` y los `fixup!`/`squash!`/`amend!`. Sin node, usa el mismo criterio en
+bash sobre `git interpret-trailers`.
 
 **Quality gates opcionales** (`/sdd-setup` los ofrece): H7 Stop Quality Gate (prompt hook que revisa la
 consistencia de `pipeline-state.json` al cerrar) y H8 Task Traceability Gate (agent hook en `TaskCompleted` que
 verifica los trailers del ultimo commit).
 
-**Hooks a nivel de skill**: `sdd-task-implementer` (Stop: `Refs:`/`Task:` en el ultimo commit) y
-`sdd-spec-auditor` (Stop: hallazgos P0/P1 tratados).
+**Hooks a nivel de skill**: `sdd-spec-auditor` (Stop: hallazgos P0/P1 tratados) y `sdd-acceptance` (Stop: si el
+bucle no alcanzo el objetivo, cada Must abierto tiene una decision humana o queda pendiente).
 
 **Agentes**: el plugin no distribuye agentes. `sdd-orchestrator` es una skill; `sdd-cross-auditor` y
 `sdd-pipeline-auditor` son herramientas de mantenimiento del propio repositorio (`.claude/agents/`).
@@ -1620,7 +1686,7 @@ Definida en `references/sdd-constitution.md`; las skills la citan en sus puertas
 | 4 | Inmutabilidad upstream | Una skill downstream no modifica artefactos upstream (H2 lo aplica) |
 | 5 | Calidad lista para implementar | Una spec debe poder implementarse sin mas aclaraciones; calificativos vagos ("rapido") son defectos |
 | 6 | Auditoria con baseline | La primera auditoria crea baseline; las siguientes reportan nuevos y regresiones |
-| 7 | Una task, un commit atomico | Conventional Commits con `Refs:`/`Task:` y estrategia de revert |
+| 7 | Una task, un commit atomico | Conventional Commits con trailers `Task:`/`Refs:` (via `git commit --trailer`) y estrategia de revert |
 | 8 | Construccion test-first | El test se escribe antes que el codigo |
 | 9 | Bucles de feedback estructurados | La retroalimentacion va a `feedback/IMPL-FEEDBACK-FASE-N.md` |
 | 10 | Operacion consciente del contexto | Leer decisiones existentes (ADRs, CLARIFICATIONS, CLAUDE.md, baselines) antes de preguntar o proponer |
@@ -1744,20 +1810,21 @@ Score: 52/100 (C). 8 hallazgos, 2 criticos.
 
 ```
 /sdd-task-generator
-/sdd-task-implementer
+/sdd-task-implementer --fase 0      # en la rama fase-0-<slug>; demo al final de la FASE
+# Puerta de FASE: el cliente acepta el incremento → /sdd-acceptance --sign-off --fase 0
 ```
 
 ### Fase 9: Post-implementacion
 
 ```
-# Indexar codigo implementado
-/sdd-code-index
+# Veredicto por requisito e integridad de cadena (en brownfield: acceptance_gate: warn)
+/sdd-acceptance --check
 
-# Verificar trazabilidad
-/sdd-traceability-check
+# Bucle hasta que todo Must este VERIFIED o WAIVED
+/sdd-acceptance --loop
 
-# Generar dashboard
-/sdd-dashboard
+# Bloque para el PR y pagina de estado opcional
+/sdd-acceptance --publish
 
 # Ver estado final
 /sdd-pipeline-status
@@ -1774,7 +1841,7 @@ Score: 52/100 (C). 8 hallazgos, 2 criticos.
 
 # Verificar resultado
 /sdd-pipeline-status
-/sdd-dashboard
+/sdd-acceptance --check
 ```
 
 ### Fase 11: Sprint 3 — Detectar drift
@@ -1806,14 +1873,13 @@ ecommerce-api/
 │   └── RECONCILIATION-REPORT.md      ← Divergencias resueltas
 │
 ├── requirements/
+│   ├── CUSTOMER-NEEDS.md             ← Necesidades del cliente (N-NNN)
 │   └── REQUIREMENTS.md               ← Requisitos formales (EARS)
 │
 ├── spec/
-│   ├── DOMAIN-MODEL.md
-│   ├── USE-CASES.md
-│   ├── WORKFLOWS.md
-│   ├── API-CONTRACTS.md
-│   ├── NFR.md
+│   ├── domain/  use-cases/  workflows/  contracts/
+│   ├── tests/BDD-UC-*.md             ← Escenarios AC-NNN-NN
+│   ├── nfr/
 │   └── adr/ADR-*.md
 │
 ├── audits/
@@ -1838,9 +1904,10 @@ ecommerce-api/
 │   └── PERF-SCENARIOS.md
 │
 ├── plan/
-│   ├── PLAN.md
+│   ├── PLAN.md                        ← Plan-Style: vertical
 │   ├── ARCHITECTURE.md
-│   └── fases/FASE-*.md
+│   ├── fases/FASE-*.md                ← FASE-0-SKELETON, incrementos
+│   └── fase-plans/PLAN-FASE-*.md
 │
 ├── task/
 │   ├── TASK-FASE-*.md
@@ -1853,14 +1920,12 @@ ecommerce-api/
 │   ├── CHANGE-REPORT-CHG-2026-04-02-001.md
 │   └── CASCADE-REPORT-CHG-2026-04-02-001.md
 │
-├── dashboard/
-│   ├── index.html                     ← Dashboard interactivo
-│   ├── guide.html
-│   ├── traceability-graph.json
-│   └── live-status.js
+├── acceptance/
+│   ├── ACCEPTANCE-REPORT.md           ← Veredicto por requisito (SHA evaluado)
+│   └── decisions.jsonl                ← Exenciones, demos, mediciones, aceptaciones
 │
-├── code-intelligence/
-│   └── CODE-INDEX-REPORT.md           ← Simbolos, cobertura, gaps
+├── dashboard/
+│   └── traceability-graph.json        ← Grafo para MCP y hooks (sdd-graph.py)
 │
 ├── src/                               ← Codigo implementado
 ├── tests/                             ← Tests automatizados
@@ -1902,7 +1967,7 @@ ecommerce-api/
 │  /sdd-test-planner                       Plan de pruebas                 │
 │  /sdd-plan-architect                     Arquitectura + fases            │
 │  /sdd-task-generator                     Tareas atomicas                 │
-│  /sdd-task-implementer                   Implementar con TDD             │
+│  /sdd-task-implementer --fase N          Implementar con TDD + demo      │
 │                                                                           │
 │  LATERALES (cualquier momento)                                            │
 │  /sdd-tech-designer                      12 dims tecnicas               │
@@ -1923,12 +1988,10 @@ ecommerce-api/
 │                                                                           │
 │  UTILIDADES                                                               │
 │  /sdd-pipeline-status                    Estado del pipeline             │
-│  /sdd-traceability-check                 Verificar cadena               │
-│  /sdd-dashboard                          Dashboard HTML                  │
-│  /sdd-code-index                         Indexar codigo                  │
-│  /sdd-code-index --lite                  Sin GitNexus                    │
-│  /sdd-code-index --status                Verificar frescura             │
-│  /sdd-code-index --refresh               Re-indexar cambios             │
+│  /sdd-acceptance --check                 Veredictos + integridad cadena │
+│  /sdd-acceptance --loop                  Bucle hasta objetivo            │
+│  /sdd-acceptance --sign-off --fase N     Aceptacion + fase-N-accepted    │
+│  /sdd-acceptance --publish               Bloque PR + pagina de estado    │
 │  /sdd-session-summary                    Resumen de sesion               │
 │  /sdd-gap-detector                       Gaps spec ↔ codigo             │
 │  /sdd-gap-detector --semantic            + cobertura por requisito       │
@@ -1936,6 +1999,15 @@ ecommerce-api/
 │  CONDUCCION                                                               │
 │  /sdd-orchestrator                       Pipeline completo guiado        │
 │  /sdd-lead                               Sesion lead multisesion         │
+│                                                                           │
+│  CLI (node scripts/sdd.mjs; en CI node .claude/sdd/sdd.mjs)               │
+│  lint [--needs | --plan]                 Tareas, necesidades, plan       │
+│  trace commits|req|why|delivered         Trazabilidad por git            │
+│  verify --message F | --range A..B       Reglas de commit (commit-msg)  │
+│  branch start|status                     Rama de trabajo por defecto    │
+│  accept [record ...]                     Libro de aceptacion             │
+│  gate [--mode off|warn|enforce] [--md]   Puerta: exit 0/1/2/3            │
+│  loop next                               Un paso del bucle               │
 │                                                                           │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1947,7 +2019,10 @@ ecommerce-api/
 | Termino | Significado |
 |---------|-------------|
 | **Pipeline** | Secuencia de 7 pasos (REQ → IMPL) |
-| **FASE** | Fase de implementacion (grupo de tareas) |
+| **FASE** | Incremento vertical: un recorrido de usuario con su demo (FASE-0 = esqueleto) |
+| **Necesidad (N-NNN)** | Palabras literales del cliente en `CUSTOMER-NEEDS.md`; cada requisito cita las suyas |
+| **Veredicto** | VERIFIED / FAILING / MISSING / WAIVED por requisito, calculado por `sdd accept` |
+| **Trailer** | Linea `Task:` / `Refs:` / `Change:` del bloque final de un commit, escrita con `git commit --trailer` |
 | **EARS** | Formato de requisitos: WHEN/THE/SHALL |
 | **BDD** | Escenarios Given/When/Then |
 | **ADR** | Architecture Decision Record |
@@ -1962,11 +2037,9 @@ ecommerce-api/
 | **CWE** | Common Weakness Enumeration |
 | **ISO 14764** | Estandar de clasificacion de mantenimiento |
 | **MCP** | Model Context Protocol (consultas de trazabilidad) |
-| **GitNexus** | Herramienta de code intelligence (call graph, clusters) |
 | **Design Tokens** | Variables de diseno exportables (colores, spacing, etc.) |
 | **WCAG** | Web Content Accessibility Guidelines (2.2 AA) |
 | **Blast Radius** | Conjunto de artefactos/codigo afectados por un cambio |
-| **Code Intelligence** | Mapeo bidireccional codigo ↔ artefactos SDD |
 | **ATAM-lite** | Architecture Tradeoff Analysis Method simplificado |
 | **Atomic Design** | Metodologia UI: atoms → molecules → organisms → templates → pages |
 | **Baseline** | Primera auditoria; las siguientes solo reportan deltas |
@@ -1976,9 +2049,7 @@ ecommerce-api/
 | **Constitution** | 12 articulos que gobiernan el comportamiento de SDD (`references/sdd-constitution.md`) |
 | **Upstream** | Artefactos que alimentan al actual (ej: requirements es upstream de spec) |
 | **Downstream** | Artefactos que dependen del actual (ej: task es downstream de plan) |
-| **Fast Path** | Ejecucion acelerada del dashboard via generate.py |
-| **JSONP Polling** | Mecanismo de actualizacion cuando dashboard se abre como archivo local |
-| **Inference Engine** | Motor que deduce trazabilidad code→spec desde commits y simbolos |
+| **Walking skeleton** | FASE-0: el camino minimo escribir → observar → persistir del caso de uso central |
 
 ---
 

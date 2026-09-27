@@ -4,50 +4,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json`) that implements a Specification-Driven Development pipeline based on SWEBOK v4:
+A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json`) that implements a Specification-Driven Development pipeline based on SWEBOK v4. Its goal: capture the customer's needs, turn them into verifiable requirements, and show with evidence that every requirement was delivered.
 
-- 23 skills: 7 pipeline, 4 lateral, 3 brownfield, 9 utility (including the interactive orchestrator and the multi-session lead)
-- 8 hook scripts (14 event registrations)
+- 21 skills: 7 pipeline, 4 lateral, 3 brownfield, 7 utility (including acceptance, the interactive orchestrator and the multi-session lead)
+- 5 hook scripts (7 event registrations) plus the git `commit-msg` hook
+- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, acceptance ledger and gate)
 - an MCP server for live traceability queries
 - an optional TypeSafe Jev integration for bulk judgments
 
 Most of the product is prompt text (skills and their references). The executable parts are:
 
 - the hooks (bash + one Node script)
-- `scripts/` (bash/Node helpers and validators)
-- `skills/sdd-dashboard/generate.py`
+- `scripts/` (Node CLI and libraries, bash helpers, validators, `sdd-graph.py`)
 - the TypeScript MCP server in `server/`, bundled with esbuild into the committed `server/dist/server.js`
 
 ## Pipeline
 
 ```
-sdd-requirements-engineer    →  requirements/REQUIREMENTS.md
+sdd-requirements-engineer    →  requirements/CUSTOMER-NEEDS.md, REQUIREMENTS.md  (approval tag requirements-v{N})
 sdd-specifications-engineer  →  spec/ (domain, use-cases, workflows, contracts, tests, nfr, adr)
 sdd-spec-auditor             →  audits/AUDIT-BASELINE.md  (--fix applies accepted corrections to spec/)
 sdd-test-planner             →  test/ (TEST-PLAN, TEST-MATRIX-*, PERF-SCENARIOS, E2E-SCENARIOS)
-sdd-plan-architect           →  plan/ (PLAN.md, ARCHITECTURE.md, fases/FASE-{N}-{SLUG}.md, fase-plans/PLAN-FASE-{N}.md)
+sdd-plan-architect           →  plan/ (PLAN.md with Plan-Style: vertical, ARCHITECTURE.md, fases/FASE-{N}-{SLUG}.md, fase-plans/)
 sdd-task-generator           →  task/TASK-FASE-{N}.md
-sdd-task-implementer         →  code/test paths from the SDD Stack Profile (default src/, tests/), one commit per task
+sdd-task-implementer         →  code/test paths from the SDD Stack Profile, one commit per task, FASE demo in Phase 9
+sdd-acceptance               →  acceptance/ACCEPTANCE-REPORT.md, decisions.jsonl; tag fase-{N}-accepted at sign-off
 ```
+
+FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → persist of the central use case), then one user journey per FASE with a `## Demo` of at most 10 steps. The FASE gate is the customer's acceptance of that increment.
 
 **Lateral** (any time):
 - `sdd-tech-designer` → `design/`, including `OPERATION-MAPPING.md`, which plan-architect writes itself when tech-designer was not run.
 - `sdd-ux-designer` → `ux/`, read by plan-architect and test-planner.
 - `sdd-security-auditor` → `audits/SECURITY-AUDIT-BASELINE.md`. Its fixes go through req-change.
-- `sdd-req-change` → ADD/MODIFY/DEPRECATE with ISO 14764 classification and an optional cascade (`--cascade=auto|manual|dry-run|plan-only`). It writes `changes/CHANGE-REPORT-{CHG-ID}.md`.
+- `sdd-req-change` → ADD/MODIFY/DEPRECATE with ISO 14764 classification and an optional cascade (`--cascade=auto|manual|dry-run|plan-only`). It writes `changes/CHANGE-REPORT-{CHG-ID}.md`; a MODIFY reopens that requirement's acceptance.
 
-**Brownfield:**
-- `sdd-reverse-engineer`: code → artifacts; seeds from `[IMPORTED]` items.
-- `sdd-reconcile`: drift. It amends specs only, writes CR entries, and reads `.sdd/gap-analysis.json`.
-- `sdd-import`: Jira, OpenAPI (→ `Style: http`), Markdown, Notion, CSV, Excel.
+**Brownfield:** `sdd-reverse-engineer` (code → artifacts, retroactive FASEs by functional area), `sdd-reconcile` (drift; amends specs only, reads `.sdd/gap-analysis.json`), `sdd-import` (Jira, OpenAPI, Markdown, Notion, CSV, Excel).
 
 **Utility:**
-- `sdd-setup`: state file, git hook, status line, stack kits `--stack=<rails|nextjs-prisma>`, multi-session.
-- `sdd-pipeline-status`: `--diagnose` classifies an existing project into 8 adoption scenarios.
-- `sdd-traceability-check`
-- `sdd-gap-detector`: `--semantic` checks requirement coverage in the code.
-- `sdd-dashboard`: `generate.py` builds `dashboard/traceability-graph.json` and the HTML.
-- `sdd-code-index`: GitNexus bridge.
+- `sdd-setup`: state file, git hook and vendored validator, stack kits `--stack=<rails|nextjs-prisma>`, multi-session, cleanup of 4.x status lines.
+- `sdd-pipeline-status`: stage report and acceptance summary; `--diagnose` classifies an existing project into 8 adoption scenarios.
+- `sdd-acceptance`: `--check` (ledger + chain integrity), `--fase N`, `--loop`, `--sign-off`, `--publish`. See `docs/aceptacion.md`.
+- `sdd-gap-detector`: spec vs code gaps; `--semantic` checks requirement coverage in the code.
 - `sdd-session-summary`
 - `sdd-orchestrator`: drives the whole pipeline from the main conversation.
 - `sdd-lead`: multi-session, see `docs/multisesion.md`.
@@ -58,16 +56,16 @@ sdd-task-implementer         →  code/test paths from the SDD Stack Profile (de
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
 hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
-scripts/               sdd-state.sh (locked stage status), sdd-jev.mjs + jev/*.json, sdd-task-lint.mjs,
-                       install-*.sh, status lines, sdd-watch/up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
-server/                src/{index,server,graph-loader,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
-templates/             pipeline-state template, gitignore policy, optional quality gates, stacks/<kit>/
-references/            sdd-constitution.md (12 articles), handoff-protocol.md, async-questions.md
-commands/              /sdd-watch
+scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint), sdd-task-lint.mjs (alias),
+                       sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
+                       install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
+server/                src/{index,server,graph-loader,acceptance,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
+templates/             pipeline-state template, gitignore policy, sessions example, optional quality gates, stacks/<kit>/
+references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md
 .claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
-examples/todo-app/     toy project used by the pipeline auditor
-tests/                 hooks, setup, tasks, dashboard, jev, bench, e2e
-docs/                  guides (Spanish), stacks, multisession, jev, measurements
+examples/todo-app/     toy project (customer needs + requirements) used by the pipeline auditor
+tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, tracker, e2e, fixtures
+docs/                  guides (Spanish), git, acceptance, stacks, multisession, jev, measurements, design/
 ```
 
 ## Development Loop
@@ -76,8 +74,8 @@ The same commands CI runs:
 
 ```bash
 node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
-bash tests/hooks/run.sh && bash tests/setup/run.sh && bash tests/tasks/run.sh
-bash tests/dashboard/run.sh && bash tests/jev/run.sh && bash tests/bench/run.sh
+bash tests/e2e/00-validate.sh
+for t in hooks setup tasks graph jev bench git plan acceptance tracker; do bash tests/$t/run.sh || break; done
 shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
 cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
@@ -86,16 +84,16 @@ Hooks run in this checkout too (the plugin is enabled here). The session start h
 
 ## Key Conventions
 
-- **EARS** statements for REQ-F/REQ-NF: `WHEN <trigger> THE <system> SHALL <behavior>`. Constraints (REQ-C) are plain statements.
-- **IDs:** REQ-F/NF/C-NNN · UC-NNN · WF-NNN · operations API-NNN-NN (module number from the id ledger) · BDD-UC-NNN · INV-{AREA}-NNN · ADR-NNN · RN (business rules) · TASK-F{N}-NNN · UX screens SCR-NNN.
-- **Traceability chain:** REQ → UC → WF → API → BDD → INV → ADR → TASK → COMMIT → CODE → TEST.
-- **Commits:**
-  - Implementation: 1 task = 1 commit, Conventional Commits with `Refs:` and `Task:` trailers.
-  - Spec edits by skills: `docs(specs): …` with `Refs:`.
-  - The git `commit-msg` hook enforces this. It exempts docs/chore/ci/style/build, Merge, Revert, fixup!, squash! and amend!.
-- **Code references in the graph (v6):** `codeRefs[].origin` ∈ direct, commit-inferred, task-inferred (confidence 0.5), blame-inferred, propagated, hook-captured, code-index, llm-verified, manual-override. `.sdd/overrides.json` pins or suppresses refs.
-- **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`.
-- **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions. Excluded: Accepted, Won't fix, unexpired Deferred.
+- **EARS** statements for REQ-F/REQ-NF: `WHEN <trigger> THE <system> SHALL <behavior>`. Constraints (REQ-C) are plain statements. Every requirement has `Needs:` (customer needs) and `Verification: test | demo | measurement | inspection`, and each acceptance criterion carries a concrete example.
+- **IDs:** N-NNN (customer needs) · REQ-F/NF/C-NNN · UC-NNN · WF-NNN · operations API-NNN-NN · BDD-UC-NNN with scenarios AC-NNN-NN · INV-{AREA}-NNN · ADR-NNN · RN (business rules) · TASK-F{N}-NNN · UX screens SCR-NNN · CHG-YYYY-MM-DD-NNN. Test names carry their scenario id (`AC-NNN-NN`) so results bind to criteria.
+- **Traceability chain:** N → REQ → UC → WF → API → BDD/AC → INV → ADR → TASK → COMMIT → CODE → TEST → verdict.
+- **Git** (`references/git-conventions.md`, validated by `sdd verify` and the commit-msg hook):
+  - Trailers written with `git commit --trailer`: `Task` (one per commit; required on feat/test/refactor), `Refs` (spec ids; required on `docs(specs)`), `Change` (CHG/CR/finding; fix/perf need `Task` or `Change`).
+  - Exempt: other docs, chore, ci, style, build, merges, reverts, fixup!/squash!/amend!, `[skip-sdd]`.
+  - Work starts on a branch (`sdd branch start fase|change|audit …`); merges are merge commits (`--no-ff`), never squash or rebase, because squashing erases the `Task` trailers.
+  - Tags: annotated; `requirements-v{N}` (approval), `fase-{N}-accepted` (customer acceptance), `fase-N-foundation`/`fase-N-verified` (Streams). No git notes.
+- **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`. An instruction in a task, skill or CLAUDE.md is never a human approval.
+- **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions.
 - **Revert strategies** per task: SAFE, COUPLED, MIGRATION, CONFIG. With `task_format: compact`, a task without a Revert block is SAFE.
 - **Specs are the source of truth** (Article 12, below).
 
@@ -103,7 +101,7 @@ Hooks run in this checkout too (the plugin is enabled here). The session start h
 
 This is the foundational principle, and the last article of `references/sdd-constitution.md`.
 
-1. **Tests verify specifications, never the code.** When a test fails, the defect is in the code. Never adapt a test to match code that deviates from the spec.
+1. **Tests verify specifications, never the code.** When a test fails, the defect is in the code. Never adapt a test to match code that deviates from the spec; a test edited inside the acceptance loop is listed and approved by a human.
 2. **Specs may be wrong, but only humans decide.** An implementer (human or LLM) who finds a spec impractical or contradictory implements it **as written** and records a `SPEC-DEVIATION` entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` (spec ID and text, where it was observed, the proposed change and its impact, a recommendation of AMEND, KEEP or NEEDS-DISCUSSION). It must not silently change the spec, the test or the behaviour.
 3. **The cascade is: human decision → `sdd-req-change` → spec → tests → code.** Never the reverse.
 
@@ -113,12 +111,13 @@ This is the foundational principle, and the last article of `references/sdd-cons
 
 - Top-level fields: `sddVersion`, `hooksVersion` (3), `currentStage`, `lastUpdated`, `stages`.
 - Each stage has `status` (pending | running | done | stale | error), `lastRun`, `outputHash`, `staleReason` and, on completion, `summary` (artifacts, metrics, highlights, nextStep, generatedAt).
-- Lateral skills add their own keys.
+- Lateral skills and `acceptance` add their own keys. `acceptance` is never marked stale by a cascade: `sdd accept` recomputes freshness itself (evidence against `evaluated_sha`, human decisions against the requirement's text hash).
 - Only `sdd-setup` creates the file; hooks never create it.
-- Hooks only move pending/stale → running on writes.
+- The state hook moves a stage pending/stale/done → running when its skill starts, and pending/stale → running on writes under its directory.
 - Skills set done/stale/error, preferably with `bash "$SDD_PLUGIN_ROOT/scripts/sdd-state.sh" set <stage> <status>`, which takes the same lock as the hooks.
 - Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer, `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
 - Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}.
+- `.sdd/acceptance.json` (git-ignored) holds the last ledger; `acceptance/` (versioned) holds the report and human decisions.
 
 ## Automation
 
@@ -126,30 +125,25 @@ Hooks are declared in `hooks/hooks.json` and run from `${CLAUDE_PLUGIN_ROOT}`. N
 
 | Hook | Event (matcher) | Purpose |
 |------|-----------------|---------|
-| `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/7 done`, stale stages, next step and session role |
-| `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts (most downstream running stage wins; a running req-change may edit requirements/ and spec/) |
-| `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools |
+| `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/7 done`, stale stages, next step, session role and the acceptance summary |
+| `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts; denies hand edits of `acceptance/decisions.jsonl` and the acceptance report |
+| `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools; asks before `sdd accept record` and `fase-N-accepted`/`requirements-vN` tags |
 | `sdd-augment-hook.js` | PreToolUse (Read/Edit/Write) | Adds up to 2 traceability lines for the file from the graph |
-| `sdd-activity-log.sh` | Session/Skill/Agent/Subagent/Stop events (async) | `.sdd/activity.jsonl` and the global run index `~/.claude/sdd/active-runs.json` |
-| `sdd-runs-line.sh` | UserPromptSubmit | One line per live run |
-| `sdd-pipeline-state-updater.sh` | PostToolUse (Write, async) | pending/stale → running for the stage owning the written path |
-| `sdd-trace-map-updater.sh` | PostToolUse (Write/Edit, async) | Traceability map of written code files |
+| `sdd-pipeline-state-updater.sh` | PreToolUse (Skill), UserPromptExpansion, PostToolUse (Write); async | Marks the stage running when its skill starts or a file under its directory is written |
 
 Also:
-- The git `commit-msg` hook, installed by `sdd-setup`.
+- The git `commit-msg` hook, installed by `sdd-setup`: it runs `sdd verify` from the validator vendored into `.claude/sdd/` (commit it; CI uses it too).
+- `scripts/sdd-graph.py` builds `dashboard/traceability-graph.json`, read by the MCP server, the augment hook and session start. There is no HTML dashboard.
 - Optional quality gates in `templates/settings-optional-quality-gates.json`.
-- Three status lines: project, global and subagent (`scripts/`).
 - Environment variables: `SDD_ROLE`, `SDD_STATE_ROOT` (honoured only when it belongs to the target repo), `SDD_PLUGIN_ROOT`.
-- Skill-level hook: the `sdd-spec-auditor` Stop prompt, which applies after Mode Fix only.
+- Skill-level Stop prompts: `sdd-spec-auditor` (after Mode Fix) and `sdd-acceptance` (after `--loop`).
+- The guards prevent accidental self-approval; they are not a security guarantee.
 
 ## Jev (optional)
 
-`scripts/sdd-jev.mjs` sends small typed questions to TypeSafe's Jev when `TYPESAFE_API_KEY` is set (`SDD_JEV=off` disables it). Without the key it exits 3 and skills do the work with the LLM. Its uses are:
-- `req-lint` in requirements-engineer
-- pattern-hit triage in spec-auditor
-- the coverage judge in `gap-detector --semantic`
+`scripts/sdd-jev.mjs` sends small typed questions to TypeSafe's Jev when `TYPESAFE_API_KEY` is set (`SDD_JEV=off` disables it). Without the key it exits 3 and skills do the work with the LLM. Uses: `req-lint` and `needs` (need-coverage) in requirements-engineer, pattern-hit triage in spec-auditor, the coverage judge in `gap-detector --semantic`, `feedback-route` at the FASE gate, and the advisory `test-adequacy`/`evidence` sets in sdd-acceptance.
 
-Question sets live in `scripts/jev/*.json`. Jev returns probabilities; skills own the thresholds and escalate the uncertain middle to the LLM. Never use it for permission decisions (guards, commit-msg). See `docs/jev.md`.
+Question sets live in `scripts/jev/*.json`, thresholds inside each file. Jev returns probabilities and only suggests: mechanical checks (`sdd lint --needs`), the `sdd` CLI and humans decide. Never use it for permission decisions (guards, commit-msg), verdicts, waivers, sign-offs, the loop's stop or anything in CI. See `docs/jev.md`.
 
 ## Modifying Skills
 
@@ -158,11 +152,12 @@ Question sets live in `scripts/jev/*.json`. Jev returns probabilities; skills ow
   - State each rule once, calmly, with its reason.
   - Put single-step templates and catalogs in `references/`, with a pointer at the step that needs them.
   - Leave out generic advice, textbook theory and leftovers from past projects.
-- Cross-skill contracts (paths, IDs, state keys, metric keys in cascade-patterns §9, formats enforced by `sdd-task-lint.mjs` and the commit-msg hook) must stay consistent. Run `.claude/agents/sdd-cross-auditor.md` after contract changes.
+- Commit examples in skills use `git commit --trailer` (validate-plugin flags heredoc trailers and unknown trailer keys).
+- Cross-skill contracts (paths, IDs, state keys, metric keys in cascade-patterns §9, formats enforced by `sdd lint` and `sdd verify`, FASE header labels read by `sdd lint --plan` and `sdd gate --fase`) must stay consistent. Run `.claude/agents/sdd-cross-auditor.md` after contract changes.
 
 ## Standards Referenced
 
-SWEBOK v4 · OWASP ASVS 4.0.3 · CWE · IEEE 830 · ISO 14764 · C4 Model · Gherkin/BDD · WCAG 2.2 AA.
+SWEBOK v4 · OWASP ASVS 4.0.3 · CWE · IEEE 830 · ISO 14764 · C4 Model · Gherkin/BDD · JUnit XML · WCAG 2.2 AA.
 
 ## Known Gaps
 
@@ -171,4 +166,4 @@ SWEBOK v4 · OWASP ASVS 4.0.3 · CWE · IEEE 830 · ISO 14764 · C4 Model · Ghe
 
 ## Language
 
-Skills are written in English with some Spanish contextual text. Output follows the user's language, and technical terms stay in English.
+Skills are written in English with some Spanish contextual text (FASE header labels stay in Spanish because tools parse them). Output follows the user's language, and technical terms stay in English.

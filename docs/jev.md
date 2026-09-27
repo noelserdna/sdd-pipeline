@@ -17,10 +17,15 @@ El texto de specs y de código viaja a `api.typesafe.ai`, así que no conviene a
 | Comando | Qué hace | Quién lo usa |
 |---|---|---|
 | `req-lint [REQUIREMENTS.md]` | Por requisito: término vago, compuesto, no verificable, fuga de implementación y patrón EARS (las restricciones `REQ-C-*` no pasan por EARS ni por fuga de implementación) | `sdd-requirements-engineer` Mode 2 |
-| `needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md]` | Cobertura de necesidades del cliente. Primero la comprobación mecánica, sin red (con `--mechanical` se queda ahí: exit 1 si hay errores). Después, con Jev, dos pasadas de Choice: por necesidad sobre los IDs de requisito más `none`, y por cada requisito que ninguna necesidad eligió, sobre las necesidades más `none` | `sdd-requirements-engineer` Mode 1 y puerta 1 (`references/approval.md`) |
+| `needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md]` (`need-coverage.json`) | Cobertura de necesidades del cliente. Primero la comprobación mecánica, sin red (con `--mechanical` se queda ahí: exit 1 si hay errores). Después, con Jev, dos pasadas de Choice: por necesidad sobre los IDs de requisito más `none`, y por cada requisito que ninguna necesidad eligió, sobre las necesidades más `none` | `sdd-requirements-engineer` Mode 1 y puerta 1 (`references/approval.md`) |
 | `judge --questions scripts/jev/spec-triage.json --items hits.jsonl` | Triaje de los hits de los patrones de detección: CAT-01/02/03/04/06/07/09 o `not_a_defect` | `sdd-spec-auditor` Fase 1 |
 | `judge --questions scripts/jev/coverage.json --items pares.jsonl` | ¿Este trozo de código implementa este requisito? (`implements`, `partial`, `related`) | `sdd-gap-detector --semantic` |
 | `chunks FICHERO…` | Parte el código en fronteras de nivel superior (≤24k chars) para `judge` | `sdd-gap-detector --semantic` |
+| `judge --questions scripts/jev/feedback-route.json --items feedback.jsonl` | Puerta de FASE: una Choice por cada comentario del cliente sobre el incremento (`defect`, `change_request`, `question`). Solo propone: una persona confirma la ruta, y por debajo de 0,7 de confianza se pregunta sin propuesta | `sdd-orchestrator` y `sdd-lead` (`skills/sdd-orchestrator/references/fase-gate.md`) |
+| `judge --questions scripts/jev/test-adequacy.json --items pares.jsonl` | Por (criterio, test que lo verifica): dos Noul, ¿el test afirma el THEN? y ¿ejecuta el WHEN? Por debajo de 0,5 en cualquiera se marca para revisión. Informativo: un test que pasa sigue VERIFIED | `sdd-acceptance --check` (y `--sign-off`; sin Jev lo contesta un subagente independiente) |
+| `judge --questions scripts/jev/evidence.json --items demos.jsonl` | Por (criterio, demo observada): un Score de 3 niveles, ¿la salida muestra el THEN? (no / parcial / sí). Ayuda a la persona antes de `sdd accept record demo`; lo que se registra es su respuesta | `sdd-acceptance --loop` (ruta `needs-human`) |
+
+Los umbrales de cada conjunto viven dentro de su JSON (`thresholds`). Los dos de aceptación (`test-adequacy`, `evidence`) tienen fixtures etiquetados en `tests/jev/fixtures/` y la suite comprueba su forma sin red; medición real (jev-1.13.0, 2026-09-27): `test-adequacy` 6/6 (un test sin aserción da `asserts_then` = 0,06; uno que comprueba otro resultado, 0,02; los adecuados, ≥ 0,96), `evidence` 4/4 y `feedback-route` 6/6 sobre feedback real en español (defecto, petición de cambio y pregunta, todos con confianza ≥ 0,81). Son muestras pequeñas: sirven para comprobar que la pregunta está bien planteada, no como calibración definitiva. Amplía los fixtures con casos de tus proyectos (`SDD_JEV_CALIBRATE_KEY=… bash tests/jev/run.sh`).
 
 Los conjuntos de preguntas están en `scripts/jev/*.json`. Si cambias una pregunta, cambias el comportamiento: pruébalo antes con casos etiquetados, como en el experimento de requisitos de abajo.
 
@@ -31,7 +36,7 @@ Los conjuntos de preguntas están en `scripts/jev/*.json`. Si cambias una pregun
 | Secciones de las 24 skills (propósito, conocimiento genérico, material de referencia, ambigüedad, énfasis, claridad) | 355 secciones | 6,6 s | 530k (~0,02 $) | Casi nada de "conocimiento genérico". Entre el 32 % y el 53 % de las 4 skills grandes era material de referencia de un solo paso, y eso guio el recorte. |
 | Enrutado: descripciones de las skills contra 56 peticiones parafraseadas (ES/EN) | 56 peticiones | 1,8 s | 192k | **55/56** correctas. El único fallo, "ponte a programar las tareas", es ambiguo en español y se corrigió añadiendo triggers. |
 | Solapamiento entre skills (276 pares, un Noul por par) | 276 preguntas | <1 s | — | Un solo par por encima de 0,4: `gap-detector` y `verify-coverage` (0,50). Se fusionaron. |
-| Cribado de código (hooks, scripts, servidor, dashboard) | 171 trozos | 3,4 s | 296k | Cero marcas de inyección, coste en ruta caliente o portabilidad. Las marcas de "error silenciado" eran en su mayoría fail-open intencionado. |
+| Cribado de código (hooks, scripts, servidor, dashboard; el dashboard HTML ya no existe en 5.0) | 171 trozos | 3,4 s | 296k | Cero marcas de inyección, coste en ruta caliente o portabilidad. Las marcas de "error silenciado" eran en su mayoría fail-open intencionado. |
 | Requisitos con defectos sembrados (8 limpios de `examples/todo-app` + 12 mutantes) | 20 requisitos | 0,75 s | 14k | 0 falsos positivos en los limpios. Recall del 100 % en vago, compuesto, no verificable y fuga de implementación. |
 | `req-lint` sobre el REQUIREMENTS.md real del ejemplo | 10 requisitos | 0,42 s | 7k | Marcó `REQ-F-006` como compuesto (p = 0,92). Es correcto: tiene dos cláusulas WHEN independientes (persistir y cargar). |
 
@@ -50,7 +55,7 @@ Resultado sobre `examples/todo-app` (6 necesidades, una fuera de alcance; 10 req
 
 ### Límites observados
 
-- **No sustituye a la revisión profunda.** El bug más grave encontrado, el parser de commits de `generate.py` que descartaba casi todos los commits, no lo marcó el cribado de Jev. Es un error de lógica de varios pasos, justo lo que Jev declara como punto débil, y lo encontró la revisión con el LLM. Úsalo para priorizar, no para dar por buena una zona.
+- **No sustituye a la revisión profunda.** El bug más grave encontrado, el parser de commits de `generate.py` (hoy `scripts/sdd-graph.py`) que descartaba casi todos los commits, no lo marcó el cribado de Jev. Es un error de lógica de varios pasos, justo lo que Jev declara como punto débil, y lo encontró la revisión con el LLM. Úsalo para priorizar, no para dar por buena una zona.
 - **Preguntas de una sola línea.** Una línea aislada no permite juzgar la sobreespecificación de transporte (CAT-10), porque depende de si algún requisito exige la ruta. Tampoco permite juzgar contradicciones entre documentos (CAT-05). Por eso esas categorías no están en el triaje y van directas al auditor.
 - **Cobertura repartida.** Si un requisito se implementa entre varios ficheros, cada trozo puede puntuar bajo. Un `implements` bajo nunca prueba ausencia: esos casos van al LLM.
 - **Idioma.** Jev rinde mejor en inglés. Las preguntas están en inglés aunque el estado (la spec) esté en español.
@@ -61,6 +66,7 @@ Resultado sobre `examples/todo-app` (6 necesidades, una fuera de alcance; 10 req
 - **commit-msg.** Los hooks de git corren fuera de Claude, y una llamada de red bloquearía el commit.
 - **Sugerir una skill en cada prompt** (UserPromptSubmit). Las descripciones ya enrutan 55/56. Además añadiría red y latencia a cada prompt y enviaría todos los prompts a un tercero.
 - **Contar, comparar fechas o hacer aritmética.** Eso lo hace el código.
+- **Veredictos de aceptación, exenciones, firmas, la parada del bucle o cualquier cosa que corra en CI.** Los decide `sdd accept` / `sdd gate` / `sdd loop next` o una persona; Jev solo añade una marca informativa.
 
 ## Próximos candidatos (no implementados)
 

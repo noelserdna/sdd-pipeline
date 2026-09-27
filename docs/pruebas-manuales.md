@@ -1,5 +1,7 @@
 # Pruebas manuales (B4 paso 5): sesiones reales con tmux
 
+> **Nota (5.0):** la status line que se menciona ya no se instala; el rol se ve en el mensaje del hook de arranque.
+
 Lo que no puede automatizarse sin el modelo: dos sesiones de Claude Code con rol que se envían un handoff.
 
 ## Preparación

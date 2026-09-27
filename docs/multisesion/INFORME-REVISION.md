@@ -1,6 +1,6 @@
 # Informe de síntesis: propuesta multisesión para el pipeline SDD v3.1.0
 
-> **Documento histórico.** Describe un diseño anterior y no se mantiene; la referencia vigente es [multisesion.md](../multisesion.md).
+> **Documento histórico.** Describe un diseño anterior y no se mantiene; la referencia vigente es [multisesion.md](../multisesion.md). Desde 5.0 no existen el hook trace-map, `traceability-check`, el dashboard ni las status lines que cita.
 
 ## 1. Veredicto global
 

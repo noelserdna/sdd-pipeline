@@ -111,7 +111,7 @@ Each divergence is applied independently; a failure in one does not block the ot
 
 1. Mark stages stale per the canonical rules (CLAUDE.md, `sdd-req-change/references/cascade-patterns.md`): a change in `requirements/` makes `specifications-engineer` and everything after it stale; a change in `spec/` makes `spec-auditor` and everything after it stale. Reconcile never writes `plan/` or `task/`, so it never originates a staleness from there. Record `staleReason: "reconcile {date}"`.
 2. Read [references/reconciliation-report-template.md](references/reconciliation-report-template.md) and write `reconciliation/RECONCILIATION-REPORT.md`.
-3. Do not invoke downstream skills; list the recommended next commands (normally `/sdd-spec-auditor`, then `/sdd-traceability-check`).
+3. Do not invoke downstream skills; list the recommended next commands (normally `/sdd-spec-auditor`, then `/sdd-acceptance --check`).
 
 ## 4. Pipeline Integration
 
@@ -126,6 +126,6 @@ Each divergence is applied independently; a failure in one does not block the ot
 | `sdd-req-change` | Owns the CR format; option C hands CRs to it |
 | `sdd-spec-auditor` | Run next to audit the amended specs |
 | `sdd-task-generator` | `--fase=N --incremental` turns defects and gaps into tasks |
-| `sdd-traceability-check` | Verifies chain integrity afterwards |
+| `sdd-acceptance` | `--check` verifies chain integrity and the verdict per requirement afterwards |
 
 Every classification cites spec location, code location and test status. Output language follows the user's language; technical terms stay in English.

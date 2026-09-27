@@ -1,6 +1,6 @@
 # Extended ID Patterns for the Traceability Graph
 
-Extended regex patterns for extracting artifact IDs from real SDD projects. Superset of `traceability-check/references/traceability-patterns.md` — covers compound IDs, named IDs, and range expansions.
+Extended regex patterns for extracting artifact IDs from real SDD projects. Superset of the basic patterns in `skills/sdd-acceptance/references/chain-integrity.md` (which replaced `sdd-traceability-check` in 5.0) — covers compound IDs, named IDs, and range expansions.
 
 ## Definition Patterns (where IDs are defined)
 

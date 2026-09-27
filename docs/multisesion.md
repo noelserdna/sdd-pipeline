@@ -32,7 +32,7 @@ Roles por defecto (`templates/sdd-sessions.example.json`):
 | `sdd-spec` | `spec/*`, `audits/AUDIT-*`, `audits/UPSTREAM-*`, `audits/CORRECTIONS-*`, `changes/*` | specifications-engineer, spec-auditor, req-change |
 | `sdd-plan` | `design/*`, `ux/*`, `test/*`, `plan/*`, `task/*`, `audits/SECURITY-*` | tech-designer, ux-designer, security-auditor, test-planner, plan-architect, task-generator |
 | `impl-f1a` | `src/*`, `tests/*`, `feedback/*`, `task/TASK-FASE-*.md`, `.sdd/*` | task-implementer (fase 1, stream A, worktree `../<proyecto>-f1a`) |
-| `sdd-qa` | `.sdd/*`, `audits/GAP-*`, `dashboard/*` | gap-detector, traceability-check, dashboard |
+| `sdd-qa` | `.sdd/*`, `audits/GAP-*`, `acceptance/*`, `dashboard/*` | gap-detector, acceptance (`/sdd-acceptance --check`/`--loop`; la firma del cliente, `--sign-off`, la hace el lead tras la puerta de FASE) |
 
 `sdd-spec` y `sdd-plan` no aportan paralelismo (la cadena es secuencial); su valor es aislar el contexto de etapas largas y poder retomarlas. Las estaciones que sí se ejecutan en paralelo son las `impl-*`.
 
@@ -44,10 +44,13 @@ Roles por defecto (`templates/sdd-sessions.example.json`):
 
 ## Implementación por Streams
 
-1. `sdd-task-generator` calcula los Streams de cada FASE (componentes conexas por write-set; el wiring compartido va al Stream `integración`) y los publica en la tabla *Stream Ownership* de `task/TASK-FASE-N.md` y en `task/TASK-ORDER.md`. `task/TASK-INDEX.md` es opcional (no existe en formato compacto): `scripts/sdd-task-lint.mjs index` lo deriva y `status` da el estado real por trailers `Task:`.
+En un plan vertical los Streams son la excepción: solo cuando una FASE se parte en conjuntos de escritura disjuntos. La mayoría de FASEs se implementan en secuencia en su rama `fase-{N}-{slug}`.
+
+1. `sdd-task-generator` calcula los Streams de cada FASE (componentes conexas por write-set; el wiring compartido va al Stream `integración`) y los publica en la tabla *Stream Ownership* de `task/TASK-FASE-N.md` y en `task/TASK-ORDER.md`. `task/TASK-INDEX.md` es opcional (no existe en formato compacto): `node scripts/sdd.mjs tasks index` lo deriva y `tasks status` da el estado real por trailers `Task:`.
 2. Las tasks `base` (Setup + Foundation) se implementan en el principal → checkpoint `fase-N-foundation`.
-3. Cada Stream: `sdd-up.sh impl-fNx` → en el worktree, `/sdd-task-implementer --fase N --stream X`. Solo ve sus tasks; no crea tags; al terminar hace *Stream Complete* (tests, push de la rama) y envía el handoff.
-4. El lead, en el principal: `/sdd-task-implementer --integrate --fase N` → `git merge --no-ff` por rama, tasks de `integración`, `--verify`, tag `fase-N-verified`, Persist Summary, push.
+3. Cada Stream: `sdd-up.sh impl-fNx` → en el worktree, `/sdd-task-implementer --fase N --stream X`. Solo ve sus tasks; no crea tags; al terminar hace *Stream Complete* (tests y push de la rama, que pregunta) y envía el handoff.
+4. El lead, en el principal: `/sdd-task-implementer --integrate --fase N` → `git merge --no-ff` por rama, tasks de `integración`, `--verify`, tag `fase-N-verified`, Persist Summary (el push pregunta).
+5. Con un plan vertical, el lead presenta la demo de la FASE y los veredictos por requisito, y pregunta al cliente si acepta el incremento; con un sí explícito ejecuta `/sdd-acceptance --sign-off --fase N` (tag `fase-{N}-accepted`).
 
 ## Handoffs y preguntas
 

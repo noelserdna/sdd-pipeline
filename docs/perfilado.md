@@ -1,5 +1,7 @@
 # Perfilado de una etapa: `sdd-spec-auditor` (2026-08-25)
 
+> **Nota (5.0):** las status lines, `sdd-watch` y `.sdd/activity.jsonl` que se citan se retiraron en 5.0; que el fan-out se activó queda en `summary.metrics.mode` y `task_agents` de `pipeline-state.json`.
+
 Herramienta: `scripts/sdd-profile.sh` (ejecuta la skill con `claude -p --output-format stream-json --verbose` y desglosa el flujo de eventos; `--analyze FILE.jsonl` sobre una captura existente).
 
 Caso: re-auditoría de `spec/` del todo-app (7 UC, 4 contratos, 7 ADR, dominio, NFR) en modo solo auditoría.

@@ -233,6 +233,6 @@ Defectos del material de la carrera que no se trasladan, y que `validate-plugin.
   propias.
 - El `db_reset_safe` de `nextjs-prisma` borra cualquier `*.db`, `*.db-journal`, `*.db-wal` o `*.db-shm` hasta profundidad 2
   dentro de `app_dir`. Si la app guarda otros SQLite ahí, sustitúyelo con `--set`.
-- `/sdd-dashboard` (`test-result-parser.py`) entiende la salida verbose de Minitest (`bin/rails test -v >
+- `scripts/test-result-parser.py` (lo usa `scripts/sdd-graph.py` para el grafo; los veredictos de aceptación leen JUnit, ver `test_report`) entiende la salida verbose de Minitest (`bin/rails test -v >
   .sdd/test-results-raw.txt`, lanzado desde `app_dir`) y el JSON de RSpec. Detecta el runner en el `app_dir` del perfil, y
   solo considera RSpec si hay `.rspec` o `spec/rails_helper.rb`, porque `spec/` es la carpeta de especificación del SDD.

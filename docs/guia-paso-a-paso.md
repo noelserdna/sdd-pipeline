@@ -3,7 +3,7 @@
 > **Specification-Driven Development** — Construye software que funciona bien *desde el principio*,
 > no software que "funciona" y luego hay que arreglar.
 >
-> **Nota (4.x):** la instalación vigente está en [instalacion.md](instalacion.md). Los diagramas de esta guía
+> **Nota (5.0):** la instalación vigente está en [instalacion.md](instalacion.md). Los diagramas de esta guía
 > simplifican la estructura real de `spec/` (`domain/01..05-*.md`, `use-cases/UC-NNN-*.md`, `workflows/`,
 > `contracts/API-*.md`, `tests/BDD-UC-NNN.md`, `nfr/*.md`, `adr/ADR-NNN-*.md`); ante la duda manda el `SKILL.md`
 > de cada skill.
@@ -194,16 +194,14 @@ Req.   Caso   Flujo  Contrato Escen.  Regla  Decisión  Tarea    Commit    Archi
 │  Prerrequisitos                                  │
 │                                                  │
 │  ✓ Claude Code CLI  (claude.ai/code)            │
-│  ✓ Git              (control de versiones)      │
+│  ✓ Git ≥ 2.32       (commit --trailer)          │
 │  ✓ Node.js 18+      (para el servidor MCP)      │
 │  ✓ jq               (procesamiento JSON)        │
 │  ✓ Plugin SDD       (este proyecto)             │
 │                                                  │
 │  Opcional:                                       │
-│  ○ GitHub CLI (gh)   (para PRs automáticos)     │
-│  ○ Notion API key    (para sync con Notion)     │
-│  ○ GitNexus          (code intelligence)        │
-│    npm i -g gitnexus                             │
+│  ○ gh / glab         (issues y PRs, tracker)    │
+│  ○ python3           (grafo JSON para el MCP)   │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -242,11 +240,11 @@ Esto registra el repositorio de GitHub como fuente de plugins.
 │  1. Descarga el plugin desde GitHub                                              │
 │     noelserdna/sdd-pipeline                                                      │
 │                                                                                  │
-│  2. Registra las 23 skills como comandos /sdd-*                                  │
+│  2. Registra las 21 skills como comandos /sdd-*                                  │
 │     /sdd-requirements-engineer                                                   │
 │     /sdd-specifications-engineer                                                 │
 │     /sdd-spec-auditor                                                            │
-│     ... (23 skills en total)                                                     │
+│     ... (21 skills en total)                                                     │
 │                                                                                  │
 │  3. Activa los hooks de automatización (corren desde el plugin)                  │
 │     Session start, upstream guard, state updater, etc.                            │
@@ -300,10 +298,13 @@ Dentro de Claude Code:
 │  2. Detecta upgrades (v1 → v2)                                                  │
 │     Si tienes hooks antiguos, los migra automáticamente                          │
 │                                                                                  │
-│  3. Verifica dependencias (jq, node)                                             │
-│     y compila el servidor MCP si es necesario                                    │
+│  3. Verifica dependencias (git ≥ 2.32, jq, node)                                 │
 │                                                                                  │
-│  4. Genera reporte de verificación                                               │
+│  4. Instala el hook git commit-msg (mismas reglas que `sdd verify`,              │
+│     con el validador copiado en .claude/sdd/) y escribe un Stack Profile         │
+│     mínimo con task_state: trailers (proyectos nuevos)                           │
+│                                                                                  │
+│  5. Genera reporte de verificación                                               │
 │     Confirma que todo está listo para usar                                        │
 │                                                                                  │
 │  Resultado:                                                                      │
@@ -366,14 +367,20 @@ Dentro de Claude Code:
 ║           │                  └── fases/FASE-*.md                                  ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐    task/                                                ║
-║  │  /sdd-task-generator │──→ ├── TASK-FASE-01.md                                ║
-║  └────────┬────────────┘    ├── TASK-FASE-02.md                                 ║
-║           │                  └── TASK-INDEX.md                                    ║
+║  │  /sdd-task-generator │──→ ├── TASK-FASE-0.md                                 ║
+║  └────────┬────────────┘    ├── TASK-FASE-1.md                                  ║
+║           │                  └── TASK-ORDER.md                                    ║
 ║           ▼                                                                      ║
 ║  ┌─────────────────────┐                                                         ║
-║  │  /sdd-task-           │──→ src/ + tests/ + git commits                        ║
-║  │   implementer        │    "Código real, trazable y testeado"                  ║
-║  └─────────────────────┘                                                         ║
+║  │  /sdd-task-           │──→ src/ + tests/ + git commits (rama de trabajo)      ║
+║  │   implementer        │    "Código real, trazable y testeado" + demo           ║
+║  └────────┬────────────┘                                                         ║
+║           │                                                                      ║
+║           ▼                                                                      ║
+║  ┌─────────────────────┐    acceptance/                                          ║
+║  │  /sdd-acceptance     │──→ ├── ACCEPTANCE-REPORT.md                            ║
+║  │                      │    └── decisions.jsonl                                 ║
+║  └─────────────────────┘    "¿Está cada requisito cumplido, y con qué prueba?"  ║
 ║                                                                                  ║
 ║  ┌─ Herramientas laterales ──────────────────────────────────────────────┐       ║
 ║  │  /sdd-tech-designer       Diseño técnico (12 dimensiones)             │       ║
@@ -384,9 +391,7 @@ Dentro de Claude Code:
 ║                                                                                  ║
 ║  ┌─ Utilidades ──────────────────────────────────────────────────────────┐       ║
 ║  │  /sdd-pipeline-status     Estado actual del pipeline                  │       ║
-║  │  /sdd-traceability-check  Verificar cadena de trazabilidad            │       ║
-║  │  /sdd-dashboard           Dashboard HTML interactivo                  │       ║
-║  │  /sdd-code-index          Indexar código para trazabilidad profunda   │       ║
+║  │  /sdd-gap-detector        Endpoints que faltan y código huérfano      │       ║
 ║  │  /sdd-session-summary     Resumen de sesión                           │       ║
 ║  └───────────────────────────────────────────────────────────────────────┘       ║
 ║                                                                                  ║
@@ -503,13 +508,26 @@ Tengo varias fuentes:
 
 ### Lo que sucede
 
-1. **Elicitación**: El skill te hace preguntas estructuradas para extraer requisitos:
+1. **Necesidades del cliente, con sus palabras**: antes de escribir un solo requisito, el skill
+   anota lo que pide el cliente, textual, en `requirements/CUSTOMER-NEEDS.md`. Cada necesidad
+   (`N-NNN`) lleva la cita, quién la dijo y cuándo, y se relee con el cliente para confirmarla:
+
+```
+### N-001: Jot a task down without leaving the terminal
+- **Quote:** "I live in the terminal and I keep forgetting small things. I want to write
+  a task down in one command, without opening anything else."
+- **Who:** Laura Gómez, product owner
+- **When:** 2026-08-20
+- **Status:** confirmed
+```
+
+2. **Elicitación**: El skill te hace preguntas estructuradas para extraer requisitos:
    - ¿Quiénes son los usuarios?
    - ¿Qué problemas resuelve?
    - ¿Qué funcionalidades necesita?
    - ¿Hay restricciones técnicas?
 
-2. **Formato EARS**: Cada requisito se escribe en formato EARS (Easy Approach to Requirements Syntax):
+3. **Formato EARS**: Cada requisito se escribe en formato EARS (Easy Approach to Requirements Syntax):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -527,41 +545,70 @@ Tengo varias fuentes:
 │  AND assign a unique identifier                                      │
 │  AND return the created task to the user                             │
 │                                                                      │
-│  Acceptance Criteria:                                                │
-│  Given a logged-in user                                              │
-│  When they submit a task with title "Buy milk"                       │
-│  Then the task is created with status "pending"                      │
-│  And a unique ID is assigned (format: TASK-XXXX)                     │
+│  Priority:      Must have                                            │
+│  Needs:         N-001            ← qué necesidad del cliente cubre   │
+│  Verification:  test             ← test | demo | measurement |       │
+│                                    inspection                        │
+│  Acceptance Criteria (con datos reales, revisados con el cliente):   │
+│  GIVEN an empty task list                                            │
+│  WHEN the user runs `todo add "Buy milk"`                            │
+│  THEN a task with id 1, title "Buy milk" and status pending is stored│
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-3. **Clasificación**: Los requisitos se organizan por dominio y prioridad:
+   - **`Needs:`** enlaza el requisito con las necesidades que cubre. Toda necesidad acaba
+     cubierta por algún requisito o marcada fuera de alcance con la decisión registrada; un
+     requisito sin necesidad es candidato a *gold plating*.
+   - **`Verification:`** dice cómo se demostrará que está cumplido. Lo usa después
+     `/sdd-acceptance` para decidir qué cuenta como evidencia (un test que pasa, una demo
+     observada, una medición con umbral o una revisión humana).
+   - **Ejemplos**: cada criterio lleva un ejemplo con datos concretos. El cliente los revisa y
+     queda escrito quién lo hizo (`Examples reviewed by:`).
+
+4. **Clasificación**: Los requisitos se organizan por dominio y prioridad:
 
 ```
   ┌─────────────────────────────────────────────┐
   │  Requisitos                                  │
   │                                              │
   │  Funcionales (F)                             │
-  │  ├── REQ-F-001     Crear tarea         P0   │
-  │  ├── REQ-F-002     Listar tareas       P0   │
-  │  ├── REQ-F-003     Completar tarea     P0   │
-  │  ├── REQ-F-004     Eliminar tarea      P1   │
-  │  └── REQ-F-005     Filtrar tareas      P2   │
+  │  ├── REQ-F-001     Crear tarea        Must  │
+  │  ├── REQ-F-002     Listar tareas      Must  │
+  │  ├── REQ-F-003     Completar tarea    Must  │
+  │  ├── REQ-F-004     Eliminar tarea     Should│
+  │  └── REQ-F-005     Filtrar tareas     Nice  │
   │                                              │
   │  No Funcionales (NF)                         │
-  │  ├── REQ-NF-001    Respuesta < 200ms   P0   │
-  │  ├── REQ-NF-002    Autenticación JWT   P0   │
-  │  └── REQ-NF-003    Responsive design   P1   │
+  │  ├── REQ-NF-001    Respuesta < 200ms  Must  │
+  │  └── REQ-NF-002    Cobertura ≥ 90 %   Should│
   │                                              │
-  │  P0 = Crítico  P1 = Importante  P2 = Deseable│
+  │  Must have · Should have · Nice to have      │
   └─────────────────────────────────────────────┘
 ```
 
-### Archivo generado
+   Si más del 60 % de los requisitos son Must, el skill lo avisa: cuando casi todo es
+   imprescindible, el plan no puede ordenar por valor. En cualquier caso, el cliente confirma
+   la lista Must explícitamente.
+
+5. **Aprobación**: la comprobación mecánica tiene que salir limpia:
+
+```bash
+node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" lint --needs    # necesidades huérfanas, requisitos
+                                                        # sin necesidad, Verification válido
+```
+
+   Después el skill pregunta al aprobador (nombre y rol): *"¿Apruebas los requisitos v1.0 como
+   base de las especificaciones?"*. Solo un "Aprobar" explícito cuenta. Con él hace un commit
+   `docs(requirements)` y crea el tag anotado `requirements-v{N}` con quién aprobó, su rol, la
+   fecha y el hash de `REQUIREMENTS.md` y `CUSTOMER-NEEDS.md`. El hook de herramientas pide
+   confirmación antes de crear ese tag, para evitar una auto-aprobación accidental.
+
+### Archivos generados
 
 ```
 requirements/
-└── REQUIREMENTS.md
+├── CUSTOMER-NEEDS.md    ← necesidades N-NNN, textuales
+└── REQUIREMENTS.md      ← requisitos con Needs:, Verification: y ejemplos
 ```
 
 ### Principio clave: "Nunca asumir, siempre preguntar"
@@ -946,19 +993,19 @@ El plan genera una matriz que cruza requisitos con tipos de prueba:
 ### ¿Qué hace este paso?
 
 Diseña la arquitectura del sistema y divide la implementación en **fases** (FASEs)
-ordenadas por dependencias.
+verticales: cada FASE es un incremento que el cliente puede ver funcionar en una demo.
 
 ```
-┌───────────────┐         ┌──────────────────────────────────────┐
-│  spec/        │         │  plan/                                │
-│  audits/      │──────▶  │  ├── PLAN.md          Visión general │
-│  test/        │         │  ├── ARCHITECTURE.md   Diagramas C4  │
-│               │         │  └── fases/                           │
-│               │         │      ├── FASE-01.md   Infraestructura│
-│               │         │      ├── FASE-02.md   Modelo dominio │
-│               │         │      ├── FASE-03.md   API core       │
-│               │         │      └── FASE-04.md   UI             │
-└───────────────┘         └──────────────────────────────────────┘
+┌───────────────┐         ┌──────────────────────────────────────────┐
+│  spec/        │         │  plan/                                    │
+│  audits/      │──────▶  │  ├── PLAN.md          Plan-Style: vertical│
+│  test/        │         │  ├── ARCHITECTURE.md  Diagramas C4        │
+│               │         │  └── fases/                               │
+│               │         │      ├── FASE-0-SKELETON.md   add + list  │
+│               │         │      ├── FASE-1-LIFECYCLE.md  done + rm   │
+│               │         │      ├── FASE-2-FILTER.md     filtrar     │
+│               │         │      └── FASE-3-HARDENING.md  latencia    │
+└───────────────┘         └──────────────────────────────────────────┘
 ```
 
 ### Cómo ejecutarlo
@@ -1009,33 +1056,77 @@ El skill genera diagramas en 4 niveles de zoom:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Las FASEs
+### Las FASEs: incrementos verticales
 
-Cada FASE agrupa funcionalidades que se pueden construir juntas:
+Una FASE no es una capa (infraestructura, modelo, API, UI) sino un **recorrido de usuario
+que funciona de punta a punta**. Así el cliente ve algo útil al final de cada FASE y puede
+aceptarlo o corregir el rumbo pronto. Con el todo-app de ejemplo:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                      │
-│  FASE-01: Infraestructura        FASE-02: Modelo de dominio         │
-│  ┌─────────────────────────┐     ┌─────────────────────────┐        │
-│  │ • Setup proyecto         │     │ • Entidades: Task, User │        │
-│  │ • Config TypeScript      │     │ • Repositorios           │        │
-│  │ • Config testing         │────▶│ • Validaciones (INV-*)   │        │
-│  │ • Config linter          │     │ • Migraciones BD         │        │
-│  │ • CI/CD básico           │     └───────────┬─────────────┘        │
-│  └─────────────────────────┘                  │                      │
-│                                               ▼                      │
-│  FASE-03: API Core               FASE-04: UI                        │
-│  ┌─────────────────────────┐     ┌─────────────────────────┐        │
-│  │ • Endpoints CRUD         │     │ • Componentes React      │        │
-│  │ • Autenticación JWT      │────▶│ • Páginas                │        │
-│  │ • Middleware validación   │     │ • Integración API        │        │
-│  │ • Manejo de errores      │     │ • Tests E2E              │        │
-│  └─────────────────────────┘     └─────────────────────────┘        │
-│                                                                      │
-│  Dependencias: FASE-01 → FASE-02 → FASE-03 → FASE-04               │
-│  (cada fase depende de la anterior)                                  │
+│  FASE-0-SKELETON: apuntar tareas y verlas en otra ejecución          │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │ todo add (escribir) → todo list (observar) → data/todos.json│     │
+│  │ (persistir). Solo la infraestructura que ese camino necesita│     │
+│  │ REQ-F-001, REQ-F-002, REQ-F-006, REQ-NF-002                 │     │
+│  └───────────────────────────┬──────────────────────────────┘       │
+│                ┌─────────────┴─────────────┐                         │
+│                ▼                           ▼                         │
+│  FASE-1-LIFECYCLE               FASE-2-FILTER                        │
+│  completar y borrar tareas      filtrar por estado                   │
+│  REQ-F-003, REQ-F-004           REQ-F-005                            │
+│                └─────────────┬─────────────┘                         │
+│                              ▼                                       │
+│  FASE-3-HARDENING: latencia con 1 000 tareas (REQ-NF-001)            │
+│  (solo existe porque hay un NFR medido)                              │
 └─────────────────────────────────────────────────────────────────────┘
+```
+
+Reglas principales (`sdd-plan-architect/references/phase-assignment-rules.md`):
+
+- **Orden**: las dependencias mandan; la prioridad MoSCoW desempata.
+- **FASE-0 es el esqueleto andante**: el camino mínimo *escribir → observar → persistir* del
+  caso de uso central, aunque cruce 2-3 requisitos, más la infraestructura que ese camino
+  necesita, nada más.
+- **Un recorrido de usuario por FASE**: el CRUD de una entidad es un incremento; como máximo
+  3 casos de uso y unas 15 tareas por FASE.
+- **Seguridad** (autenticación, validación) en la primera FASE que expone el recurso.
+- **`FASE-N-HARDENING`** solo para NFR medidos (rendimiento, disponibilidad), y solo si existen.
+
+Cada FASE empieza con una cabecera que otras herramientas leen:
+
+```
+# FASE 0: Esqueleto — apuntar tareas y verlas de nuevo
+
+> **Estado:** Implementable
+> **Incremento:** Apuntar tareas y verlas en otra ejecución
+> **Requisitos:** REQ-F-001, REQ-F-002, REQ-F-006, REQ-NF-002
+> **Escenarios:** AC-001-01, AC-001-02, AC-001-03, AC-001-04, AC-002-01, ...
+> **Necesidades:** N-001, N-002, N-004, N-005
+> **Dependencias:** Ninguna (fase inicial)
+```
+
+Y termina con una **demo** de como máximo 10 pasos desde un checkout limpio, cada uno con su
+escenario y las necesidades del cliente que demuestra:
+
+```
+## Demo
+
+| # | Acción                          | Resultado esperado              | Escenario             |
+|---|---------------------------------|---------------------------------|-----------------------|
+| 1 | `rm -rf data && todo list`      | `No tasks`, exit 0              | AC-002-02 · N-002     |
+| 2 | `todo add "Buy milk"`           | tarea 1 pending; fichero creado | AC-001-01 · N-001     |
+| 3 | `todo add ""`                   | exit 2, `title must not be empty` | AC-001-03 · N-001   |
+```
+
+`plan/PLAN.md` lleva la marca `> **Plan-Style:** vertical`. Un plan sin ella se trata como
+horizontal (planes anteriores) y sigue funcionando. La comprobación mecánica del plan:
+
+```bash
+node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" lint --plan
+# V8: cada FASE tiene criterios y demo respaldados por IDs REQ/AC existentes
+# V9: todo requisito Must está asignado a alguna FASE
 ```
 
 ---
@@ -1048,25 +1139,22 @@ Descompone cada FASE en **tareas atómicas**: cada tarea es un commit,
 con su mensaje predefinido, su estrategia de rollback, y su trazabilidad.
 
 ```
-┌───────────────┐         ┌──────────────────────────────────────┐
-│  plan/        │         │  task/                                │
-│  fases/       │──────▶  │  ├── TASK-FASE-01.md                 │
-│  FASE-01.md   │         │  │   T-F01-01: Init project          │
-│  FASE-02.md   │         │  │   T-F01-02: Config TypeScript     │
-│  ...          │         │  │   T-F01-03: Config testing        │
-│               │         │  │                                    │
-│               │         │  ├── TASK-FASE-02.md                 │
-│               │         │  │   T-F02-01: Create Task entity    │
-│               │         │  │   T-F02-02: Create User entity    │
-│               │         │  │   ...                              │
-│               │         │  │                                    │
-│               │         │  ├── TASK-INDEX.md                   │
-│               │         │  │   Índice global de todas las tareas│
-│               │         │  │                                    │
-│               │         │  └── TASK-ORDER.md                   │
-│               │         │      Orden de ejecución               │
-└───────────────┘         └──────────────────────────────────────┘
+┌───────────────────┐     ┌──────────────────────────────────────────┐
+│  plan/fases/      │     │  task/                                    │
+│  FASE-0-SKELETON  │──▶  │  ├── TASK-FASE-0.md                       │
+│  FASE-1-LIFECYCLE │     │  │   TASK-F0-001 Setup mínimo (Foundation)│
+│  ...              │     │  │   ### UC-001 — Crear tarea             │
+│                   │     │  │   TASK-F0-003 todo add, test-first     │
+│                   │     │  │   ### UC-002 — Listar tareas           │
+│                   │     │  │   TASK-F0-005 todo list, test-first    │
+│                   │     │  ├── TASK-FASE-1.md                       │
+│                   │     │  └── TASK-ORDER.md   Orden de ejecución   │
+└───────────────────┘     └──────────────────────────────────────────┘
 ```
+
+Con un plan vertical, las tareas se agrupan por caso de uso y la Foundation es mínima.
+El generador comprueba que cada escenario de la cabecera `Escenarios:` lo cita alguna tarea.
+`node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" lint` valida el formato de las tareas.
 
 ### Cómo ejecutarlo
 
@@ -1077,40 +1165,19 @@ con su mensaje predefinido, su estrategia de rollback, y su trazabilidad.
 ### Anatomía de una tarea
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  T-F02-01: Crear entidad Task                                        │
-│                                                                      │
-│  FASE: 02 — Modelo de dominio                                        │
-│  Refs: UC-TASK-001, DOMAIN-MODEL Task entity, INV-001, INV-002      │
-│                                                                      │
-│  Descripción:                                                        │
-│  Crear la entidad Task con sus propiedades, validaciones             │
-│  e invariantes según el modelo de dominio.                           │
-│                                                                      │
-│  Archivos a crear/modificar:                                         │
-│  • src/domain/entities/task.ts           (CREATE)                    │
-│  • tests/domain/entities/task.test.ts    (CREATE)                    │
-│  • src/domain/types.ts                   (MODIFY — add TaskStatus)   │
-│                                                                      │
-│  Tests primero (TDD):                                                │
-│  1. should create task with valid title                              │
-│  2. should reject empty title (INV-002)                              │
-│  3. should reject title > 200 chars (INV-002)                        │
-│  4. should default status to "pending" (INV-001)                     │
-│  5. should assign unique ID                                          │
-│                                                                      │
-│  Commit predefinido:                                                 │
-│  feat(domain): add Task entity with validation                       │
-│                                                                      │
-│  Refs: UC-TASK-001, INV-001, INV-002                                 │
-│  Task: T-F02-01                                                      │
-│                                                                      │
-│  Estrategia de rollback: SAFE                                        │
-│  (Archivos nuevos, se eliminan sin afectar nada)                     │
-│                                                                      │
-│  Dependencias: T-F01-03 (testing config must exist)                  │
-└─────────────────────────────────────────────────────────────────────┘
+- [ ] TASK-F0-003 [P] Create task (API-001-01), test-first | `tests/add.test.ts`, `src/api/add.ts`
+  - blocked-by: TASK-F0-002
+  - **Commit:** `feat(tasks): create task with incremental id`
+  - **Acceptance:**
+    - Test first: `AC-001-01 creates task 1 pending` — el nombre del test lleva el ID del escenario
+    - Test first: `AC-001-03 rejects empty title with exit 2`
+  - **Refs:** FASE-0, REQ-F-001, UC-001, API-001-01, INV-TSK-001
+  - **Revert:** SAFE — ficheros nuevos
 ```
+
+Una tarea por línea (`- [ ] TASK-F{N}-NNN … | \`rutas\``), con sus campos indentados debajo.
+El nombre de cada test lleva el ID de su escenario (`AC-NNN-NN`): así `sdd accept` puede
+atar el resultado del test al criterio de aceptación que verifica.
 
 ### Estrategias de rollback
 
@@ -1156,10 +1223,10 @@ creando commits atómicos con trazabilidad completa.
 │               │         │  ├── api/routes/tasks.test.ts         │
 │               │         │  └── ...                              │
 │               │         │                                      │
-│               │         │  Git log:                              │
-│               │         │  abc1234 feat(domain): add Task entity│
-│               │         │  def5678 feat(domain): add User entity│
-│               │         │  ghi9012 feat(api): add POST /tasks   │
+│               │         │  Git log (rama fase-0-skeleton):       │
+│               │         │  abc1234 feat(tasks): create task     │
+│               │         │  def5678 feat(tasks): list tasks      │
+│               │         │  ghi9012 feat(store): persist to JSON │
 │               │         │  ...                                  │
 └───────────────┘         └──────────────────────────────────────┘
 ```
@@ -1175,7 +1242,7 @@ creando commits atómicos con trazabilidad completa.
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                      │
-│   Para cada tarea (T-FXX-YY):                                        │
+│   Para cada tarea (TASK-F{N}-NNN):                                   │
 │                                                                      │
 │   ┌─────────────┐                                                    │
 │   │ 1. RED      │  Escribir tests que FALLAN                         │
@@ -1196,40 +1263,91 @@ creando commits atómicos con trazabilidad completa.
 │          │                                                           │
 │          ▼                                                           │
 │   ┌─────────────┐                                                    │
-│   │ 4. COMMIT   │  git commit con mensaje predefinido                │
-│   │    ✅       │  + trailers de trazabilidad                        │
+│   │ 4. COMMIT   │  git commit --trailer con mensaje predefinido      │
+│   │    ✅       │  (trailers Task: y Refs:)                          │
 │   └─────────────┘                                                    │
-│                                                                      │
-│   Formato del commit:                                                │
-│   ──────────────────                                                 │
-│   feat(domain): add Task entity with validation                      │
-│                                                                      │
-│   Implement Task entity with title validation (1-200 chars)          │
-│   and default pending status per domain model.                       │
-│                                                                      │
-│   Refs: UC-TASK-001, INV-001, INV-002                                │
-│   Task: T-F02-01                                                     │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+#### Git: rama, commits con trailers y merge commit
+
+Las reglas completas están en `references/git-conventions.md`. Lo esencial:
+
+- **Rama de trabajo por defecto.** Antes del primer commit, si estás en la rama por defecto,
+  el implementer crea la rama de la FASE (`fase-{N}-{slug}`); los cambios de requisitos van
+  en `change/{CHG-ID}-{slug}`. Con HEAD suelto, para y pregunta.
+
+  ```bash
+  node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" branch start fase 0 skeleton   # → fase-0-skeleton
+  ```
+
+- **Trailers con `git commit --trailer`**, nunca escritos a mano: git solo lee los trailers del
+  último párrafo, y una línea de prosa detrás los convierte en texto normal (y la tarea deja
+  de contar como hecha).
+
+  ```bash
+  git commit -m "feat(tasks): create task with incremental id" \
+    -m "Validates the title per RN-001." \
+    --trailer "Task: TASK-F0-003" \
+    --trailer "Refs: REQ-F-001, UC-001, API-001-01"
+  ```
+
+  | Trailer | Valor | Obligatorio en |
+  |---|---|---|
+  | `Task` | `TASK-F{N}-NNN` (uno por commit) | `feat`, `test`, `refactor`; `fix`/`perf` necesitan `Task` **o** `Change` |
+  | `Refs` | IDs de spec | `docs(specs)` |
+  | `Change` | `CHG-…`, `CR-N` o un hallazgo (`SEC-12`) | `fix`/`perf` sin tarea (hotfix, corrección de auditoría) |
+
+- **El hook git `commit-msg`** (instalado por `/sdd-setup`) aplica las mismas reglas que
+  `sdd verify --message`: rechaza un commit `feat` sin `Task:` y señala la línea de un bloque
+  de trailers roto. Quedan exentos `docs`, `chore`, `ci`, `style`, `build`, merges, `Revert`
+  y `fixup!`/`squash!`/`amend!`.
+- **Solo merge commits.** Un squash o un rebase merge reescribe los commits por tarea en uno
+  y borra todos los `Task:`. Se integra con `git merge --no-ff` (o un PR con merge commit), y
+  `sdd verify --range base..head` detecta un squash. Hacer merge a la rama por defecto o push
+  siempre pregunta.
+
 ### Verificación post-implementación
 
-Después de implementar cada FASE, el skill verifica:
+Después de implementar cada FASE, el skill verifica, ejecuta la demo desde un estado
+limpio y calcula el veredicto de cada requisito de la FASE con `sdd accept --fase N`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Verificación FASE-02                                            │
+│  Verificación FASE-0                                             │
 │                                                                  │
 │  ✅ Todos los tests pasan (12/12)                                │
-│  ✅ Cada tarea tiene exactamente 1 commit                        │
-│  ✅ Todos los commits tienen trailers Refs: y Task:              │
-│  ✅ Cobertura de código: 94% (objetivo: 80%)                     │
-│  ✅ No hay archivos sin trazar                                   │
-│  ⚠️  T-F02-03 requirió un cambio adicional a task.ts             │
-│     (documentado en feedback/FEEDBACK-F02-03.md)                 │
+│  ✅ Cada tarea tiene exactamente 1 commit con su Task:           │
+│  ✅ Demo: 6/6 pasos como se esperaba                             │
+│  ✅ REQ-F-001 VERIFIED (3/3 test) · REQ-F-002 VERIFIED (2/2 test)│
+│  ⚠️  Una desviación de spec registrada como SPEC-DEVIATION       │
+│     en feedback/IMPL-FEEDBACK-FASE-0.md                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+Un requisito FAILING o MISSING hace fallar la FASE: se arregla el código, nunca el test
+(Art. 12).
+
+### La puerta de FASE: el cliente acepta el incremento
+
+Al terminar una FASE de un plan vertical, el orquestador (o el lead) enseña al cliente el
+incremento, la demo y el veredicto por requisito, y pregunta: *"¿Aceptas el incremento
+FASE-0 (Apuntar tareas y verlas en otra ejecución)?"*
+
+| Respuesta | Qué pasa |
+|---|---|
+| **Aceptado** | `/sdd-acceptance --sign-off --fase 0` registra la decisión (quién, rol, canal) en `acceptance/decisions.jsonl` y crea el tag anotado `fase-0-accepted` |
+| **Aceptado con observaciones** | Igual, con tag; cada observación se enruta sin bloquear el incremento |
+| **Rechazado, con feedback** | Sin tag; el feedback se enruta |
+
+El feedback se clasifica en **defecto** (la entrega contradice lo que ya dicen los requisitos
+→ tareas incrementales y se arregla el código), **petición de cambio** (comportamiento nuevo
+→ `/sdd-req-change`) o **pregunta** (se responde y se vuelve a preguntar). Con Jev activado,
+el set `feedback-route` propone la ruta; una persona siempre la confirma.
+
+Si faltan requisitos por cumplir, `/sdd-acceptance --loop` itera (medir → enrutar → implementar)
+hasta que todos los Must estén VERIFIED o WAIVED, o hasta que el código decida parar.
 
 ---
 
@@ -1375,7 +1493,7 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 │  │   to Task)        to request)      selection step)       │       │
 │  │       │                │               │                  │       │
 │  │       ▼                ▼               ▼                  │       │
-│  │  TEST-MATRIX     TASK-FASE-02     TASK-FASE-03           │       │
+│  │  TEST-MATRIX     TASK-FASE-0      TASK-FASE-1            │       │
 │  │  (add tests)     (new task)       (modify task)          │       │
 │  │                                                           │       │
 │  └──────────────────────────────────────────────────────────┘       │
@@ -1414,111 +1532,64 @@ Cuando necesitas cambiar un requisito después de que el pipeline ya avanzó:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Verificación de trazabilidad
+### Aceptación por requisito
 
 ```
-/sdd-traceability-check
+/sdd-acceptance --check
 ```
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Traceability Check                                              │
-│                                                                  │
-│  Chain: REQ → UC → WF → API → BDD → INV → ADR                   │
-│                                                                  │
-│  REQ-F-001     ✅ UC-TASK-001 ✅ WF-TASK-CREATE ✅ API-TASK-001  │
-│  REQ-F-002     ✅ UC-TASK-002 ✅ WF-TASK-LIST   ✅ API-TASK-002  │
-│  REQ-F-003     ✅ UC-TASK-003 ⚠️ WF missing!    ── ──           │
-│  REQ-NF-002    ✅ UC-AUTH-001 ✅ WF-AUTH-LOGIN  ✅ API-AUTH-001  │
-│                                                                  │
-│  Problemas encontrados:                                          │
-│  ⚠️ REQ-F-003 → UC-TASK-003: Missing workflow WF-TASK-DONE      │
-│  ⚠️ ADR-002 no está referenciado por ningún UC                   │
-│                                                                  │
-│  Cobertura: 92% (23/25 links verificados)                        │
-└─────────────────────────────────────────────────────────────────┘
-```
+Responde la pregunta que importa al cliente: **¿está cumplido cada requisito, y con qué
+evidencia?** Ejecuta los tests con el comando `test_report` del Stack Profile (que escribe
+JUnit XML), y `sdd accept` calcula un veredicto por requisito según su `Verification:`:
 
-### Dashboard visual
+| Veredicto | Significa |
+|---|---|
+| **VERIFIED** | Cada criterio tiene evidencia válida y fresca (un test que pasa con su `AC-NNN-NN` en el nombre, una demo o una inspección registradas, una medición dentro del umbral). El informe dice cuántos: "3/5" |
+| **FAILING** | Alguna evidencia falla |
+| **MISSING** | Algún criterio no tiene evidencia (sin implementar, sin test, o el test no lleva el ID del escenario) |
+| **WAIVED** | Una persona lo eximió para el texto actual del requisito; un Must exento exige motivo, rol e issue de seguimiento |
+
+Los requisitos deprecados se listan aparte y no bloquean. El resultado queda en
+`acceptance/ACCEPTANCE-REPORT.md` (legible por el cliente) y en `.sdd/acceptance.json`.
+El mismo modo comprueba la integridad de la cadena de IDs (referencias rotas, definiciones
+huérfanas, requisitos sin escenario), que antes hacía `/sdd-traceability-check`.
+
+Otros modos:
 
 ```
-/sdd-dashboard
+/sdd-acceptance --fase 1       # solo los requisitos de la FASE 1
+/sdd-acceptance --loop         # bucle hasta que todos los Must estén VERIFIED o WAIVED
+/sdd-acceptance --sign-off     # puerta final + aceptación registrada + tag
+/sdd-acceptance --publish      # bloque para el PR/issue y, opcional, página de estado
 ```
 
-Genera un archivo HTML interactivo que puedes abrir en el navegador:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Dashboard generado:                                             │
-│                                                                  │
-│  dashboard/                                                      │
-│  ├── index.html               ← Abrir en el navegador           │
-│  ├── guide.html               ← Guía interactiva                │
-│  ├── traceability-graph.json  ← Datos del grafo                 │
-│  └── live-status.js           ← Estado en tiempo real            │
-│                                                                  │
-│  5 vistas disponibles:                                           │
-│  1. Resumen ejecutivo     (health score, métricas clave)         │
-│  2. Trazabilidad          (grafo interactivo)                    │
-│  3. Cobertura             (gaps analysis)                        │
-│  4. Pipeline              (estado de cada paso)                  │
-│  5. Adopción              (progreso de adopción SDD)             │
-│                                                                  │
-│  Dos formas de usarlo:                                           │
-│  • Abrir index.html directamente (funciona sin servidor)         │
-│  • Usar el dashboard server para actualizaciones en vivo (SSE)  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Opcional — Dashboard server con actualizaciones en vivo:**
-
-Si quieres que el dashboard se actualice en tiempo real mientras trabajas
-(sin tener que regenerarlo), puedes levantar el servidor:
+La puerta de entrega, también en CI (solo necesita Node y git):
 
 ```bash
-# Busca la ruta del plugin
-# En Mac/Linux:
-node "$SDD_PLUGIN_ROOT/server/dist/server.js"   # SDD_PLUGIN_ROOT lo exporta el hook SessionStart del plugin
-
-# El server arranca en http://localhost:3001
-# SSE stream en http://localhost:3001/events
+node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" gate --mode enforce
+# 0 objetivo cumplido (todos los Must VERIFIED o WAIVED)
+# 1 no cumplido · 2 evidencia obsoleta · 3 cumplido con Must exentos
 ```
 
-El dashboard detecta automáticamente si está servido por HTTP (usa SSE en vivo)
-o abierto como archivo local (usa JSONP polling).
+`--publish` puede publicar una página de estado como Artifact de Claude cuando la sesión lo
+permite (siempre pregunta antes, porque saca títulos de requisitos de la máquina). Sin esa
+herramienta, por ejemplo con `claude -p`, la vista para compartir es
+`acceptance/ACCEPTANCE-REPORT.md`.
 
-### Code intelligence
+### Trazabilidad con git
 
-```
-/sdd-code-index
+Los trailers de los commits responden "¿qué commits implementan REQ-F-004?" sin herramientas
+extra:
+
+```bash
+SDD="node $SDD_PLUGIN_ROOT/scripts/sdd.mjs"
+$SDD trace req REQ-F-004            # commits cuyo Task/Refs/Change contiene ese ID exacto
+$SDD trace why src/api/add.ts:42    # blame → commit → trailers → IDs de spec
+$SDD trace delivered REQ-F-004      # tags y ramas que contienen ese trabajo
 ```
 
-Indexa tu código fuente y lo conecta con los artefactos SDD. Si tienes
-**GitNexus** instalado (`npm i -g gitnexus`), genera un análisis profundo
-con call graph, clusters y flujos de ejecución:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Code Intelligence                                               │
-│                                                                  │
-│  Sin GitNexus (modo básico):                                     │
-│  • Escanea símbolos (funciones, clases, tipos)                  │
-│  • Mapea commits con Refs:/Task: trailers a artefactos          │
-│  • Enriquece traceability-graph.json con codeRefs               │
-│                                                                  │
-│  Con GitNexus (modo completo):                                   │
-│  • Todo lo anterior +                                            │
-│  • Call graph (quién llama a quién)                              │
-│  • Clusters de código relacionado                                │
-│  • Flujos de ejecución (execution flows)                        │
-│  • Commit-symbol bridge (a nivel de función, no de archivo)     │
-│                                                                  │
-│  Ejecútalo después de implementar para ver:                     │
-│  • Qué código implementa cada requisito                         │
-│  • Blast radius: si cambias X, qué se afecta                   │
-│  • Cobertura por origen: linked / inferred / uncovered          │
-└─────────────────────────────────────────────────────────────────┘
-```
+El servidor MCP (`sdd`) y los hooks leen además `dashboard/traceability-graph.json`, que
+construye `scripts/sdd-graph.py` (solo el JSON; ya no hay dashboard HTML).
 
 ### Resumen de sesión
 
@@ -1569,9 +1640,9 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 │  Continuo: Verificación                                              │
 │  ┌───────────────────────────────────────────┐                      │
 │  │ /sdd-pipeline-status                       │                      │
-│  │ /sdd-traceability-check                    │                      │
+│  │ /sdd-acceptance --check                    │                      │
 │  │ /sdd-security-auditor                      │                      │
-│  │ /sdd-dashboard                             │                      │
+│  │ /sdd-gap-detector                          │                      │
 │  └───────────────────────────────────────────┘                      │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -1598,9 +1669,9 @@ SDD no es un proceso waterfall. Es un pipeline que puedes **iterar**:
 │  └──→ /sdd-pipeline-status                                           │
 │       Te dice exactamente qué paso ejecutar                          │
 │                                                                      │
-│  ¿Trazabilidad rota?                                                 │
-│  └──→ /sdd-traceability-check                                        │
-│       Encuentra links rotos y huérfanos                              │
+│  ¿Trazabilidad rota o requisitos sin cumplir?                        │
+│  └──→ /sdd-acceptance --check                                        │
+│       Veredicto por requisito, links rotos y huérfanos               │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1781,14 +1852,18 @@ en su Phase 0 y los integra en las fases:
 ```
 mi-task-app/
 └── plan/
-    ├── PLAN.md                 ← Visión general: 4 fases, ~3 semanas
+    ├── PLAN.md                 ← Plan-Style: vertical, 4 incrementos
     ├── ARCHITECTURE.md         ← C4: React + Node + PostgreSQL
     └── fases/
-        ├── FASE-01.md          ← Infraestructura (8 tareas)
-        ├── FASE-02.md          ← Modelo dominio (6 tareas)
-        ├── FASE-03.md          ← API core (10 tareas)
-        └── FASE-04.md          ← UI (12 tareas)
+        ├── FASE-0-SKELETON.md  ← Entrar, crear una tarea y verla tras recargar
+        │                          (login + crear + listar + BD: el camino mínimo)
+        ├── FASE-1-LIFECYCLE.md ← Completar y borrar tareas
+        ├── FASE-2-FILTER.md    ← Filtrar por estado
+        └── FASE-3-HARDENING.md ← Respuesta < 200 ms (REQ-NF-001, NFR medido)
 ```
+
+La autenticación entra en FASE-0 porque es la primera FASE que expone las tareas. Cada FASE
+termina con su demo, y `node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" lint --plan` comprueba el plan.
 
 ### Paso 6: Tareas
 
@@ -1799,11 +1874,10 @@ mi-task-app/
 ```
 mi-task-app/
 └── task/
-    ├── TASK-FASE-01.md         ← 8 tareas atómicas
-    ├── TASK-FASE-02.md         ← 6 tareas atómicas
-    ├── TASK-FASE-03.md         ← 10 tareas atómicas
-    ├── TASK-FASE-04.md         ← 12 tareas atómicas
-    ├── TASK-INDEX.md           ← Índice: 36 tareas total
+    ├── TASK-FASE-0.md          ← 12 tareas atómicas (agrupadas por caso de uso)
+    ├── TASK-FASE-1.md          ← 7 tareas
+    ├── TASK-FASE-2.md          ← 5 tareas
+    ├── TASK-FASE-3.md          ← 4 tareas
     └── TASK-ORDER.md           ← Orden de ejecución
 ```
 
@@ -1813,7 +1887,9 @@ mi-task-app/
 /sdd-task-implementer
 ```
 
-El skill implementa tarea por tarea (puedes ir FASE por FASE):
+El skill implementa tarea por tarea, FASE por FASE, en una rama de trabajo por FASE
+(`fase-0-skeleton`, …). Al final de cada FASE ejecuta la demo y el cliente acepta el
+incremento (tag `fase-N-accepted`):
 
 ```
 mi-task-app/
@@ -1836,15 +1912,15 @@ mi-task-app/
 │   └── e2e/
 ├── package.json
 ├── tsconfig.json
-└── ... (36 commits trazables)
+└── ... (28 commits trazables, uno por tarea, cada uno con su Task:)
 ```
 
 ### Verificación final
 
 ```
-/sdd-traceability-check    ← Todo conectado ✅
-/sdd-dashboard             ← Dashboard HTML generado
-/sdd-code-index            ← (opcional) Indexar código para blast radius
+/sdd-acceptance --check    ← Veredicto por requisito + cadena de IDs íntegra ✅
+/sdd-acceptance --loop     ← (si falta algo) itera hasta cumplir todos los Must
+/sdd-acceptance --sign-off ← Aceptación registrada del cliente
 /sdd-pipeline-status       ← Todos los pasos: done ✅
 ```
 
@@ -1979,21 +2055,19 @@ pero son más útiles **antes de plan-architect**:
 
 Ambos generan artefactos que plan-architect consume automáticamente si existen.
 
-### ¿Qué es el code intelligence?
+### ¿Cómo sé qué código implementa cada requisito?
 
-`/sdd-code-index` analiza tu código fuente y lo conecta con los artefactos SDD.
-Usa los commits con trailers `Refs:` y `Task:` (que task-implementer genera automáticamente)
-para inferir qué código implementa cada requisito.
-
-Con **GitNexus** instalado (`npm i -g gitnexus`), el análisis es mucho más profundo:
-call graphs, clusters de código, flujos de ejecución. Sin GitNexus, funciona en modo básico.
+Por los trailers de los commits (`Task:`, `Refs:`, `Change:`), que task-implementer escribe
+con `git commit --trailer`. `sdd trace req REQ-F-004` lista los commits de un requisito y
+`sdd trace why src/api/add.ts:42` recorre blame → commit → trailers hasta los IDs de spec.
 
 ### ¿Puedo ver el estado del pipeline en cualquier momento?
 
 Sí, de tres formas:
 
-1. `/sdd-pipeline-status` — Resumen en texto
-2. `/sdd-dashboard` — Dashboard HTML interactivo
+1. `/sdd-pipeline-status` — Resumen en texto (incluye el resumen de aceptación)
+2. `acceptance/ACCEPTANCE-REPORT.md` — Veredicto por requisito, legible por el cliente
+   (`/sdd-acceptance --publish` puede publicarlo además como página de estado)
 3. `pipeline-state.json` — Archivo JSON (automáticamente actualizado)
 
 ---
@@ -2002,8 +2076,11 @@ Sí, de tres formas:
 
 | Término | Significado |
 |---------|-------------|
-| **Pipeline** | La secuencia de 7 pasos (REQ → IMPL) |
-| **FASE** | Una fase de implementación (grupo de tareas) |
+| **Pipeline** | La secuencia de 7 pasos (REQ → IMPL), más la aceptación |
+| **FASE** | Un incremento vertical: un recorrido de usuario que se demuestra al cliente |
+| **Necesidad (N-NNN)** | Lo que pidió el cliente, con sus palabras (`CUSTOMER-NEEDS.md`) |
+| **Veredicto** | VERIFIED / FAILING / MISSING / WAIVED por requisito (`sdd accept`) |
+| **Trailer** | Línea `Clave: valor` al final del commit (`Task:`, `Refs:`, `Change:`) |
 | **EARS** | Formato de requisitos: WHEN/THE/SHALL |
 | **BDD** | Escenarios Given/When/Then |
 | **ADR** | Registro de decisión de arquitectura |
@@ -2015,12 +2092,9 @@ Sí, de tres formas:
 | **C4 Model** | Diagramas de arquitectura en 4 niveles |
 | **SWEBOK** | Body of Knowledge de ingeniería de software |
 | **OWASP ASVS** | Estándar de verificación de seguridad |
-| **SSE** | Server-Sent Events (actualizaciones en tiempo real) |
-| **GitNexus** | Herramienta de code intelligence (call graph, clusters) |
 | **Design Tokens** | Variables de diseño exportables (colores, spacing, etc.) |
 | **WCAG** | Web Content Accessibility Guidelines |
 | **Blast Radius** | Impacto de un cambio en el resto del sistema |
-| **Code Intelligence** | Mapeo código ↔ artefactos SDD |
 
 ---
 
@@ -2039,6 +2113,7 @@ Sí, de tres formas:
 │  6.  /sdd-plan-architect           Diseñar arquitectura y fases  │
 │  7.  /sdd-task-generator           Generar tareas atómicas       │
 │  8.  /sdd-task-implementer         Implementar con TDD            │
+│  9.  /sdd-acceptance               ¿Cumplido cada requisito?      │
 │                                                                   │
 │  LATERALES (en cualquier momento):                                │
 │                                                                   │
@@ -2050,9 +2125,8 @@ Sí, de tres formas:
 │  UTILIDADES (cuando las necesites):                               │
 │                                                                   │
 │  /sdd-pipeline-status              ¿Dónde estoy?                 │
-│  /sdd-traceability-check           ¿Está todo conectado?         │
-│  /sdd-dashboard                    Verlo visualmente              │
-│  /sdd-code-index                   Conectar código con specs     │
+│  /sdd-gap-detector                 ¿Qué falta o sobra en código?  │
+│  /sdd-orchestrator                 Conducir todo el pipeline     │
 │  /sdd-session-summary              Resumen de sesión              │
 │                                                                   │
 │  PROYECTO EXISTENTE:                                              │

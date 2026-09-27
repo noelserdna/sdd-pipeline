@@ -1,5 +1,7 @@
 # Inventario de la fusión (F0) — 2026-08-24
 
+> **Nota (5.0):** inventario histórico. `sdd-dashboard` (y su `generate.py`, hoy `scripts/sdd-graph.py` sin HTML), `sdd-code-index`, `sdd-traceability-check` y las status lines ya no existen.
+
 Origen de cada pieza del repositorio unificado `noelserdna/sdd-pipeline` y destino de lo que no se fusiona.
 
 | Repo origen | Commit / tag de referencia |

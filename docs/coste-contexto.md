@@ -1,5 +1,7 @@
 # Coste de contexto del plugin
 
+> **Nota (5.0):** las filas anteriores cuentan skills ya retiradas (`sdd-dashboard`, `sdd-code-index`, `sdd-traceability-check`); 5.0 tiene 21 skills y todavía no tiene medición en esta tabla.
+
 Medido con `claude plugin details sdd-pipeline` tras instalar desde el marketplace en un `CLAUDE_CONFIG_DIR` limpio (Claude Code 2.1.241).
 
 | Versión | Fecha | Skills | Agentes | Always-on | Mayor on-invoke | Nota |
