@@ -485,14 +485,38 @@ export function criterionHint(r, c) {
 
 // ------------------------------------------------------------------ report
 const cell = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+const clip = (t, n = 80) => { const x = String(t ?? ""); return x.length > n ? `${x.slice(0, n - 1)}…` : x; };
+/** Tests of one criterion, summarised: counts plus at most 2 names; failing tests always listed (up to 5).
+ *  The full list stays in .sdd/acceptance.json, so a report or PR body stays readable at any suite size. */
+function testSummary(n, evidence) {
+  const tests = evidence.filter((e) => e.kind === "test" && e.status !== "skip");
+  if (!tests.length) return null;
+  const name = (e) => `"${clip(e.name)}"`;
+  const failing = tests.filter((e) => e.fresh && (e.status === "fail" || e.status === "error"));
+  const passing = tests.filter((e) => e.fresh && e.status === "pass");
+  const stale = tests.filter((e) => !e.fresh);
+  const plural = (k) => `${k} test${k === 1 ? "" : "s"}`;
+  if (failing.length) {
+    const shown = failing.slice(0, 5).map((e) => `${name(e)} (${e.status})`);
+    const more = failing.length > 5 ? ` +${failing.length - 5} more` : "";
+    return `AC${n}: ${failing.length} of ${plural(tests.length)} fail — ${shown.join(", ")}${more}`;
+  }
+  if (passing.length) {
+    const more = passing.length > 2 ? ` +${passing.length - 2} more` : "";
+    return `AC${n}: ${plural(passing.length)} pass — ${passing.slice(0, 2).map(name).join(", ")}${more}${stale.length ? ` (${stale.length} stale)` : ""}`;
+  }
+  return `AC${n}: ${plural(stale.length)} stale — ${name(stale[0])}${stale.length > 1 ? ` +${stale.length - 1} more` : ""}`;
+}
 function evidenceCell(r) {
   if (r.verdict === "WAIVED") return `waiver ${DECISIONS_FILE}:${r.waiver.line}`;
   const parts = [];
   for (const c of r.criteria) {
+    const t = testSummary(c.n, c.evidence);
+    if (t) parts.push(t);
     for (const e of c.evidence) {
-      const mark = !e.fresh ? "stale" : (e.kind === "test" ? (e.status === "pass" ? "pass" : e.status) : (e.kind === "inspection" ? (c.state === "pass" ? "pass" : c.state) : (e.pass ? "pass" : "fail")));
-      if (e.kind === "test") parts.push(`AC${c.n} ${e.ref} "${e.name}" (${mark})`);
-      else if (e.kind === "measurement") parts.push(`AC${c.n} ${e.metric} ${e.observed} ${e.op} ${e.threshold} — ${e.ref} (${mark})`);
+      if (e.kind === "test") continue;
+      const mark = !e.fresh ? "stale" : (e.kind === "inspection" ? (c.state === "pass" ? "pass" : c.state) : (e.pass ? "pass" : "fail"));
+      if (e.kind === "measurement") parts.push(`AC${c.n} ${e.metric} ${e.observed} ${e.op} ${e.threshold} — ${e.ref} (${mark})`);
       else if (e.kind === "inspection") { if (c.n === 1) parts.push(`inspection by ${e.by} (${e.role}) — ${e.ref} (${mark})`); }
       else parts.push(`AC${c.n} demo — ${e.ref} (${mark})`);
     }

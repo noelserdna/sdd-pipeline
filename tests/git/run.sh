@@ -184,6 +184,9 @@ expect "--issue prefija el nombre" "$(git -C "$b" symbolic-ref --short HEAD)" "4
 git -C "$b" switch -q trunk
 run branch start audit 2026-09-27 --repo "$b"; expect "audit/fix-fecha" "$(git -C "$b" symbolic-ref --short HEAD)" "audit/fix-2026-09-27"
 git -C "$b" switch -q trunk
+run branch start acceptance 2026-09-27 --repo "$b"; expect "acceptance/fecha" "$rc:$(git -C "$b" symbolic-ref --short HEAD)" "0:acceptance/2026-09-27"
+git -C "$b" switch -q trunk
+run branch start acceptance 27-09-2026 --repo "$b"; expect "acceptance con fecha mal formada → 2" "$rc" 2
 run branch start fase 3 billing-core --repo "$b" --json; expect "rama existente con árbol limpio: se retoma" "$(js 'j.action')" "resumed"
 git -C "$b" switch -q trunk
 git -C "$b" checkout -q --detach

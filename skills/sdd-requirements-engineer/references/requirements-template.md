@@ -49,7 +49,7 @@
 - **Type:** Technical | Business | Regulatory
 - **Source:** {origin of constraint}
 - **Needs:** N-00X | — (team/architecture source)
-- **Verification:** inspection — {what is reviewed}
+- **Verification:** test — {what the static check reads, e.g. package.json, import graph} | inspection — {what is reviewed}
 
 ## Traceability
 
@@ -57,7 +57,8 @@
 |--------|------|----------|--------|-------|--------------|--------------|
 | REQ-F-001 | Functional | Must | {source} | N-001 | test | None |
 | REQ-NF-001 | Nonfunctional | Must | {source} | N-004 | measurement | REQ-F-001 |
-| REQ-C-001 | Constraint | — | {source} | — | inspection | — |
+| REQ-C-001 | Constraint | — | {source} | — | test | — |
+| REQ-C-002 | Constraint | — | {source} | — | inspection | — |
 ```
 
 ## Field rules
@@ -70,7 +71,10 @@
   | `test` | behaviour (the default for REQ-F) | an automated test per criterion, named with its scenario ID |
   | `demo` | UI/UX look and flow a test cannot judge | the observed output, shown to the customer |
   | `measurement` | NFR with a threshold — state metric, threshold and how it is measured on the same line | a recorded value compared with the threshold |
-  | `inspection` | constraints, legal, process, documentation | a recorded human review |
+  | `test` for a constraint | a constraint code can check: dependency lists, import boundaries, runtime/engine versions, forbidden APIs | a static test per constraint, named `REQ-C-NNN AC1 …` (a constraint has one implicit criterion, AC1) |
+  | `inspection` | process, legal and organisational constraints, documentation, or anything no test can observe | a recorded human review |
+
+  A constraint whose compliance a test can read should say `test`: a static check runs on every commit and never goes stale, while an inspection is a human record that expires whenever the files it names change. Keep `inspection` for what only a person can judge.
 
 - **Acceptance criteria** carry real example data (names, amounts, IDs, exact messages, exit codes), not placeholders: "GIVEN a cart with 2 × 12.50 € WHEN …" instead of "GIVEN a cart with items". Customers can check a concrete example; they cannot check an abstraction. Cover the normal path, the main alternative and at least one error.
 - **Examples reviewed by:** who on the customer side read the examples and agreed, and when. Per requirement, or once in the header when a whole batch was reviewed together.

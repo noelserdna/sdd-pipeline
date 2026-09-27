@@ -18,6 +18,8 @@ Cada requisito declara en `REQUIREMENTS.md` cómo se verifica (`Verification:`),
 | `measurement` | Un valor registrado que la CLI compara con su umbral | Métricas objetivas (cobertura, un benchmark): `sdd accept measure --command … --extract …`, que ejecuta el comando y se vuelve a medir sola con `sdd accept --remeasure`. Valores que confirma una persona: `sdd accept record measurement` |
 | `inspection` | Una revisión humana registrada | `sdd accept record inspection` |
 
+**Restricciones comprobables por código.** Una restricción (`REQ-C`) cuyo cumplimiento puede leer un test (lista de dependencias, fronteras de importación, versión del runtime, APIs prohibidas) declara `Verification: test`, con un test estático llamado `REQ-C-NNN AC1 …` (una restricción tiene un único criterio implícito, AC1). Ese test corre en cada commit y no caduca; una inspección es un registro humano que caduca cada vez que cambian los ficheros que nombra. `inspection` queda para restricciones de proceso, legales u organizativas, o para lo que ningún test puede observar. En la ejecución real de todo-app, 8 tests estáticos en verde no contaban porque las dos restricciones decían `inspection`.
+
 Por eso los tests llevan en el nombre el ID de su escenario (lo exigen `sdd-test-planner` y el TDD del implementer). Los `Refs:` a nivel de fichero **no** cuentan como evidencia: atan un fichero entero a un requisito y darían VERIFIED falsos. Lectores JUnit probados: vitest, jest, pytest, rspec, playwright, minitest y mocha. La tabla de comandos por runner está en `skills/sdd-acceptance/references/test-report.md`.
 
 ## Veredictos
@@ -96,6 +98,8 @@ Modos: `enforce` falla con 1/2/3 tal cual; `warn` imprime y sale con 0; `off` sa
 | `no-progress` | VERIFIED no sube y FAILING + MISSING no bajan |
 | `max-cycles` | 3 ciclos por defecto (máximo 5) |
 | `needs-human` | Todo lo que queda necesita a una persona |
+
+Sobre la rama por defecto, `--loop` y `--sign-off` empiezan con `sdd branch start acceptance`, que crea (o retoma) `acceptance/{YYYY-MM-DD}` para sus commits; en cualquier otra rama se quedan en ella.
 
 Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
 

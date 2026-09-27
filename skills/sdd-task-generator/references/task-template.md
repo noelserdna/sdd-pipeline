@@ -64,9 +64,9 @@
 **Checkpoint:** Project initializes and builds successfully.
 
 - [ ] TASK-F{N}-001 {Description} | `{file_path}`, `{file_path}`
-  - **Commit:** `{type}({scope}): {message}`
+  - **Commit:** `chore({scope}): {message}`
   - **Acceptance:**
-    - {criterion_1}
+    - Verify: `{command}` → {output that proves it, e.g. "lists the perf project"}   ← no behaviour, no test file
     - {criterion_2}
   - **Refs:** {FASE-N}, {ADR-XXX}
   - **Revert:** {SAFE|COUPLED|MIGRATION|CONFIG} — {impact description}
@@ -277,7 +277,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
   - **Files:** `{extra_path}`, `{extra_path}`
   - **Commit:** `{type}({scope}): {message}`
   - **Acceptance:**
-    - {test written first, then criteria with specific values, not vague}
+    - {feat/fix: test written first · chore/build: Verify command; then criteria with specific values, not vague}
   - **Refs:** {FASE, UC, API, ADR, INV, REQ — comma-separated}
   - **Revert:** {SAFE|COUPLED|MIGRATION|CONFIG} — {what breaks}
   - **Review:**
@@ -295,7 +295,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 | blocked-by | NO | Task IDs this task depends on (same FASE or earlier); drives Stream assignment (V-18) |
 | Files | NO | Extra paths the task creates/modifies; together with the line paths they form the task's write-set (Stream Ownership) |
 | Commit | YES | Conventional commit format (V-05) |
-| Acceptance | YES | At least 1 criterion with specific values; for code tasks the first is the test written first (V-06, Constitution Art. 8) |
+| Acceptance | YES | At least 1 criterion with specific values (V-06). `feat`/`fix` tasks: the first is `Test first: …` and the test file is in the write-set (Constitution Art. 8). `chore`/`build`/config tasks: `Verify: \`{command}\` → {expected output}`, no test file; a chore task that says `Test first` must list its test file |
 | Refs | YES | At least FASE reference |
 | Revert | Full: YES · compact: only when not SAFE | Category + impact (V-07; absent = SAFE in compact) |
 | Review | Full: YES (≥ 2 checks) · compact: omitted | Patterns in `references/review-checklist.md` |

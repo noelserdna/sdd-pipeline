@@ -5,7 +5,7 @@
 # Covers the verdicts (VERIFIED, FAILING, MISSING, WAIVED, DEPRECATED), NF/C methods (measurement computed in code,
 # demo, inspection freshness by paths), waivers voided by a MODIFY, gate exit codes 0/1/2/3 and modes, stale JUnit,
 # report rows, --fase scoping, loop stops, JUnit dialects, freshness scoped to code_paths/test_paths (a docs or
-# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure). bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
+# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence cells. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SDD="$ROOT/scripts/sdd.mjs"
@@ -395,6 +395,32 @@ expect "stale human measurement: nothing appended" "$(dlines)" "$before"
 run loop next --state .sdd/loop-g.json --reset
 expect "loop: stale measurement without a command → needs-human" "$(loopq 'j.targets.find(t=>t.req==="REQ-NF-002").route_hint')" needs-human
 rm -f "$repo/cov.txt"
+
+# ---------------------------------------------------------------- 12. evidence cell summarised (F16)
+# 40 passing tests with long names on one criterion and 7 failing on another: the PR block shows counts, at most 2
+# passing names (clipped to 80 chars) and up to 5 failing names; the full list stays in .sdd/acceptance.json.
+md=$(node --input-type=module -e '
+import { renderPrBlock, renderReport, summarize } from "'"$ROOT"'/scripts/lib/acceptance.mjs";
+const long = (i) => `AC-001-01 test number ${i} ` + "x".repeat(120);
+const t = (i, status) => ({ kind: "test", ref: "tests/a.test.ts", name: long(i), status, fresh: true });
+const pass = Array.from({ length: 40 }, (_, i) => t(i, "pass"));
+const fail = [...Array.from({ length: 7 }, (_, i) => t(100 + i, "fail")), t(200, "pass")];
+const req = (id, crit) => ({ id, title: id, priority: "Must", needs: [], verification: "test", in_scope: true, stale_evidence: false,
+  verdict: crit.some((c) => c.state === "fail") ? "FAILING" : "VERIFIED", criteria: crit,
+  criteria_total: crit.length, criteria_passing: crit.filter((c) => c.state === "pass").length });
+const reqs = [req("REQ-F-001", [{ n: 1, state: "pass", evidence: pass }]), req("REQ-F-002", [{ n: 1, state: "pass", evidence: pass.slice(0, 1) }, { n: 2, state: "fail", evidence: fail }])];
+const L = { requirements: reqs, summary: summarize(reqs), evaluated_sha: "abcdef1234567", generatedAt: "2026-09-27T00:00:00Z",
+  scope: null, dirty: false, stale_decisions: [], fase_acceptances: [] };
+process.stdout.write(renderPrBlock(L, 1) + "\n@@REPORT@@\n" + renderReport(L));')
+contains "$md" "AC1: 40 tests pass — " && pass "evidence: passing count per criterion" || bad "evidence: passing count"
+contains "$md" "+38 more" && pass "evidence: at most 2 passing names, +m more" || bad "evidence: +m more"
+contains "$md" "…\"" && pass "evidence: long names clipped" || bad "evidence: clipped names"
+contains "$md" "AC2: 7 of 8 tests fail — " && pass "evidence: failing count" || bad "evidence: failing count"
+expect "evidence: 5 failing names listed" "$(printf '%s' "$md" | sed -n '/^| REQ-F-002/p' | head -1 | grep -o '(fail)' | wc -l | tr -d ' ')" 5
+contains "$md" "(fail) +2 more" && pass "evidence: failing beyond 5 counted" || bad "evidence: failing +2 more"
+contains "$md" "AC1: 1 test pass — " && pass "evidence: singular" || bad "evidence: singular"
+size=$(printf '%s' "$md" | sed '/@@REPORT@@/q' | wc -c | tr -d ' ')
+[ "$size" -lt 2500 ] && pass "PR block stays small with 48 bound tests ($size bytes)" || bad "PR block size $size"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

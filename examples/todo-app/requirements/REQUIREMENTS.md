@@ -121,14 +121,14 @@
 - **Type:** Technical
 - **Source:** Team standard (see README.md)
 - **Needs:** — (team/architecture source)
-- **Verification:** inspection — review of `package.json` (engines, no `dependencies`) and `tsconfig.json`
+- **Verification:** test — static checks (package.json engines and no `dependencies`, tsconfig.json)
 
 ### REQ-C-002: Module boundaries
 - **Statement:** Business logic lives in `src/api/` (pure functions and the JSON repository) and the command-line interface in `src/cli/`; `src/cli/` may import `src/api/` but never the reverse.
 - **Type:** Technical
 - **Source:** Architecture guideline (enables independent implementation streams)
 - **Needs:** — (team/architecture source)
-- **Verification:** inspection — review of the imports under `src/api/` (none from `src/cli/`)
+- **Verification:** test — static checks (import graph: nothing under `src/api/` imports `src/cli/`)
 
 ## Traceability
 
@@ -142,5 +142,5 @@
 | REQ-F-006 | Functional | Must | Product owner | Yes | N-004 | test |
 | REQ-NF-001 | Nonfunctional | Should | Team standard | Yes | N-005 | measurement |
 | REQ-NF-002 | Nonfunctional | Must | Team standard | Yes | N-005 | measurement |
-| REQ-C-001 | Constraint | Must | Team standard | — | — | inspection |
-| REQ-C-002 | Constraint | Must | Architecture guideline | — | — | inspection |
+| REQ-C-001 | Constraint | Must | Team standard | — | — | test |
+| REQ-C-002 | Constraint | Must | Architecture guideline | — | — | test |

@@ -21,6 +21,7 @@
 //   sdd branch start fase <N> <slug> [--issue N] [--json]      fase-{N}-{slug}
 //   sdd branch start change <CHG-ID> <slug> [--issue N]        change/{CHG-ID}-{slug}
 //   sdd branch start audit [YYYY-MM-DD] [--issue N]            audit/fix-{date}
+//   sdd branch start acceptance [YYYY-MM-DD] [--issue N]       acceptance/{date} (global acceptance loop / sign-off)
 //       On the default branch: `git switch -c <name>` (uncommitted changes carry over). On another branch: stay there.
 //       Detached HEAD: exit 1. Default branch = Stack Profile default_branch → origin/HEAD → init.defaultBranch →
 //       main/master. --issue N prefixes the name with `{N}-`.
@@ -679,7 +680,11 @@ function cmdBranch(o) {
     const date = id || new Date().toISOString().slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) usage("branch start audit takes an optional YYYY-MM-DD");
     name = `audit/fix-${date}`;
-  } else usage("branch start needs fase, change or audit");
+  } else if (kind === "acceptance") {
+    const date = id || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) usage("branch start acceptance takes an optional YYYY-MM-DD");
+    name = `acceptance/${date}`;
+  } else usage("branch start needs fase, change, audit or acceptance");
   if (o.issue) name = `${o.issue}-${name}`;
   if (git(repo, ["check-ref-format", "--branch", name]).status !== 0) usage(`invalid branch name ${name}`);
   const result = (action, code, msg) => { if (o.json) json({ action, branch: action === "refused" ? null : (action === "stayed" ? info.current : name), wanted: name, ...info, message: msg }); else out(msg); return code; };

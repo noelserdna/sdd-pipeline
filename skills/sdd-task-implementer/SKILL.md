@@ -139,7 +139,7 @@ For each task:
 2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`, `references/tdd-workflow.md`).
 3. Run `{test_file}` (or `{test_name}`) → they must FAIL. Tests that pass without implementation are wrong; fix them.
 
-Tasks without a testable component (config, toolchain) define a verification instead, e.g. `config parses → {server} starts without errors (server helper)`.
+Tasks without behaviour (`chore`/`build`/config, e.g. a runner setting or a fixture) write no test: run the `Verify:` command the task states and check its output (e.g. `config parses → {server} starts without errors`). A chore task that says `Test first` but lists no test file is a task defect: record it as IF feedback and verify with a command.
 
 ### Phase 5: Implementation
 

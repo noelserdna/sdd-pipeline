@@ -184,6 +184,11 @@ Convergence Protocol in `sdd-spec-auditor`: each cycle measures, acts on what is
 decision belongs to `sdd loop next`, which compares the cycle with the previous ones; do not continue past a stop and
 do not stop early on your own judgment, except to ask a human something the next action depends on.
 
+`--loop` and `--sign-off` commit (feedback, records, report), and on the default branch those commits belong on a
+work branch, not on the delivered line. Before the first commit run `node "$SDD" branch start acceptance`: on the
+default branch it creates `acceptance/{YYYY-MM-DD}` (or resumes it), on any other branch it stays there
+(plugin-root `references/git-conventions.md`, § Branches).
+
 ```
 first cycle: node "$SDD" loop next --reset [--fase N] [--max-cycles M]        # baseline
 repeat:
@@ -259,7 +264,8 @@ PR body of `--publish`.
 The customer's acceptance is a recorded fact, not a remark in a chat. Read `references/sign-off.md` before this mode:
 it has the confirmation question, the record command and the tag message.
 
-1. Run `--check` for the scope (fresh evidence, at the commit being accepted).
+1. Run `node "$SDD" branch start acceptance` (the branch rule of `--loop`), then `--check` for the scope (fresh
+   evidence, at the commit being accepted).
 2. `node "$SDD" gate --mode enforce [--fase N]`. Exit 0 → goal met. Exit 3 → met with waived Musts: show each with its
    reason and follow-up issue. Exit 2 → stale evidence: re-capture (Step 1) and retry once. Exit 1 → not met: say so
    with the open Musts and offer `/sdd-acceptance --loop` (or, for demo/measurement/inspection evidence, the human

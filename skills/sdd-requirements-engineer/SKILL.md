@@ -78,7 +78,7 @@ Mode 1 writes both files; Mode 3 updates `REQUIREMENTS.md`; Mode 2 writes only a
 ### Rules for Output
 
 1. IDs: `REQ-F-NNN` (functional), `REQ-NF-NNN` (nonfunctional), `REQ-C-NNN` (constraint), unique across the document.
-2. Every REQ-F and REQ-NF has an EARS statement, BDD acceptance criteria (Given/When/Then) with concrete data, `Needs:` citing at least one need, and `Verification:`. Constraints (REQ-C) are plain statements with Type, Source and `Verification:` (usually `inspection`); `Needs: —` is allowed when the source is the team or the architecture.
+2. Every REQ-F and REQ-NF has an EARS statement, BDD acceptance criteria (Given/When/Then) with concrete data, `Needs:` citing at least one need, and `Verification:`. Constraints (REQ-C) are plain statements with Type, Source and `Verification:` (`test` when code can check it, `inspection` for process, legal or organisational constraints); `Needs: —` is allowed when the source is the team or the architecture.
 3. No vague terms; every quality metric is quantified, and a `measurement` requirement states metric, threshold and how it is measured.
 4. Every need is covered by some requirement or `out-of-scope` with its decision; the Traceability table lists every requirement with its needs and verification method.
 5. **Re-runs keep IDs stable.** Never renumber or reuse an ID; new requirements take the next free number, removed ones are marked deprecated rather than deleted, because specs, tests and commits reference them. After approval (tag `requirements-v{Version}`), changes go through `sdd-req-change` (it classifies the change, cascades staleness and leads to a new approval and tag) instead of re-running this skill.

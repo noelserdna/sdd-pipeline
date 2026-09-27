@@ -139,6 +139,8 @@ From each `PLAN-FASE-{N}.md`: components → tasks grouped by behaviour; data mo
 
 Split a task above 6 files or 2 API operations (V-08 warns above 8); two trivially related operations sharing all their files may share a slice.
 
+**Test-first applies to behaviour.** A task that implements behaviour (`feat`/`fix`: a slice, a validation, an error path) opens its Acceptance with `Test first: …` and has its test file in its write-set. A task without behaviour (`chore`/`build`/`ci`/config: a runner setting, a dataset fixture, a dependency pin) states its verification instead — a command whose output proves the change, e.g. `Verify: npx vitest run --project perf --reporter=junit lists the perf project` — and needs no test file. If a chore task still deserves a versioned test, put that test file in its write-set; a `Test first:` line with no test path to write is a contradiction the implementer can only report (IF feedback).
+
 ### Phase 3: Dependency Resolution
 
 Per task: write-set (files it creates/modifies) and read-set. B depends on A when B's read-set meets A's write-set or B needs A's deliverable. Mark `[P]` when write-sets are disjoint and there is no read-dependency on uncommitted work. The graph must be a DAG with every task reachable from a root; identify the critical path.

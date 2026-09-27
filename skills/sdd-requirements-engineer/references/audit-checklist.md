@@ -49,7 +49,7 @@ For EACH requirement, evaluate:
 
 - [ ] **Concrete examples**: each acceptance criterion uses real data (values, names, exact messages, exit codes), not placeholders such as "some items" or "an error"
 - [ ] **Examples reviewed**: `Examples reviewed by:` names who on the customer side agreed with them, per requirement or once in the header
-- [ ] **Verification method fits**: `Verification:` is `test` for behaviour, `demo` for UI look and flow, `measurement` for an NFR with a threshold (metric, threshold and how it is measured stated on the line), `inspection` for constraints, legal and process
+- [ ] **Verification method fits**: `Verification:` is `test` for behaviour, `demo` for UI look and flow, `measurement` for an NFR with a threshold (metric, threshold and how it is measured stated on the line), `test` for constraints code can check (dependency lists, import boundaries, runtime versions; tests named `REQ-C-NNN AC1 …`), `inspection` only for process, legal and organisational constraints or what no test can observe
 - [ ] **Measurable NFR**: a `measurement` requirement names a threshold that a recorded value can be compared with
 
 ### 1.7 Categorization

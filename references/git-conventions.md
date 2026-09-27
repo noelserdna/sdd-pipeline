@@ -51,12 +51,14 @@ Repeated `Refs` trailers are fine; readers join them. Check a message before com
 | FASE N | `fase-{N}-{slug}` |
 | Requirement change | `change/{CHG-ID}-{slug}` |
 | Audit fixes | `audit/fix-{YYYY-MM-DD}` |
+| Global acceptance (`sdd-acceptance --loop` / `--sign-off` after a delivery) | `acceptance/{YYYY-MM-DD}` |
 
 With an issue, prefix the issue number: `42-fase-3-billing` (GitLab links branches by that prefix).
 
 Rule before any commit: on the default branch, create the work branch (`git switch -c`, uncommitted changes carry
 over); on a work branch, keep working there; on a detached HEAD, stop and ask. `node "$SDD" branch start
-<fase|change|audit> <id> <slug> [--issue N]` applies it; `branch status` reports the state. The default branch is
+<fase|change|audit|acceptance> <id> <slug> [--issue N]` applies it (`audit` and `acceptance` take only an optional
+`YYYY-MM-DD`, default today); `branch status` reports the state. The default branch is
 `default_branch` in the SDD Stack Profile, else `origin/HEAD`, else `init.defaultBranch`, else `main`/`master`.
 Stream worktrees (`--stream`) and their integration (`--integrate`) manage their own branches and skip this rule.
 
