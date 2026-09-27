@@ -153,7 +153,7 @@ expect "fase scope: 2 requirements in the gate" "$(js 'j.requirements.length')" 
 junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass" \
   "test_ac_002_03_filter=pass" "AC-002-04 rm keeps ids=pass" "REQ-F-006 AC1 columns=pass"
 run gate --fase 1; expect "gate --fase 1 → 0 once F-002 passes" "$rc" 0
-run gate --fase 1 --md; has "--md: PR block" "### Acceptance — FASE 1"; has "--md: Refs line" "Refs: REQ-F-001, REQ-F-002"; has "--md: Closes placeholder" "Closes #<issue>"
+run gate --fase 1 --md; has "--md: PR block" "### Acceptance — FASE 1"; has "--md: Refs line" "Refs: REQ-F-001, REQ-F-002"; if contains "$out" "Closes #<issue>"; then bad "--md: no Closes placeholder"; else pass "--md: no Closes placeholder"; fi
 run accept --fase 1 --report acceptance/F1.md --no-out
 expect "report --fase 1: 2 rows" "$(grep -c '^| REQ-' "$repo/acceptance/F1.md")" 2
 

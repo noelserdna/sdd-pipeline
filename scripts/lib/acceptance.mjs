@@ -511,6 +511,6 @@ export function renderPrBlock(ledger, code) {
     `Goal: **${s.goal ? (s.must_waived ? "met with waivers" : "met") : "not met"}** — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}.`, "",
     "| Requirement | Priority | Verification | Verdict | Criteria | Evidence |", "|---|---|---|---|---|---|"];
   for (const r of rows) o.push(`| ${r.id} ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.verification || "—")} | ${r.verdict} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
-  o.push("", `Refs: ${rows.map((r) => r.id).join(", ") || "—"}`, "Closes #<issue>");
+  o.push("", `Refs: ${rows.map((r) => r.id).join(", ") || "—"}`);
   return o.join("\n") + "\n";
 }

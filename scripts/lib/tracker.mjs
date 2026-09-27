@@ -467,7 +467,7 @@ function cmdPrBody(o) {
   else o2.push(`Change report: \`${src.file}\``, "");
   const ledger = ledgerFor(root, s, src.requisitos);
   if (ledger) {
-    const block = renderPrBlock(ledger, gateCode(ledger)).split("\n").filter((l) => !/^Closes #<issue>$/.test(l.trim())).join("\n").replace(/\n+$/, "");
+    const block = renderPrBlock(ledger, gateCode(ledger)).replace(/\n+$/, "");
     o2.push(block, "");
   } else o2.push("_No acceptance ledger: run `sdd accept` (requirements/REQUIREMENTS.md not found)._", "");
   if (s.kind === "fase") {

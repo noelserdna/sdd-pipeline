@@ -242,8 +242,9 @@ it has the confirmation question, the record command and the tag message.
    platform release the project already uses, created only after the approver's explicit confirmation, with the
    approver lines and the `sdd gate --md` block in its annotated message or release notes. There is no
    `accepted-*` tag.
-7. Push the commit or tag only when the user agrees. Closing the FASE issue happens here once the tracker integration
-   exists (`tracker` in the Stack Profile).
+7. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
+   `$SDD issue close fase N` (it refuses without the `fase-{N}-accepted` tag); after a rejection, `$SDD issue update
+   fase N` keeps the issue's checklist and verdicts current.
 
 ## `--publish`
 
