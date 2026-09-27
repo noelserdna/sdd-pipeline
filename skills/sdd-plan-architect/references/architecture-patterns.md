@@ -25,9 +25,9 @@ C4 (Context, Containers, Components, Code) is a hierarchical approach to softwar
 
 ```
                     ┌──────────┐
-  [Recruiter] ────→ │  ReadPDF  │ ────→ [Anthropic API]
-  [OrgAdmin]  ────→ │  System   │ ────→ [Email Service]
-  [Candidate] ────→ │           │
+  [Customer]  ────→ │  {System} │ ────→ [Payment API]
+  [Admin]     ────→ │           │ ────→ [Email Service]
+  [Support]   ────→ │           │
                     └──────────┘
 ```
 
@@ -205,9 +205,9 @@ Request
 **Components:**
 | Component | Responsibility | Spec Reference |
 |-----------|---------------|----------------|
-| Rate Limiter | Enforce rate limits per session/user | ADR-025, nfr/LIMITS.md |
+| Rate Limiter | Enforce rate limits per session/user | ADR-{NNN}, nfr/LIMITS.md |
 | JWT Validator | Validate token signature and expiry | nfr/SECURITY.md |
-| Tenant Resolver | Extract org_id from token, validate tenant | INV-SYS-xxx |
+| Tenant Resolver | Extract org_id from token, validate tenant | INV-{AREA}-{NNN} |
 | RBAC Enforcer | Check role permissions for endpoint | 01-SYSTEM-CONTEXT.md roles |
 
 ### 3.2 Data Flow View

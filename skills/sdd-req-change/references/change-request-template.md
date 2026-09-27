@@ -26,12 +26,11 @@
 | Field | Value |
 |-------|-------|
 | **Type** | ADD / MODIFY / DEPRECATE |
-| **Category** | FUN / NFR / OPS / REG / DER |
-| **Subcategory** | EXT / CVA / MAT / GDP / USR / ORG / OFF / CAN / SEL / DSH / SYS / PERF / SEC / SCAL / AVAIL / TECH / DEP / MON / REC / MNT / GDPR / DPR / AUT / RET / DER |
+| **Category** | F (functional) / NF (nonfunctional) / C (constraint) |
 | **Priority** | Must Have / Should Have / Could Have |
 | **Stability** | Stable / Moderate / Volatile |
-| **Affected REQs** | REQ-{SUB}-{NNN}, ... (for MODIFY/DEPRECATE) or "None" (for ADD) |
-| **Related REQs** | REQ-{SUB}-{NNN}, ... (REQs that may need review) or "None" |
+| **Affected REQs** | REQ-{F|NF|C}-{NNN}, ... (for MODIFY/DEPRECATE) or "None" (for ADD) |
+| **Related REQs** | REQ-{F|NF|C}-{NNN}, ... (REQs that may need review) or "None" |
 
 ### Description
 
@@ -120,6 +119,8 @@ Then {expected result}
 
 ## Examples
 
+> Illustrative only (a PDF-processing product); use your project's IDs.
+
 ### Example 1: ADD Functional Requirement
 
 ```markdown
@@ -130,12 +131,11 @@ Then {expected result}
 | Field | Value |
 |-------|-------|
 | **Type** | ADD |
-| **Category** | FUN |
-| **Subcategory** | EXT |
+| **Category** | F |
 | **Priority** | Should Have |
 | **Stability** | Moderate |
 | **Affected REQs** | None |
-| **Related REQs** | REQ-EXT-001, REQ-EXT-002, REQ-PERF-001 |
+| **Related REQs** | REQ-F-001, REQ-F-002, REQ-NF-001 |
 
 ### Description
 
@@ -164,7 +164,7 @@ And a BulkExtractionResult is returned with status per PDF
 
 - Must respect existing per-PDF 50MB limit (INV-EXT-001)
 - Must respect existing rate limits (ADR-025)
-- Must handle deduplication per PDF (REQ-EXT-002 applies individually)
+- Must handle deduplication per PDF (REQ-F-002 applies individually)
 - Total batch timeout: configurable, default 30 minutes
 ```
 
@@ -178,12 +178,11 @@ And a BulkExtractionResult is returned with status per PDF
 | Field | Value |
 |-------|-------|
 | **Type** | MODIFY |
-| **Category** | NFR |
-| **Subcategory** | PERF |
+| **Category** | NF |
 | **Priority** | Must Have |
 | **Stability** | Stable |
-| **Affected REQs** | REQ-PERF-001 |
-| **Related REQs** | REQ-EXT-003 (fallback), RN-181 |
+| **Affected REQs** | REQ-NF-001 |
+| **Related REQs** | REQ-F-003 (fallback), RN-181 |
 
 ### Description
 
@@ -210,12 +209,11 @@ Production telemetry shows 3% of extractions timing out at 180s per model. These
 | Field | Value |
 |-------|-------|
 | **Type** | DEPRECATE |
-| **Category** | FUN |
-| **Subcategory** | CAN |
+| **Category** | F |
 | **Priority** | - |
 | **Stability** | - |
-| **Affected REQs** | REQ-CAN-011 |
-| **Related REQs** | REQ-CAN-010, REQ-MAT-003 |
+| **Affected REQs** | REQ-F-011 |
+| **Related REQs** | REQ-F-010, REQ-F-007 |
 
 ### Description
 

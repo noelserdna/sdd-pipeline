@@ -1,5 +1,7 @@
 # Coste de contexto del plugin
 
+> **Nota (5.0):** las filas anteriores cuentan skills ya retiradas (`sdd-dashboard`, `sdd-code-index`, `sdd-traceability-check`); 5.0 tiene 21 skills y todavía no tiene medición en esta tabla.
+
 Medido con `claude plugin details sdd-pipeline` tras instalar desde el marketplace en un `CLAUDE_CONFIG_DIR` limpio (Claude Code 2.1.241).
 
 | Versión | Fecha | Skills | Agentes | Always-on | Mayor on-invoke | Nota |
@@ -9,7 +11,7 @@ Medido con `claude plugin details sdd-pipeline` tras instalar desde el marketpla
 | sdd-pipeline 4.0.0-alpha.2 | 2026-08-24 | 24 | 5 | ~4.880 tok | sdd-req-change ~16,2k | + sdd-lead |
 | sdd-pipeline 4.0.0-beta.1 (+descripciones ≤ 350) | 2026-08-24 | 24 | 5 | **~3.390 tok** | sdd-req-change ~16,2k | tras recortar 19 descriptions (de 403-934 a ≤ 350 chars) |
 
-Per-componente (always-on, alpha.1): las 23 skills entre ~90 y ~240 tok; agentes: `sdd-pipeline-auditor` ~550, `sdd-orchestrator` ~410, resto ≤ ~50.
+Per-componente (always-on, alpha.1): las 23 skills entre ~90 y ~240 tok; agentes: `sdd-pipeline-auditor` ~550, `sdd-orchestrator` ~410, resto ≤ ~50. *(Nota: desde esta medición el plugin no distribuye agentes; `sdd-orchestrator` es ahora una skill y `sdd-pipeline-auditor` un agente local del repositorio en `.claude/agents/`.)*
 
 Umbral acordado: si el always-on supera **8.000 tok**, dividir en `sdd-pipeline` (core) + `sdd-brownfield` en el mismo marketplace. Con 4.806 no procede.
 

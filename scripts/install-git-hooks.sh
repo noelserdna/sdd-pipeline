@@ -9,9 +9,15 @@
 #   - otherwise $(git rev-parse --git-common-dir)/hooks, which is shared by every
 #     linked worktree, so installing once covers all of them.
 #
-# Idempotent: re-running with the same hook content is a no-op. A hook that is
+# It also vendors the validator the hook runs, <plugin>/scripts/sdd.mjs plus the
+# modules it imports (lib/git-log.mjs, …; same layout as scripts/), into
+# <work tree>/.claude/sdd/ with a header naming the plugin version; re-installing
+# overwrites them. Commit them: CI and teammates
+# without the plugin run `node .claude/sdd/sdd.mjs verify --range A..B` from there.
+#
+# Idempotent: re-running with the same content is a no-op. A hook that is
 # not ours is backed up as commit-msg.backup.<timestamp> before being replaced,
-# and --uninstall restores the most recent backup.
+# and --uninstall restores the most recent backup (the vendored files stay).
 #
 # Portable: bash 3.2, no GNU-only flags.
 
@@ -19,14 +25,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC="$SCRIPT_DIR/../hooks/sdd-commit-msg-hook.sh"
+CLI_SRC="$SCRIPT_DIR/sdd.mjs"
 MARKER="SDD Commit Message Traceability Hook"
+VENDOR_MARKER="Vendored by sdd-pipeline"
 
 MODE="install"
 QUIET=false
 TARGET_DIR=""
 
 usage() {
-  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -127,6 +135,65 @@ fi
 
 # ── install ──────────────────────────────────────────────────────────────────
 [ -f "$SRC" ] || die "hook source not found: $SRC (is the plugin checkout complete?)"
+
+# Vendor sdd.mjs and every module it imports (relative `from "./…"` / `"../…"`, followed recursively) into
+# <work tree>/.claude/sdd/, keeping their paths relative to scripts/.
+plugin_version() {
+  sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/../.claude-plugin/plugin.json" 2>/dev/null | head -n 1
+}
+# Relative path of FILE under scripts/ after resolving ".." (FILE is SCRIPT_DIR/…); empty when it escapes scripts/.
+rel_to_scripts() {
+  local d f
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd)" || return 0
+  f="$d/$(basename "$1")"
+  case "$f" in "$SCRIPT_DIR"/*) printf '%s\n' "${f#"$SCRIPT_DIR"/}" ;; esac
+}
+import_closure() { # prints paths relative to scripts/, sdd.mjs first
+  local queue="sdd.mjs" seen=" " cur spec dep
+  while [ -n "$queue" ]; do
+    queue="${queue# }"
+    cur="${queue%% *}"; queue="${queue#"$cur"}"
+    [ -z "$cur" ] && continue
+    case "$seen" in *" $cur "*) continue ;; esac
+    [ -f "$SCRIPT_DIR/$cur" ] || { warn "vendoring: $cur not found"; continue; }
+    seen="$seen$cur "
+    printf '%s\n' "$cur"
+    while IFS= read -r spec; do
+      [ -z "$spec" ] && continue
+      dep="$(rel_to_scripts "$(dirname "$SCRIPT_DIR/$cur")/$spec")"
+      if [ -n "$dep" ]; then queue="$queue $dep"; else warn "vendoring: $cur imports $spec outside scripts/"; fi
+    done < <(grep -oE "(from|import)[[:space:]]*\(?[\"'](\.\.?/[^\"']+)[\"']" "$SCRIPT_DIR/$cur" | sed -E "s/.*[\"'](\.\.?\/[^\"']+)[\"']/\1/")
+  done
+}
+vendor_one() { # vendor_one REL DST (header after a shebang line, else first); prints "updated" when DST changed
+  local src="$SCRIPT_DIR/$1" dst="$2" tmpf header
+  header="// $VENDOR_MARKER ${VERSION:-unknown} (scripts/$1) by install-git-hooks.sh; re-install overwrites it — edit the plugin, not this copy."
+  tmpf="$dst.tmp.$$"
+  mkdir -p "$(dirname "$dst")"
+  if head -n 1 "$src" | grep -q '^#!'; then
+    { head -n 1 "$src"; printf '%s\n' "$header"; tail -n +2 "$src"; } > "$tmpf"
+  else
+    { printf '%s\n' "$header"; cat "$src"; } > "$tmpf"
+  fi
+  if [ -f "$dst" ] && cmp -s "$tmpf" "$dst"; then
+    rm -f "$tmpf"
+    return 0
+  fi
+  mv "$tmpf" "$dst"
+  echo updated
+}
+if [ -f "$CLI_SRC" ]; then
+  VERSION="$(plugin_version)"
+  VENDOR_DIR="$(git rev-parse --show-toplevel)/.claude/sdd"
+  VENDOR_CHANGED=""
+  for f in $(import_closure); do
+    [ -n "$(vendor_one "$f" "$VENDOR_DIR/$f")" ] && VENDOR_CHANGED=1
+  done
+  chmod +x "$VENDOR_DIR/sdd.mjs"
+  [ -n "$VENDOR_CHANGED" ] && log "validator vendored: $VENDOR_DIR/sdd.mjs (sdd-pipeline ${VERSION:-unknown})"
+else
+  warn "scripts/sdd.mjs not found next to this installer; the hook will use its bash rules"
+fi
 
 mkdir -p "$HOOKS_DIR"
 

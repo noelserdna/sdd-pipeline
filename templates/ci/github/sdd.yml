@@ -1,0 +1,50 @@
+# SDD traceability checks (sdd-pipeline) — installed by `/sdd-setup --tracker` as .github/workflows/sdd.yml.
+# Runs the vendored CLI committed by /sdd-setup (.claude/sdd/sdd.mjs + .claude/sdd/lib/), so the runner needs only
+# git and node, not the plugin. Each step skips itself when the artifacts it checks do not exist yet.
+name: sdd
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  sdd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # full history: verify reads every commit of the PR and its trailers
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Per-task commits and trailers (fails on a squashed PR)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node .claude/sdd/sdd.mjs verify --range "origin/${BASE_REF}..HEAD"
+
+      - name: Task files
+        run: |
+          if [ -d task ]; then node .claude/sdd/sdd.mjs lint; else echo "sdd: no task/ yet, skipped"; fi
+
+      - name: Vertical plan
+        run: |
+          if [ -d plan ]; then node .claude/sdd/sdd.mjs lint --plan; else echo "sdd: no plan/ yet, skipped"; fi
+
+      # To feed the acceptance gate, run the Stack Profile `test_report` command here (install dependencies first) so
+      # it writes JUnit XML to .sdd/junit/ or to `test_report_path`. Example:
+      # - run: npm ci && npx vitest run --reporter=junit --outputFile=.sdd/junit/vitest.xml
+
+      - name: Acceptance gate (warn)
+        run: |
+          if [ -f requirements/REQUIREMENTS.md ] && { [ -d .sdd/junit ] || grep -Eq '^[[:space:]]*[-*][[:space:]]+test_report(_path)?:' CLAUDE.md 2>/dev/null; }; then
+            node .claude/sdd/sdd.mjs gate --mode warn
+          else
+            echo "sdd: no requirements or test reports configured, gate skipped"
+          fi

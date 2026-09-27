@@ -1,433 +1,194 @@
 ---
 name: sdd-gap-detector
-description: "Detects spec-vs-code gaps: compares API contracts, use cases and BDD scenarios with source to find MISSING endpoints, ORPHAN code, SCHEMA mismatches. Use when: 'detect gaps', 'find missing implementations', 'what's not implemented', 'orphan code', 'gap analysis', 'verify implementation completeness', 'qué falta por implementar', 'código huérfano'."
-context: fork
-agent: Explore
-allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git rev-parse:*), Bash(bin/rails routes:*), Write(.sdd/*), Write(audits/*)
+description: "Spec-vs-code gaps: missing endpoints, orphan routes, schema mismatches, untested BDD; --semantic judges whether code implements each requirement. Triggers: 'detect gaps', 'what's not implemented', 'orphan code', 'gap analysis', 'verify coverage', 'check implementation', 'are requirements implemented', 'qué falta por implementar', 'código huérfano', 'verificar cobertura'."
+allowed-tools: Read, Grep, Glob, Write, Bash(node:*), Bash(mkdir:*), Bash(git log:*), Bash(git rev-parse:*), Bash(bin/rails routes:*)
 ---
 
 # SDD Gap Detector
 
-**Version**: 1.0.0
-**SWEBOK**: Ch11 (Software Construction), Ch08 (Software Testing — structural coverage)
-**Purpose**: Perform objective gap analysis between SDD specifications and implementation code, identifying missing endpoints, orphan routes, schema mismatches, and uncovered BDD scenarios.
+Objective gap analysis between the SDD specifications and the code: what the spec says the system should do versus
+what the code does. The structural phases (1-4) compare contracts, routes and tests with regex parsers; the
+semantic phase (S, `--semantic`) asks, per requirement, whether some code actually implements it.
 
-## Trigger Phrases
-
-- `/sdd-gap-detector`
-- "detect gaps between spec and code"
-- "find missing implementations"
-- "what's not implemented yet"
-- "orphan code detection"
-- "verify implementation completeness"
-- "gap analysis"
-
-## Prerequisites
-
-- Source code in `src/` (or detected project root)
-- At least one of: `spec/contracts/*.md`, `spec/use-cases/*.md`
-- Tolerates partial specs — reports what it can and notes what is missing
+Code and test paths come from the SDD Stack Profile (`code_paths` / `test_paths` in the project's `CLAUDE.md`, see
+`skills/sdd-task-implementer/references/stack-profile.md`); `src/` and `tests/` are only defaults. Needs at least
+one of `spec/contracts/`, `spec/use-cases/`, BDD scenarios (or `requirements/` for `--semantic`); partial specs are
+fine — report what could not be checked.
 
 ## Modes
 
-| Mode | Flag | Description |
-|------|------|-------------|
-| **Full** | (default) | Complete gap analysis: endpoints + BDD + orphans |
-| **Endpoints** | `--endpoints` | Only endpoint gap analysis (spec contracts vs code routes) |
-| **BDD** | `--bdd` | Only BDD coverage analysis (scenarios vs test files) |
-| **Summary** | `--summary` | Statistics only, no detailed listings |
+| Mode | Flag | Runs |
+|------|------|------|
+| Full | (default) | Phases 1-5: endpoints, BDD, orphans, review document |
+| Endpoints | `--endpoints` | Endpoint analysis only (contracts vs routes) |
+| BDD | `--bdd` | BDD coverage only (scenarios vs test files) |
+| Summary | `--summary` | Statistics only, no detailed listings |
+| Semantic | `--semantic` | Full + Phase S (requirement-level implementation check) |
 
-## Process
+## Phase 1: Spec manifest (what the system should do)
 
-### Phase 1: Extract from Specs
+1. **Endpoints** — from `spec/contracts/API-*.md`: tables whose header has `Method` and `Path` (or `Endpoint`,
+   `Route`), or the `Style: operations` table (`references/language-parsers.md` §8, §8b). Record `id` (API ID or
+   method+path), `method`, `path`, `specFile:line`, request/response field names and status codes when documented.
+2. **Use cases** — `spec/use-cases/UC-*.md`: map `UC-ID → [API-IDs, BDD-IDs]`.
+3. **BDD scenarios** — `spec/tests/BDD-UC-*.md`, gherkin blocks in use cases, `**/*.feature`: `id` (BDD ID or
+   scenario name), `scenarioName`, `specFile:line`.
 
-Build a "spec manifest" — what the system SHOULD do.
+Missing sources are noted ("No API contracts found — endpoint analysis skipped") and the rest continues. If none
+exist (and no `requirements/` for `--semantic`), stop: "No spec artifacts found. Run the SDD pipeline first
+(start with /sdd-requirements-engineer)."
 
-#### 1.1 Extract API Endpoint Definitions
+## Phase 2: Code manifest (what the system does)
 
-Read `spec/contracts/*.md` and extract endpoint definitions. Look for markdown tables with columns matching: Method, Path, Description, Status Codes — or the `Style: operations` table (§8b).
+Scan the current checkout only, excluding `node_modules/`, build output and `.claude/worktrees/**` (ephemeral
+worktrees with unmerged Stream branches would otherwise show up as ORPHAN or be counted twice).
 
-**Table detection patterns** (see `references/language-parsers.md` §8):
-- Header row containing `Method` and `Path` (or `Endpoint`, `Route`)
-- Each data row: `| METHOD | /path/to/resource | ... |`
+1. **Framework** — detect every framework present:
 
-For each endpoint found, record:
-- `id`: The API identifier if present (e.g., `API-005`), or auto-generate from method+path
-- `method`: HTTP method (GET, POST, PUT, PATCH, DELETE)
-- `path`: URL path pattern
-- `specFile`: Source file and line number
-- `requestFields`: Field names from request body schema (if documented)
-- `responseFields`: Field names from response body schema (if documented)
-- `statusCodes`: Expected HTTP status codes
+   | Signal | Framework |
+   |--------|-----------|
+   | `package.json` dep `express` / `fastify` / `hono` / `next` | Express / Fastify / Hono / Next.js |
+   | `app/api/*/route.{ts,js}` | Next.js App Router |
+   | `"use server"` under `app/**` or `src/**` | Next.js Server Actions |
+   | `flask` / `fastapi` in `pyproject.toml` or `requirements.txt` | Flask / FastAPI |
+   | `manage.py` or `urls.py` | Django |
+   | `Gemfile` with `rails` + `config/routes.rb` | Rails (`bin/rails routes --expanded`, static fallback) |
 
-#### 1.2 Extract Use Case References
+   None detected → `projectFramework: "unknown"` and try all parsers.
+2. **Routes** — apply `references/language-parsers.md` to the Stack Profile `code_paths` plus framework locations
+   outside them (`app/api/**`, `**/urls.py`, `routes/**`, `api/**`). Record `method`, `path` (with router mount
+   prefixes applied), `codeFile`, `handler`, `line`.
+3. **Exports** — exported functions/classes (JS/TS `export …`, top-level non-underscore Python `def`/`class`) as
+   context for orphan analysis.
+4. **Tests** — files under `test_paths` (`*.test.*`, `*.spec.*`, `test_*.py`, `*.feature`) with their
+   describe/it/test names and scenario names.
 
-Read `spec/use-cases/*.md` (or `spec/use-cases.md` if single file) and extract:
-- UC identifiers: pattern `UC-\d{3}`
-- Associated API references within each UC (pattern `API-\d{3}`)
-- Associated BDD references within each UC (pattern `BDD-\d{3}`)
+## Phase 3: Structural gap analysis
 
-Build a map: `UC-ID → [API-IDs, BDD-IDs]`
+**MISSING endpoints.** A spec endpoint matches a route with the same method and an equivalent path:
+- parameter syntax is equivalent: `/users/:id` = `/users/{id}` = `/users/[id]` = `/users/<int:id>`;
+- the code path may add a *mount prefix* in front of the spec path, aligned on whole segments: segments made only
+  of `api` and version markers (`v1`, `v2`…), or a prefix the code applies to every route (global router mount,
+  Rails `scope`). Spec `/users` matches `/api/users` and `/api/v1/users`, but not `/admin/users` or `/superusers`
+  — a namespace such as `/admin` is a different resource.
 
-#### 1.3 Extract BDD Scenario IDs
+No match → MISSING; when a route failed only the prefix rule, add it as `nearMatch` for the human.
+`Style: operations` contracts compare API-op ↔ `design/OPERATION-MAPPING.md` row ↔ route/action
+(`references/language-parsers.md` §8b); method + path equality applies only to `Style: http`.
 
-Scan for BDD scenarios in:
-1. `spec/bdd/*.md` or `spec/bdd/*.feature`
-2. BDD blocks embedded in `spec/use-cases/*.md` (fenced code blocks with `gherkin` or `Given/When/Then`)
-3. `test/**/*.feature`
+**ORPHAN routes.** Routes with no spec endpoint (same matching rules), excluding infrastructure routes
+(`references/language-parsers.md` §10: health, docs, metrics, `/up`, `/rails/*`, `/cable`, `/_next/*`).
 
-For each scenario, record:
-- `id`: BDD identifier (pattern `BDD-\d{3}`) or scenario name
-- `scenarioName`: The `Scenario:` or `Scenario Outline:` title
-- `specFile`: Source file and line number
+**MISMATCH.** For matched endpoints compare field names, method variants and status codes (e.g. spec 201, code
+200). Regex-based and best-effort: give each mismatch a confidence.
 
-#### 1.4 Build Spec Manifest
+**BDD coverage.** A scenario is covered when a `.feature` file or a test block references its ID or name, or a
+test file name correlates with its UC/BDD ID; otherwise it is uncovered.
 
-Assemble the complete spec manifest:
-```
-specManifest = {
-  endpoints: [...],      // from 1.1
-  useCases: [...],       // from 1.2
-  bddScenarios: [...],   // from 1.3
-  specFiles: [...]        // all spec files read
-}
-```
+## Phase S: Semantic check (`--semantic`)
 
-**Graceful degradation:**
-- If `spec/contracts/` does not exist: note "No API contracts found — endpoint analysis skipped" and continue with BDD-only analysis
-- If `spec/use-cases/` does not exist: note "No use cases found — UC mapping skipped"
-- If no BDD scenarios found anywhere: note "No BDD scenarios found — BDD coverage skipped"
-- If NONE of the above exist: STOP with message "No spec artifacts found. Run the SDD pipeline first (start with /sdd-requirements-engineer)."
+Answers "is this requirement implemented?" for the requirements the structural phases cannot vouch for. The
+decision rules below are applied by you; Jev only supplies probabilities.
 
----
+**S.1 Targets.** Read `requirements/REQUIREMENTS.md`: per `REQ-*` block take the statement and its acceptance
+criteria. Read `dashboard/traceability-graph.json` if present (`artifacts[]` with `codeRefs[]`,
+`classification.businessDomain`; `relationships[]` with `source`/`target`). A REQ is **covered** when a codeRef has
+origin `direct` or `manual-override`, or `commit-inferred` with confidence ≥ 0.8;
+**weakly covered** when its only refs are `task-inferred`, `blame-inferred`, `propagated` or lower-confidence
+inferred ones; **uncovered** with no refs. Targets = weakly covered + uncovered + covered REQs whose UCs lead to a
+MISSING endpoint or an uncovered BDD scenario. Without the graph every REQ is a target: say so, and suggest
+running `python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` first for a narrower pass. `REQ-C-*` constraints and `REQ-NF-*` that no single code location can
+implement (performance, availability) are listed as "not checkable by code reading" instead.
 
-### Phase 2: Extract from Code
+**S.2 Candidates** (at most 5 files per REQ, non-test, non-config, no barrel/index re-exports), in order:
+1. files on the task lines / `Files:` of tasks that reference the REQ or its UCs (`task/TASK-FASE-*.md`), the files
+   of its weak codeRefs, and the files of commits whose `Task`/`Refs`/`Change` name the REQ, its UCs or those tasks
+   (one call: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" trace commits --files --json`; exact
+   ids, skip `effective: false`);
+2. keyword search in `code_paths`: significant terms of the statement (drop EARS keywords and stop words) plus the
+   business domain; rank files by hits.
+No candidate → status `no-candidates`.
 
-Build a "code manifest" — what the system ACTUALLY does.
+**S.3 Items.** Split whole files (not first-N lines) and build one JSONL item per (REQ, chunk):
 
-Scan scope: the current checkout only. Every scan below (2.2, 2.3, 2.4) excludes `node_modules/`, build output and `.claude/worktrees/**` — ephemeral Claude Code worktrees that may hold unmerged Stream branches (`feat/fase-N-x`) and would otherwise be reported as ORPHAN or counted twice. Sibling worktrees created with `git worktree add ../<project>-fNx` live outside the checkout and are never scanned.
-
-#### 2.1 Detect Project Language and Framework
-
-Detect the project's language and framework by checking for:
-
-| File | Framework |
-|------|-----------|
-| `package.json` with `express` dep | Express.js |
-| `package.json` with `fastify` dep | Fastify |
-| `package.json` with `hono` dep | Hono |
-| `package.json` with `next` dep | Next.js |
-| `app/api/*/route.ts` or `route.js` | Next.js App Router |
-| `pyproject.toml` or `requirements.txt` with `flask` | Flask |
-| `pyproject.toml` or `requirements.txt` with `fastapi` | FastAPI |
-| `manage.py` or `urls.py` | Django |
-| `Gemfile` with `rails` + `config/routes.rb` | Rails (`bin/rails routes --expanded`, static fallback) |
-| `"use server"` in `app/**` or `src/**` | Next.js Server Actions |
-
-If multiple frameworks detected, process ALL of them. If none detected, set `projectFramework: "unknown"` and attempt generic route detection using all parsers.
-
-#### 2.2 Extract Route Definitions
-
-Using the regex patterns from `references/language-parsers.md`, scan the Stack Profile `code_paths` (CLAUDE.md `## SDD Stack Profile`; else `src/**/*`) for routes, endpoints and Server Actions.
-
-For each route found, record:
-- `method`: HTTP method
-- `path`: URL path pattern
-- `codeFile`: Source file path
-- `handler`: Function/method name handling the route
-- `line`: Line number of the route definition
-
-**Important**: Also scan files outside `src/` if the framework convention places routes elsewhere:
-- Next.js: `app/api/**/*`
-- Django: `**/urls.py`
-- Express: `routes/**/*`, `api/**/*`
-
-#### 2.3 Extract Exported Functions and Classes
-
-Scan `src/**/*.{ts,js,tsx,jsx,py,java,go,rs}` for exported symbols:
-- JS/TS: `export (default )?(function|class|const) NAME`
-- Python: top-level `def` and `class` definitions (non-underscore-prefixed)
-
-This provides context for orphan analysis — code that exists but serves no specified purpose.
-
-#### 2.4 Extract Test Files
-
-Scan for test files that may correspond to BDD scenarios:
-- `test/**/*`, `tests/**/*`, `__tests__/**/*`
-- Files matching: `*.test.{ts,js,py}`, `*.spec.{ts,js,py}`, `test_*.py`, `*.feature`
-
-Build a test file inventory with searchable content (scenario names, describe blocks, test names).
-
-#### 2.5 Build Code Manifest
-
-```
-codeManifest = {
-  framework: "express|fastify|...",
-  routes: [...],          // from 2.2
-  exports: [...],         // from 2.3
-  testFiles: [...],       // from 2.4
-  sourceFiles: [...]      // all source files scanned
-}
+```bash
+JEV="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs"   # same resolution as sdd-setup "Locating the plugin root"
+mkdir -p .sdd/jev
+node "$JEV" chunks src/a.ts src/b.ts > .sdd/jev/chunks-REQ-F-012.jsonl
+node -e 'const fs=require("fs"),r=JSON.parse(process.argv[1]);for(const l of fs.readFileSync(0,"utf8").split("\n").filter(Boolean)){const c=JSON.parse(l);console.log(JSON.stringify({id:r.id+"|"+c.id,state:{requirement:r,code:{path:c.path,start:c.start,end:c.end,code:c.code}}}))}' \
+  '{"id":"REQ-F-012","statement":"WHEN …","criteria":["…"]}' < .sdd/jev/chunks-REQ-F-012.jsonl >> .sdd/jev/items.jsonl
 ```
 
----
+**S.4 Judge.** `node "$JEV" status`:
+- exit 0 → `node "$JEV" judge --questions "$(dirname "$JEV")/jev/coverage.json" --items .sdd/jev/items.jsonl --out .sdd/jev-coverage.json`.
+  Output `{model, items: [{id, answers: {implements, partial, related}}], errors, usage}`, each answer a
+  probability. Items in `errors` (exit 1) are judged by you with the fallback prompt. Privacy: this sends the
+  chunks to api.typesafe.ai; setting `TYPESAFE_API_KEY` is the opt-in, and `SDD_JEV=off` disables it for projects
+  whose code must not leave the machine. Say how many chunks will be sent before the call.
+- exit 3 (no key or `SDD_JEV=off`) → fallback: judge each (REQ, chunk) yourself with the template in
+  `references/verification-prompt.md`; your `confidence` stands in for `implements`, and `related` is your
+  judgment of whether the chunk is about the same feature.
 
-### Phase 3: Gap Analysis
+**S.5 Decide per REQ** (p = max `implements` over its chunks):
 
-Compare spec manifest against code manifest to identify gaps.
+| Condition | Status |
+|-----------|--------|
+| p ≥ 0.85 | `covered` — origin `llm-verified`, confidence = p, evidence = best chunk `path:start-end` |
+| p ≤ 0.15 and max `related` ≤ 0.3 | `likely-missing` |
+| two or more chunks each with `implements` in 0.3-0.6 (behaviour split across files; Jev is weak at multi-hop) | you read those chunks together and decide (`reason: split`) |
+| anything else | you read the top chunks (by `implements`, then `partial`) and decide (`reason: uncertain`) |
 
-#### 3.1 MISSING Endpoints
+The split rule wins over the other two. When you decide, the outcome is `covered`, `partial` or `likely-missing`,
+with evidence. Low scores are never proof of absence on their own.
 
-For each endpoint in `specManifest.endpoints`:
-1. Search `codeManifest.routes` for a matching route (same method + compatible path)
-2. Path matching rules:
-   - Exact match: `/api/users` = `/api/users`
-   - Parameter equivalence: `/api/users/:id` = `/api/users/{id}` = `/api/users/[id]`
-   - Prefix tolerance: spec `/users` matches code `/api/users` (common prefix addition)
-3. If NO match found: classify as **MISSING**
+## Phase 4: Write results
 
-**`Style: operations` contracts:** compare API-op ↔ `design/OPERATION-MAPPING.md` row ↔ route/action in code (`references/language-parsers.md` §8b); method + path equality applies only to `Style: http`.
+Read `references/output-formats.md` before writing. Write `.sdd/gap-analysis.json` (§1; the `semantic` section
+only with `--semantic`), then print the console summary (§2).
 
-#### 3.2 ORPHAN Routes
+## Phase 5: Human review document
 
-For each route in `codeManifest.routes`:
-1. Search `specManifest.endpoints` for a matching spec entry
-2. If NO match found: classify as **ORPHAN**
-3. Exclude infrastructure and framework routes from orphan detection (`references/language-parsers.md` §10: health, docs, metrics, `/up`, `/rails/*`, `/cable`, `/_next/*`)
+Write `audits/GAP-ANALYSIS-REVIEW.md` (§3 of `references/output-formats.md`): every ORPHAN, MISSING, MISMATCH and
+uncovered BDD finding, and with `--semantic` every requirement not verified as covered, as a line item awaiting a
+human decision. Present facts neutrally with the risk of each option; do not recommend REMOVE or PROMOTE and do
+not fix anything. Gold plating is as harmful as a missing feature — code without a requirement is untested
+surface and breaks traceability — but only a human can decide whether it becomes a REQ or goes.
 
-#### 3.3 MISMATCH Detection
-
-For endpoints that match by method+path, compare:
-1. **Field names**: request/response field names in spec vs handler parameters/body parsing in code
-2. **HTTP method**: spec says POST but code has PUT (or vice versa)
-3. **Status codes**: spec documents 201 for creation but code returns 200
-
-Mismatch detection is best-effort — it compares what can be extracted via regex. Report findings with confidence level.
-
-#### 3.4 BDD Coverage
-
-For each BDD scenario in `specManifest.bddScenarios`:
-1. Search `codeManifest.testFiles` for:
-   - A `.feature` file containing the scenario ID or name
-   - A test file with `describe`/`it`/`test` block referencing the scenario ID
-   - A test file whose name correlates with the scenario (fuzzy match on UC/BDD ID)
-2. If NO matching test file found: classify as **uncovered BDD scenario**
-
----
-
-### Phase 4: Write Results
-
-#### 4.1 Write Structured Results
-
-Write `.sdd/gap-analysis.json` with the following schema:
-
-```json
-{
-  "$schema": "sdd-gap-analysis-v1",
-  "generatedAt": "ISO-8601",
-  "projectFramework": "express|fastify|hono|nextjs|nextjs-actions|flask|fastapi|django|rails|unknown",
-  "endpoints": {
-    "specified": [
-      {
-        "id": "API-005",
-        "method": "POST",
-        "path": "/api/users",
-        "specFile": "spec/contracts/users.md:24"
-      }
-    ],
-    "implemented": [
-      {
-        "id": "API-005",
-        "method": "POST",
-        "path": "/api/users",
-        "codeFile": "src/routes/users.ts",
-        "handler": "createUser",
-        "line": 45
-      }
-    ],
-    "missing": [
-      {
-        "id": "API-012",
-        "method": "DELETE",
-        "path": "/api/users/:id",
-        "specFile": "spec/contracts/users.md:38"
-      }
-    ],
-    "orphan": [
-      {
-        "method": "GET",
-        "path": "/api/legacy",
-        "codeFile": "src/routes/legacy.ts",
-        "handler": "getLegacy",
-        "line": 12
-      }
-    ],
-    "mismatch": [
-      {
-        "id": "API-003",
-        "issue": "Spec expects field 'email', code uses 'mail'",
-        "specFile": "spec/contracts/users.md:15",
-        "codeFile": "src/routes/users.ts:30"
-      }
-    ]
-  },
-  "bddCoverage": {
-    "totalScenarios": 50,
-    "withTestFiles": 42,
-    "withoutTestFiles": 8,
-    "missing": ["BDD-020", "BDD-033"]
-  },
-  "statistics": {
-    "totalSpecEndpoints": 20,
-    "implemented": 18,
-    "missing": 2,
-    "orphanRoutes": 3,
-    "mismatches": 1,
-    "endpointCoveragePercent": 90.0,
-    "bddCoveragePercent": 84.0
-  }
-}
-```
-
-#### 4.2 Print Summary Table
-
-Display a summary to the user:
-
-```
-## Gap Analysis Summary
-
-| Metric                    | Count | Percentage |
-|---------------------------|-------|------------|
-| Specified endpoints       | 20    |            |
-| Implemented endpoints     | 18    | 90.0%      |
-| Missing endpoints         | 2     | 10.0%      |
-| Orphan routes (unspecified)| 3    |            |
-| Schema mismatches         | 1     |            |
-| BDD scenarios (total)     | 50    |            |
-| BDD with test files       | 42    | 84.0%      |
-| BDD without test files    | 8     | 16.0%      |
-
-### Missing Endpoints (not implemented)
-| ID      | Method | Path              | Spec File                    |
-|---------|--------|-------------------|------------------------------|
-| API-012 | DELETE | /api/users/:id    | spec/contracts/users.md:38   |
-
-### Orphan Routes (not in spec)
-| Method | Path        | Code File                  | Handler    |
-|--------|-------------|----------------------------|------------|
-| GET    | /api/legacy | src/routes/legacy.ts:12    | getLegacy  |
-
-### Mismatches
-| ID      | Issue                              | Spec File | Code File |
-|---------|------------------------------------|-----------|-----------|
-| API-003 | Spec 'email', code uses 'mail'     | ...       | ...       |
-
-### Uncovered BDD Scenarios
-BDD-020, BDD-033
-```
-
----
-
-### Phase 5: Human Review Document
-
-**Purpose:** Generate a structured review document listing every ORPHAN, MISSING, and SCHEMA finding as a line item requiring a human decision. The LLM NEVER decides whether orphan code should stay or go — that is a human judgment call.
-
-> **Principle:** Over-delivery (gold plating) is as harmful as under-delivery. Code without requirement backing introduces untested surface area, breaks traceability, and consumes maintenance budget. But only a human can decide whether to promote the feature to a formal REQ or remove it.
-
-#### 5.1 Write `audits/GAP-ANALYSIS-REVIEW.md`
-
-For each finding from Phase 3, create a structured entry:
-
-```markdown
-### {TYPE}-{NNN}: {Short title}
-- **File:** `{file path}:{line}`
-- **Origin:** {Where the code/spec came from — REQ, audit recommendation, implementation decision}
-- **What it does:** {Brief description}
-- **Why it's {orphan|missing|schema drift}:** {Explanation referencing specific REQ or spec gap}
-- **Risk of {removing|not implementing|keeping as-is}:** {Concrete consequence}
-- **Decision:** `________` **Rationale:** _______________________
-```
-
-#### 5.2 Decision Options
-
-Include this legend at the top of the document:
-
-| Decision | Meaning | Action |
-|----------|---------|--------|
-| **PROMOTE** | The feature is valuable — promote to formal REQ via `/sdd-req-change` | Create REQ, update specs, keep code |
-| **REMOVE** | The feature was not requested — remove the code | Delete code, update tests |
-| **ACCEPT** | Keep as-is without formal REQ (document rationale) | No code change, add rationale |
-| **DEFER** | Decide later | No action now |
-
-#### 5.3 Processing Instructions
-
-Include at the bottom:
-
-```
-## How to process this document
-1. Review each finding
-2. Write your decision (PROMOTE / REMOVE / ACCEPT / DEFER) and rationale
-3. For PROMOTE decisions: run `/sdd-req-change` to create the formal REQ
-4. For REMOVE decisions: delete the code and update affected tests
-5. For ACCEPT decisions: no code change, rationale serves as documentation
-6. Commit this document with decisions as the audit trail
-```
-
-#### 5.4 Rules
-
-- **NEVER** auto-fix findings — all decisions are human
-- **NEVER** recommend REMOVE or PROMOTE — present facts neutrally, let the human decide
-- **ALWAYS** include "Risk of removing/not implementing" so the human can make an informed choice
-- For ORPHAN items that come from security audit recommendations (INFO/RECOMMENDATION severity), explicitly note: "Origin: audit recommendation, not a formal REQ"
-- For ORPHAN items that are testing infrastructure (`NODE_ENV` guards, test env vars), note: "Origin: implementation convenience for testability"
-
----
+The decisions the human writes in this file (PROMOTE / REMOVE / ACCEPT / DEFER per ORPHAN, with its rationale) are
+the record: `sdd-acceptance --check` reads `audits/GAP-ANALYSIS-REVIEW.md` and lists them next to the acceptance
+report, and an ORPHAN still without a decision is shown there as open, because unrequested code is part of what the
+customer receives. When you re-run, carry over every decision already written for a finding that still exists.
 
 ## Constraints
 
-- **C-01**: READ-ONLY on `spec/` and `src/` — never modify source or spec files
-- **C-02**: Only writes to `.sdd/` directory (creates it if needed)
-- **C-03**: Language-agnostic approach with specific regex parsers per detected framework
-- **C-04**: Regex-based extraction only — no AST parser dependencies, no npm install
-- **C-05**: Tolerant of partial specs — if contracts don't exist, skip endpoint analysis and report it
-- **C-06**: Can be run at any pipeline stage — does not depend on pipeline-state.json
-- **C-07**: Excludes common infrastructure routes from orphan detection (health, docs, metrics)
-- **C-08**: Path matching is flexible — handles parameter syntax differences across frameworks
-- **C-09**: Gap detection only — never proposes fixes or generates code
-- **C-10**: If both spec and code manifests are empty, STOP early with clear guidance
+- Read-only on `spec/`, `requirements/` and code. Writes only `.sdd/gap-analysis.json`, `.sdd/jev-coverage.json`
+  and `.sdd/jev/` (scratch), `audits/GAP-ANALYSIS-REVIEW.md` and the `gap-detector` entry of `pipeline-state.json`.
+- Regex extraction only for the structural phases: no AST parsers, no package installs.
+- Runs at any pipeline stage; pipeline-state.json is optional input.
+- Reports gaps; never proposes code or edits specs.
+- `llm-verified` results are proposals: nothing is written into source files or the traceability graph.
 
-## Output Artifacts
+## Related skills
 
-| Artifact | Location | Description |
-|----------|----------|-------------|
-| Gap analysis JSON | `.sdd/gap-analysis.json` | Structured results with all gaps, orphans, mismatches |
-| Human review document | `audits/GAP-ANALYSIS-REVIEW.md` | Each finding as a decision item for human review (PROMOTE/REMOVE/ACCEPT/DEFER) |
-| Console summary | (stdout) | Human-readable summary table |
+`python3 "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-graph.py"` builds the graph used in S.1 and loads `.sdd/gap-analysis.json`; `/sdd-acceptance --check`
+verifies ID chains across artifacts and reports each requirement's verdict with its evidence (it reads the orphan decisions of this skill's review document); `/sdd-reconcile` resolves drift using these findings; the MCP tool `sdd_gaps`
+serves `.sdd/gap-analysis.json`.
 
-## Integration with Other Skills
+## Persist summary
 
-| Skill | Relationship |
-|-------|-------------|
-| `/sdd-dashboard` | Dashboard can load `.sdd/gap-analysis.json` for graph enrichment and coverage visualization |
-| `/sdd-traceability-check` | Complementary: traceability-check verifies ID chains across specs; gap-detector verifies spec-to-code alignment |
-| `/sdd-reconcile` | Complementary: reconcile handles drift resolution; gap-detector provides the objective gap data |
-| `/sdd-code-index` | Code index provides symbol-level data; gap-detector provides endpoint-level data |
-| `/sdd-pipeline-status` | Pipeline status can reference gap-analysis.json for implementation progress |
-| MCP `sdd_gaps` tool | MCP server can expose gap-analysis.json via `sdd_gaps` query tool |
+After writing the results, update `pipeline-state.json` (create it from
+`$SDD_PLUGIN_ROOT/templates/pipeline-state.template.json` if absent, as `sdd-setup` Step 1 does):
 
-## Persist Summary
-
-After writing `.sdd/gap-analysis.json`, update `pipeline-state.json`:
-
-1. Read `pipeline-state.json` from project root (create if absent with default stage structure)
-2. Set `stages["gap-detector"].status` = `"done"` (utility stage — add key if absent)
-3. Set `stages["gap-detector"].lastRun` = current ISO-8601
-4. Set `stages["gap-detector"].summary`:
-   - `artifacts`: `[{"file": ".sdd/gap-analysis.json", "label": "Gap Analysis Results"}]`
-   - `metrics`: `{ "total_spec_endpoints": N, "implemented": N, "missing": N, "orphan_routes": N, "mismatches": N, "endpoint_coverage_pct": N, "bdd_coverage_pct": N }`
-   - `highlights`: top 3-5 observations (e.g., "2 missing endpoints: API-012, API-015", "3 orphan routes in src/routes/legacy.ts", "90% endpoint coverage")
-   - `nextStep`: `"Implement missing endpoints"` or `"All endpoints covered — review orphan routes"`
-   - `generatedAt`: current ISO-8601
-5. Write updated `pipeline-state.json`
-6. Display summary table to user
-7. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
+1. `stages["gap-detector"]` (utility stage, add the key if absent): `status: "done"`, `lastRun`: now (ISO-8601).
+2. `summary`:
+   - `artifacts`: `.sdd/gap-analysis.json` ("Gap Analysis Results"), `audits/GAP-ANALYSIS-REVIEW.md` ("Gap review")
+   - `metrics`: `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`,
+     `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`,
+     `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` | `llm`)
+   - `highlights`: 3-5 observations (e.g. "2 missing endpoints: API-001-12, API-002-03", "REQ-F-031 likely missing")
+   - `nextStep`: e.g. "Review audits/GAP-ANALYSIS-REVIEW.md" or "Implement missing endpoints"
+   - `generatedAt`: now
+3. Commit the review (`git add audits/GAP-ANALYSIS-REVIEW.md`; `.sdd/gap-analysis.json` is ignored), then
+   `docs(gaps): …` with `Refs:` the ids of the missing or mismatched items, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+4. Show the summary table. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode;
+   never from a subagent).

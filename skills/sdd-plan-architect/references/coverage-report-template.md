@@ -85,18 +85,12 @@ Specs assigned to multiple phases (expected behavior for large domain files):
 
 ## Distribución por Fase
 
-| Fase | Specs asignados | UCs | ADRs | INVs | Tests | Contratos |
-|------|-----------------|-----|------|------|-------|-----------|
-| FASE-0 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-1 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-2 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-3 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-4 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-5 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-6 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-7 | {N} | {N} | {N} | {N} | {N} | {N} |
-| FASE-8 | {N} | {N} | {N} | {N} | {N} | {N} |
-| **TOTAL** | **{N}** | **{N}** | **{N}** | **{N}** | **{N}** | **{N}** |
+| Fase | Requisitos | Escenarios | Pasos de demo | Specs asignados | UCs | INVs | Contratos |
+|------|-----------|------------|---------------|-----------------|-----|------|-----------|
+| FASE-{N} | {REQ ids} | {N} | {N} (≤ 10) | {N} | {N} (≤ 3) | {N} | {N} |
+| **TOTAL** | **{N}** | **{N}** | | **{N}** | **{N}** | **{N}** | **{N}** |
+
+Requisitos Must sin fase (V9): {ninguno | ids}. Mechanical source: `sdd lint --plan --json`.
 
 ---
 

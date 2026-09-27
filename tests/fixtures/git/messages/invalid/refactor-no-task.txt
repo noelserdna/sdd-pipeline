@@ -1,0 +1,3 @@
+refactor(tasks): extract validator
+
+Refs: UC-002

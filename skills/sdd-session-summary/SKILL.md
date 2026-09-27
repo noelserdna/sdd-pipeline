@@ -70,7 +70,7 @@ Compare the pipeline state at session start (from H1 context if available) with 
 2. CI/CD pipeline choice deferred
 
 ### Artifacts Modified
-- `spec/contracts.md` — Added API-015 endpoint
+- `spec/contracts/API-tasks.md` — Added API-001-15 operation
 - `spec/adr/ADR-005.md` — New ADR for database choice
 - `requirements/REQUIREMENTS.md` — Updated REQ-012
 

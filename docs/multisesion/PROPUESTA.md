@@ -1,5 +1,7 @@
 # Propuesta: encajar sesiones con nombre, mensajería entre sesiones, subagentes/Workflow, worktrees y (opcionalmente) Agent Teams en el pipeline SDD
 
+> **Documento histórico.** Describe un diseño anterior y no se mantiene; la referencia vigente es [multisesion.md](../multisesion.md). Desde 5.0 el rol `sdd-qa` ejecuta gap-detector y acceptance; `traceability-check` y el dashboard ya no existen.
+
 ## Hechos verificados hoy (Claude Code v2.1.241, macOS)
 - Sesiones con nombre: `claude -n <nombre>` o `/rename <nombre>`. Persisten en el transcript como `{"type":"custom-title"}` y `{"type":"agent-name"}` y en `<sessionDir>/custom-title.json`. Se retoman con `claude --resume`.
 - `/color red|blue|green|yellow|purple|orange|pink|cyan|default` persiste como `{"type":"agent-color"}`. No hay flag `--color`.

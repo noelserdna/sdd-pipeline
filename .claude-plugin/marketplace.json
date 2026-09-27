@@ -11,12 +11,13 @@
       "source": "./",
       "version": "4.3.0",
       "category": "development",
-      "description": "Specification-Driven Development pipeline (SWEBOK v4): 24 skills, 5 agents, 7 hooks (13 event registrations) and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation.",
+      "description": "Specification-Driven Development pipeline (SWEBOK v4): 21 skills, 5 hooks (7 event registrations) and an MCP traceability server. Greenfield, brownfield and multi-session (worktree) implementation; optional Jev (TypeSafe) bulk judgments.",
       "tags": [
         "sdd",
         "swebok",
         "specification-driven",
-        "traceability"
+        "traceability",
+        "acceptance"
       ],
       "author": {
         "name": "Andres Leon",

@@ -16,7 +16,7 @@
 - One line per task at column 0: `- [ ] TASK-F{N}-{SEQ} [P] {Description} | ` followed by the backticked paths, `, `-separated. `[ ]` pending · `[x]` done · `[!]` blocked.
 - Continuation lines indented two spaces (`  - **Commit:** …`); nested bullets four.
 - Forbidden: `### TASK-…` headings, `**TASK-…**` bold ids, indented task lines, paths outside backticks. `[PLAN GAP]` tasks may omit the path (WARN).
-- Checked by `scripts/sdd-task-lint.mjs lint --dir task` (V-19, V-09, V-05/V-06, V-16); `json`, `status` and `index` read the same lines.
+- Checked by `scripts/sdd.mjs lint --dir task` (V-19, V-09, V-05/V-06, V-16); `sdd.mjs tasks json|status|index` read the same lines.
 
 ---
 
@@ -25,7 +25,7 @@
 ```markdown
 # Tasks: FASE-{N} - {Title}
 
-> **Input:** plan/fases/FASE-{N}-{slug}.md + plan/PLAN-FASE-{N}.md
+> **Input:** plan/fases/FASE-{N}-{slug}.md + plan/fase-plans/PLAN-FASE-{N}.md
 > **Generated:** {YYYY-MM-DD}
 > **Total tasks:** {count}
 > **Parallel capacity:** {number of work Streams from Stream Ownership}
@@ -51,7 +51,7 @@
 | Spec Reference | Task Coverage |
 |---------------|---------------|
 | {UC-XXX} | {TASK-F{N}-XXX, ...} |
-| {API-XXX-XX} | {TASK-F{N}-XXX, ...} |
+| {API-NNN-NN} | {TASK-F{N}-XXX, ...} |
 | {ADR-XXX} | {TASK-F{N}-XXX, ...} |
 | {INV-XXX-XXX} | {TASK-F{N}-XXX, ...} |
 | {REQ-XXX-XXX} | {TASK-F{N}-XXX, ...} |
@@ -64,9 +64,9 @@
 **Checkpoint:** Project initializes and builds successfully.
 
 - [ ] TASK-F{N}-001 {Description} | `{file_path}`, `{file_path}`
-  - **Commit:** `{type}({scope}): {message}`
+  - **Commit:** `chore({scope}): {message}`
   - **Acceptance:**
-    - {criterion_1}
+    - Verify: `{command}` → {output that proves it, e.g. "lists the perf project"}   ← no behaviour, no test file
     - {criterion_2}
   - **Refs:** {FASE-N}, {ADR-XXX}
   - **Revert:** {SAFE|COUPLED|MIGRATION|CONFIG} — {impact description}
@@ -79,7 +79,7 @@
 
 ## Phase 2: Foundation
 
-**Purpose:** Shared infrastructure used by ≥ 2 slices (schema, base layout, error handling, shared models).
+**Purpose:** Shared infrastructure used by ≥ 2 slices (schema, base layout, error handling, shared models). Vertical plan: only what ≥ 2 slices of this increment share and no earlier FASE delivered.
 **Checkpoint:** Foundation tests pass.
 
 - [ ] TASK-F{N}-{SEQ} {Description} | `{file_path}`
@@ -98,13 +98,15 @@
 **Purpose:** One vertical slice per API operation (`API-NNN-NN`), layers in the kit `layers` order (rails: migration → model → controller → views; nextjs-prisma: schema → domain/data → server actions → components/page), tests written first inside the task.
 **Checkpoint:** Every slice's tests green.
 
+### UC-{NNN} — {use case title}   ← vertical plan only: one sub-heading per use case
+
 - [ ] TASK-F{N}-{SEQ} [P] {Operation} ({API-NNN-NN}), test-first | `{test_path}`, `{code_path}`, `{view_or_component_path}`
   - blocked-by: TASK-F{N}-{SEQ}
   - **Commit:** `feat({scope}): {message}`
   - **Acceptance:**
-    - Test first: {failing test that encodes the criterion / invariant}
+    - Test first: `AC-{NNN}-{NN} {behaviour}` — {failing test that encodes the criterion / invariant; its name carries the scenario id}
     - {observable behaviour with specific values; transport per design/OPERATION-MAPPING.md}
-  - **Refs:** {FASE-N}, {UC-XXX}, {API-NNN-NN}, {INV-XXX-XXX}
+  - **Refs:** {FASE-N}, {REQ-X-NNN}, {UC-XXX}, {API-NNN-NN}, {INV-XXX-XXX}
   - **Revert:** {category} — {impact}
   - **Review:**
     - [ ] The test failed before the implementation
@@ -151,13 +153,10 @@ Files excluded from unit test coverage (from PLAN-FASE §7.4 Exclusions):
 
 ### Task Dependency Graph
 
-```mermaid
-graph TD
-    TASK-F{N}-001 --> TASK-F{N}-002
-    TASK-F{N}-001 --> TASK-F{N}-003
-    TASK-F{N}-002 --> TASK-F{N}-005
-    TASK-F{N}-003 --> TASK-F{N}-005
-    TASK-F{N}-004 --> TASK-F{N}-006
+```text
+TASK-F{N}-001 ──► TASK-F{N}-002 ──► TASK-F{N}-005
+             └──► TASK-F{N}-003 ──┘
+TASK-F{N}-004 ──► TASK-F{N}-006
 ```
 
 ### Critical Path
@@ -192,7 +191,7 @@ graph TD
 
 ## Template: TASK-FASE-{N}.md (compact)
 
-With `--compact` or `task_format: compact`. Keeps only what the implementer and the global validations read; `sdd-task-lint.mjs json | index | status` derive the rest.
+With `--compact` or `task_format: compact`. Keeps only what the implementer and the global validations read; `sdd.mjs tasks json | index | status` derive the rest.
 
 ```markdown
 # Tasks: FASE-{N} — {Title}
@@ -228,10 +227,12 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 ## Slices
 
+### UC-{NNN} — {use case title}
+
 - [ ] TASK-F{N}-{SEQ} [P] {Operation} ({API-NNN-NN}), test-first | `{test_path}`, `{code_path}`
   - blocked-by: TASK-F{N}-{SEQ}
   - **Commit:** `feat({scope}): {message}`
-  - **Acceptance:** Test first: {criterion}; {observable behaviour}
+  - **Acceptance:** Test first: `AC-{NNN}-{NN} {behaviour}`; {observable behaviour}
   - **Refs:** FASE-{N}, {UC}, {API}, {INV}
   - **Revert:** COUPLED — {written only when not SAFE}
 
@@ -246,11 +247,11 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 | Omitted in compact | Where it comes from |
 |---|---|
-| Summary, Traceability | `sdd-task-lint.mjs index` / `json` |
+| Summary, Traceability | `sdd.mjs tasks index` / `tasks json` |
 | Dependency graph, Parallel Execution Plan | `blocked-by` lines + Stream Ownership |
 | Review block | `references/review-checklist.md` |
-| `Revert: SAFE` | absent Revert line = SAFE (V-07) |
-| `TASK-INDEX.md` | `sdd-task-lint.mjs index` (never templated by hand) |
+| `Revert: SAFE` | absent Revert line = SAFE (V-07; CLAUDE.md Revert strategies) |
+| `TASK-INDEX.md` | `sdd.mjs tasks index` (never templated by hand) |
 
 ### Stream Ownership Rules
 
@@ -276,7 +277,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
   - **Files:** `{extra_path}`, `{extra_path}`
   - **Commit:** `{type}({scope}): {message}`
   - **Acceptance:**
-    - {test written first, then criteria with specific values, not vague}
+    - {feat/fix: test written first · chore/build: Verify command; then criteria with specific values, not vague}
   - **Refs:** {FASE, UC, API, ADR, INV, REQ — comma-separated}
   - **Revert:** {SAFE|COUPLED|MIGRATION|CONFIG} — {what breaks}
   - **Review:**
@@ -294,7 +295,62 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 | blocked-by | NO | Task IDs this task depends on (same FASE or earlier); drives Stream assignment (V-18) |
 | Files | NO | Extra paths the task creates/modifies; together with the line paths they form the task's write-set (Stream Ownership) |
 | Commit | YES | Conventional commit format (V-05) |
-| Acceptance | YES | At least 1 criterion with specific values; for code tasks the first is the test written first (V-06, Constitution Art. 8) |
+| Acceptance | YES | At least 1 criterion with specific values (V-06). `feat`/`fix` tasks: the first is `Test first: …` and the test file is in the write-set (Constitution Art. 8). `chore`/`build`/config tasks: `Verify: \`{command}\` → {expected output}`, no test file; a chore task that says `Test first` must list its test file |
 | Refs | YES | At least FASE reference |
 | Revert | Full: YES · compact: only when not SAFE | Category + impact (V-07; absent = SAFE in compact) |
 | Review | Full: YES (≥ 2 checks) · compact: omitted | Patterns in `references/review-checklist.md` |
+
+---
+
+## Template: TASK-ORDER.md (full)
+
+Written by the main thread from the FASE JSONs. Diagrams are ASCII (no Mermaid), as in `plan/`.
+
+```markdown
+# Implementation Order
+
+> **Generated:** {YYYY-MM-DD}
+> **Total FASEs:** {count}
+> **Recommended approach:** Incremental delivery per FASE
+
+## FASE Dependency Graph
+
+{ASCII diagram, one line per FASE, e.g. FASE-0 ──► FASE-1 ──► FASE-2}
+
+## Recommended Implementation Sequence
+
+### Wave 1: Foundation
+**FASE-0** (No dependencies — start here)
+- {count} tasks, {parallel count} parallelizable
+- Critical path: {N} sequential tasks
+- Streams: serial
+
+### Wave 2: Core Capabilities
+**FASE-1** (depends on: FASE-0)
+- {count} tasks, {parallel count} parallelizable
+- Critical path: {N} sequential tasks
+- Streams: base(2) → A(2) ∥ B(2) → integración(1) → verificación(1)
+
+## Cross-FASE Dependencies
+
+| From (Stream) | To (Stream) | Reason |
+|---------------|-------------|--------|
+| TASK-F0-005 (base) | TASK-F1-001 (A) | {why F1 needs it} |
+
+## MVP Strategy
+
+**Minimum Viable Product:** FASE-0 + FASE-1
+- {count} total tasks
+- Core capability: {description}
+
+## Incremental Delivery Checkpoints
+
+| Checkpoint | FASEs Complete | Capability |
+|-----------|---------------|------------|
+| CP-1 | FASE-0 | {capability delivered} |
+| CP-2 | FASE-0,1 | {capability delivered} |
+```
+
+**`Streams:` line:** one per FASE inside its Wave entry: `Streams: base(n) → A(n) ∥ B(n) [∥ C(n)…] → integración(n) → verificación(n)`, task count per Stream (empty Stream = `integración(0)`); a FASE with a single work Stream writes exactly `Streams: serial`. In Cross-FASE Dependencies every task carries its Stream in parentheses.
+
+**Compact format:** `TASK-ORDER.md` ≤ 1 500 chars — keep `## FASE Dependency Graph` (one line per FASE), one Wave entry per FASE with its `Critical path:` and `Streams:` lines, and Cross-FASE Dependencies only when non-empty; drop MVP Strategy and Incremental Delivery Checkpoints. V-11 and `--audit` read only what is kept.

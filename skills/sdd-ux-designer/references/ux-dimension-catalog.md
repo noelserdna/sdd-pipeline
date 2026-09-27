@@ -1,7 +1,7 @@
 # UX Dimension Catalog
 
 > Reference for the 12 UX dimensions analyzed by `sdd-ux-designer`.
-> Each dimension includes scope, detection rules, question templates, common patterns, and red flags.
+> Each dimension has detection rules, question templates and red flags; scope is in the SKILL.md dimension table.
 
 ---
 
@@ -28,13 +28,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 
 ## 1. Brand Identity
 
-### What It Covers
-- Logo usage rules (sizes, clear space, variations)
-- Color palette (primary, secondary, accent, semantic, neutral)
-- Typography scale (font families, sizes, weights, line heights)
-- Voice & tone guidelines (formal vs casual, technical vs friendly)
-- Iconography style (outlined, filled, rounded, custom)
-
 ### Detection Rules
 - **HIGH priority** if: specs mention public-facing users, e-commerce, or brand guidelines
 - **MEDIUM priority** if: internal tool with corporate brand
@@ -57,13 +50,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Friendly and conversational (consumer apps, social)
    - Option C: Technical and precise (developer tools, documentation)
 
-### Common Patterns
-- Material Design color system (primary, secondary, surface, error)
-- Tailwind CSS default palette (slate, gray, zinc, neutral, stone)
-- IBM Carbon Design System
-- Apple Human Interface Guidelines
-- Custom brand-first approach
-
 ### Red Flags
 - No color palette defined for a public-facing app
 - Using only black and white without semantic colors
@@ -73,13 +59,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 2. Design System & Tokens
-
-### What It Covers
-- Design token JSON structure (colors, spacing, radii, shadows, breakpoints)
-- Token naming convention (semantic vs literal)
-- Token categories: color, spacing, typography, elevation, border, animation
-- Token format compatibility (CSS custom properties, Tailwind, Style Dictionary)
-- Token versioning strategy
 
 ### Detection Rules
 - **HIGH priority** if: multiple delivery channels or component reuse expected
@@ -103,13 +82,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: 8px base (8, 16, 24, 32, 48, 64, 96) — looser layouts
    - Option C: Custom scale from existing brand guidelines
 
-### Common Patterns
-- 4px spacing grid (most common in modern design systems)
-- 8-point grid system (Material Design)
-- T-shirt sizing (xs, sm, md, lg, xl, 2xl)
-- Fibonacci-based scale
-- Tailwind default spacing scale
-
 ### Red Flags
 - Hardcoded pixel values throughout specs instead of tokens
 - No spacing system defined
@@ -119,13 +91,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 3. Component Library (Atomic Design)
-
-### What It Covers
-- Component hierarchy: atoms, molecules, organisms, templates, pages
-- Component variants (sizes, states, themes)
-- Component composition rules
-- Prop/slot definitions per component
-- Component documentation standards
 
 ### Detection Rules
 - **HIGH priority** if: specs reference multiple UI screens or complex forms
@@ -150,13 +115,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Molecules and organisms only — pragmatic middle ground
    - Option C: Page-level components only — fastest, least reusable
 
-### Common Patterns
-- shadcn/ui (copy-paste, full control, Tailwind-based)
-- Radix Primitives + Tailwind (headless + utility CSS)
-- Material UI (comprehensive, opinionated)
-- Ant Design (enterprise-focused)
-- Custom design system with Storybook
-
 ### Red Flags
 - Specs reference UI elements with no component definition
 - No consistent button/input/card patterns across screens
@@ -166,14 +124,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 4. Responsive & Adaptive
-
-### What It Covers
-- Breakpoint definitions (mobile, tablet, desktop, large desktop)
-- Mobile-first vs desktop-first approach
-- Fluid vs fixed layouts
-- Container query support
-- Responsive image strategy
-- Layout patterns per breakpoint
 
 ### Detection Rules
 - **HIGH priority** if: specs mention mobile users, multiple screen sizes, or responsive requirements
@@ -197,13 +147,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Container queries (component-level responsiveness)
    - Option C: Framework grid system (Bootstrap grid, Tailwind container)
 
-### Common Patterns
-- 12-column grid system
-- CSS Grid with auto-fit/auto-fill
-- Container queries for component-level responsiveness
-- Responsive typography with clamp()
-- srcset/sizes for responsive images
-
 ### Red Flags
 - No mention of mobile in a web application spec
 - Fixed pixel widths in layouts
@@ -212,15 +155,7 @@ The priority of each dimension depends on the project type. Use this matrix to d
 
 ---
 
-## 5. Accessibility (WCAG 2.1 AA)
-
-### What It Covers
-- Color contrast ratios (4.5:1 normal text, 3:1 large text)
-- Keyboard navigation (all interactive elements focusable)
-- Screen reader support (ARIA roles, labels, live regions)
-- Focus management (visible focus indicators, logical tab order)
-- Alternative text for images and non-text content
-- Reduced motion support (prefers-reduced-motion)
+## 5. Accessibility (WCAG 2.2 AA)
 
 ### Detection Rules
 - **HIGH priority** if: public-facing app, government/regulated sector, or accessibility mentioned in specs
@@ -230,8 +165,8 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ### Question Templates
 
 1. **Compliance Target:** "What WCAG compliance level is required?"
-   - Option A: WCAG 2.1 Level AA (recommended — covers most legal requirements)
-   - Option B: WCAG 2.1 Level AAA (highest standard — very restrictive)
+   - Option A: WCAG 2.2 Level AA (recommended — current W3C Recommendation; EN 301 549 still cites 2.1 AA, which 2.2 AA satisfies)
+   - Option B: WCAG 2.2 Level AAA (highest standard — very restrictive)
    - Option C: Section 508 / EN 301 549 (US/EU specific requirements)
    - Option D: Best effort (no formal compliance target, but follow best practices)
 
@@ -245,13 +180,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Focus management library (focus-trap, react-focus-lock)
    - Option C: Browser default behavior (minimal intervention)
 
-### Common Patterns
-- ARIA landmark roles (banner, main, navigation, contentinfo)
-- Skip navigation links
-- Focus trap for modals and dialogs
-- Live regions for dynamic content (aria-live)
-- Visually hidden text for screen readers (sr-only class)
-
 ### Red Flags
 - No mention of accessibility in any spec
 - Color-only information encoding (red=error, green=success)
@@ -264,15 +192,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 6. Interaction Design
-
-### What It Covers
-- Micro-interactions (button press, toggle, hover effects)
-- Page transitions (route changes, view switches)
-- Loading states (skeleton screens, spinners, progress bars)
-- Success/error feedback (toasts, inline messages, alerts)
-- Animation timing and easing functions
-- Drag and drop interactions
-- Gesture support (swipe, pinch, long press)
 
 ### Detection Rules
 - **HIGH priority** if: specs mention rich interactions, drag-and-drop, real-time updates
@@ -298,13 +217,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option C: Modal/dialog for critical errors — attention-demanding
    - Option D: Combination based on severity
 
-### Common Patterns
-- CSS transition: 150ms ease-out (standard button/hover)
-- CSS transition: 200-300ms ease-in-out (expanding/collapsing)
-- Spring animations (framer-motion, react-spring)
-- Skeleton screens with pulse animation
-- Toast notifications with auto-dismiss (5s default)
-
 ### Red Flags
 - No loading states defined in specs with async operations
 - No error handling UI patterns
@@ -314,15 +226,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 7. Forms & Data Entry
-
-### What It Covers
-- Form layout patterns (single column, multi-column, multi-step)
-- Validation strategy (client-side, server-side, hybrid, server-authoritative)
-- Error message conventions (inline, summary, toast)
-- Field types and input masks
-- Auto-save and draft persistence
-- File upload patterns
-- Multi-step flow with progress indication
 
 ### Detection Rules
 - **HIGH priority** if: specs contain forms, data entry, user registration, or CRUD operations
@@ -348,13 +251,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Accordion sections (expand/collapse) — all visible
    - Option C: Single long form with sections — simplest
 
-### Common Patterns
-- Single column forms (mobile-friendly, highest completion rate)
-- Floating labels (Material Design style)
-- Input masks for phone, credit card, date
-- Auto-save drafts every 30s
-- Confirm before destructive actions
-
 ### Red Flags
 - Forms with no validation strategy
 - No error message convention across forms
@@ -366,14 +262,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 8. Navigation & Information Architecture
-
-### What It Covers
-- Primary navigation pattern (top bar, sidebar, bottom tabs)
-- Secondary navigation (breadcrumbs, tabs, pagination)
-- Search functionality (full-text, filters, facets)
-- URL structure and deep linking — only URLs a REQ demands (e.g. a `?estado=` filter), citing it; other routes are transport, decided in `design/OPERATION-MAPPING.md`
-- Sitemap / page hierarchy
-- Mobile navigation adaptation
 
 ### Detection Rules
 - **HIGH priority** if: specs describe multiple pages/sections, complex information hierarchy
@@ -399,13 +287,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Yes, only on detail pages — pragmatic
    - Option C: No breadcrumbs — flat navigation structure
 
-### Common Patterns
-- Responsive sidebar (full on desktop, hamburger on mobile)
-- Breadcrumb + page title combination
-- Tab navigation for related views
-- Pagination vs infinite scroll vs load more
-- Deep linking with URL parameters for filters
-
 ### Red Flags
 - No navigation pattern defined for multi-page app
 - Inconsistent nav placement across pages
@@ -417,15 +298,8 @@ The priority of each dimension depends on the project type. Use this matrix to d
 
 ## 9. Frontend Security
 
-### What It Covers
-- Content Security Policy (CSP) headers
-- XSS prevention (input sanitization, output encoding, DOM manipulation)
-- CSRF protection (tokens, SameSite cookies)
-- Clickjacking prevention (X-Frame-Options, frame-ancestors)
-- Subresource Integrity (SRI) for CDN assets
-- Secure cookie configuration (HttpOnly, Secure, SameSite)
-- Client-side data exposure (localStorage, sessionStorage sensitivity)
-- HTTPS enforcement and HSTS
+### Inputs from sdd-security-auditor
+If `audits/SECURITY-AUDIT-BASELINE.md` exists, read its open findings that touch the client (XSS, CSRF, clickjacking, token storage, CSP, SRI, sensitive data in client storage). Each decision in this dimension cites the finding IDs it addresses, and every open client-side finding is either addressed or listed as "not addressed in ux/" with the reason. Do not re-audit what the security auditor already covered.
 
 ### Detection Rules
 - **HIGH priority** if: specs handle user data, authentication, payments, or PII
@@ -449,13 +323,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: SRI hashes for all CDN resources — verified integrity
    - Option C: Trusted CDN domains in CSP — convenient but less controlled
 
-### Common Patterns
-- CSP with nonce for inline scripts
-- CSRF tokens via double-submit cookie pattern
-- HttpOnly + Secure + SameSite=Strict cookies
-- X-Frame-Options: DENY or CSP frame-ancestors 'none'
-- HSTS with includeSubDomains and preload
-
 ### Red Flags
 - Storing JWT in localStorage (XSS risk)
 - No CSP headers defined
@@ -467,15 +334,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 
 ## 10. Frontend Performance
 
-### What It Covers
-- Core Web Vitals targets (LCP < 2.5s, FID < 100ms, CLS < 0.1)
-- Image optimization (formats, compression, lazy loading, srcset)
-- Code splitting and lazy loading (routes, components)
-- Bundle size budget
-- Caching strategy (service worker, CDN, HTTP cache headers)
-- Font loading strategy (display: swap, preload, subsetting)
-- Critical CSS / above-the-fold optimization
-
 ### Detection Rules
 - **HIGH priority** if: public-facing app, SEO requirements, mobile users on slow connections
 - **MEDIUM priority** if: internal tool where performance matters but not critical
@@ -484,9 +342,9 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ### Question Templates
 
 1. **Performance Budget:** "What are the performance targets?"
-   - Option A: Core Web Vitals (LCP < 2.5s, FID < 100ms, CLS < 0.1) — Google recommended
-   - Option B: Strict (LCP < 1.5s, FID < 50ms, CLS < 0.05) — premium experience
-   - Option C: Relaxed (LCP < 4s, FID < 200ms, CLS < 0.25) — internal tools
+   - Option A: Core Web Vitals "good" thresholds at p75 (LCP < 2.5s, INP < 200ms, CLS < 0.1) — Google recommended
+   - Option B: Strict (LCP < 1.5s, INP < 100ms, CLS < 0.05) — premium experience
+   - Option C: Relaxed (LCP < 4s, INP < 500ms, CLS < 0.25) — internal tools
 
 2. **Image Strategy:** "How should images be optimized?"
    - Option A: Next-gen formats (WebP/AVIF) with fallback — best compression
@@ -499,14 +357,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Component-based splitting (heavy components lazy-loaded) — granular
    - Option C: No splitting (small app, single bundle under 100KB)
 
-### Common Patterns
-- Route-based code splitting with React.lazy/dynamic imports
-- Image lazy loading with loading="lazy"
-- Service worker for offline caching (Workbox)
-- Critical CSS inlining for above-the-fold
-- Font display: swap with preload for custom fonts
-- Bundle size budget: <200KB initial JS (compressed)
-
 ### Red Flags
 - No performance targets in specs with mobile users
 - Large unoptimized images in specs
@@ -517,15 +367,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 11. Mobile-Specific
-
-### What It Covers
-- Touch target sizing (minimum 48x48px per WCAG, 44x44pt Apple HIG)
-- Gesture support (swipe, pinch-to-zoom, pull-to-refresh)
-- Offline-first capability
-- PWA configuration (manifest, service worker, install prompt)
-- Native vs hybrid vs responsive decision
-- Mobile-specific UI patterns (bottom sheets, action sheets, floating action button)
-- Safe area insets (notch, home indicator)
 
 ### Detection Rules
 - **HIGH priority** if: mobile is a primary delivery channel or specs mention mobile app
@@ -552,16 +393,8 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option B: Swipe actions (swipe to delete, swipe between views) — common mobile pattern
    - Option C: Rich gestures (pinch-to-zoom, long press, drag-to-reorder) — advanced
 
-### Common Patterns
-- Bottom sheet for contextual actions
-- Pull-to-refresh for list views
-- Swipe-to-dismiss for cards/items
-- Floating action button (FAB) for primary action
-- Tab bar with 3-5 items max
-- Safe area padding for notch devices
-
 ### Red Flags
-- Touch targets smaller than 48px in mobile specs
+- Touch targets smaller than the platform minimum (44pt iOS / 48dp Android) in mobile specs
 - No offline strategy for mobile-focused app
 - Desktop-only navigation patterns on mobile
 - No consideration of slow mobile connections
@@ -570,15 +403,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
 ---
 
 ## 12. Dark Mode & Theming
-
-### What It Covers
-- Theme switching mechanism (system preference, manual toggle, scheduled)
-- Semantic color tokens (use "surface" not "white", "on-surface" not "black")
-- Color adjustments for dark mode (not just inversion)
-- Image and illustration adaptation for dark backgrounds
-- User preference persistence (localStorage, user profile)
-- `prefers-color-scheme` media query support
-- High contrast mode support
 
 ### Detection Rules
 - **HIGH priority** if: specs explicitly require dark mode or theming
@@ -603,14 +427,6 @@ The priority of each dimension depends on the project type. Use this matrix to d
    - Option A: localStorage (client-only, instant) — simplest
    - Option B: User profile in database (synced across devices) — best for multi-device
    - Option C: Both (localStorage for instant apply, profile for sync)
-
-### Common Patterns
-- CSS custom properties for theme tokens
-- Semantic color naming (background, surface, on-surface, primary, on-primary)
-- Dark mode: reduce brightness, not just invert colors
-- Elevation changes in dark mode (lighter surfaces = higher elevation)
-- prefers-color-scheme media query with fallback class
-- Theme transition: 200ms ease-in-out on background-color
 
 ### Red Flags
 - Using "white" and "black" as color names instead of semantic tokens

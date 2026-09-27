@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="0.01" tests="1" failures="0">
+  <testsuite name="Root Suite" timestamp="2026-09-27T10:00:00" tests="0" file="test/rm.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="rm" timestamp="2026-09-27T10:00:00" tests="1" file="test/rm.spec.js" time="0.01" failures="0">
+    <testcase name="AC-002-04 deletes without renumbering" time="0.0100" classname="deletes without renumbering">
+    </testcase>
+  </testsuite>
+</testsuites>

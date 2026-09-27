@@ -44,10 +44,8 @@ for f in install-git-hooks.sh sdd-up.sh migrate-hooks-v3.sh; do check "bash -n $
 
 # ── 2. Plantillas ────────────────────────────────────────────────────────────
 sed -e "s/__SDD_VERSION__/9.9.9/" -e "s/__NOW__/2026-01-01T00:00:00Z/" "$ROOT/templates/pipeline-state.template.json" > "$tmp/ps.json"
-check "template pipeline-state: sddVersion, hooksVersion 3, 7 stages pending" \
-  jq -e '.sddVersion == "9.9.9" and .hooksVersion == 3 and .currentStage == "requirements-engineer" and .lastUpdated == "2026-01-01T00:00:00Z" and (.stages | length) == 7 and ([.stages[] | .status] | all(. == "pending"))' "$tmp/ps.json"
-check "template statusLine: type command, script .claude/sdd-status-line.sh" \
-  jq -e '.statusLine.type == "command" and .statusLine.command == "bash .claude/sdd-status-line.sh"' "$ROOT/templates/settings.statusline.example.json"
+check "template pipeline-state: sddVersion, hooksVersion 3, 7 stages pending, route null" \
+  jq -e '.sddVersion == "9.9.9" and .hooksVersion == 3 and .currentStage == "requirements-engineer" and .lastUpdated == "2026-01-01T00:00:00Z" and (.stages | length) == 7 and ([.stages[] | .status] | all(. == "pending")) and has("route") and .route == null' "$tmp/ps.json"
 check "template gitignore.sdd: marcadores" sh -c "grep -q '^# sdd-begin' '$ROOT/templates/gitignore.sdd' && grep -q '^# sdd-end' '$ROOT/templates/gitignore.sdd'"
 
 # ── 3. Repo temporal ─────────────────────────────────────────────────────────
@@ -65,7 +63,13 @@ out="$(bash "$SCRIPTS/install-git-hooks.sh")"
 if contains "$out" "already installed"; then pass "install: idempotente"; else bad "install: idempotente ($out)"; fi
 echo a > a.txt; git add a.txt
 if git commit -q -m "feat: sin trailer" >/dev/null 2>&1; then bad "commit feat sin trailer debería fallar"; else pass "commit feat sin trailer rechazado"; fi
-if git commit -q -m "feat: con trailer" -m "Refs: REQ-001" >/dev/null 2>&1; then pass "commit feat con Refs: aceptado"; else bad "commit feat con Refs: rechazado"; fi
+check "install: vendoriza .claude/sdd/sdd.mjs y lib/git-log.mjs" sh -c 'grep -q "Vendored by sdd-pipeline" .claude/sdd/sdd.mjs && test -f .claude/sdd/lib/git-log.mjs'
+check "install: el sdd.mjs vendorizado funciona" node .claude/sdd/sdd.mjs branch status
+if git commit -q -m "feat: solo refs" -m "Refs: REQ-001" >/dev/null 2>&1; then bad "commit feat con solo Refs: debería fallar (feat exige Task)"; else pass "commit feat con solo Refs: rechazado"; fi
+if git commit -q -m "feat: con trailer" --trailer "Task: TASK-F1-001" --trailer "Refs: REQ-001" >/dev/null 2>&1; then pass "commit feat con --trailer Task/Refs aceptado"; else bad "commit feat con --trailer Task/Refs rechazado"; fi
+printf '%s\n' "// local edit" >> .claude/sdd/sdd.mjs
+bash "$SCRIPTS/install-git-hooks.sh" >/dev/null
+check "install: re-instalar sobrescribe la copia vendorizada" sh -c '! grep -q "// local edit" .claude/sdd/sdd.mjs'
 if git commit -q --allow-empty -m "docs: exento" >/dev/null 2>&1; then pass "commit docs sin trailer aceptado"; else bad "commit docs sin trailer rechazado"; fi
 
 # 3b. uninstall, backup de hook ajeno y restauración
@@ -186,7 +190,11 @@ rm -f .gitignore .git/hooks/commit-msg
 mkdir -p .claude/hooks .claude/agents
 for h in sdd-session-start.sh sdd-upstream-guard.sh sdd-pipeline-state-updater.sh sdd-trace-map-updater.sh sdd-status-line.sh; do printf '#!/bin/bash\n' > ".claude/hooks/$h"; done
 printf '// old\n' > .claude/hooks/sdd-augment-hook.js
-printf '# old agent\n' > .claude/agents/sdd-cross-auditor.md
+printf '# old agent\n' > .claude/agents/sdd-legacy-agent.md
+# 4.x: status lines copiadas al proyecto y ficheros de los hooks retirados (trace-map, activity log)
+printf '#!/bin/bash\n' > .claude/sdd-status-line.sh; printf '#!/bin/bash\n' > .claude/sdd-subagent-status.sh
+mkdir -p .sdd; printf '{}\n' > .sdd/current-task.json; printf '{}\n' > .sdd/trace-map.json
+printf '{}\n' > .sdd/activity.jsonl; printf '{}\n' > .sdd/activity.1.jsonl; printf 'Q\n' > .sdd/questions-sdd-spec.md
 cat > .claude/settings.json <<'EOF'
 {
   "hooks": {
@@ -200,28 +208,30 @@ cat > .claude/settings.json <<'EOF'
     ],
     "Stop": [{ "hooks": [{ "type": "command", "command": "echo {}" }] }]
   },
-  "statusLine": { "type": "command", "command": "bash .claude/hooks/sdd-status-line.sh" }
+  "statusLine": { "type": "command", "command": "bash .claude/hooks/sdd-status-line.sh" },
+  "subagentStatusLine": { "type": "command", "command": "bash .claude/sdd-subagent-status.sh" }
 }
 EOF
 cat > pipeline-state.json <<'EOF'
 { "currentStage": "specifications-engineer", "lastUpdated": "2026-01-01T00:00:00Z",
   "stages": { "requirements-engineer": { "status": "done", "outputHash": "abc", "lastRun": "2026-01-01T00:00:00Z", "staleReason": null } } }
 EOF
-before="$(find .claude pipeline-state.json -type f -exec cksum {} + | sort)"
+before="$(find .claude .sdd pipeline-state.json -type f -exec cksum {} + | sort)"
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
-for needle in "sdd-session-start.sh" "sdd-upstream-guard.sh" "sdd-augment-hook.js" "sdd-pipeline-state-updater.sh" "sdd-trace-map-updater.sh" ".claude/agents/sdd-cross-auditor.md" "statusLine points to .claude/hooks" "commit-msg hook missing" "pipeline-state.json: sddVersion=none hooksVersion=0" ".gitignore" "[DRY RUN]"; do
+for needle in "sdd-session-start.sh" "sdd-upstream-guard.sh" "sdd-augment-hook.js" "sdd-pipeline-state-updater.sh" "sdd-trace-map-updater.sh" ".claude/agents/sdd-legacy-agent.md" ".claude/sdd-status-line.sh" ".claude/sdd-subagent-status.sh" ".sdd/current-task.json" ".sdd/trace-map.json" ".sdd/activity.jsonl" ".sdd/activity.1.jsonl" "statusLine runs a legacy SDD status line" "subagentStatusLine runs a legacy SDD script" "commit-msg hook missing" "pipeline-state.json: sddVersion=none hooksVersion=0" ".gitignore" "[DRY RUN]"; do
   if contains "$out" "$needle"; then pass "migrate --dry-run lista: $needle"; else bad "migrate --dry-run no lista: $needle"; fi
 done
-after="$(find .claude pipeline-state.json -type f -exec cksum {} + | sort)"
+after="$(find .claude .sdd pipeline-state.json -type f -exec cksum {} + | sort)"
 if [ "$before" = "$after" ] && [ ! -e .gitignore ] && [ ! -e .git/hooks/commit-msg ] && [ ! -d .claude/backups ]; then pass "migrate --dry-run: no toca nada"; else bad "migrate --dry-run: modificó ficheros"; fi
 
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" 2>&1)"
-check "migrate: settings.json solo conserva statusLine" jq -e 'keys == ["statusLine"]' .claude/settings.json
-check "migrate: statusLine apunta a .claude/sdd-status-line.sh" jq -e '.statusLine.command == "bash .claude/sdd-status-line.sh"' .claude/settings.json
-check "migrate: .claude/sdd-status-line.sh copiado del plugin" cmp -s .claude/sdd-status-line.sh "$ROOT/scripts/sdd-status-line.sh"
-check "migrate: .claude/sdd-status-line.sh ejecutable" test -x .claude/sdd-status-line.sh
+check "migrate: settings.json sin hooks sdd- ni status lines SDD" jq -e '. == {}' .claude/settings.json
+check "migrate: status lines copiadas eliminadas" sh -c '[ ! -e .claude/sdd-status-line.sh ] && [ ! -e .claude/sdd-subagent-status.sh ]'
+check "migrate: current-task, trace-map y activity log eliminados" sh -c '! ls .sdd/current-task.json .sdd/trace-map.json .sdd/activity*.jsonl >/dev/null 2>&1'
+check "migrate: el resto de .sdd/ se conserva" test -f .sdd/questions-sdd-spec.md
+check "migrate: backup de los ficheros de .sdd/" sh -c 'ls .claude/backups/sdd-v3-*/.sdd/current-task.json >/dev/null 2>&1'
 check "migrate: hooks copiados eliminados" sh -c '! ls .claude/hooks/sdd-* >/dev/null 2>&1'
-check "migrate: agentes copiados eliminados" test ! -e .claude/agents/sdd-cross-auditor.md
+check "migrate: agentes copiados eliminados" test ! -e .claude/agents/sdd-legacy-agent.md
 check "migrate: commit-msg reinstalado" grep -q "SDD Commit" .git/hooks/commit-msg
 PLUGIN_VERSION="$(jq -r .version "$ROOT/.claude-plugin/plugin.json")"
 check "migrate: pipeline-state sddVersion=$PLUGIN_VERSION hooksVersion=3" jq -e --arg v "$PLUGIN_VERSION" '.sddVersion == $v and .hooksVersion == 3' pipeline-state.json
@@ -232,6 +242,19 @@ check "migrate: backup de los hooks antiguos" sh -c 'ls .claude/backups/sdd-v3-*
 if contains "$out" "Migration complete"; then pass "migrate: resumen final"; else bad "migrate: sin resumen ($out)"; fi
 out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" 2>&1)"
 if contains "$out" "Nothing to migrate"; then pass "migrate: segunda pasada sin cambios (idempotente)"; else bad "migrate: segunda pasada ($out)"; fi
+# el validador vendorizado (.claude/sdd/) se refresca aunque el hook commit-msg ya esté al día
+printf '%s\n' "// stale copy" >> .claude/sdd/sdd.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
+if contains "$out" "vendored validator .claude/sdd/ differs from the plugin (sdd.mjs)"; then pass "migrate: detecta el validador vendorizado desactualizado"; else bad "migrate: validador vendorizado ($out)"; fi
+bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1
+check "migrate: refresca la copia vendorizada" sh -c '! grep -q "// stale copy" .claude/sdd/sdd.mjs && grep -q "Vendored by sdd-pipeline" .claude/sdd/sdd.mjs'
+rm -f .claude/sdd/lib/junit.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" --dry-run 2>&1)"
+if contains "$out" "misses lib/junit.mjs"; then pass "migrate: detecta un módulo importado sin vendorizar"; else bad "migrate: módulo sin vendorizar ($out)"; fi
+bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1
+check "migrate: vuelve a vendorizar el módulo que faltaba" test -f .claude/sdd/lib/junit.mjs
+out="$(bash "$SCRIPTS/migrate-hooks-v3.sh" 2>&1)"
+if contains "$out" "Nothing to migrate"; then pass "migrate: tras refrescar el validador, sin cambios"; else bad "migrate: tras refrescar ($out)"; fi
 
 # 6b. conserva hooks y ajustes ajenos
 cat > .claude/settings.json <<'EOF'
@@ -244,7 +267,7 @@ cat > .claude/settings.json <<'EOF'
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bash .claude/hooks/sdd-session-start.sh" }] }],
     "Stop": [{ "hooks": [{ "type": "prompt", "prompt": "quality gate", "timeout": 30 }] }]
   },
-  "statusLine": { "type": "command", "command": "bash .claude/sdd-status-line.sh" }
+  "statusLine": { "type": "command", "command": "bash ~/bin/my-line.sh" }
 }
 EOF
 bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1
@@ -252,6 +275,7 @@ check "migrate: conserva permissions" jq -e '.permissions.allow == ["Bash(git st
 check "migrate: conserva el hook del usuario" jq -e '.hooks.PreToolUse | length == 1 and .[0].hooks == [{"type":"command","command":"echo user-hook"}]' .claude/settings.json
 check "migrate: elimina el evento vacío" jq -e '.hooks.SessionStart == null' .claude/settings.json
 check "migrate: conserva el quality gate (prompt)" jq -e '.hooks.Stop[0].hooks[0].type == "prompt"' .claude/settings.json
+check "migrate: conserva una statusLine ajena" jq -e '.statusLine.command == "bash ~/bin/my-line.sh"' .claude/settings.json
 
 # 6c. fallback node: PATH mínimo sin jq (symlinks a las herramientas que usan los scripts)
 mkdir -p "$tmp/minbin"
@@ -261,12 +285,13 @@ done
 if [ -x "$tmp/minbin/node" ] && ! PATH="$tmp/minbin" bash -c 'command -v jq' >/dev/null 2>&1; then
   cat > .claude/settings.json <<'EOF'
 { "hooks": { "PreToolUse": [{ "matcher": "Write", "hooks": [{ "type": "command", "command": "bash .claude/hooks/sdd-upstream-guard.sh" }] }] },
-  "statusLine": { "type": "command", "command": "bash .claude/hooks/sdd-status-line.sh" } }
+  "statusLine": { "type": "command", "command": "bash .claude/hooks/sdd-status-line.sh" },
+  "subagentStatusLine": { "type": "command", "command": "bash .claude/sdd-subagent-status.sh" }, "env": { "A": "1" } }
 EOF
   printf '{"currentStage":"requirements-engineer","stages":{}}\n' > pipeline-state.json
   printf '#!/bin/bash\n' > .claude/hooks-old.sh; mkdir -p .claude/hooks; printf '#!/bin/bash\n' > .claude/hooks/sdd-upstream-guard.sh
   PATH="$tmp/fakebin:$tmp/minbin" bash "$SCRIPTS/migrate-hooks-v3.sh" >/dev/null 2>&1 || true
-  check "migrate (node): settings solo statusLine" jq -e 'keys == ["statusLine"] and .statusLine.command == "bash .claude/sdd-status-line.sh"' .claude/settings.json
+  check "migrate (node): quita hooks sdd- y status lines SDD, conserva el resto" jq -e '. == {"env":{"A":"1"}}' .claude/settings.json
   check "migrate (node): pipeline-state versionado" jq -e '.hooksVersion == 3' pipeline-state.json
   check "migrate (node): hook antiguo borrado" test ! -e .claude/hooks/sdd-upstream-guard.sh
   rm -f .claude/hooks-old.sh

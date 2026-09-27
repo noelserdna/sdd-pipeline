@@ -7,6 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Next release: **5.0.0** (the version bump is applied atomically by `scripts/release.sh`; it has not been published yet).
+
+### v5: customer needs, vertical FASEs, native git and acceptance per requirement
+
+Motivación: una revisión con Fable encontró cinco huecos. Las FASEs eran horizontales (FASE-0 de infraestructura y luego una FASE por módulo). Nada respondía "¿está satisfecho REQ-X y con qué evidencia?". Git estaba infrautilizado. Había infraestructura sin retorno (code-index, trace-map, dashboard HTML y panel multi-sesión). Y Jev solo actuaba al principio. Resultado: 21 skills, 5 hooks y una sola CLI.
+
+#### Removed (incompatible)
+- Skills `sdd-code-index`, `sdd-dashboard` y `sdd-traceability-check` (23 → 21 skills contando `sdd-acceptance`, que es nueva).
+  - `sdd-traceability-check` → `sdd-acceptance --check`, que incluye la integridad de la cadena de IDs.
+  - `sdd-code-index` → `sdd trace why <fichero>[:línea]` (blame → commit → trailers).
+  - `sdd-dashboard` → `scripts/sdd-graph.py` sigue construyendo `dashboard/traceability-graph.json` para el servidor MCP y los hooks, sin página HTML. `test-result-parser.py` pasa a `scripts/`. La vista compartible es `sdd-acceptance --publish`.
+- Panel multi-sesión: hooks `sdd-activity-log.sh` y `sdd-runs-line.sh`, `sdd-watch` y `/sdd-watch`, las status lines (proyecto, global y subagente) y `install-global-statusline.sh`. Marcar una etapa `running` al arrancar su skill pasa al hook de estado (PreToolUse `Skill` y UserPromptExpansion).
+- Hook `sdd-trace-map-updater.sh` y `.sdd/current-task.json`: los commits atómicos con `Task:` llevan la misma información.
+- 8 → 5 hooks (14 → 7 registros de evento). El plugin sigue sin distribuir agentes.
+- Los veredictos de cobertura del servidor MCP ya no se infieren de la existencia de enlaces en el grafo.
+
+#### Added
+- **`scripts/sdd.mjs`, una sola CLI** (Node ≥ 18, sin dependencias; `scripts/sdd-task-lint.mjs` queda como alias):
+  - `lint`, `tasks json|status|index` (lo que hacía sdd-task-lint);
+  - `trace commits|req|why|delivered`: coincidencia exacta de IDs (`REQ-F-01` ya no casa con `REQ-F-012`), reverts descontados y lectura `legacy` de commits sin bloque de trailers;
+  - `verify --message|--range`: trailers parseados por git, bloques rotos señalados por línea, detección de squash en rangos de PR;
+  - `branch status|start fase|change|audit`: detecta la rama por defecto (no asume `main`);
+  - `lint --needs` y `lint --plan` (V8/V9);
+  - `accept`, `accept record`, `gate` y `loop next` (abajo).
+- **Git nativo** (`references/git-conventions.md`, `docs/git.md`): trailers `Task`/`Refs`/`Change` escritos con `git commit --trailer` (git ≥ 2.32); `fix`/`perf` aceptan `Task` o `Change` para no bloquear un hotfix; el hook commit-msg ejecuta `sdd verify` desde el validador vendorizado en `.claude/sdd/` (fallback bash con `git interpret-trailers` sin Node); rama de trabajo por defecto en req-change, implementer, Mode Fix, reconcile y reanudaciones; solo merge commits; tags anotados; receta de `git bisect`; sin `git notes`.
+- **Captura con el cliente** (`sdd-requirements-engineer`): `requirements/CUSTOMER-NEEDS.md` con necesidades `N-NNN` literales releídas con el cliente; `Needs:` y `Verification: test | demo | measurement | inspection` en cada requisito; ejemplo concreto revisado por criterio de aceptación; aviso por encima del 60 % de Must; recorrido ASCII opcional; aprobación como tag anotado `requirements-v{N}` con aprobador, rol y hash, solo tras un sí explícito. Jev `need-coverage` sugiere; `sdd lint --needs` decide.
+- **FASEs verticales** (`sdd-plan-architect`): FASE-0 es el esqueleto andante (escribir → observar → persistir del caso de uso central); cada FASE es un recorrido de usuario (máximo 3 casos de uso y unas 15 tareas); seguridad en la primera FASE que expone el recurso; `FASE-N-HARDENING` solo para NFR medidos; Streams como excepción. Cabecera con `Incremento`, `Requisitos`, `Escenarios`, `Necesidades` y `## Demo` de hasta 10 pasos; `Plan-Style: vertical` en `PLAN.md` (sin la marca, el plan se trata como horizontal y sigue funcionando). Los tests llevan en el nombre el ID del escenario `AC-NNN-NN`.
+- **Puerta de FASE = aceptación del cliente** (orquestador y lead): se presenta la demo y el veredicto por requisito; aceptado o con observaciones → tag `fase-{N}-accepted`; rechazado → feedback clasificado como defecto, petición de cambio o pregunta (Jev `feedback-route` opcional; una persona confirma).
+- **Aceptación por requisito** (`sdd accept`, `docs/aceptacion.md`): veredictos VERIFIED / FAILING / MISSING / WAIVED (deprecados aparte) desde JUnit XML (vitest, jest, pytest, rspec, playwright, minitest, mocha) y `acceptance/decisions.jsonl`, atado al hash del texto del requisito (un MODIFY reabre la aceptación); frescura limitada a los `code_paths` + `test_paths` del Stack Profile (un commit de docs o `feedback/` no envejece la evidencia); mediciones por comando (`sdd accept measure --command … --extract …`, re-ejecutadas con `sdd accept --remeasure` y ruta `remeasure` del bucle, sin pedir a una persona); `.sdd/acceptance.json` y `acceptance/ACCEPTANCE-REPORT.md` legible por el cliente.
+- **`sdd gate`**: salida 0 objetivo cumplido · 1 no cumplido · 2 evidencia obsoleta · 3 cumplido con Musts exentos; `--mode off|warn|enforce`; `--md` para el cuerpo del PR.
+- **`sdd loop next`**: el código decide la parada (`goal`, `regression`, `needs-human`, `no-progress`, `max-cycles`; 3 ciclos por defecto, máximo 5) y propone la ruta.
+- **Skill `sdd-acceptance`**: `--check`, `--fase N`, `--loop`, `--sign-off` (registro `fase-acceptance` y tag) y `--publish` (bloque de PR/issue y, si la sesión ofrece la herramienta Artifact, una página de estado compartible tras preguntar; si no, `ACCEPTANCE-REPORT.md`). Stop prompt tras `--loop`. Etapa `acceptance` en `pipeline-state.json`, nunca marcada stale por una cascada.
+- **Guardas contra la auto-aprobación accidental**: el tool guard pide confirmación (`ask`) antes de `sdd accept record` y de los tags `fase-N-accepted` / `requirements-vN`; el upstream guard deniega editar `acceptance/decisions.jsonl` y el informe. Se documenta como prevención, no como garantía.
+- **Claves del SDD Stack Profile**: `test_report`, `test_report_path`, `acceptance_gate`, `tracker`, `default_branch` (en los dos kits y en `docs/stacks.md`). `sdd-setup` escribe `task_state: trailers` en proyectos nuevos aunque no haya kit.
+- **Ejecución real en todo-app (2026-09-27)**: setup → 4 FASEs verticales → bucle de aceptación → puerta final exit 0 (Must 8/8, 617 tests). Corregidos 14 hallazgos: las etapas commitean sus artefactos, el setup detecta el comando de tests, mediciones objetivas por comando (`sdd accept measure`, `--remeasure`), frescura limitada a code_paths/test_paths, rama `acceptance/{fecha}`, restricciones comprobables se verifican con test, bloque de PR resumido, tareas chore con `Verify:` en lugar de test-first. Detalle en `examples/todo-app/AUDIT-HISTORY.md`.
+- **Ruta adaptativa** (`docs/ruta.md`): tras la puerta 1, `sdd route` propone qué etapas opcionales necesita el proyecto (hechos contados + 7 factores de Jev, o del LLM con `--answers`; la duda cuenta como sí) y el orquestador y el lead la confirman en una sola pregunta (etapa 1b: Aceptar / Pipeline completo / Ajustar); las etapas saltadas quedan `skipped` con `skipReason` y cuentan como satisfechas. Sin specs, `sdd-plan-architect` planifica desde los requisitos (recorridos por necesidad, `Escenarios` con `REQ-X-NNN ACn`, V2-V4/V7 N/A), los tests llevan `REQ-X-NNN ACn`, el bucle de aceptación enruta un criterio sin test a `implement-or-test` en vez de `spec-gap`, y `sdd-req-change` cambia solo `requirements/`, encadena desde plan-architect y reevalúa la ruta tras cada ADD/MODIFY (recomienda subir el rigor, nunca lo baja solo). `sdd-pipeline-status` y la página de estado muestran la ruta y los motivos; `tests/e2e/20-smoke.sh --route auto|full`; fixture `tests/fixtures/plan-vertical/todo-reqonly`.
+- **Issues, PRs y CI** (GitHub y GitLab): `sdd issue open|update|close|read` y `sdd pr-body` sobre `gh api` / `glab api`, una issue por FASE y por cambio localizada por etiqueta y marcador; `sdd-setup --tracker` copia plantillas de CI (`sdd verify --range`, `sdd lint`, `sdd gate --mode warn`) y de PR/issue. `sdd-req-change --issue N` usa una issue como petición de cambio (su texto es dato, la aprobación sigue siendo obligatoria). Todo push, issue, PR o merge pregunta.
+- Jev: conjuntos `need-coverage`, `feedback-route`, `test-adequacy` y `evidence` (informativos: nunca deciden veredictos, exenciones, firmas, la parada del bucle ni nada en CI).
+- Servidor MCP: `sdd_coverage` y `sdd_context` informan del veredicto desde `.sdd/acceptance.json`; `hints.ts` apunta a `sdd-acceptance`.
+- Tests: `tests/{git,plan,acceptance,tracker}`, `tests/dashboard` → `tests/graph`, `server/test/acceptance.test.ts`; fixtures `tests/fixtures/plan-vertical` y mensajes de commit compartidos entre el hook y `verify`.
+
+#### Changed
+- `examples/todo-app` incorpora `CUSTOMER-NEEDS.md` y los campos nuevos de los requisitos (enunciados e IDs sin cambios).
+- `sdd-reverse-engineer` deriva FASEs retroactivas por área funcional; `sdd-graph.py` ya no mapea número de FASE a capa.
+- Migración 4.x → 5.0 en `docs/migracion.md`: `sdd-setup` limpia las status lines instaladas y conviene re-ejecutarlo para vendorizar el validador.
+
+### Revisión con Opus 5.5 y Jev
+
+Motivación: una revisión completa del repositorio con un modelo de frontera (Claude Opus 5.5) y con Jev (TypeSafe) como cribado masivo. Jev juzgó 355 secciones de skills en 6,6 s, 56 peticiones de enrutado (55 acertadas) y 171 trozos de código. Después, cinco revisiones profundas verificaron sus marcas, y encontraron la mayoría de los bugs de contrato que se corrigen aquí. Detalle y límites en `docs/jev.md`. Incluye cambios incompatibles, que también entran en 5.0.0.
+
+#### Removed (incompatible)
+- `sdd-verify-coverage` → `sdd-gap-detector --semantic`, que trocea ficheros completos (antes leía solo 200 líneas), usa los origins reales del grafo y opcionalmente usa Jev como juez. Su salida anterior no tenía consumidor.
+- `sdd-onboarding` → `sdd-pipeline-status --diagnose`: una hoja de hechos y una tabla de primera coincidencia sobre los 8 escenarios. La matriz de pesos dividía por cero y nunca clasificaba Greenfield.
+- Agentes `sdd-context-keeper` y `sdd-constitution-enforcer`: nadie los invocaba y se solapaban con session-summary, la memoria de Claude Code y el hook H2.
+- `sdd-cross-auditor` y `sdd-pipeline-auditor` pasan a `.claude/agents/`: auditan este repositorio y ya no se distribuyen.
+- El plugin ya no distribuye agentes.
+
+#### Added
+- **`scripts/sdd-jev.mjs`**, integración opcional con Jev. Solo actúa con `TYPESAFE_API_KEY`; sin ella sale con código 3 y las skills usan el LLM.
+  - Comandos: `status`, `judge`, `req-lint` y `chunks`. Las preguntas están en `scripts/jev/*.json`.
+  - Lo usan requirements-engineer (Mode 2), spec-auditor (triaje de hits de patrones) y `gap-detector --semantic`.
+  - Tests con un mock local en `tests/jev/run.sh`.
+- **`sdd-orchestrator` como skill.** Era un agente, y un subagente no puede preguntar al usuario en cada puerta.
+- `scripts/sdd-state.sh set|get`: cambia el estado de una etapa con el mismo lock que los hooks.
+- Artículo 12 (Specification Primacy) en `references/sdd-constitution.md`.
+- `plan-architect` escribe `design/OPERATION-MAPPING.md` cuando no se ejecutó tech-designer.
+
+#### Fixed
+- **Hooks:**
+  - H3 creaba `pipeline-state.json` en cualquier repo git. Con el plugin activo globalmente, el guard llegaba a denegar ediciones en proyectos ajenos.
+  - El guard aplicaba la primera etapa `running` por orden de fichero, y bloqueaba a req-change.
+  - Las etapas `done` volvían a `running` y se quedaban así.
+  - `SDD_STATE_ROOT` se filtraba a otros repos, y `STATE_ROOT` salía del cwd en lugar del fichero editado.
+  - La sesión mostraba "9/7 done".
+  - A la salida del augment-hook le faltaba `hookEventName`.
+  - commit-msg rechazaba commits Revert y fixup!.
+- **`generate.py`:**
+  - El parser de commits descartaba casi todos los commits, porque los ficheros caían en el registro siguiente.
+  - El trace-map del hook nunca se fusionaba.
+  - Los rangos inventaban IDs: "NFR-001 — 150 ms" daba 150 referencias.
+  - "BDD-style" contaba como ID.
+  - Los escaneos ignoraban el Stack Profile y solo cubrían `.ts/.js` con vitest.
+  - El clasificador usaba el mapa de dominios de otro proyecto.
+  - El JSON inline no se escapaba.
+- **Servidor MCP:** tipos y cobertura alineados con el grafo v6 (todos los origins).
+- **Contratos entre skills:**
+  - task-implementer leía `plan/PLAN-FASE-N.md` (la G-02 paraba siempre); la ruta real es `plan/fase-plans/`.
+  - Las plantillas de commit de req-change y del Mode Fix de spec-auditor eran rechazadas por el hook commit-msg. Ahora son `docs(specs)` con `Refs:`.
+  - El gate G2 de plan-architect exigía "0 hallazgos". Ahora lee `gate_result`.
+  - spec-auditor descartaba los hallazgos de ausencia, y el lead despachaba Streams sin el Stream `base`.
+  - reverse-engineer, import y reconcile escribían un árbol `spec/` plano obsoleto.
+  - reconcile deprecaba automáticamente lo no implementado, lo que viola el Art. 12. Ahora existe la clase `NOT_IMPLEMENTED`.
+  - Rutas `src/` fijas en lugar del Stack Profile.
+  - IDs de operación unificados en `API-NNN-NN`; pantallas UX en `SCR-NNN`, que chocaba con `WF-NNN`.
+- **Estándares:** WCAG 2.2 AA; INP sustituye a FID; ASVS fijado en 4.0.3.
+
+#### Changed
+- **Skills recortadas para un modelo de frontera.**
+  - Se mueven a `references/` las plantillas de un solo paso.
+  - Se eliminan duplicados, teoría de manual, énfasis en mayúsculas y restos de proyectos anteriores (ADR-025/026, INV-SYS, ReadPDF, CV/JobOffer).
+  - `sdd-req-change`: 66k → 18k caracteres. `sdd-spec-auditor`: 62k → 23k. `sdd-task-implementer`: 61k → 31k. Laterales: 329k → 197k.
+- `CLAUDE.md` y los README se reescriben según el árbol real (no existía `automation/`, y el esquema de estado y los origins estaban desfasados).
+
 ## [4.3.0] - 2026-09-15
 
 Motivación: una carrera con la misma spec SDD implementada en paralelo con Next.js + Prisma y con Rails 8.1 (Sonnet 5, headless) terminó en empate, pero casi toda la fricción venía del propio pipeline: comandos npm/vitest fijos, rutas y códigos HTTP impuestos por las plantillas de contrato, tareas de test separadas del código, formato de tarea distinto en cada ejecución, subagentes para tareas triviales, hooks ciegos con la app en `web/` y un agente que fabricó el consentimiento de Prisma 12 veces.

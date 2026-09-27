@@ -29,21 +29,21 @@ Every task, regardless of type, includes these base checks:
 - [ ] Validation constraints from invariants enforced
 - [ ] Timestamps use ISO 8601 format
 - [ ] IDs use specified format (UUID v4, ULID, etc.)
-- [ ] Tenant isolation field present (org_id) per INV-SYS-001
+- [ ] Tenant isolation field present (e.g. org_id) when the domain is multi-tenant
 ```
 
 ### API Endpoint / Operation Tasks
 
 ```markdown
 - [ ] Operation satisfies its API-op semantics in spec/contracts/*.md (input VOs, effect/post INV, domain error codes)
-- [ ] Transport matches design/OPERATION-MAPPING.md (idiom, route/action, verb, success, validation error, no-JS fallback, accessible element) — or the plan's fallback when that file does not exist
+- [ ] Transport matches design/OPERATION-MAPPING.md (idiom, route/action, verb, success, validation error, no-JS fallback, accessible element) (written by sdd-tech-designer, or by sdd-plan-architect when the tech designer did not run)
 - [ ] Method + path equal the contract only when it declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http)
 - [ ] Request/response schemas match contract
-- [ ] Authentication required per INV-SYS-003
+- [ ] Authentication required where the spec demands it
 - [ ] Rate limiting applied per ADR-025 *(example id — cite the project's own ADR)*
 - [ ] Error responses follow ADR-026 format *(example id — cite the project's own ADR)*
 - [ ] API versioning prefix /api/v1/ per ADR-033 *(example id; `Style: http` only)*
-- [ ] Tenant isolation in queries per INV-SYS-001
+- [ ] Tenant isolation in queries (multi-tenant domains)
 ```
 
 ### Middleware Tasks
@@ -103,7 +103,7 @@ Every task, regardless of type, includes these base checks:
 ### PII / Encryption Tasks
 
 ```markdown
-- [ ] Encryption follows ADR-002 (AES-256-GCM)
+- [ ] Encryption follows the project's crypto ADR *(e.g. ADR-002 AES-256-GCM — example id)*
 - [ ] IV never reused (INV-SEC-001, INV-SEC-002)
 - [ ] PII fields identified and encrypted
 - [ ] Decryption only with proper authorization
@@ -114,7 +114,7 @@ Every task, regardless of type, includes these base checks:
 ### Multi-Tenant Tasks
 
 ```markdown
-- [ ] Tenant isolation enforced in all queries (INV-SYS-001)
+- [ ] Tenant isolation enforced in all queries (the project's tenancy invariant)
 - [ ] org_id filter applied at repository/data layer
 - [ ] No cross-tenant data leakage possible
 - [ ] Tenant context propagated through call chain
@@ -123,10 +123,10 @@ Every task, regardless of type, includes these base checks:
 ### Background Job Tasks
 
 ```markdown
-- [ ] Job follows ADR-023 patterns
+- [ ] Job follows the project's background-job ADR *(example: ADR-023)*
 - [ ] Idempotency guaranteed (safe to retry)
 - [ ] DLQ configured for failed jobs
-- [ ] Timeout within limits (INV-SYS-004: 360s max)
+- [ ] Timeout within the limit the NFRs/invariants set
 - [ ] Progress tracking if long-running
 ```
 
@@ -137,7 +137,7 @@ Every task, regardless of type, includes these base checks:
 - [ ] Secrets use proper secret management (not env vars)
 - [ ] Default values are production-safe
 - [ ] Configuration validation at startup
-- [ ] Runtime/deploy config valid for the project's stack — the Stack Profile commands pass (`skills/sdd-task-implementer/references/stack-profile.md`); e.g. `wrangler.toml` bindings (Cloudflare), `config/database.yml` + credentials (Rails), `next.config.*` + env (Next.js)
+- [ ] Runtime/deploy config valid for the project's stack — the Stack Profile commands pass (`skills/sdd-task-implementer/references/stack-profile.md`); e.g. `config/database.yml` + credentials (Rails), `next.config.*` + env (Next.js)
 ```
 
 ### Integration / Wiring Tasks
@@ -164,7 +164,7 @@ Add severity hints to help reviewers prioritize:
 
 Example:
 ```markdown
-- [ ] [CRITICAL] Encryption follows ADR-002 (AES-256-GCM)
+- [ ] [CRITICAL] Encryption follows the project's crypto ADR
 - [ ] [IMPORTANT] Business rules from RN-181 enforced
 - [ ] [NICE] Variable names follow glossary conventions
 ```

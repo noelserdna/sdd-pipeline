@@ -12,7 +12,10 @@ step "claude plugin validate --strict"
 if command -v claude >/dev/null 2>&1; then
   claude plugin validate ./ --strict >/dev/null 2>&1 && ok "marketplace + plugin" || bad "claude plugin validate ./ --strict"
   claude plugin validate ./skills --strict >/dev/null 2>&1 && ok "skills" || bad "claude plugin validate ./skills"
-  claude plugin validate ./agents --strict >/dev/null 2>&1 && ok "agents" || bad "claude plugin validate ./agents"
+  # El plugin no distribuye agentes; los de mantenimiento viven en .claude/agents/ (no se publican).
+  if [ -d agents ]; then
+    claude plugin validate ./agents --strict >/dev/null 2>&1 && ok "agents" || bad "claude plugin validate ./agents"
+  fi
 else
   echo "skip claude CLI no disponible"
 fi

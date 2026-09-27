@@ -1,0 +1,3 @@
+perf(search): index task titles
+
+Change: SEC-12

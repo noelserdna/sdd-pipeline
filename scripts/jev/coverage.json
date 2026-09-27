@@ -1,0 +1,13 @@
+{
+  "description": "sdd-gap-detector --semantic judge: one item per (requirement, code chunk), state = {requirement: {id, statement, criteria}, code: {path, start, end, code}}. The skill takes the max over the chunks of a requirement; a requirement split across files can score low on every chunk, so low scores are never proof of absence and go to the LLM.",
+  "questions": {
+    "implements": {"type": "noul",
+      "instructions": "Does `code.code` implement the behavior described by `requirement.statement` (as checked by `requirement.criteria`), rather than just mentioning related names?",
+      "criteria": {"true": "The code performs the required behavior: the trigger is handled and the required response is produced",
+                   "false": "The code does not perform this behavior, or only touches related data"}},
+    "partial": {"type": "noul",
+      "instructions": "Does `code.code` implement only part of `requirement.statement`, for example the main path but not the error cases listed in `requirement.criteria`?"},
+    "related": {"type": "noul",
+      "instructions": "Is `code.code` about the same feature or domain concept as `requirement.statement`, even if it does not implement it?"}
+  }
+}

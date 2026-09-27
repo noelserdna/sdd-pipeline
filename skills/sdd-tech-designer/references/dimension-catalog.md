@@ -1,813 +1,208 @@
-# Dimension Catalog — 12 Technical Design Dimensions
+# Dimension Catalog — 12 Technical Design Dimensions (Phase 3)
 
-> Reference document for sdd-tech-designer Phase 3 (12-Dimension Analysis).
-> Each dimension defines detection rules, contextual questions, common patterns, and anti-patterns.
+Each dimension lists detection rules (Applicable / Resolved / N/A), its question IDs (`DIM-{d}-{nnn}`) with the
+option set to offer, and red flags to raise. Write question text and option notes in the user's language; add a
+one-clause note per option only where the trade-off is not obvious. Always put the recommended option first and
+fill the **Context** line from the specs.
 
----
+Status per dimension: **Resolved** (decision exists in an ADR, spec, CLAUDE.md or code) · **Partial** (some
+questions resolved) · **Missing** (applicable, nothing decided) · **N/A**.
 
-## Overview
+**Stack already decided.** With a Stack Profile (CLAUDE.md `## SDD Stack Profile`), an installed kit
+(`templates/stacks/<kit>`, `## Stack Conventions`) or an accepted stack ADR, DIM-1-002, DIM-3-001 and DIM-3-002
+are Resolved: show the evidence, recommend what was chosen and do not reopen the question. Recommendations in the
+other dimensions (data, auth, CI, infra) must be compatible with that stack.
 
-The 12 dimensions cover the complete technical design space for a software system. Not all dimensions apply to all systems — detection rules determine applicability.
-
-### Applicability Classification
-
-| Status | Meaning |
-|--------|---------|
-| **Applicable** | Dimension is relevant to this system type |
-| **Resolved** | Decision exists in ADR, spec, or CLAUDE.md |
-| **Partial** | Some aspects decided, others missing |
-| **Missing** | No decision found, dimension is applicable |
-| **N/A** | Dimension does not apply to this system type |
+Order when several dimensions are open: 1 → 12 (delivery and style shape everything after them).
 
 ---
 
-## Dimension 1: Delivery Channels
+## DIM-1 Delivery Channels
 
-### What It Covers
+- **Applicable:** any human actor in the use cases; specs mention screens, forms, dashboards, views.
+- **Resolved:** ADR selecting channels; CLAUDE.md names a frontend framework; context diagram shows user channels.
+- **N/A:** all actors are external systems; spec says "API-only, no UI".
 
-How end users interact with the system: web browser, mobile app, command-line interface, API-only (headless), desktop application, embedded UI.
-
-### Detection Rules
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-1-001 | Primary delivery channel ({N} human actors, channel unspecified) | Web SPA · Web SSR · Mobile native · Mobile cross-platform · CLI · API-only · Desktop (Electron/Tauri) |
+| DIM-1-002 | Frontend framework (web chosen, no framework) | Next.js App Router full-stack (Server Components + Server Actions, progressive-enhancement forms; no own HTTP API without external clients) · Rails + Hotwire full-stack (forms work without JS) · React/Next.js SPA/SSG + API · Vue/Nuxt · SvelteKit · Astro · HTMX + templates |
 
-```
-APPLICABLE WHEN:
-- Use cases involve human actors (not just system-to-system)
-- Specs mention "user", "screen", "form", "dashboard", "view"
-- ANY actor in system context is a human
+Context: actors, interaction complexity, target platform, team expertise.
 
-RESOLVED WHEN:
-- ADR exists selecting delivery channel(s)
-- CLAUDE.md specifies frontend framework
-- System context diagram shows user-facing channels
-
-N/A WHEN:
-- All actors are external systems (pure backend/integration service)
-- Spec explicitly states "API-only, no UI"
-```
+Red flags: complex interactions with no UI channel chosen; several channels mentioned without a support plan;
+mobile without an offline/sync strategy.
 
-### Question Templates
+## DIM-2 Architecture Style
 
-```markdown
-**DIM-1-001: Primary Delivery Channel**
-El sistema tiene {N} actores humanos pero no especifica cómo interactúan.
-
-| Opción | Descripción |
-|--------|-------------|
-| Web SPA | Single-Page Application — rich interactivity, JS framework |
-| Web SSR | Server-Side Rendered — SEO, fast first load, server-centric |
-| Mobile Native | iOS/Android apps — platform APIs, offline, push notifications |
-| Mobile Cross-Platform | React Native/Flutter — code sharing, native-like |
-| CLI | Command-line — developers/ops, scriptable, no GUI |
-| API-only | Sin UI propia — consumido por clientes externos |
-| Desktop | Electron/Tauri — offline-first, native OS integration |
+- **Applicable:** >1 bounded context; scale beyond one process; team > 3; several deployment environments.
+- **Resolved:** ADR defining service topology; documented deployment view; CLAUDE.md states the approach.
+- **N/A:** simple script or single-purpose CLI.
 
-**Contexto:** [actores], [complejidad de interacción], [plataforma target]
-```
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-2-001 | Architecture style ({N} bounded contexts, {scale}) | Modular monolith · Microservices · Serverless functions · Event-driven · Hexagonal |
 
-```markdown
-**DIM-1-002: Frontend Framework**
-Canal web seleccionado pero sin framework.
+Context: bounded contexts, scale, team size, deployment platform.
 
-| Opción | Descripción |
-|--------|-------------|
-| Next.js App Router (full-stack) | React Server Components + Server Actions, `<form action>` con progressive enhancement; sin API HTTP propia si no hay clientes externos |
-| Rails + Hotwire (full-stack) | Server-rendered, REST resources + Turbo/Stimulus; formularios funcionan sin JS, poco JS propio |
-| React + Next.js (SPA/SSG + API) | Full-featured, SSR/SSG, grande ecosystem |
-| Vue + Nuxt | Buena DX, curva menor, progressive |
-| Svelte + SvelteKit | Mínimo bundle, excelente performance |
-| Astro | Content-first, islands architecture, multi-framework |
-| HTMX + templates | Minimal JS, hypermedia-driven |
+Red flags: microservices for a small team or simple system; monolith without module boundaries; serverless for
+long-running or stateful workflows; no style chosen with 5+ bounded contexts.
 
-**Contexto:** [tipo de app], [complejidad UI], [team expertise]
-```
+## DIM-3 Tech Stack
 
-> **Stack ya decidido.** Con Stack Profile (CLAUDE.md `## SDD Stack Profile`), kit instalado (`templates/stacks/<kit>`,
-> sección `## Stack Conventions`) o ADR de stack aceptado, DIM-1-002, DIM-3-001 y DIM-3-002 están **Resolved**: se
-> muestra la evidencia, se recomienda lo ya elegido y no se reabre la pregunta. Las recomendaciones de las demás
-> dimensiones (datos, auth, CI, infra) deben ser compatibles con ese stack.
+- **Applicable:** always.
+- **Resolved:** stack ADR; CLAUDE.md "Active Technologies" with versions, `## SDD Stack Profile` or
+  `## Stack Conventions`; installed kit; existing codebase.
 
-### Common Patterns
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-3-001 | Language & runtime | TypeScript/Node · Ruby/Rails · Python/FastAPI · Go · Rust · Java/Spring Boot · C#/.NET |
+| DIM-3-002 | Backend framework for {lang} | Ruby: Rails (REST resources, Active Record, Hotwire; `form_with`/`button_to` without JS) · Sinatra/Hanami. TypeScript: Next.js App Router (Route Handlers only for external HTTP clients) · Fastify/Hono/NestJS (pure HTTP API, `Style: http` contracts). Others: the language's mainstream options |
 
-- **SPA + API Backend**: Most common for interactive apps. Clear separation of concerns.
-- **SSR + Hydration**: Best for content-heavy sites with interactivity. Next.js, Nuxt, SvelteKit.
-- **API-only + External consumers**: Microservice or platform play. Focus on API contracts.
-- **BFF (Backend for Frontend)**: When multiple channels need different API shapes.
+Context: system type, team expertise, platform constraints.
 
-### Red Flags
+Red flags: language the team does not know without a plan; polyglot without justification; deprecated
+framework versions; no package manager / build tool decision.
 
-- Specs describe complex user interactions but no UI channel is selected
-- Multiple channels mentioned casually without explicit support plan
-- Mobile mentioned but no offline/sync strategy
-- "Web" assumed without considering accessibility and responsiveness
+## DIM-4 Data Strategy
 
----
+- **Applicable:** the system persists data; specs define entities; NFRs mention retention or storage.
+- **Resolved:** database ADR; physical data model; migration strategy defined.
+- **N/A:** stateless transformation/proxy; all state held by external systems.
 
-## Dimension 2: Architecture Style
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-4-001 | Primary database ({N} entities) | PostgreSQL · MySQL/MariaDB · MongoDB · SQLite/Turso · DynamoDB |
+| DIM-4-002 | Migration strategy | SQL up/down files · ORM-generated (Prisma, Drizzle, Active Record) · Declarative schema-as-code |
+| DIM-4-003 | Caching (latency targets exist) | Redis/Valkey · In-process · CDN/edge · None needed |
 
-### What It Covers
+Context: entity count, query patterns, read/write ratio, scale, platform.
 
-High-level structural organization: monolith, microservices, serverless, modular monolith, event-driven, CQRS, hexagonal.
+Red flags: NoSQL chosen without knowing query patterns; no migration strategy; caching without invalidation; no
+backup/restore strategy.
 
-### Detection Rules
+## DIM-5 Auth & Security
 
-```
-APPLICABLE WHEN:
-- System has more than one bounded context
-- Scale targets exceed single-process capacity
-- Team size > 3 developers
-- Multiple deployment environments needed
+- **Applicable:** user authentication; sensitive data; NFRs mention security/compliance/encryption; a security
+  audit exists.
+- **Resolved:** auth ADR; security architecture documented; encryption strategy defined.
+- **N/A:** unauthenticated internal tool; public read-only API with no sensitive data.
 
-RESOLVED WHEN:
-- ADR exists defining service topology
-- Architecture view documented with deployment strategy
-- CLAUDE.md specifies architecture approach
+If `audits/SECURITY-AUDIT-BASELINE.md` exists, cite its open findings in the Context line of these questions.
 
-N/A WHEN:
-- System is a simple script or CLI tool
-- Single-purpose utility with no scaling needs
-```
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-5-001 | Authentication model | Session-based · JWT (with rotation/revocation) · OAuth 2.0/OIDC · API keys (service-to-service) · Passwordless |
+| DIM-5-002 | Authorization model | RBAC · ABAC · ACL per resource · Simple admin/user |
 
-### Question Templates
+Context: user types, multi-tenancy, compliance, roles in `contracts/PERMISSIONS-MATRIX.md`.
 
-```markdown
-**DIM-2-001: Architecture Style**
-El sistema tiene {N} bounded contexts y {scale targets}. ¿Qué estilo arquitectónico?
+Red flags: sensitive data without encryption at rest; JWT without rotation/revocation; state-changing endpoints
+without CSRF protection; no threat model.
 
-| Opción | Descripción |
-|--------|-------------|
-| Modular Monolith | Un desplegable, módulos internos bien separados |
-| Microservices | Servicios independientes por bounded context |
-| Serverless Functions | Funciones individuales por operación/evento |
-| Event-Driven | Componentes desacoplados vía eventos/mensajes |
-| Hexagonal / Ports & Adapters | Core aislado, adaptadores intercambiables |
+## DIM-6 API Design
 
-**Contexto:** [bounded contexts], [escala], [team size], [deployment platform]
-```
+- **Applicable:** the system exposes an API to external clients; `Style: http` contracts exist.
+- **Resolved:** contracts fix style, versioning and errors; API ADR; OpenAPI/GraphQL schema exists.
+- **N/A:** no API; every contract is `Style: operations` (no external HTTP clients) — the transport of a
+  server-rendered or client UI app is not API design, it goes to `design/OPERATION-MAPPING.md`.
 
-### Common Patterns
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-6-001 | API style ({N} operations for external clients) | REST/JSON · GraphQL · gRPC · tRPC |
 
-- **Modular Monolith**: Best starting point for most projects. Migrate to microservices later if needed.
-- **Microservices**: When bounded contexts have independent scaling/deployment needs and team can handle operational complexity.
-- **Serverless**: Cost-effective for bursty workloads. Cold start trade-off.
-- **CQRS + Event Sourcing**: When audit trail is critical or read/write patterns diverge significantly.
+Context: client types, query complexity, performance needs.
 
-### Red Flags
+Red flags: no versioning strategy; no error-response convention; public API without rate limiting; inconsistent
+resource naming.
 
-- Choosing microservices for a small team or simple system (over-engineering)
-- Monolith without internal module boundaries (will become a big ball of mud)
-- Serverless for long-running processes or stateful workflows
-- No architecture style selected with 5+ bounded contexts
+## DIM-7 Infrastructure
 
----
+- **Applicable:** anything deployed; scale targets; several environments.
+- **Resolved:** hosting/compute ADR; deployment config (Dockerfile, IaC) exists; CLAUDE.md names the platform.
+- **N/A:** library or package deployed by its consumer.
 
-## Dimension 3: Tech Stack
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-7-001 | Compute model | PaaS (Fly, Render, Railway, Heroku) · Containers (Docker/K8s) · Serverless functions · Edge runtime · VPS |
 
-### What It Covers
+Context: scale targets, budget, team ops expertise.
 
-Programming languages, frameworks, runtimes, package managers, build tools.
+Red flags: manual deployment without IaC; single region for global users; no disaster-recovery plan;
+over-provisioning for the expected load.
 
-### Detection Rules
+## DIM-8 CI/CD Pipeline
 
-```
-APPLICABLE WHEN:
-- Always applicable (every system needs a tech stack)
+- **Applicable:** any deployed service; team > 1; several environments.
+- **Resolved:** CI config exists (`.github/workflows`, etc.); deployment ADR; documented build/test/deploy.
+- **N/A:** personal project deployed by hand (flag it as a risk).
 
-RESOLVED WHEN:
-- ADR exists selecting language + framework + runtime
-- CLAUDE.md has "Active Technologies" with specific versions
-- CLAUDE.md has `## SDD Stack Profile` / `## Stack Conventions`, or a stack kit is installed (`templates/stacks/<kit>`)
-- Existing codebase already uses a stack
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-8-001 | CI/CD platform | GitHub Actions · GitLab CI · CircleCI · Jenkins |
+| DIM-8-002 | Deployment strategy | Direct · Rolling · Blue-green · Canary |
 
-N/A WHEN:
-- Never N/A
-```
+Context: code hosting, availability and rollback needs, infrastructure. The CI test step should run the Stack
+Profile `test` command when a profile exists.
 
-### Question Templates
+Red flags: no automated tests in CI; manual production deploys; no rollback strategy; no staging.
 
-```markdown
-**DIM-3-001: Primary Language & Runtime**
-No hay selección de lenguaje/runtime de implementación.
+## DIM-9 Observability
 
-| Opción | Descripción |
-|--------|-------------|
-| TypeScript + Node.js | Amplio ecosystem, full-stack capability |
-| Ruby + Rails | Convención sobre configuración, full-stack server-rendered (Hotwire), muy productivo en CRUD |
-| Python + FastAPI | Rápido para APIs, ML ecosystem |
-| Go | Performance, concurrency, simple deployment |
-| Rust | Maximum performance, memory safety |
-| Java + Spring Boot | Enterprise-grade, mature ecosystem |
-| C# + .NET | Microsoft ecosystem, enterprise |
+- **Applicable:** production runtime; SLO/uptime targets in NFRs; several services or integrations.
+- **Resolved:** stack chosen; SLOs mapped to SLIs; alert rules defined (`spec/nfr/OBSERVABILITY.md`).
+- **N/A:** dev tool or CLI with no production runtime.
 
-**Contexto:** [tipo de sistema], [team expertise], [platform constraints]
-```
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-9-001 | Observability stack | OpenTelemetry + backend · Grafana/Prometheus/Loki · Sentry + metrics · Datadog · Cloud-native (CloudWatch etc.) |
 
-```markdown
-**DIM-3-002: Backend Framework**
-Lenguaje seleccionado ({lang}) pero sin framework backend.
+Context: budget, complexity, SLO targets.
 
-| Opción | Descripción |
-|--------|-------------|
-| {Framework options based on selected language} |
-| *Ruby:* Rails | Full-stack: REST resources, Active Record, Hotwire; formularios sin JS (`form_with`, `button_to`) |
-| *Ruby:* Sinatra / Hanami | Ligero / arquitectura limpia, menos convenciones |
-| *TypeScript:* Next.js App Router | Full-stack: Server Components + Server Actions; Route Handlers solo para clientes HTTP externos |
-| *TypeScript:* Fastify / Hono / NestJS | API HTTP pura (clientes externos, contratos `Style: http`) |
+Red flags: no production logging; alerts without runbooks; SLOs with no instrumented SLIs; microservices without
+distributed tracing.
 
-**Contexto:** [runtime], [tipo de API], [complejidad]
-```
+## DIM-10 Cost & Scaling
 
-### Common Patterns
+- **Applicable:** hosted service; scale targets; budget constraints.
+- **Resolved:** cost estimate documented; scaling strategy and per-environment budgets set.
+- **N/A:** open-source library/tool; free tier covers all needs.
 
-- **TypeScript everywhere**: Frontend + Backend sharing types/validation. Most popular for web.
-- **Python for data**: When ML/AI/data processing is core. Use TypeScript for web layer.
-- **Go for infrastructure**: Microservices, CLIs, high-concurrency backends.
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-10-001 | Scaling strategy ({targets}) | Static provisioning · Vertical · Horizontal auto-scale · Platform (serverless) auto-scale |
 
-### Red Flags
+Context: load targets, cost constraints, traffic pattern.
 
-- Selecting a language the team doesn't know without training plan
-- Multiple languages without clear justification (polyglot tax)
-- Outdated framework versions or deprecated frameworks
-- No build tool or package manager decision
+Red flags: no cost estimate before production; no plan for 10× growth; data-transfer costs ignored.
 
----
+## DIM-11 Developer Experience
 
-## Dimension 4: Data Strategy
+- **Applicable:** team > 1; several modules/packages; onboarding matters.
+- **Resolved:** CLAUDE.md setup section or contributing guide; documented build/test commands (Stack Profile).
+- **N/A:** solo developer, simple project.
 
-### What It Covers
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-11-001 | Repository structure | Single repo · Monorepo with tooling (Turborepo/Nx) · Multi-repo |
 
-Database selection, schema design approach, migration strategy, caching, data lifecycle.
+Context: package count, team size, independent-deploy needs.
 
-### Detection Rules
+Red flags: undocumented setup; no lint/format automation; inconsistent tooling across modules.
 
-```
-APPLICABLE WHEN:
-- System persists data (entities, state, files)
-- Specs define domain entities or data models
-- NFRs mention data retention or storage limits
+## DIM-12 i18n & Accessibility
 
-RESOLVED WHEN:
-- ADR exists selecting database technology
-- Physical data model documented
-- Migration strategy defined
+- **Applicable:** user-facing UI; several languages/regions; NFRs mention accessibility.
+- **Resolved:** i18n strategy and locale list documented; WCAG level specified (or `ux/ACCESSIBILITY-SPEC.md`
+  exists — defer to it).
+- **N/A:** API-only; single-language internal tool; CLI.
 
-N/A WHEN:
-- Stateless system (pure transformation/proxy)
-- All state managed by external systems
-```
+| ID | Question | Options |
+|----|----------|---------|
+| DIM-12-001 | Internationalization | Full i18n from day 1 · Single language, i18n-ready · Single language |
+| DIM-12-002 | Accessibility level | WCAG 2.2 AA (recommended) · WCAG 2.2 A · WCAG 2.2 AAA · Best effort |
 
-### Question Templates
+Context: target markets, user languages, audience, legal requirements.
 
-```markdown
-**DIM-4-001: Primary Database**
-El domain model define {N} entities pero no hay selección de base de datos.
-
-| Opción | Descripción |
-|--------|-------------|
-| PostgreSQL | Relacional completo, JSON support, extensible |
-| MySQL/MariaDB | Relacional popular, replicación madura |
-| MongoDB | Document store, flexible schema |
-| SQLite / Turso | Lightweight, edge-compatible |
-| DynamoDB | Serverless, auto-scaling, AWS-native |
-
-**Contexto:** [entity count], [query patterns], [scale], [platform]
-```
-
-```markdown
-**DIM-4-002: Migration Strategy**
-Base de datos seleccionada pero sin estrategia de migrations.
-
-| Opción | Descripción |
-|--------|-------------|
-| SQL migrations (up/down) | Explicit SQL files, version-controlled |
-| ORM migrations | Generated from entity definitions (Prisma, Drizzle) |
-| Schema-as-code | Declarative schema, diffed on deploy |
-
-**Contexto:** [database], [ORM/query builder], [deploy strategy]
-```
-
-```markdown
-**DIM-4-003: Caching Strategy**
-NFR define targets de latencia pero no hay estrategia de caching.
-
-| Opción | Descripción |
-|--------|-------------|
-| Redis / Valkey | Full-featured, pub/sub, TTL |
-| In-memory (application) | Simple, per-instance, no shared state |
-| CDN / Edge cache | For static or semi-static content |
-| No caching needed | Latency targets met without cache |
-
-**Contexto:** [latency targets], [data access patterns], [read/write ratio]
-```
-
-### Common Patterns
-
-- **PostgreSQL + Prisma/Drizzle**: Most versatile for web apps. SQL migrations.
-- **Redis for caching + sessions**: Fast, flexible, widely supported.
-- **Event sourcing + projections**: When audit trail is business-critical.
-- **Multi-database**: OLTP + OLAP separation for analytics-heavy systems.
-
-### Red Flags
-
-- NoSQL selected without understanding query patterns (may need joins later)
-- No migration strategy (schema changes will be painful)
-- Caching everything without invalidation strategy
-- No backup/restore strategy for production data
-
----
-
-## Dimension 5: Auth & Security
-
-### What It Covers
-
-Authentication model, authorization model, encryption, compliance requirements, security patterns.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System has user authentication
-- System handles sensitive data
-- NFRs mention security, compliance, or encryption
-- Security audit exists with findings
-
-RESOLVED WHEN:
-- ADR exists for auth model (JWT, session, OAuth)
-- Security architecture documented
-- Encryption strategy defined
-
-N/A WHEN:
-- Internal tool with no authentication
-- Public read-only API with no sensitive data
-```
-
-### Question Templates
-
-```markdown
-**DIM-5-001: Authentication Model**
-El spec define usuarios pero no especifica mecanismo de autenticación.
-
-| Opción | Descripción |
-|--------|-------------|
-| JWT (stateless) | Tokens auto-contenidos, scalable |
-| Session-based | Server-side sessions, simpler revocation |
-| OAuth 2.0 / OIDC | Delegated auth, social login, SSO |
-| API Keys | Simple, for service-to-service |
-| Passwordless (magic links) | No passwords, email/SMS based |
-
-**Contexto:** [tipo de usuarios], [multi-tenant], [compliance requirements]
-```
-
-```markdown
-**DIM-5-002: Authorization Model**
-Autenticación definida pero sin modelo de autorización detallado.
-
-| Opción | Descripción |
-|--------|-------------|
-| RBAC (Role-Based) | Roles con permisos predefinidos |
-| ABAC (Attribute-Based) | Policies basadas en atributos |
-| ACL (Access Control Lists) | Per-resource permissions |
-| Simple (admin/user) | Dos niveles, suficiente para apps simples |
-
-**Contexto:** [roles definidos], [complejidad de permisos], [multi-tenant]
-```
-
-### Common Patterns
-
-- **JWT + RBAC**: Most common for web APIs. Stateless, scalable.
-- **OAuth 2.0 + OIDC**: When SSO or third-party login is needed.
-- **mTLS + API Keys**: For service-to-service communication.
-
-### Red Flags
-
-- No encryption at rest for sensitive data
-- JWT without rotation/revocation strategy
-- Missing CSRF protection on state-changing endpoints
-- No security audit or threat model
-
----
-
-## Dimension 6: API Design
-
-### What It Covers
-
-API style, versioning, documentation, rate limiting, error handling conventions.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System exposes APIs (internal or external)
-- Contracts/ directory exists with endpoint definitions
-- Multiple clients consume the API
-
-RESOLVED WHEN:
-- API contracts fully specify style, versioning, errors
-- ADR exists for API design decisions
-- OpenAPI/GraphQL schema exists
-
-N/A WHEN:
-- No API (standalone CLI, desktop app, embedded system)
-- Every contract is `Style: operations` (no external HTTP clients): the transport of a server-rendered or client UI app is not API design — it goes to `design/OPERATION-MAPPING.md`
-```
-
-### Question Templates
-
-```markdown
-**DIM-6-001: API Style**
-Los contratos definen {N} endpoints pero no especifican estilo de API.
-
-| Opción | Descripción |
-|--------|-------------|
-| REST (JSON) | Universal, well-understood, cacheable |
-| GraphQL | Flexible queries, single endpoint, typed |
-| gRPC | High-performance, binary, strongly typed |
-| tRPC | End-to-end type safety, TypeScript-native |
-
-**Contexto:** [client types], [query complexity], [performance needs]
-```
-
-### Common Patterns
-
-- **REST + OpenAPI**: Standard for public APIs. Well-tooled.
-- **GraphQL**: When clients need flexible data fetching (mobile, dashboards).
-- **tRPC**: TypeScript monorepos where client and server share types.
-
-### Red Flags
-
-- No API versioning strategy
-- Missing error response conventions
-- No rate limiting for public APIs
-- Inconsistent endpoint naming
-
----
-
-## Dimension 7: Infrastructure
-
-### What It Covers
-
-Cloud provider, compute model, containerization, Infrastructure as Code.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System needs deployment (always, unless pure library)
-- Scale targets defined in NFRs
-- Multi-environment needed (dev, staging, prod)
-
-RESOLVED WHEN:
-- ADR exists for cloud provider and compute model
-- Deployment configuration exists (Dockerfile, terraform, etc.)
-- CLAUDE.md specifies hosting platform
-
-N/A WHEN:
-- Library or package (no deployment)
-- Deployed by consumer (npm package, etc.)
-```
-
-### Question Templates
-
-```markdown
-**DIM-7-001: Compute Model**
-No hay decisión sobre modelo de cómputo.
-
-| Opción | Descripción |
-|--------|-------------|
-| Containers (Docker + K8s) | Flexible, portable, industry standard |
-| Serverless (Lambda/Functions) | Pay-per-use, auto-scale, cold starts |
-| PaaS (Heroku, Railway, Fly) | Simple deploy, managed infrastructure |
-| Edge (Cloudflare Workers, Vercel) | Global distribution, low latency |
-| VPS (traditional) | Full control, predictable cost |
-
-**Contexto:** [scale targets], [budget], [team ops expertise]
-```
-
-### Common Patterns
-
-- **Docker + K8s**: Enterprise standard. Complex but powerful.
-- **Serverless**: Cost-effective for variable workloads. AWS Lambda, Cloudflare Workers.
-- **PaaS**: Best for small teams. Railway, Fly.io, Render.
-
-### Red Flags
-
-- No Infrastructure as Code (manual deployment)
-- Single region for global users
-- No disaster recovery plan
-- Over-provisioned infrastructure for expected load
-
----
-
-## Dimension 8: CI/CD Pipeline
-
-### What It Covers
-
-Build pipeline, test automation, deployment strategy, environment management.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System will be deployed (always for services)
-- Team size > 1 (need consistent builds)
-- Multiple environments needed
-
-RESOLVED WHEN:
-- CI/CD config exists (.github/workflows, etc.)
-- ADR exists for deployment strategy
-- Build/test/deploy pipeline documented
-
-N/A WHEN:
-- Personal project with manual deployment (not recommended but possible)
-```
-
-### Question Templates
-
-```markdown
-**DIM-8-001: CI/CD Platform**
-No hay pipeline de CI/CD definido.
-
-| Opción | Descripción |
-|--------|-------------|
-| GitHub Actions | Native to GitHub, YAML-based, extensive marketplace |
-| GitLab CI | Built-in, Docker-native, self-hostable |
-| CircleCI | Fast, parallelism, Docker layer caching |
-| Jenkins | Self-hosted, maximum flexibility |
-
-**Contexto:** [code hosting], [team preference], [complexity needs]
-```
-
-```markdown
-**DIM-8-002: Deployment Strategy**
-CI/CD definido pero sin estrategia de deploy.
-
-| Opción | Descripción |
-|--------|-------------|
-| Blue-Green | Zero-downtime, instant rollback |
-| Canary | Gradual rollout, risk mitigation |
-| Rolling | Incremental update, resource efficient |
-| Direct deploy | Simple, for low-risk environments |
-
-**Contexto:** [availability requirements], [rollback needs], [infrastructure]
-```
-
-### Common Patterns
-
-- **GitHub Actions + Docker**: Most popular for open source and startups.
-- **GitLab CI + K8s**: Common for enterprise, self-hosted Git.
-
-### Red Flags
-
-- No automated tests in CI
-- Manual deployment to production
-- No rollback strategy
-- Single environment (no staging)
-
----
-
-## Dimension 9: Observability
-
-### What It Covers
-
-Logging, monitoring, alerting, distributed tracing, SLOs/SLIs.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System runs in production (any deployed service)
-- SLOs or uptime targets defined in NFRs
-- Multiple services or external integrations
-
-RESOLVED WHEN:
-- Observability stack selected and documented
-- SLOs mapped to SLIs
-- Alerting rules defined
-
-N/A WHEN:
-- Development tool or CLI (no production runtime)
-```
-
-### Question Templates
-
-```markdown
-**DIM-9-001: Observability Stack**
-No hay stack de observabilidad seleccionado.
-
-| Opción | Descripción |
-|--------|-------------|
-| Datadog | Full-stack, APM, logs, metrics, expensive |
-| Grafana + Prometheus + Loki | Open source, flexible, self-managed |
-| AWS CloudWatch | AWS-native, integrated, adequate |
-| Sentry + custom metrics | Error tracking focus, lightweight |
-| OpenTelemetry + backend | Vendor-neutral instrumentation |
-
-**Contexto:** [budget], [complexity], [SLO targets]
-```
-
-### Common Patterns
-
-- **OpenTelemetry → Grafana Stack**: Vendor-neutral, open source, flexible.
-- **Datadog all-in-one**: Higher cost but lower operational burden.
-
-### Red Flags
-
-- No logging in production
-- Alerts without runbooks
-- SLOs defined but no SLIs instrumented
-- No distributed tracing with microservices
-
----
-
-## Dimension 10: Cost & Scaling
-
-### What It Covers
-
-Infrastructure cost estimation, scaling strategy, budget constraints.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System will run in production (any hosted service)
-- Scale targets defined in NFRs
-- Budget constraints exist
-
-RESOLVED WHEN:
-- Cost estimates documented
-- Scaling strategy defined (horizontal, vertical, auto)
-- Resource budgets per environment set
-
-N/A WHEN:
-- Open source library or tool
-- Free tier covers all needs
-```
-
-### Question Templates
-
-```markdown
-**DIM-10-001: Scaling Strategy**
-NFR define {targets} pero no hay estrategia de escalado.
-
-| Opción | Descripción |
-|--------|-------------|
-| Horizontal auto-scale | Add instances based on load metrics |
-| Vertical scaling | Upgrade instance size |
-| Serverless auto-scale | Platform handles scaling automatically |
-| Static provisioning | Fixed capacity, sufficient for expected load |
-
-**Contexto:** [load targets], [cost constraints], [traffic patterns]
-```
-
-### Common Patterns
-
-- **Start fixed, then auto-scale**: Don't over-engineer scaling day 1.
-- **Serverless for variable load**: Cost-effective when traffic is unpredictable.
-
-### Red Flags
-
-- No cost estimation before going to production
-- Over-provisioned for actual needs
-- No scaling plan for 10x growth
-- Ignoring data transfer costs
-
----
-
-## Dimension 11: Developer Experience
-
-### What It Covers
-
-Repository structure, local development setup, tooling, code quality automation.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- Team size > 1 developer
-- Multiple modules or packages
-- Onboarding new developers is a concern
-
-RESOLVED WHEN:
-- CLAUDE.md has development setup section
-- Contributing guide exists
-- Build/test commands documented
-
-N/A WHEN:
-- Solo developer with simple project
-```
-
-### Question Templates
-
-```markdown
-**DIM-11-001: Repository Structure**
-No hay decisión sobre estructura de repositorio.
-
-| Opción | Descripción |
-|--------|-------------|
-| Monorepo (Turborepo/Nx) | Código compartido, atomic changes, build caching |
-| Multi-repo | Independencia total, deploy independiente |
-| Monorepo simple | Un repo, sin herramienta de monorepo |
-
-**Contexto:** [number of packages], [team size], [deploy independence needs]
-```
-
-### Common Patterns
-
-- **Monorepo + Turborepo**: For TypeScript projects with shared packages.
-- **Multi-repo + API contracts**: When teams are independent and services well-bounded.
-
-### Red Flags
-
-- No documented setup process (CLAUDE.md or README)
-- No linting or formatting automation
-- No pre-commit hooks
-- Inconsistent tooling across modules
-
----
-
-## Dimension 12: i18n & Accessibility
-
-### What It Covers
-
-Internationalization, localization, WCAG accessibility, RTL support.
-
-### Detection Rules
-
-```
-APPLICABLE WHEN:
-- System has user-facing UI
-- Multiple languages or regions mentioned in specs
-- NFRs mention accessibility or WCAG compliance
-- Users include people with disabilities
-
-RESOLVED WHEN:
-- i18n strategy documented (library, string management)
-- Accessibility requirements specified (WCAG level)
-- Language/locale list defined
-
-N/A WHEN:
-- API-only system with no UI
-- Internal tool for single-language team
-- CLI without accessibility concerns
-```
-
-### Question Templates
-
-```markdown
-**DIM-12-001: Internationalization**
-El sistema tiene usuarios en múltiples regiones/idiomas.
-
-| Opción | Descripción |
-|--------|-------------|
-| Full i18n from day 1 | i18n library, string keys, locale files |
-| English-only, i18n-ready | Code structure supports i18n, add later |
-| Single language | No i18n needed |
-
-**Contexto:** [target markets], [user languages], [timeline]
-```
-
-```markdown
-**DIM-12-002: Accessibility Level**
-El sistema tiene UI pero no especifica nivel de accesibilidad.
-
-| Opción | Descripción |
-|--------|-------------|
-| WCAG 2.1 AA (Recomendado) | Industry standard, legal compliance in many jurisdictions |
-| WCAG 2.1 A | Minimum, basic accessibility |
-| WCAG 2.1 AAA | Maximum, specialized audiences |
-| No specific target | Best-effort accessibility |
-
-**Contexto:** [target audience], [legal requirements], [industry]
-```
-
-### Common Patterns
-
-- **react-intl / next-intl**: Standard for React i18n.
-- **WCAG 2.1 AA**: Default target for most web apps.
-
-### Red Flags
-
-- UI built without i18n and later needs multiple languages (expensive retrofit)
-- No accessibility testing in CI
-- Hardcoded strings throughout codebase
-- No keyboard navigation support
-
----
-
-## Dimension Priority Matrix
-
-When multiple dimensions need decisions, prioritize by system impact:
-
-| Priority | Dimension | Rationale |
-|----------|-----------|-----------|
-| 1 | Delivery Channels | Determines entire frontend architecture |
-| 2 | Architecture Style | Shapes system structure |
-| 3 | Tech Stack | Blocks all implementation |
-| 4 | Data Strategy | Shapes all persistence |
-| 5 | Auth & Security | Must be built-in, not bolted-on |
-| 6 | API Design | Defines system contracts |
-| 7 | Infrastructure | Deployment decisions |
-| 8 | CI/CD Pipeline | Development workflow |
-| 9 | Observability | Operational readiness |
-| 10 | Cost & Scaling | Resource planning |
-| 11 | Developer Experience | Team productivity |
-| 12 | i18n & Accessibility | UX completeness |
+Red flags: UI built without i18n that will need several languages; hard-coded strings; no accessibility testing
+in CI; no keyboard navigation.

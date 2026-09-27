@@ -1,0 +1,5 @@
+feat(tasks): create task
+
+Task: TASK-F2-003
+Closes #12
+Refs: UC-002

@@ -1,0 +1,15 @@
+{
+  "description": "sdd-acceptance (optional, advisory) for demo evidence: one item per (acceptance criterion, observed demo), state = {criterion: {text}, observed: {command, output}} where criterion.text is the GIVEN/WHEN/THEN line and observed is the command the human watched and its captured output. It helps the human decide before `sdd accept record demo --pass true|false`; the human's answer is what gets recorded, and Jev never records, waives, signs off, stops the loop or runs in CI. Score levels are 0 not shown, 1 partial, 2 shown: below `flag_below`, tell the human which part of the THEN the output does not seem to show; at or above it, still ask the human to confirm.",
+  "thresholds": {
+    "flag_below": 1.5
+  },
+  "questions": {
+    "shows_then": {"type": "score",
+      "instructions": "The command `observed.command` was run for the acceptance criterion `criterion.text` and printed `observed.output`. How completely does that output show the outcome required by the THEN part of the criterion?",
+      "criteria": [
+        "The output does not show the required outcome: it is missing, contradicts it, shows an error, or is about something else",
+        "The output shows part of the required outcome, or shows it only indirectly, so a reader cannot confirm the whole THEN from it",
+        "The output plainly shows the whole outcome the THEN part requires"
+      ]}
+  }
+}

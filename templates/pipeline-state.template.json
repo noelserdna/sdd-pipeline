@@ -3,6 +3,7 @@
   "hooksVersion": 3,
   "currentStage": "requirements-engineer",
   "lastUpdated": "__NOW__",
+  "route": null,
   "stages": {
     "requirements-engineer":    { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },
     "specifications-engineer":  { "status": "pending", "outputHash": null, "lastRun": null, "staleReason": null },

@@ -51,20 +51,19 @@
    - Rate limiting requirements
 1b. READ transport for the operation
    - design/OPERATION-MAPPING.md row: | API-op | Idiom | Route / action | Verb | Success | Validation error | No-JS fallback | Accessible element |
-   - fallback: plan/ table | API-op | Transport | Handler | Note |
    - `Style: operations` → the stack idiom from the mapping (Server Action, Rails resource route, Route Handler…)
    - `Style: http` → method + path exactly as the contract
    - no mapping row and `Style: operations` → PAUSE: Conflict (transport undefined), never invent a custom route
 2. CREATE handler in the mapped idiom
    - Register route/action as the mapping (or, for `Style: http`, the contract) says
-   - Apply auth middleware per relevant INV-SYS-* or INV-AUTH-* invariant
-   - Apply rate limiting per relevant ADR and nfr/LIMITS.md
+   - Apply auth per the relevant auth invariant (INV-*)
+   - Apply rate limiting per the relevant ADR and spec/nfr/ limits
 3. IMPLEMENT request validation
    - Parse and validate request body against contract schema
    - Return 400 with structured error per error-handling ADR if invalid
 4. IMPLEMENT business logic
    - Call service layer (never inline domain logic in handler)
-   - Apply tenant isolation filter per relevant INV-SYS-* invariant (if multi-tenant)
+   - Apply the tenant isolation filter per the relevant INV-* (if multi-tenant)
 5. IMPLEMENT response
    - Format response matching contract schema exactly
    - Include proper HTTP status codes
@@ -109,7 +108,7 @@
      - Set user context (user_id, org_id, role)
      - Return 401 on failure
    For rate limiting:
-     - Read limits from config (relevant rate-limiting ADR + nfr/LIMITS.md)
+     - Read limits from config (relevant rate-limiting ADR + spec/nfr/ limits)
      - Track request count per key (session/user/IP)
      - Return 429 with Retry-After on limit exceeded
    For tenant isolation:
@@ -146,7 +145,7 @@
    - Default values where specified
    - Foreign keys matching entity relationships
    - Indexes for common query patterns (from contracts)
-   - Tenant isolation column if multi-tenant (per relevant INV-SYS-* invariant)
+   - Tenant isolation column if multi-tenant (per the relevant INV-*)
    - created_at, updated_at timestamps
 3. CREATE down() migration
    - Reversible: DROP TABLE or ALTER TABLE
@@ -237,12 +236,12 @@
 
 ## Protocol: Configuration / Setup Tasks
 
-**Input:** `plan/PLAN-FASE-{N}.md`, ADRs
+**Input:** `plan/fase-plans/PLAN-FASE-{N}.md`, ADRs
 
 ```
 1. READ configuration requirements from plan and ADRs
 2. CREATE configuration files
-   - Framework/runtime config of the stack (wrangler.toml, package.json, tsconfig.json, Gemfile, config/*.rb, next.config.ts, etc.)
+   - Framework/runtime config of the stack (package.json, tsconfig.json, Gemfile, config/*.rb, next.config.ts, etc.)
    - Environment variables documented
    - Secrets use proper secret management (not env vars)
 3. VALIDATE configuration

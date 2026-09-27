@@ -1,21 +1,13 @@
 # Execution Protocol: Index, Budgets, Fan-out by Dimension
 
-> Profile that motivated this (docs/perfilado.md): one thread, 57 turns, 106 k tokens of specs read file by file,
-> 112 k output tokens, 21 min for a 10-requirement project. Target: wall-clock ≈ the slowest dimension + consolidation,
-> main-thread spec context ≤ ~30 k tokens, report ≤ 25 k chars.
+Target: wall-clock ≈ the slowest dimension + consolidation, main-thread spec context ≤ ~30 k tokens, report ≤ 25 k chars.
 
 ## 0. Fan-out is part of this skill's contract
 
-Launching the four dimension auditors is **the requested behaviour of `/sdd-spec-auditor`** above the threshold, not an
-optional expansion of scope: invoking this skill on a spec of that size *is* the explicit request for them. They are
-read-only workers (no writes, no commits, no nesting), bounded to four, scoped to one directory group each, and they cost
-less wall-clock than the single-thread audit they replace. **Do not downgrade to sequential out of caution.** Downgrade
-only for one of the reasons in §1 (below the threshold, `--sequential`, no `Agent` tool, Cycle 3), and always record the
-reason in `summary.highlights` and in `metrics.mode`.
-
-Measured on 2026-08-27 (`docs/medidas.md`): a run that downgraded to sequential "because the session guidance forbids
-spawning subagents without an explicit request" took 11 min; the same audit with fan-out took 9.9 min with a larger
-report — and the gap widens with the size of `spec/`.
+Above the threshold, launching the four dimension auditors is the requested behaviour of `/sdd-spec-auditor`, not an
+optional expansion of scope. They are read-only workers (no writes, no commits, no nesting), bounded to four, scoped
+to one directory group each. Downgrade only for a reason in §1 (below the threshold, `--sequential`, no `Agent` tool,
+Cycle 3) and record it in `summary.highlights` and `metrics.mode`.
 
 ## 1. Choose the mode (Phase 1, before opening any file)
 
@@ -56,9 +48,12 @@ This is what keeps the token cost of fan-out close to the sequential run instead
 |---|---|---|
 | main, fanout | ≤ ~30 k tokens (~120 k chars) | index summaries + baseline ids + grep outputs + `sed -n` spot checks of P0/P1 evidence |
 | main, sequential | corpus ≤ 40 k chars fits; read by dimension order, section by section | same commands; collect findings in a compact list before writing |
-| each auditor | its scope whole if ≤ 60 k chars, else by sections; ≤ 200 lines of neighbour lookups per finding | own slice of `$IDX`, `sed -n`, `grep -n` |
+| each auditor | files of its scope ≤ 8 k chars whole, larger files by sections (§2); ≤ 200 lines of neighbour lookups per finding | own slice of `$IDX`, `sed -n`, `grep -n` |
 
-## 4. Scopes (prefixes from the Multi-Agent table in SKILL.md)
+## 4. Scopes and prefixes
+
+Each auditor uses its prefix for provisional ids in its JSON; the consolidator assigns the final category ids and keeps
+the provisional one as `Source`.
 
 | Auditor | Prefix | Reads ONLY | Owns these corpus-wide families (grep-based) | 3C checks |
 |---|---|---|---|---|
@@ -69,8 +64,8 @@ This is what keeps the token cost of fan-out close to the sequential run instead
 | main thread | — | `$IDX`, `spec/README.md`, `TRACEABILITY-MATRIX.md`, `DERIVED-SPECS.md`, `CLARIFICATIONS-PENDING.md`, `requirements/REQUIREMENTS.md` (ids only) | Cross-references (SH03: every referenced id exists in the id set); REQ coverage and orphans (SC01, SC02, SC05); subdirectories populated (SC03); `TBD|TODO|NEEDS CLARIFICATION` markers corpus-wide (SC04); template uniformity from heading counts (SH05); baseline and regression (Phases 0, 6) | SC01–SC03, SC05, SH03, SH05 |
 
 Directories not in the table (`spec/events/`, `spec/ux/`, …) go to the closest auditor, named in its prompt
-(events → Contracts; ux → Use cases). A missing directory: the auditor returns `docs_read: []`; the main thread records
-the SC03 failure as a CAT-06 finding. Auditors do not write files and do not run Persist Summary or Handoff.
+(events → Contracts; ux → Use cases). A missing directory: the auditor returns `docs_read: []`; when the directory is
+mandatory (`domain/`, `use-cases/`, `contracts/`, `tests/`) the main thread records the SC03 failure as a CAT-06 finding. Auditors do not write files and do not run Persist Summary or Handoff.
 
 ## 5. Launch
 
@@ -98,14 +93,15 @@ Neighbours: for cross-document evidence use `grep -n` and `sed -n 'a,bp'` on oth
 lookup; never `cat` a file outside your scope. Glossary terms: {IDX slice of spec/domain/01-GLOSSARY.md, or "read it"}.
 Known findings — do NOT re-report: {baseline rows "ID — short description", or "none"}.
 
-Detect defects CAT-01..CAT-10 (definitions and one-category rule: {REFS}/../SKILL.md "Defect Categories";
+Detect defects CAT-01..CAT-10 (table, caps and one-category rule: {REFS}/../SKILL.md "Defect Categories";
+signals and examples: {REFS}/defect-categories.md;
 checklists: {REFS}/audit-checklists.md sections {"Use Case", "Workflow", …}; grep patterns:
 {REFS}/detection-patterns.md sections {CAT-xx list}). Read only those sections.
 Rules:
 - Evidence from 2+ documents, or the document plus the element that is missing; cite `doc:line`; quote ≤ 12 words.
 - Exactly one category per finding. Severity: P0 = blocks implementation / undefined production behaviour;
   P1 = bugs or a violated requirement; P2 = hinders comprehension or maintenance; P3 = style or clarity.
-  CAT-08 is at most P2; naming/format findings at most P3.
+  CAT-08 is at most P2; naming/format findings at most P3; CAT-10 at most P2 (P1 when it blocks required behaviour).
 - An ADR or a CLARIFICATIONS rule that explains the behaviour makes it a decision, not a finding. Minority rule for
   contradictions: the divergent document is the location; one finding, not N.
 - Batch the same defect pattern across documents into ONE finding listing all locations.
@@ -125,7 +121,7 @@ Return ONLY this JSON (no prose, ≤ 6 000 chars), P0 first, at most 25 findings
 2. **Deduplicate:** same `doc` + same line (±5) or same section + same defect type → keep the most complete finding,
    union the locations, mark `[CROSS-VALIDATED]`. A contradiction reported from both sides (A vs B, B vs A) is one
    finding located in the divergent document. Apply Phase 7.1 batching and 7.3 cascade marks across dimensions.
-3. **Baseline filter** (Phase 0 lists): a finding matching an `Accepted`, `Won't fix` or unexpired `Deferred` row
+3. **Baseline filter** (the Phase 0 exclusion set): a finding matching an `Accepted`, `Won't fix` or unexpired `Deferred` row
    (same document + same defect) is dropped and counted as excluded.
 4. **Classify** `new | persistent | regression` against the previous report's ids (Phase 6).
 5. **Final ids by category:** `AMB- IMP- SIL- SEM- CON- INC- INV- EVO- ADR- TRN-`, numbered within category in severity
@@ -134,7 +130,7 @@ Return ONLY this JSON (no prose, ≤ 6 000 chars), P0 first, at most 25 findings
 6. **Severity review:** before a P0 or P1 enters the report, the main thread opens the cited lines once
    (`sed -n`, ≤ 60 lines) and confirms the claim; missing evidence → downgrade or drop. P2/P3 are accepted as reported
    after the Signal Filters.
-7. Compute 3C (own checks + auditors' `checks`), the Quality Scorecard and the Gate (Quality Gate Thresholds), then
+7. Compute 3C (own checks + auditors' `checks`), the Quality Metrics and the Gate (SKILL.md § Quality Gate), then
    write `audits/AUDIT-BASELINE.md` per `report-template.md` and run Persist Summary (`metrics.mode = "fanout"`).
 
 ## 8. Sequential mode (small specs)

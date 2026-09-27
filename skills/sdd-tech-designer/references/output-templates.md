@@ -260,7 +260,7 @@ The following architecture decisions were identified during design and should be
 
 {What is the technical challenge or decision point?}
 {What constraints or requirements drive this decision?}
-{Reference relevant specs: UC-NNN, NFR-NNN, INV-NNN}
+{Reference relevant specs: UC-NNN, REQ-NF-NNN, INV-XXX-NNN}
 
 ## Decision
 
@@ -296,8 +296,8 @@ The following architecture decisions were identified during design and should be
 
 ---
 
-> **Next steps:** Review this draft and, if approved, move to `spec/adr/ADR-{NNN}-{slug}.md`
-> with status changed from DRAFT to Accepted.
+> **Next steps:** On approval this draft is promoted to `spec/adr/ADR-{next free number}-{slug}.md`
+> (Accepted) — see SKILL.md "Promoting ADR drafts".
 ```
 
 ---
@@ -306,6 +306,7 @@ The following architecture decisions were identified during design and should be
 
 **When:** mandatory when any `spec/contracts/API-*.md` declares `Style: operations`; optional with `Style: http` (to record handler idioms).
 **Seed:** the installed stack kit (`templates/stacks/<kit>/conventions.md`) and the project CLAUDE.md sections `## Stack Conventions` / `## SDD Stack Profile` (canonical description: `skills/sdd-task-implementer/references/stack-profile.md`). Accepted ADRs win over kit defaults; a divergence from the kit goes to *Deviations*.
+**Owner:** `sdd-tech-designer`; when it did not run, `sdd-plan-architect` (Phase 4b) writes the file with this template and adds `· Written by: sdd-plan-architect` to the header line.
 **Consumers:** `sdd-plan-architect`, `sdd-task-generator` (review checklist), `sdd-task-implementer`, `sdd-gap-detector` (API-op ↔ mapping ↔ routes/actions), `sdd-test-planner` (never as a test oracle).
 
 ```markdown
@@ -355,7 +356,7 @@ The following architecture decisions were identified during design and should be
 
 ## Notes
 
-- All templates use English for section headers and Spanish for descriptive text (following project convention).
+- Section headers stay in English; descriptive text follows the user's language; technical terms stay in English.
 - Templates are guidelines — adapt structure to the specific project's needs.
 - Sections for N/A dimensions can be omitted or marked as "N/A — {reason}".
 - ASCII diagrams are preferred over external image references.

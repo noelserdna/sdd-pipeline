@@ -80,4 +80,10 @@ jobs:
       - run: bash tests/setup/run.sh
       - run: bash tests/bench/run.sh
       - run: bash tests/tasks/run.sh
-      - run: bash tests/dashboard/run.sh
+      - run: bash tests/graph/run.sh
+      - run: bash tests/jev/run.sh
+      - run: bash tests/git/run.sh
+      - run: bash tests/acceptance/run.sh
+      - run: bash tests/plan/run.sh
+      - run: bash tests/tracker/run.sh
+      - run: bash tests/route/run.sh

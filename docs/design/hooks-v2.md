@@ -1,5 +1,7 @@
 # Plan: SDD Hooks v2 + Dashboard Live Server
 
+> **Documento histórico.** Describe un diseño anterior y no se mantiene; la referencia vigente es `hooks/hooks.json` y [instalacion.md](../instalacion.md). Desde 5.0 no hay dashboard HTML ni servidor de dashboard (el grafo JSON lo construye `scripts/sdd-graph.py`).
+
 > Fecha: 2026-03-06
 > Versiones afectadas: plugin v2.4.0, MCP server v2.4.0
 > Resumen: Modernizar hooks al nuevo API, crear dashboard server con HTTP hooks para real-time updates, y agregar quality gates con prompt/agent hooks.

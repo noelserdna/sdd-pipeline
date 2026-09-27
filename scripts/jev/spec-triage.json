@@ -1,0 +1,19 @@
+{
+  "description": "sdd-spec-auditor Phase 1 pre-pass: one item per detection-pattern hit, state = {hit: {file, line, text, context}} where context is the hit line with ~3 lines around it. Only categories visible from one line: contradictions between documents (CAT-05), evolution risks (CAT-08) and transport over-specification (CAT-10, which depends on whether a requirement demands the route) skip the triage and go straight to the auditor.",
+  "questions": {
+    "category": {
+      "type": "choice",
+      "instructions": "The line `hit.text` of the specification file `hit.file` matched a defect search pattern. Read it with `hit.context`. Which specification defect does it show, if any?",
+      "criteria": {
+        "CAT-01": "Ambiguity: a vague or unquantified term (reasonable, fast, several, if possible) where the spec needs a precise value or condition",
+        "CAT-02": "Implicit rule: behavior the system must have that is assumed or mentioned in passing but never stated as a rule",
+        "CAT-03": "Dangerous silence: a failure, timeout, limit or edge case whose outcome is left undefined",
+        "CAT-04": "Semantic ambiguity: a term used with a different meaning, or a synonym used instead of the glossary term",
+        "CAT-06": "Incomplete specification: a placeholder, TBD, TODO, empty section or missing required element",
+        "CAT-07": "Weak invariant: a business constraint stated only in prose, without a formal invariant or check",
+        "CAT-09": "Implicit decision: a technology or architectural choice stated as fact with no ADR behind it",
+        "not_a_defect": "The matched word is used correctly here; the line is precise, narrative, or already covered"
+      }
+    }
+  }
+}

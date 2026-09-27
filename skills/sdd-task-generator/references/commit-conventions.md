@@ -1,19 +1,19 @@
 # Commit Conventions & Reversibility Patterns
 
-> Reference for conventional commit generation and revert strategy design.
+> Reference for conventional commit types and scopes, and for revert strategy design.
 > Each task produces exactly one commit. Each commit must be independently revertible.
+> Trailers (`Task`, `Refs`, `Change`), branches, merges and tags live in the plugin-root `references/git-conventions.md`.
 
 ---
 
 ## Conventional Commit Format
 
-```
-{type}({scope}): {description}
+The task's **Commit** field is the subject; the implementer adds the body (optional) and the trailers with `--trailer`,
+which always yields a block git can parse:
 
-{body — optional, for complex changes}
-
-Refs: {FASE-N}, {UC-XXX}, {ADR-XXX}, {INV-XXX-XXX}
-Task: {TASK-ID}
+```bash
+git commit -m "{type}({scope}): {description}" [-m "{body}"] \
+  --trailer "Task: {TASK-ID}" --trailer "Refs: {FASE-N}, {UC-XXX}, {ADR-XXX}, {INV-XXX-XXX}"
 ```
 
 ### Types
@@ -74,15 +74,10 @@ Use body for:
 - Breaking changes: prefix with `BREAKING CHANGE:`
 - Multi-file changes: list affected files
 
-```
-feat(auth): add rate limiting middleware
-
-Implement token bucket algorithm backed by the cache store (ADR-025).
-Burst: 100 req/min/session, Sustained: 1000 req/h/user.
-Returns 429 with Retry-After header per RN-289.
-
-Refs: FASE-0, ADR-025, INV-SEC-003
-Task: TASK-F0-012
+```bash
+git commit -m "feat(auth): add rate limiting middleware" \
+  -m "Implement token bucket algorithm backed by the cache store (ADR-007). Burst: 100 req/min/session, sustained: 1000 req/h/user. Returns 429 with Retry-After per RN-289." \
+  --trailer "Task: TASK-F0-012" --trailer "Refs: FASE-0, ADR-007, INV-SEC-003"
 ```
 
 ---
@@ -102,8 +97,8 @@ TASK-F{N}-{SEQ} → {SHA} (captured via `git rev-parse --short HEAD`)
 | **task-implementer Phase 8** | Progress report includes SHA per completed task |
 | **task-implementer Phase 9** | Completion report includes full commit log table |
 | **CHECK-C03 verification** | Validates commit exists and file scope matches task |
-| **dashboard** | Populates `commitRefs[]` in `traceability-graph.json` for visual traceability |
-| **traceability-check** | Verifies TASK → COMMIT link in the extended traceability chain |
+| **sdd-graph.py** | Populates `commitRefs[]` in `traceability-graph.json` (reads `sdd.mjs trace commits`) |
+| **sdd-acceptance --check** | Verifies the TASK → COMMIT link and the per-requirement evidence (`sdd tasks status`, `sdd accept`) |
 | **req-change Phase 2** | Commit impact analysis identifies code blast radius per affected artifact |
 
 ### Extended Traceability Chain
@@ -226,46 +221,11 @@ git reset --hard fase-0-foundation
 
 ---
 
-## Branch and PR Conventions
+## Branches, merges and PRs
 
-### Branch Naming
-
-```
-feat/fase-{N}-{slug}
-```
-
-Examples:
-- `feat/fase-0-bootstrap`
-- `feat/fase-1-extraction`
-- `feat/fase-3-multi-org`
-
-### PR Format
-
-```markdown
-## feat: implement FASE-{N} - {Title}
-
-### Summary
-- {count} atomic commits
-- Implements: {list of UCs}
-- Satisfies: {list of INVs}
-
-### Commits
-1. `{commit-message-1}` (TASK-F{N}-001)
-2. `{commit-message-2}` (TASK-F{N}-002)
-...
-
-### Verification
-- [ ] All FASE-{N} Criterios de Exito pass
-- [ ] All invariants enforced
-- [ ] No regressions in previous FASEs
-
-### Rollback
-To revert this entire FASE:
-\```bash
-git revert --no-commit {first-sha}..{last-sha}
-git commit -m "revert: rollback FASE-{N}"
-\```
-```
+Branch names, the branch-before-commit rule, merge commits (never squash or rebase) and tags: the plugin-root
+`references/git-conventions.md`. To roll back a whole merged FASE, revert its merge commit:
+`git revert -m 1 <merge-sha>`.
 
 ---
 
@@ -280,4 +240,4 @@ git commit -m "revert: rollback FASE-{N}"
 | "misc changes" | No scope, no traceability | One commit per concern |
 | Commit touching 10+ files | Unreviewable diff | Split into smaller tasks |
 | Commit with unrelated changes | Not atomic | Separate tasks |
-| Squash merge of 50 commits | Loses atomicity | Merge commit or rebase |
+| Squash or rebase merge | Rewrites the per-task commits and drops their `Task:` trailers | Merge commit (`git merge --no-ff`) |

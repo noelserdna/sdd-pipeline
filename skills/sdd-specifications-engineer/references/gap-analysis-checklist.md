@@ -2,7 +2,7 @@
 
 ## How to Use This Checklist
 
-Apply this checklist to requirements BEFORE writing specifications. The goal is to identify every gap, ambiguity, and issue that would prevent producing high-quality specifications. Every issue found must be resolved with the user before proceeding.
+Apply this checklist to requirements before writing specifications, to find the gaps, ambiguities and issues that would prevent good specifications. The collection-level lists are a menu: raise only the items the project's stated scope implies (a CLI has no browser matrix, a single-user tool no RBAC). Issues are resolved with the user before Mode 2 starts (SKILL.md § Asking the User).
 
 ---
 
@@ -15,7 +15,7 @@ For EACH requirement, evaluate specification readiness:
 - [ ] **Specific enough to specify**: The requirement describes a concrete behavior, not a vague goal
 - [ ] **Bounded**: The scope of the requirement is clear (what's included and what's not)
 - [ ] **Measurable**: Any quality attributes have specific numbers (response time in ms, uptime in %)
-- [ ] **No forbidden words**: "fast", "easy", "user-friendly", "efficient", "flexible", "robust", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "simple", "quickly", "etc.", "and/or"
+- [ ] **No vague terms**: none of the words listed in `../sdd-requirements-engineer/references/audit-checklist.md` §1.1
 - [ ] **No undefined acronyms or terms**: All domain-specific terms are defined
 - [ ] **Single interpretation**: Cannot be read in more than one way
 
@@ -127,7 +127,7 @@ Check if requirements exist for:
 - [ ] Supported integrations
 
 **Usability:**
-- [ ] Accessibility standards (WCAG 2.1 AA/AAA)
+- [ ] Accessibility standards (WCAG 2.2 AA/AAA)
 - [ ] Language/internationalization
 - [ ] Maximum number of clicks for key workflows
 - [ ] Error message standards
@@ -241,4 +241,4 @@ C) [option] — [pro] / [con]
 Recommendation: A — [one clause].
 ```
 
-Present the block through `AskUserQuestion`; record the answer once, as an RN row in `spec/CLARIFICATIONS.md` (Template 16). Do not restate the options or the rationale anywhere else.
+Present the blocks through `AskUserQuestion` (≤ 4 per call, severity order); record each answer once, as an RN row in `spec/CLARIFICATIONS.md` (Template 16). Do not restate the options or the rationale anywhere else.

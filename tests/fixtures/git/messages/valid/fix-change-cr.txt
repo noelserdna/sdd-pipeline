@@ -1,0 +1,3 @@
+fix(auth): lock account after five failures
+
+Change: CR-12

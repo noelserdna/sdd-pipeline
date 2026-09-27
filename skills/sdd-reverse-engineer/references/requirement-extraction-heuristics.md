@@ -179,15 +179,15 @@ Since brownfield code lacks explicit priority markers, infer priority from code 
 
 ## 6. Source Location Cross-Reference Format
 
-Every extracted requirement MUST include a source reference:
+Every extracted requirement includes a source reference:
 
 ```markdown
-### REQ-AUTH-001: User Authentication
+### REQ-NF-003: User Authentication
 
 > WHEN a user submits credentials THE system SHALL authenticate via JWT token validation
 
-- **Source:** `src/middleware/auth.ts:15-42`
-- **Tests:** `tests/middleware/auth.test.ts:10-85`
+- **Source:** `{code_path}/middleware/auth.ts:15-42`
+- **Tests:** `{test_path}/middleware/auth.test.ts:10-85`
 - **Confidence:** HIGH [INFERRED]
 - **Priority:** CRITICAL
 - **Signals:** Auth middleware, JWT decode, token validation, 401 response

@@ -65,7 +65,7 @@ for (const dir of readdirSync(skillsDir)) {
 // 3. Agentes
 const agentsDir = path.join(ROOT, "agents");
 let agentCount = 0;
-for (const f of readdirSync(agentsDir).filter((f) => f.endsWith(".md"))) {
+for (const f of existsSync(agentsDir) ? readdirSync(agentsDir).filter((f) => f.endsWith(".md")) : []) {
   agentCount++;
   const fm = frontmatter(path.join(agentsDir, f));
   if (!fm?.name) errors.push(`agents/${f}: sin name en frontmatter`);
@@ -115,7 +115,10 @@ if (claimH && Number(claimH[1]) !== hookScripts.size) errors.push(`plugin.json d
 // 7. Stack kits (templates/stacks/<kit>): contrato de docs/stacks.md
 const PROFILE_KEYS = ["stack", "app_dir", "code_paths", "test_paths", "install", "test", "test_file", "test_name",
   "typecheck", "lint_files", "lint", "build", "coverage", "db_reset_safe", "server", "port", "acceptance",
-  "e2e_scaffold", "task_state", "task_format"];
+  "e2e_scaffold", "task_state", "task_format", "test_report", "acceptance_gate", "tracker"];
+// Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md;
+// test_report_path: where test_report writes JUnit when it is not .sdd/junit/, project-specific).
+const OPTIONAL_PROFILE_KEYS = ["default_branch", "test_report_path"];
 const REQUIRED_KEYS = ["test", "test_file", "lint", "server", "port", "db_reset_safe"];
 const FORBIDDEN = [
   [/CONSENT/, "CONSENT"], [/migrate\s+reset/i, "migrate reset"], [/@restart/i, "@restart"],
@@ -165,7 +168,7 @@ if (existsSync(stacksDir)) {
     if (!defaults) errors.push(`${where}/kit.json: falta defaults`);
     else {
       for (const k of PROFILE_KEYS) if (typeof defaults[k] !== "string" || !defaults[k].trim()) errors.push(`${where}/kit.json: defaults.${k} ${REQUIRED_KEYS.includes(k) ? "(obligatoria) " : ""}falta o no es un string`);
-      for (const k of Object.keys(defaults)) if (!PROFILE_KEYS.includes(k)) warnings.push(`${where}/kit.json: defaults.${k} no es una clave del Stack Profile v1`);
+      for (const k of Object.keys(defaults)) if (!PROFILE_KEYS.includes(k) && !OPTIONAL_PROFILE_KEYS.includes(k)) warnings.push(`${where}/kit.json: defaults.${k} no es una clave del Stack Profile v1`);
       if (defaults.stack !== undefined && defaults.stack !== kit) errors.push(`${where}/kit.json: defaults.stack "${defaults.stack}" != ${kit}`);
       if (defaults.port !== undefined && !/^\d{1,5}$/.test(defaults.port)) errors.push(`${where}/kit.json: defaults.port debe ser un número ("3000")`);
       if (typeof defaults.app_dir === "string" && /[{}]/.test(defaults.app_dir)) errors.push(`${where}/kit.json: defaults.app_dir no admite marcadores`);
@@ -189,7 +192,7 @@ if (existsSync(stacksDir)) {
         else errors.push(`${where}/profile.md: línea fuera del contrato "${l}"`);
       }
       for (const k of PROFILE_KEYS) if (!(k in prof)) errors.push(`${where}/profile.md: falta la clave ${k}`);
-      for (const k of Object.keys(prof)) if (!PROFILE_KEYS.includes(k)) warnings.push(`${where}/profile.md: clave desconocida ${k}`);
+      for (const k of Object.keys(prof)) if (!PROFILE_KEYS.includes(k) && !OPTIONAL_PROFILE_KEYS.includes(k)) warnings.push(`${where}/profile.md: clave desconocida ${k}`);
       const expect = (k, ok, msg) => { if (k in prof && !ok(prof[k])) errors.push(`${where}/profile.md: ${k} ${msg}`); };
       expect("stack", (v) => v === kit, `debe ser ${kit}`);
       expect("app_dir", (v) => v === "{app_dir}", "debe ser {app_dir}");
@@ -201,6 +204,9 @@ if (existsSync(stacksDir)) {
       expect("e2e_scaffold", (v) => ["allowed", "never"].includes(v), "debe ser allowed o never");
       expect("task_state", (v) => ["checkbox", "trailers"].includes(v), "debe ser checkbox o trailers");
       expect("task_format", (v) => ["full", "compact"].includes(v), "debe ser full o compact");
+      expect("acceptance_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
+      expect("tracker", (v) => ["github", "gitlab", "off"].includes(v), "debe ser github, gitlab u off");
+      expect("test_report", (v) => v === "none" || /\.sdd\/junit\//.test(v), "debe escribir JUnit en .sdd/junit/ (o ser none)");
       for (const k of ["code_paths", "test_paths"]) expect(k, (v) => v.split(",").every((p) => p.trim().startsWith("{app_dir}/")), ": cada ruta debe empezar por {app_dir}/");
       if (defaults) for (const k of PROFILE_KEYS) {
         if (k === "app_dir" || k === "port" || !(k in prof) || typeof defaults[k] !== "string") continue;
@@ -283,26 +289,31 @@ for (const self of skillNames) {
 // 9. Comandos de un stack concreto en skills/** (deben salir del Stack Profile)
 // Exentos: la referencia del perfil y las líneas marcadas como ejemplo — la línea contiene "e.g.", "example"
 // o "ejemplo", o está dentro de un bloque ``` cuya línea de apertura dice "example" (```bash example) o va
-// precedido de <!-- example -->.
+// precedido de <!-- example -->. Un bloque ``` o una tabla markdown precedidos de <!-- stack-specific … --> también
+// están exentos: son tablas de detección que nombran a propósito el comando de cada stack detectado (sdd-setup).
 const HARDCODED_RE = /npx vitest|npm run |wrangler |npm init playwright/g;
 const EXAMPLE_RE = /e\.g\.|example|ejemplo/i;
+const BLOCK_MARK_RE = /<!--\s*(example|stack-specific)\b[^>]*-->/i;
 const HARDCODED_ALLOW = new Set(["skills/sdd-task-implementer/references/stack-profile.md"]);
 const TEXT_EXT = new Set([".md", ".py", ".js", ".mjs", ".cjs", ".ts", ".sh", ".json", ".yml", ".yaml", ".txt"]);
 for (const file of walk(skillsDir)) {
   const r = rel(file);
   if (HARDCODED_ALLOW.has(r) || !TEXT_EXT.has(path.extname(file))) continue;
   const lines = readFileSync(file, "utf8").split("\n");
-  let fence = false, fenceExample = false, prev = "";
+  let fence = false, fenceExample = false, table = false, tableExempt = false, prev = "";
   const hits = [];
   const tokens = new Map();
   lines.forEach((line, idx) => {
     const f = line.match(/^\s*(```|~~~)(.*)$/);
     if (f) {
-      if (!fence) fenceExample = EXAMPLE_RE.test(f[2]) || /<!--\s*example\s*-->/i.test(prev);
+      if (!fence) fenceExample = EXAMPLE_RE.test(f[2]) || BLOCK_MARK_RE.test(prev);
       fence = !fence;
     } else {
+      const isRow = !fence && /^\s*\|/.test(line);
+      if (isRow && !table) tableExempt = BLOCK_MARK_RE.test(prev);
+      table = isRow;
       const found = line.match(HARDCODED_RE);
-      if (found && !EXAMPLE_RE.test(line) && !(fence && fenceExample)) {
+      if (found && !EXAMPLE_RE.test(line) && !(fence && fenceExample) && !(table && tableExempt)) {
         hits.push(idx + 1);
         for (const t of found) tokens.set(t.trim(), (tokens.get(t.trim()) ?? 0) + 1);
       }
@@ -320,6 +331,45 @@ const SKILL_MAX = 62000;
 for (const self of skillNames) {
   const size = readFileSync(path.join(skillsDir, self, "SKILL.md"), "utf8").length;
   if (size > SKILL_MAX) warnings.push(`skills/${self}/SKILL.md: ${size} chars (> ${SKILL_MAX}; muévelo a references/)`);
+}
+
+// 11. Commit templates in skills/** and references/**: trailers go through `git commit --trailer`
+// (git ≥ 2.32 builds a valid trailer block; a trailer typed in a heredoc or -m body is lost after any prose or blank
+// line) and only the SDD vocabulary is used. A fenced block counts as a commit template when it contains `git commit`.
+const TRAILER_KEYS = new Set(["task", "refs", "change", "co-authored-by", "signed-off-by"]);
+const docFiles = [...walk(skillsDir), ...(existsSync(path.join(ROOT, "references")) ? walk(path.join(ROOT, "references")) : [])]
+  .filter((f) => f.endsWith(".md"));
+for (const file of docFiles) {
+  const lines = readFileSync(file, "utf8").split("\n");
+  let start = -1;
+  const blocks = [];
+  lines.forEach((l, i) => {
+    if (!/^\s*(```|~~~)/.test(l)) return;
+    if (start < 0) start = i; else { blocks.push([start, i]); start = -1; }
+  });
+  for (const [a, b] of blocks) {
+    const body = lines.slice(a + 1, b);
+    const text = body.join("\n");
+    if (!/\bgit commit\b/.test(text)) continue;
+    const where = `${rel(file)}:${a + 1}`;
+    const handTyped = body.findIndex((l) => /^\s*(Task|Refs|Change)\s*:/i.test(l));
+    if (handTyped >= 0 && !/--trailer\b/.test(text)) {
+      errors.push(`${where}: commit template writes \`${body[handTyped].trim()}\` in the message body — use git commit --trailer (references/git-conventions.md)`);
+    }
+    const keys = [...text.matchAll(/--trailer[= ]+["']?([A-Za-z][A-Za-z-]*)\s*[:=]/g)].map((m) => m[1]);
+    for (const k of new Set(keys)) if (!TRAILER_KEYS.has(k.toLowerCase())) errors.push(`${where}: trailer \`${k}\` is not part of the SDD vocabulary (Task, Refs, Change, Co-Authored-By, Signed-off-by)`);
+  }
+}
+
+// 12. Stage skills that write artifacts commit them (references/git-conventions.md § Stage outputs are committed).
+const STAGE_WRITERS = ["sdd-requirements-engineer", "sdd-specifications-engineer", "sdd-spec-auditor", "sdd-test-planner",
+  "sdd-plan-architect", "sdd-task-generator", "sdd-tech-designer", "sdd-ux-designer", "sdd-security-auditor",
+  "sdd-gap-detector", "sdd-req-change", "sdd-reverse-engineer", "sdd-import", "sdd-reconcile", "sdd-acceptance"];
+for (const s of STAGE_WRITERS) {
+  const f = path.join(skillsDir, s, "SKILL.md");
+  if (existsSync(f) && !readFileSync(f, "utf8").includes("Stage outputs are committed")) {
+    warnings.push(`skills/${s}/SKILL.md: no remite a "Stage outputs are committed" (references/git-conventions.md) en su paso Persist`);
+  }
 }
 
 for (const w of warnings) console.log(`WARN  ${w}`);

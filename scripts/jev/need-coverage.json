@@ -1,0 +1,18 @@
+{
+  "description": "sdd-requirements-engineer need coverage (run by `sdd-jev.mjs needs`, not by `judge`): pass 1 (covered_by): one item per in-scope need, state = {need: {id, quote}, requirements: {<REQ id>: <statement>}}; the code adds one option per active REQ-F/REQ-NF (and REQ-C that cite a need), criteria = its statement, to the static `none` option. Pass 2 (serves): only for requirements that were never a top choice (a need often maps to several requirements, so pass 1 alone over-reports), state = {requirement: {id, statement}, needs: {<N id>: <quote>}}, one option per in-scope need plus `none`. Suggestions only: the mechanical check (every need cited by some `Needs:` line or out-of-scope with a decision) decides. A need flagged `none` or low-confidence, or whose top choice does not cite it, is re-read by the LLM with the customer; a never-top requirement whose `serves` answer is none or below the confidence threshold is a gold-plating candidate to discuss, never to delete automatically.",
+  "thresholds": {
+    "confidence": 0.5
+  },
+  "questions": {
+    "covered_by": {"type": "choice",
+      "instructions": "The customer said `need.quote`. Which requirement in `requirements`, once built, most directly gives the customer what they asked for? Choose none when no requirement delivers it, or when the requirements only touch it in passing.",
+      "criteria": {
+        "none": "No listed requirement delivers what the customer asked for in this need"
+      }},
+    "serves": {"type": "choice",
+      "instructions": "Which customer need in `needs` does `requirement.statement` help to satisfy? Choose none when it serves none of them.",
+      "criteria": {
+        "none": "The requirement serves none of the listed customer needs"
+      }}
+  }
+}

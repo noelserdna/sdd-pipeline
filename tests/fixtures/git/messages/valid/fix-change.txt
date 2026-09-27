@@ -1,0 +1,4 @@
+fix(auth): reject expired reset tokens
+
+Change: CHG-2026-09-27-001
+Refs: REQ-F-014

@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 # B4 paso 5 (automatizado con modelo) — FASE N por Streams en dos worktrees con roles, y reintegración.
-# Uso: tests/e2e/50-streams.sh --dir <proyecto con fase-(N-1)-verified y task/TASK-FASE-N.md> [--fase N]
+# Uso: tests/e2e/50-streams.sh [--dir <proyecto con fase-(N-1)-verified y task/TASK-FASE-N.md>] [--fase N]
+#   Sin --dir usa tests/fixtures/plan-mini (FASE-1 con cortes disjuntos src/api ∥ src/cli): la copia a un temporal, marca
+#   fase-0-verified sobre el commit inicial y genera sus tareas con /sdd-task-generator. Los planes verticales rara vez
+#   tienen Streams, así que el smoke (20-smoke.sh) ya no los fuerza: esta prueba es la que ejerce el modo Stream.
 # Flujo: --stream base (principal, tag fase-N-foundation) → worktrees feat/fase-N-a|b → --stream A ∥ --stream B (paralelo,
 #        SDD_ROLE impl-fNa/impl-fNb) → --integrate --fase N (principal) → sdd-bench.sh --fase N
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DIR=""; N=1
 while [ $# -gt 0 ]; do case "$1" in --dir) DIR="$2"; shift 2;; --fase) N="$2"; shift 2;; *) shift;; esac; done
-[ -n "$DIR" ] || { echo "uso: $0 --dir <proyecto> [--fase N]"; exit 2; }
 command -v claude >/dev/null || { echo "claude CLI no disponible"; exit 2; }
+if [ -z "$DIR" ]; then
+  N=1; DIR="$(mktemp -d)/plan-mini"; mkdir -p "$DIR"; cp -R "$ROOT/tests/fixtures/plan-mini/plan" "$DIR/"
+  ( cd "$DIR" && git init -q -b main . && git config user.email e2e@example.com && git config user.name e2e \
+    && git add -A && git commit -qm "chore: plan-mini fixture [skip-sdd]" && git tag -a fase-0-verified -m "plan-mini base" \
+    && claude --plugin-dir "$ROOT" -p "/sdd-task-generator — generate task/ for every FASE of plan/ without asking questions." --output-format text 2>&1 | tail -5 \
+    && git add -A && git commit -qm "docs(tasks): plan-mini tasks [skip-sdd]" )
+  echo "fixture plan-mini en $DIR"
+fi
 cd "$DIR"; DIR="$(pwd -P)"; PARENT="$(dirname "$DIR")"; SLUG="$(basename "$DIR")"
 fail=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; fail=1; }
 t0=$(date +%s); lap() { local now; now=$(date +%s); echo "     [$1: $(( (now - t0) / 60 )) min]"; t0=$now; }

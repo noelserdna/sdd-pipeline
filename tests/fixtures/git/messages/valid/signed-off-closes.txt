@@ -1,0 +1,5 @@
+fix(tasks): trim titles
+
+Task: TASK-F2-008
+Signed-off-by: Dev <dev@example.com>
+Closes #12

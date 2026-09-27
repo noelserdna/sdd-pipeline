@@ -1,0 +1,483 @@
+{
+ "$schema": "sdd-acceptance-v1",
+ "evaluated_sha": "0123456789abcdef0123456789abcdef01234567",
+ "dirty": false,
+ "generatedAt": "2026-09-27T00:00:00.000Z",
+ "scope": null,
+ "junit": [
+  {
+   "path": ".sdd/junit/jest.xml",
+   "cases": 2,
+   "fresh": true,
+   "stale_reason": null
+  },
+  {
+   "path": ".sdd/junit/vitest.xml",
+   "cases": 4,
+   "fresh": true,
+   "stale_reason": null
+  }
+ ],
+ "junit_sha": null,
+ "requirements": [
+  {
+   "id": "REQ-F-001",
+   "type": "F",
+   "title": "Create a task",
+   "priority": "Must",
+   "needs": [
+    "N-001"
+   ],
+   "verification": "test",
+   "verification_raw": null,
+   "reqHash": "sha256:1d7b77230a2b7bc2bec8812698d5e66335f6a027a86014758b6e22a9492f9ced",
+   "in_scope": true,
+   "verdict": "FAILING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN an empty list WHEN the user runs `todo add \"Buy milk\"` THEN task 1 \"Buy milk\" is pending",
+     "scenarios": [
+      "AC-001-01"
+     ],
+     "tests": [
+      {
+       "name": "todo add > AC-001-01 adds a pending task",
+       "classname": "tests/add.test.ts",
+       "file": "tests/add.test.ts",
+       "status": "pass",
+       "message": null,
+       "via": "AC-001-01",
+       "fresh": true,
+       "stale_reason": null,
+       "report": ".sdd/junit/unit.xml"
+      }
+     ],
+     "records": [],
+     "state": "pass",
+     "evidence": [
+      {
+       "kind": "test",
+       "ref": "AC-001-01",
+       "name": "todo add > AC-001-01 adds a pending task",
+       "status": "pass",
+       "fresh": true
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "text": "GIVEN any state WHEN the user runs `todo add \"\"` THEN the command exits 2 with `title must not be empty`",
+     "scenarios": [
+      "AC-001-02"
+     ],
+     "tests": [
+      {
+       "name": "todo add > AC-001-02 rejects an empty title",
+       "classname": "tests/add.test.ts",
+       "file": "tests/add.test.ts",
+       "status": "fail",
+       "message": "expected 0 to be 2 // Object.is equality",
+       "via": "AC-001-02",
+       "fresh": true,
+       "stale_reason": null,
+       "report": ".sdd/junit/unit.xml"
+      }
+     ],
+     "records": [],
+     "state": "fail",
+     "evidence": [
+      {
+       "kind": "test",
+       "ref": "AC-001-02",
+       "name": "todo add > AC-001-02 rejects an empty title",
+       "status": "fail",
+       "fresh": true
+      }
+     ]
+    }
+   ],
+   "criteria_total": 2,
+   "criteria_passing": 1,
+   "evidence": [
+    {
+     "ac": 1,
+     "kind": "test",
+     "ref": "AC-001-01",
+     "name": "todo add > AC-001-01 adds a pending task",
+     "status": "pass",
+     "fresh": true
+    },
+    {
+     "ac": 2,
+     "kind": "test",
+     "ref": "AC-001-02",
+     "name": "todo add > AC-001-02 rejects an empty title",
+     "status": "fail",
+     "fresh": true
+    }
+   ],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-F-002",
+   "type": "F",
+   "title": "List tasks",
+   "priority": "Must",
+   "needs": [
+    "N-002"
+   ],
+   "verification": "test",
+   "verification_raw": null,
+   "reqHash": "sha256:47922e1675104f35d81c90bccf0358414bad9e87de8335970bcf507b5cd3bf12",
+   "in_scope": true,
+   "verdict": "VERIFIED",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN tasks 1 and 2 WHEN the user runs `todo list` THEN two lines are printed in id order",
+     "scenarios": [
+      "AC-002-01"
+     ],
+     "tests": [
+      {
+       "name": "list AC-002-01 prints in id order",
+       "classname": "list AC-002-01 prints in id order",
+       "file": null,
+       "status": "pass",
+       "message": null,
+       "via": "AC-002-01",
+       "fresh": true,
+       "stale_reason": null,
+       "report": ".sdd/junit/unit.xml"
+      }
+     ],
+     "records": [],
+     "state": "pass",
+     "evidence": [
+      {
+       "kind": "test",
+       "ref": "AC-002-01",
+       "name": "list AC-002-01 prints in id order",
+       "status": "pass",
+       "fresh": true
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "text": "GIVEN an empty list WHEN the user runs `todo list` THEN the output is `No tasks`",
+     "scenarios": [
+      "AC-002-02"
+     ],
+     "tests": [
+      {
+       "name": "REQ-F-002 AC2 prints No tasks",
+       "classname": "list",
+       "file": null,
+       "status": "pass",
+       "message": null,
+       "via": "REQ-F-002 AC2",
+       "fresh": true,
+       "stale_reason": null,
+       "report": ".sdd/junit/unit.xml"
+      }
+     ],
+     "records": [],
+     "state": "pass",
+     "evidence": [
+      {
+       "kind": "test",
+       "ref": "REQ-F-002 AC2",
+       "name": "REQ-F-002 AC2 prints No tasks",
+       "status": "pass",
+       "fresh": true
+      }
+     ]
+    }
+   ],
+   "criteria_total": 2,
+   "criteria_passing": 2,
+   "evidence": [
+    {
+     "ac": 1,
+     "kind": "test",
+     "ref": "AC-002-01",
+     "name": "list AC-002-01 prints in id order",
+     "status": "pass",
+     "fresh": true
+    },
+    {
+     "ac": 2,
+     "kind": "test",
+     "ref": "REQ-F-002 AC2",
+     "name": "REQ-F-002 AC2 prints No tasks",
+     "status": "pass",
+     "fresh": true
+    }
+   ],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-F-003",
+   "type": "F",
+   "title": "Filter by status",
+   "priority": "Should",
+   "needs": [
+    "N-002"
+   ],
+   "verification": "test",
+   "verification_raw": null,
+   "reqHash": "sha256:1f899c178eb556b118322bb1768ace90d25aa8bc1cbfa31338e875dc4e83d152",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN tasks 1 (pending) and 2 (completed) WHEN the user runs `todo list --status pending` THEN only task 1 is printed",
+     "scenarios": [
+      "AC-002-03"
+     ],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 1,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-F-004",
+   "type": "F",
+   "title": "Export to CSV",
+   "priority": "Should",
+   "needs": [
+    "N-003"
+   ],
+   "verification": "test",
+   "verification_raw": null,
+   "reqHash": "sha256:80ea31ac73ac691dcb7d8c6aa1c4df089cbecd6f874d39aeb440f57663df7f40",
+   "in_scope": true,
+   "verdict": "DEPRECATED",
+   "criteria": [],
+   "criteria_total": 0,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-F-005",
+   "type": "F",
+   "title": "Delete a task",
+   "priority": "Must",
+   "needs": [
+    "N-003"
+   ],
+   "verification": "test",
+   "verification_raw": null,
+   "reqHash": "sha256:59cc95cb32c9af547e05d123b62d02e9568ebb8eaf1ed18c6bb606e38b6ab360",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN tasks 1, 2 and 3 WHEN the user runs `todo rm 2` THEN tasks 1 and 3 remain",
+     "scenarios": [
+      "AC-002-04"
+     ],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    },
+    {
+     "n": 2,
+     "text": "GIVEN no task 9 WHEN the user runs `todo rm 9` THEN the command exits 3 with `task 9 not found`",
+     "scenarios": [],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 2,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-F-006",
+   "type": "F",
+   "title": "Readable output",
+   "priority": "Must",
+   "needs": [
+    "N-002"
+   ],
+   "verification": "demo",
+   "verification_raw": null,
+   "reqHash": "sha256:523b3fbc3f2a52776fbf38cc3d286573f65bec37f0da0ed9dc214cf5878ebb20",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN 5 tasks WHEN the product owner runs `todo list` THEN columns are aligned",
+     "scenarios": [],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 1,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-NF-001",
+   "type": "NF",
+   "title": "Command latency",
+   "priority": "Should",
+   "needs": [
+    "N-004"
+   ],
+   "verification": "measurement",
+   "verification_raw": null,
+   "reqHash": "sha256:2bb8f41256dc39a9e47cb4a1ef9ace5f629e995122f2dc73cba8c4e3a5413419",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN 1,000 tasks WHEN the user runs `todo list` THEN p95 < 200 ms",
+     "scenarios": [],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 1,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-NF-002",
+   "type": "NF",
+   "title": "Test coverage",
+   "priority": "Must",
+   "needs": [
+    "N-004"
+   ],
+   "verification": "measurement",
+   "verification_raw": null,
+   "reqHash": "sha256:ee670cce88d372f0fe2c698c5dfd9f3c3c8532e895ce289db85c29a8b038eb58",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": "GIVEN the suite WHEN coverage runs THEN statements ≥ 90 %",
+     "scenarios": [],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 1,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  },
+  {
+   "id": "REQ-C-001",
+   "type": "C",
+   "title": "No runtime dependencies",
+   "priority": "Must",
+   "needs": [],
+   "verification": "inspection",
+   "verification_raw": null,
+   "reqHash": "sha256:32fca60c1b96288d0c923f6e369c35361975f38dc53d5374ab385855f8864dc2",
+   "in_scope": true,
+   "verdict": "MISSING",
+   "criteria": [
+    {
+     "n": 1,
+     "text": null,
+     "scenarios": [],
+     "tests": [],
+     "records": [],
+     "state": "missing",
+     "evidence": []
+    }
+   ],
+   "criteria_total": 1,
+   "criteria_passing": 0,
+   "evidence": [],
+   "waiver": null,
+   "stale_evidence": false
+  }
+ ],
+ "summary": {
+  "active": 8,
+  "deprecated": 1,
+  "by_verdict": {
+   "VERIFIED": 1,
+   "FAILING": 1,
+   "MISSING": 6,
+   "WAIVED": 0,
+   "DEPRECATED": 1
+  },
+  "by_priority": {
+   "Must": {
+    "total": 6,
+    "VERIFIED": 1,
+    "FAILING": 1,
+    "MISSING": 4,
+    "WAIVED": 0
+   },
+   "Should": {
+    "total": 2,
+    "VERIFIED": 0,
+    "FAILING": 0,
+    "MISSING": 2,
+    "WAIVED": 0
+   }
+  },
+  "must_total": 6,
+  "must_verified": 1,
+  "must_waived": 0,
+  "goal": false,
+  "waived_musts": [],
+  "stale_evidence": 0,
+  "stale_decisions": 0,
+  "junit_files": 2,
+  "junit_stale_files": 0
+ },
+ "fase_acceptances": [],
+ "stale_decisions": [],
+ "decision_errors": [],
+ "unknown_scenarios": [
+  "AC-001-03"
+ ],
+ "unbound_tests": [
+  "todo add > AC-001-03 long title"
+ ],
+ "junit_searched": [
+  ".sdd/junit"
+ ]
+}

@@ -73,6 +73,9 @@ export function readResource(
     const current = stages.find((s) => s.name === currentStage);
     const staleStages = stages.filter((s) => s.status === "stale");
     const doneStages = stages.filter((s) => s.status === "done");
+    // Stages the adaptive route skipped count as satisfied: they leave the denominator and are never the next action.
+    const skippedStages = stages.filter((s) => s.status === "skipped");
+    const activeStages = stages.length - skippedStages.length;
 
     // Determine next action
     let nextAction = "Run /sdd-requirements-engineer to start the pipeline";
@@ -93,8 +96,10 @@ export function readResource(
             currentStage,
             currentStatus: current?.status ?? "unknown",
             lastRun: current?.lastRun ?? null,
-            progress: `${doneStages.length}/${stages.length} stages complete`,
+            progress: `${doneStages.length}/${activeStages} stages complete` +
+              (skippedStages.length ? `, ${skippedStages.length} skipped` : ""),
             staleStages: staleStages.map((s) => s.name),
+            skippedStages: skippedStages.map((s) => ({ name: s.name, reason: s.skipReason ?? null })),
             nextAction,
             generatedAt: graph.generatedAt,
           }),
@@ -126,16 +131,14 @@ export function readResource(
           text: [
             "SDD Traceability Graph Schema v3",
             "",
-            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption?, codeIntelligence? }",
+            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption? }",
             "",
             "Artifact types: REQ, UC, WF, API, BDD, INV, ADR, NFR, RN, FASE, TASK",
             "Relationship types: implements, orchestrates, verifies, guarantees, decides, decomposes, implemented-by, implemented-by-code, tested-by, implemented-by-commit, reads-from, traces-to",
             "",
             "Each artifact has: id, type, category, title, file, line, priority, stage, classification?, codeRefs[], testRefs[], commitRefs[]",
             "",
-            "codeIntelligence (optional, from /sdd-code-index): symbols[], callGraph[], processes[], stats",
-            "",
-            "Full schema: see skills/dashboard/references/graph-schema.md",
+            "Full schema: see docs/design/graph-schema.md in the sdd-pipeline plugin",
           ].join("\n"),
         },
       ],

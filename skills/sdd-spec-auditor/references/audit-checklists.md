@@ -92,7 +92,7 @@
 - ¿Hay reglas en UCs que deberían ser invariantes?
 - ¿Cada invariante tiene validación implementable?
 - ¿Los rangos numéricos tienen ambos límites?
-- ¿Qué invariantes no tienen constraint SQL?
+- ¿Qué invariantes no tienen validación especificada?
 ```
 
 ---
@@ -118,16 +118,15 @@
 - [ ] ¿Los campos tienen tipos y constraints?
 - [ ] ¿Los campos optional están marcados?
 
-### Errores
-- [ ] ¿Cada error tiene código único?
-- [ ] ¿Cada error tiene código de dominio? (HTTP status solo con `Style: http`)
-- [ ] ¿Cada error indica cuándo ocurre?
+### Errores (tabla `Exceptions & errors`)
+- [ ] ¿Cada error tiene código de dominio del catálogo? (HTTP status solo con `Style: http`, exit code en una CLI)
+- [ ] ¿Cada error indica cuándo ocurre y su efecto?
 
-### Trazabilidad
-- [ ] ¿Hay referencia a REQ-XXX que origina el UC?
-- [ ] ¿Hay referencia a WF-NNN si aplica?
-- [ ] ¿Hay referencia a INV-XXX que aplican?
-- [ ] ¿Hay referencia a BDD-feature que verifica?
+### Trazabilidad (fila `Refs` del header)
+- [ ] ¿Cita el REQ-F-NNN que origina el UC?
+- [ ] ¿Cita WF-NNN (con pasos) si aplica?
+- [ ] ¿Cita los INV-{AREA}-NNN que aplican?
+- [ ] ¿Cita `BDD-UC-NNN` y cada fila de excepción/extensión su AC-NNN-NN?
 
 ### Preguntas de auditoría
 ```
@@ -149,7 +148,7 @@
 
 ### Steps
 - [ ] ¿Cada step tiene nombre único?
-- [ ] ¿Cada step tiene tipo (http, activity, conditional)?
+- [ ] ¿Cada step tiene tipo (sync, async, manual)?
 - [ ] ¿Cada step tiene timeout individual?
 - [ ] ¿Cada step tiene retry policy?
 - [ ] ¿Cada step tiene input/output schema?
@@ -240,7 +239,7 @@
 
 ---
 
-## Checklist: BDD Test (tests/BDD-{feature}.md)
+## Checklist: BDD Test (tests/BDD-UC-NNN.md)
 
 ### Formato
 - [ ] ¿Tiene Feature con As/I want/So that?
@@ -254,7 +253,7 @@
 - [ ] ¿Hay scenarios para edge cases?
 
 ### Trazabilidad
-- [ ] ¿Cada scenario referencia AC-XXX-NNN?
+- [ ] ¿Cada título de scenario es `AC-NNN-NN — nombre [REQ-X ACn]`?
 - [ ] ¿Los scenarios cubren todos los AC del UC?
 
 ### Preguntas de auditoría
@@ -384,7 +383,7 @@
 ### Trazabilidad REQ → Implementation
 - [ ] ¿Cada REQ tiene al menos un UC?
 - [ ] ¿Cada UC tiene BDD scenarios?
-- [ ] ¿Cada INV tiene validación en código/DB?
+- [ ] ¿Cada INV tiene validación especificada?
 
 ### Consistencia de Valores
 - [ ] ¿Timeouts son consistentes entre LIMITS, WF, API?
@@ -440,7 +439,7 @@
 
 ### Existencia y Formato
 - [ ] ¿Existe `AUDIT-BASELINE.md` en el directorio de auditorías?
-- [ ] ¿El formato del baseline sigue la estructura esperada (3 tablas: Accepted, Deferred, Resolved)?
+- [ ] ¿El baseline tiene las 4 tablas de `report-template.md` §3 (Accepted, Won't fix, Deferred, Resolved)? Solo Accepted, Won't fix y Deferred no vencido excluyen hallazgos (SKILL.md Phase 0).
 - [ ] ¿El baseline indica la fecha de última actualización y el audit de origen?
 
 ### Vigencia

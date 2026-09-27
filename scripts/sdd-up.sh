@@ -3,7 +3,8 @@
 #
 # Usage: bash sdd-up.sh [-d DIR] [--dry-run] ROLE [ROLE...]
 #   -d DIR      main checkout that holds .claude/sdd-sessions.json
-#               (default: $SDD_STATE_ROOT, else the git common dir of the cwd, else the cwd)
+#               (default: $SDD_STATE_ROOT when it belongs to the cwd's repository, else the git
+#               common dir of the cwd, else the cwd)
 #   --dry-run   print the commands without running anything
 #   ROLE        key under "roles" in .claude/sdd-sessions.json (sdd-lead, sdd-spec, impl-f1a, ...)
 #
@@ -52,18 +53,24 @@ HAS_NODE=false; command -v node >/dev/null 2>&1 && HAS_NODE=true
 [ "$HAS_JQ" = true ] || [ "$HAS_NODE" = true ] || die "jq or node is required to read .claude/sdd-sessions.json"
 
 # ── Locate the main checkout and the sessions file ───────────────────────────
+# git common dir of DIR (absolute, physical) or empty
+common_of() {
+  local c
+  c="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || git -C "$1" rev-parse --git-common-dir 2>/dev/null || true)"
+  [ -n "$c" ] || return 0
+  case "$c" in /*) ;; *) c="$1/$c" ;; esac
+  (cd "$c" 2>/dev/null && pwd -P) || true
+}
+CWD_COMMON="$(common_of "$PWD")"
 if [ -n "$OPT_DIR" ]; then
   ROOT="$(cd "$OPT_DIR" 2>/dev/null && pwd)" || die "directory not found: $OPT_DIR"
-elif [ -n "${SDD_STATE_ROOT:-}" ]; then
+elif [ -n "${SDD_STATE_ROOT:-}" ] && { [ -z "$CWD_COMMON" ] || [ "$(common_of "$SDD_STATE_ROOT")" = "$CWD_COMMON" ]; }; then
+  # SDD_STATE_ROOT is inherited by child processes: honour it only inside the same repository
   ROOT="$SDD_STATE_ROOT"
+elif [ -n "$CWD_COMMON" ]; then
+  ROOT="$(cd "$(dirname "$CWD_COMMON")" && pwd)"
 else
-  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || git rev-parse --git-common-dir 2>/dev/null || true)"
-  if [ -n "$common" ]; then
-    case "$common" in /*) ;; *) common="$PWD/$common" ;; esac
-    ROOT="$(cd "$(dirname "$common")" && pwd)"
-  else
-    ROOT="$PWD"
-  fi
+  ROOT="$PWD"
 fi
 SESSIONS="$ROOT/.claude/sdd-sessions.json"
 [ -f "$SESSIONS" ] || die "$SESSIONS not found — run /sdd-setup --multisession in the main checkout"

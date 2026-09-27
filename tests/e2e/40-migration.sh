@@ -16,7 +16,8 @@ if ! git -C "$ROOT" show sdd-skills/v3.1.0:automation/settings-template.json > .
 JSON
 fi
 for h in sdd-session-start sdd-upstream-guard sdd-pipeline-state-updater sdd-status-line; do echo '#!/bin/bash' > ".claude/hooks/$h.sh"; done
-echo "---" > .claude/agents/sdd-context-keeper.md
+# agente copiado por una instalación pre-4.0 (el nombre da igual: migrate borra .claude/agents/sdd-*.md)
+echo "---" > .claude/agents/sdd-legacy-agent.md
 echo '{"sddVersion":"2.4.0","hooksVersion":2,"currentStage":"requirements-engineer","stages":{}}' > pipeline-state.json
 git add -A && git commit -qm "chore: v2 install" >/dev/null
 
@@ -24,7 +25,7 @@ bash "$ROOT/scripts/migrate-hooks-v3.sh" --dry-run >/dev/null 2>&1 && ok "dry-ru
 [ -f .claude/hooks/sdd-upstream-guard.sh ] && ok "dry-run no borra hooks" || bad "dry-run borró hooks"
 SDD_PLUGIN_ROOT="$ROOT" bash "$ROOT/scripts/migrate-hooks-v3.sh" >/dev/null 2>&1 && ok "migración aplicada" || bad "migración"
 grep -q 'sdd-' <(jq -r '.hooks // {} | .. | .command? // empty' .claude/settings.json) && bad "quedan hooks sdd-* en settings.json" || ok "settings.json sin hooks sdd-*"
-jq -e '.statusLine' .claude/settings.json >/dev/null && ok "statusLine conservada" || bad "statusLine perdida"
+jq -e '.statusLine' .claude/settings.json >/dev/null && bad "queda la statusLine SDD" || ok "statusLine SDD eliminada"
 ls .claude/hooks/sdd-*.sh >/dev/null 2>&1 && bad "quedan .claude/hooks/sdd-*" || ok ".claude/hooks/sdd-* eliminados"
 [ "$(jq -r .hooksVersion pipeline-state.json)" = "3" ] && ok "hooksVersion 3" || bad "hooksVersion: $(jq -r .hooksVersion pipeline-state.json)"
 git check-ignore -q --no-index pipeline-state.json && ok "política .gitignore aplicada" || bad ".gitignore"

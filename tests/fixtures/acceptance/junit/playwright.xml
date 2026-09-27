@@ -1,0 +1,16 @@
+<testsuites id="" name="" tests="2" failures="0" skipped="0" errors="0" time="3.2">
+<testsuite name="e2e/list.spec.ts" timestamp="2026-09-27T10:00:00.000Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.1" errors="0">
+<testcase name="list › AC-002-01 — shows tasks in id order" classname="e2e/list.spec.ts" time="1.1">
+<properties>
+<property name="annotation" value="REQ-F-002">
+</property>
+</properties>
+</testcase>
+<testcase name="list › AC-002-02 — empty state" classname="e2e/list.spec.ts" time="1.0">
+<system-out>
+<![CDATA[[[ATTACHMENT|list-AC-002-02/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>

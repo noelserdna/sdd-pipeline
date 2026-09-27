@@ -1,0 +1,7 @@
+feat(tasks): delete task
+
+Soft delete keeps history.
+
+Task: TASK-F2-007
+Refs: UC-004
+Co-Authored-By: Assistant <assistant@example.com>

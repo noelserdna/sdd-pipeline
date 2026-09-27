@@ -1,0 +1,16 @@
+{
+  "description": "sdd-acceptance --check (optional, advisory): one item per (acceptance criterion, bound test), state = {criterion: {text}, scenario: {id, text}, test: {name, code}} where criterion.text is the GIVEN/WHEN/THEN line of REQUIREMENTS.md, scenario is the BDD scenario of spec/tests/ the test is named after, and test.code is the test body. It never changes a verdict, a waiver, a sign-off, the loop's stop or anything in CI: a passing test with a low score stays VERIFIED and is listed under 'Test adequacy (advisory)' in the conversation for a human or the LLM to read. Below the threshold on either question, flag the test for review.",
+  "thresholds": {
+    "review_below": 0.5
+  },
+  "questions": {
+    "asserts_then": {"type": "noul",
+      "instructions": "Does `test.code` assert the outcome that the THEN part of `criterion.text` requires (the observable result, value or state), rather than only checking that the code runs, returns something, or matches a snapshot unrelated to that outcome?",
+      "criteria": {"true": "An assertion in the test checks the specific outcome the THEN part describes",
+                   "false": "No assertion checks that outcome: the test asserts something else, asserts nothing specific, or only checks for no error"}},
+    "exercises_when": {"type": "noul",
+      "instructions": "Does `test.code` perform the action or trigger described in the WHEN part of `criterion.text` (through the real entry point or an equivalent call), under the situation of its GIVEN part?",
+      "criteria": {"true": "The test sets up the GIVEN situation and triggers the WHEN action before asserting",
+                   "false": "The test skips the WHEN action, triggers a different one, or asserts on hand-built data without exercising the behavior"}}
+  }
+}

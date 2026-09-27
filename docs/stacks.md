@@ -32,6 +32,9 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 - server: bin/rails server -p {port} -b 127.0.0.1 -P tmp/pids/sdd-server.pid
 - port: 3000
 - acceptance: none
+- test_report: MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR="$(git rev-parse --show-toplevel)/.sdd/junit/minitest" bin/rails test
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact
@@ -55,17 +58,26 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `server` | Servidor local para iterar (`{port}`), o `none` |
 | `port` | Puerto |
 | `acceptance` | Suite de aceptación compartida; se ejecuta desde la raíz y el filtro por ID se añade como `--grep <ID>`; `none` si no hay |
+| `test_report` | Suite completa escribiendo **JUnit XML** en `.sdd/junit/` (o en `test_report_path`), o `none`. Lo ejecuta `sdd-acceptance` antes de `sdd accept`; el nombre de cada test empieza por el ID del escenario (`AC-NNN-NN`) para que el libro de aceptación lo ate a su criterio |
+| `test_report_path` | Opcional. Fichero, directorio o `dir/*.xml` (separados por comas) donde `sdd accept` y `sdd gate` leen el JUnit; sin la clave, `.sdd/junit/`. Los kits no la declaran |
+| `acceptance_gate` | Modo de `sdd gate`: `enforce` (falla si algún Must no está VERIFIED ni WAIVED), `warn` (informa y sale con 0) u `off`. Sin la clave vale `enforce`; en un proyecto brownfield conviene `--set acceptance_gate=warn` hasta cerrar la adopción |
+| `tracker` | `github`, `gitlab` u `off`: proveedor de issues y PRs de `sdd issue`/`sdd pr-body`. Todo push, issue o PR sigue preguntando a la persona |
 | `e2e_scaffold` | `allowed` o `never`: si el implementer puede montar un proyecto E2E propio |
-| `task_state` | `trailers` (el trailer `Task:` del commit es el estado) o `checkbox` |
+| `task_state` | `trailers` (el trailer `Task:` del commit es el estado) o `checkbox`. Sin la clave vale `checkbox`; `/sdd-setup` escribe `trailers` en los proyectos nuevos, con kit o sin él |
 | `task_format` | `compact` (Review y Revert opcionales) o `full` |
+| `default_branch` | Opcional. Rama por defecto para la regla de rama (`sdd.mjs branch start`) y el destino del merge; sin la clave: `origin/HEAD`, luego `init.defaultBranch`, luego `main`/`master`. Los kits no la declaran |
 
 Reglas del contrato:
 
-- Todos los comandos se ejecutan desde `app_dir`, salvo `acceptance`, que se ejecuta desde la raíz.
+- Todos los comandos se ejecutan desde `app_dir`, salvo `acceptance`, que se ejecuta desde la raíz. `test_report` también
+  corre desde `app_dir`; los kits escriben en `$(git rev-parse --show-toplevel)/.sdd/junit/` para que el JUnit quede en la
+  raíz aunque la app viva en un subdirectorio.
 - `none` salta el paso con un `WARN <clave>: n/a (stack profile)`; nunca es un fallo.
 - Marcadores en tiempo de ejecución: `{file}`, `{files}`, `{pattern}` y `{port}`. Las rutas que reciben son relativas a
   `app_dir`.
 - `{app_dir}` solo aparece en las plantillas de los kits y se resuelve al instalar.
+- Sin kit, `/sdd-setup` escribe un perfil mínimo con solo `- task_state: trailers`; el resto de claves toma los valores
+  detectados o por defecto.
 
 La referencia completa para el implementer (sustitución, cadencia de verificación, helper del servidor, `task_state`) está
 en `skills/sdd-task-implementer/references/stack-profile.md`.
@@ -100,6 +112,7 @@ Instalar el kit convierte las fuentes 2-4, que son suposiciones, en la 1, que es
 | `build` | `none` | `npm run build` (solo verificación final) |
 | `db_reset_safe` | `bin/rails db:reset` | borra los `*.db` locales dentro de `app_dir` (profundidad 2) y luego `npx prisma migrate deploy && npx prisma generate` |
 | `server` | `bin/rails server -p {port} -b 127.0.0.1 -P tmp/pids/sdd-server.pid` | `npx next dev -p {port} -H 127.0.0.1` (la verificación final hace build + `next start`) |
+| `test_report` | `MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR=".../.sdd/junit/minitest" bin/rails test`; requiere la gema `minitest-reporters` (grupo `:test`) y `Minitest::Reporters.use! if ENV["MINITEST_REPORTER"]` en `test/test_helper.rb` | `npx vitest run --reporter=junit --outputFile=".../.sdd/junit/vitest.xml"` (reporter incluido en Vitest) |
 
 `wiring` son los ficheros que casi todas las tareas tocan (rutas, esquema, layout). `layers` es el orden de capas en que
 `sdd-plan-architect` y `sdd-task-generator` trocean una operación de la spec.
@@ -220,6 +233,6 @@ Defectos del material de la carrera que no se trasladan, y que `validate-plugin.
   propias.
 - El `db_reset_safe` de `nextjs-prisma` borra cualquier `*.db`, `*.db-journal`, `*.db-wal` o `*.db-shm` hasta profundidad 2
   dentro de `app_dir`. Si la app guarda otros SQLite ahí, sustitúyelo con `--set`.
-- `/sdd-dashboard` (`test-result-parser.py`) entiende la salida verbose de Minitest (`bin/rails test -v >
+- `scripts/test-result-parser.py` (lo usa `scripts/sdd-graph.py` para el grafo; los veredictos de aceptación leen JUnit, ver `test_report`) entiende la salida verbose de Minitest (`bin/rails test -v >
   .sdd/test-results-raw.txt`, lanzado desde `app_dir`) y el JSON de RSpec. Detecta el runner en el `app_dir` del perfil, y
   solo considera RSpec si hay `.rspec` o `spec/rails_helper.rb`, porque `spec/` es la carpeta de especificación del SDD.

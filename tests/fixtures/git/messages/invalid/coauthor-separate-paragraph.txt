@@ -1,0 +1,6 @@
+feat(tasks): create task
+
+Task: TASK-F2-003
+Refs: UC-002
+
+Co-Authored-By: Assistant <assistant@example.com>

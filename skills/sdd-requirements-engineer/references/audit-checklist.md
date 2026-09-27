@@ -13,7 +13,7 @@ For EACH requirement, evaluate:
 ### 1.1 Clarity and Ambiguity
 
 - [ ] **Single interpretation**: Can this be read in only one way?
-- [ ] **No vague terms**: Avoid "fast", "user-friendly", "efficient", "flexible", "robust", "easy", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "etc.", "and/or", "if applicable"
+- [ ] **No vague terms** (canonical list for the pipeline; other skills point here): "fast", "quickly", "user-friendly", "efficient", "flexible", "robust", "easy", "simple", "intuitive", "seamless", "adequate", "reasonable", "appropriate", "etc.", "and/or", "if applicable", "as needed", and their equivalents in the document's language (e.g. "rápido", "fácil", "intuitivo", "adecuado", "según sea necesario")
 - [ ] **No pronouns without clear referents**: "it", "they", "this" must have unambiguous antecedents
 - [ ] **Quantified where needed**: performance, capacity, timing have specific numbers
 - [ ] **Defined domain terms**: technical or business terms are defined or use stakeholder vocabulary
@@ -36,7 +36,7 @@ For EACH requirement, evaluate:
 - [ ] **Stakeholder-validated**: a real stakeholder wants and needs this
 - [ ] **Not a premature solution**: describes WHAT, not HOW (apply 5-Whys if suspected)
 - [ ] **ROI justified**: the value of implementing this exceeds its cost
-- [ ] **Not gold-plating**: does not add capability beyond what stakeholders need
+- [ ] **Not gold-plating**: does not add capability beyond what stakeholders need; every REQ-F / REQ-NF cites at least one customer need in `Needs:` (only a REQ-C from a team or architecture source may use `—`)
 
 ### 1.5 Completeness of Individual Requirement
 
@@ -45,7 +45,14 @@ For EACH requirement, evaluate:
 - [ ] **Error cases addressed**: what happens when things go wrong
 - [ ] **Security considered**: CIA (Confidentiality, Integrity, Availability) implications
 
-### 1.6 Categorization
+### 1.6 Examples and Verification
+
+- [ ] **Concrete examples**: each acceptance criterion uses real data (values, names, exact messages, exit codes), not placeholders such as "some items" or "an error"
+- [ ] **Examples reviewed**: `Examples reviewed by:` names who on the customer side agreed with them, per requirement or once in the header
+- [ ] **Verification method fits**: `Verification:` is `test` for behaviour, `demo` for UI look and flow, `measurement` for an NFR with a threshold (metric, threshold and how it is measured stated on the line), `test` for constraints code can check (dependency lists, import boundaries, runtime versions; tests named `REQ-C-NNN AC1 …`), `inspection` only for process, legal and organisational constraints or what no test can observe
+- [ ] **Measurable NFR**: a `measurement` requirement names a threshold that a recorded value can be compared with
+
+### 1.7 Categorization
 
 - [ ] **Correctly classified**: functional vs. nonfunctional (use Perfect Technology Filter)
 - [ ] **If nonfunctional, subcategorized**: technology constraint vs. quality of service
@@ -85,6 +92,8 @@ For the ENTIRE set of requirements, evaluate:
 ### 2.4 Organization
 
 - [ ] **Prioritized**: each requirement has a priority (must/should/nice or numerical)
+- [ ] **Priorities discriminate**: at most 60 % of the active REQ-F / REQ-NF are Must, or the header records `Must list confirmed by:` with the reason
+- [ ] **Needs covered**: every need in `CUSTOMER-NEEDS.md` is cited by some requirement or is `out-of-scope` with its decision recorded (`sdd-jev.mjs needs --mechanical` checks this and the Needs/Verification fields)
 - [ ] **Traceable**: requirements can be traced to sources and forward to design/tests
 - [ ] **Stability assessed**: volatile requirements identified for change-tolerant design
 - [ ] **Grouped logically**: related requirements organized together
@@ -102,7 +111,7 @@ For the ENTIRE set of requirements, evaluate:
 
 ### 3.2 Attributes
 
-- [ ] **Required attributes present**: ID, description, source, priority, acceptance criteria
+- [ ] **Required attributes present**: ID, statement, source, priority, needs, verification method, acceptance criteria
 - [ ] **Rationale documented**: why each requirement exists
 - [ ] **Dependencies mapped**: relationships between requirements noted
 - [ ] **Status tracked**: draft, approved, implemented, verified
@@ -117,6 +126,8 @@ For the ENTIRE set of requirements, evaluate:
 - Conflicting requirements
 - Missing critical security or safety requirements
 - Premature solution masquerading as requirement
+- Customer need covered by no requirement and not marked out-of-scope
+- REQ-F / REQ-NF with no `Needs:` or no valid `Verification:`
 
 **WARN** - Should fix, significant risk if ignored:
 - Vague quality attributes without quantification
@@ -124,6 +135,8 @@ For the ENTIRE set of requirements, evaluate:
 - Unstated assumptions
 - Incomplete stakeholder coverage
 - Missing traceability
+- Acceptance criteria without concrete data, or examples not reviewed by the customer
+- More than 60 % Must without a recorded confirmation of the Must list
 
 **PASS** - Acceptable quality:
 - Clear, testable, atomic, necessary, complete requirement

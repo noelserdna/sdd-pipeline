@@ -5,364 +5,153 @@ description: "Imports external docs into SDD from Jira, OpenAPI/Swagger, Markdow
 
 # Skill: sdd-import — External Documentation → SDD Format Converter
 
-> **Version:** 1.0.0
-> **Pipeline position:** Pre-pipeline — feeds into `sdd-requirements-engineer` or `sdd-specifications-engineer`
-> **Invoked by:** `sdd-onboarding` (scenarios 5, 8)
-> **SWEBOK v4 alignment:** Chapter 01 (Requirements), Chapter 09 (Models & Methods)
+> **Version:** 1.1.0
+> **Pipeline position:** Pre-pipeline — feeds `sdd-requirements-engineer` or `sdd-specifications-engineer`
+> **Recommended by:** `sdd-pipeline-status --diagnose` (Greenfield with docs, Brownfield with docs, Fork/migration)
 
----
+Converts exported files (never live Jira/Notion APIs) into `requirements/` and `spec/` artifacts, previewing every mapping before writing. It does not modify the source files, generate code or tests, or keep anything in sync after the one-time import.
 
-## 1. Purpose & Scope
+## 1. Supported Formats
 
-### What This Skill Does
+| Format | Extensions | Maps to |
+|--------|-----------|---------|
+| Jira | `.json`, `.csv` | Epics → requirement groups; Stories → requirements + use cases; Bugs → import-report section "Defects" (a bug becomes a requirement only when it reveals missing behaviour); Tasks → report notes |
+| OpenAPI/Swagger | `.yaml`, `.json` (3.x, 2.0) | Paths → `Style: http` contracts; schemas → domain entities/value objects; securitySchemes → security NFRs |
+| Markdown | `.md` | Headings → groups/requirements; lists → requirements or workflow steps |
+| Notion | `.md` export (front matter), `.csv` database export | Rows → requirements; pages → spec detail |
+| CSV | `.csv` | Columns → requirement fields; rows → items |
+| Excel | `.xlsx` | Sheets → artifact types; rows → items (converted to CSV first, see Phase 1) |
 
-- **Detects** the format of input documentation automatically (or accepts explicit format specification)
-- **Parses** external documentation into a normalized intermediate representation
-- **Maps** external fields to SDD artifact fields using format-specific rules
-- **Previews** the mapping for user confirmation before generating artifacts
-- **Generates** SDD-format requirements and/or specifications from the imported data
-- **Checks** quality of the generated artifacts (completeness, consistency, traceability potential)
-- **Merges** with existing SDD artifacts when importing into a project that already has them
-
-### What This Skill Does NOT Do
-
-- Does NOT modify the source documentation files
-- Does NOT access external services (Jira API, Notion API) — works from exported files only
-- Does NOT generate code or tests — only requirements and specifications
-- Does NOT replace human judgment — always previews before generating
-- Does NOT handle real-time synchronization (use `sdd-sync-notion` for Notion sync)
-
----
-
-## 2. Supported Formats
-
-| Format | File Extensions | What It Maps To |
-|--------|----------------|----------------|
-| **Jira** | `.json`, `.csv` (Jira export) | Epics → requirement groups, Stories → use cases, Bugs → defect tracking, Tasks → implementation notes |
-| **OpenAPI/Swagger** | `.yaml`, `.json` (OpenAPI 3.x, Swagger 2.x) | Paths → API contracts, Schemas → domain model, Security → NFRs, Descriptions → requirements |
-| **Markdown** | `.md` | Headings → requirement sections, Lists → individual requirements, Code blocks → technical specs |
-| **Notion** | `.md` (with metadata), `.csv` (exported databases) | Database rows → requirements, Pages → specifications, Properties → requirement attributes |
-| **CSV** | `.csv` | Columns → requirement fields, Rows → individual requirements |
-| **Excel** | `.xlsx` | Sheets → artifact types, Rows → individual items, Named columns → requirement fields |
-
----
-
-## 3. Invocation Modes
+## 2. Invocation
 
 ```bash
-# Auto-detect format from file(s)
-/sdd-import path/to/file.yaml
-
-# Explicit format
-/sdd-import path/to/export.csv --format=jira
-
-# Target specific artifact type
-/sdd-import path/to/api.yaml --target=specs
-
-# Merge with existing artifacts
-/sdd-import path/to/requirements.csv --merge
-
-# Multiple files
-/sdd-import docs/api.yaml docs/requirements.csv docs/notion-export/
+/sdd-import path/to/file.yaml                      # auto-detect, both targets
+/sdd-import export.csv --format=jira
+/sdd-import api.yaml --target=specs
+/sdd-import requirements.csv --merge
+/sdd-import docs/api.yaml docs/reqs.csv docs/notion-export/
 ```
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| **default** | Auto-detect format, generate both requirements and specs | General import |
-| `--format=TYPE` | Skip auto-detection, use specified format | When auto-detection is ambiguous |
-| `--target=requirements` | Generate only `requirements/` artifacts | When source is requirements-focused |
-| `--target=specs` | Generate only `spec/` artifacts | When source is spec-focused (e.g., OpenAPI) |
-| `--target=both` | Generate both (default) | Full import |
-| `--merge` | Merge with existing SDD artifacts instead of creating new | Adding to existing SDD project |
+| Flag | Behavior |
+|------|----------|
+| (none) | Auto-detect format; generate requirements and specs |
+| `--format=TYPE` | Skip detection (`jira`, `openapi`, `markdown`, `notion`, `csv`, `excel`) |
+| `--target=requirements\|specs\|both` | Limit what is generated (default `both`) |
+| `--merge` | Merge into existing SDD artifacts (duplicate review in Phase 4); without it, existing artifacts are never overwritten — the import stops and asks for `--merge` |
+| `--yes` | Non-interactive: accept default mappings, skip duplicates (never replace), import skipped items as nothing; everything unresolved is listed under "Items Needing Manual Review" |
 
----
-
-## 4. Process — 7 Phases
+## 3. Process
 
 ### Phase 1: Format Detection
 
-**Objetivo:** Identify the format of input files.
+Detect by extension, confirm by content markers (rules in [references/format-parsers.md](references/format-parsers.md) §1); `--format` always wins; if still ambiguous, ask the user with the candidate formats.
 
-1. For each input file/directory:
-   - Check file extension
-   - Inspect file content for format-specific markers:
-     - OpenAPI: `openapi:` or `swagger:` key at root
-     - Jira JSON: `projects` or `issues` array with Jira field names
-     - Jira CSV: headers matching Jira export columns (`Summary`, `Issue Type`, `Status`, `Priority`)
-     - Notion markdown: YAML front matter with Notion properties
-     - Notion CSV: headers with Notion property names
-     - CSV: delimiter detection, header row analysis
-     - Excel: `.xlsx` binary detection
-     - Markdown: standard markdown without format-specific markers
-2. Resolve ambiguities:
-   - If JSON but unclear source → check for Jira fields vs OpenAPI fields
-   - If CSV but unclear source → check column headers against known patterns
-   - If still ambiguous → ask user with detected possibilities
-3. Validate format compatibility:
-   - OpenAPI: validate against OpenAPI 3.x or Swagger 2.x schema
-   - Jira: validate expected fields are present
-   - CSV/Excel: validate has headers and parseable content
+`.xlsx` has no native reader. Convert each sheet to CSV first, then parse as CSV:
 
-**Output:** Format identification with confidence and validation status.
-
-### Phase 2: Parse Input
-
-**Objetivo:** Parse files into a normalized intermediate representation.
-
-Load [references/format-parsers.md](references/format-parsers.md) and parse according to detected format.
-
-Normalized intermediate format:
-
-```
-{
-  items: [
-    {
-      id: "original-id",
-      title: "item title",
-      description: "full description",
-      type: "requirement | use-case | api-endpoint | entity | nfr | ...",
-      priority: "critical | high | medium | low",
-      status: "active | deprecated | planned",
-      group: "parent/category/epic name",
-      attributes: { ...format-specific key-value pairs },
-      relationships: [ { target: "id", type: "depends-on | child-of | ..." } ],
-      source: { file: "path", line: N, format: "jira|openapi|..." }
-    }
-  ],
-  metadata: {
-    format: "detected format",
-    totalItems: N,
-    parseErrors: [ ... ],
-    skippedItems: [ ... with reasons ]
-  }
-}
+```bash
+python3 -c "import openpyxl,csv,sys; wb=openpyxl.load_workbook(sys.argv[1],data_only=True)
+for ws in wb: csv.writer(open(f'{ws.title}.csv','w',newline='')).writerows(ws.values)" file.xlsx
+# or: ssconvert -S file.xlsx sheet-%s.csv
 ```
 
-Handle edge cases:
-- Encoding issues (UTF-8, Latin-1, etc.)
-- Date format variations
-- Empty or null fields
-- Malformed entries (log and skip with reason)
+Write the CSVs to a scratch directory, not the project. If neither `openpyxl` nor `ssconvert` is available, ask the user to export the sheets as CSV.
 
-**Output:** Normalized intermediate representation.
+### Phase 2: Parse
+
+Parse per [references/format-parsers.md](references/format-parsers.md) into a normalized item list:
+
+```
+{ id, title, description, type, priority, status, group, attributes{}, relationships[{target,type}],
+  source{file, line|row, format} }
++ metadata { format, totalItems, parseErrors[], skippedItems[{item, reason}] }
+```
+
+A malformed item is logged and skipped; it never aborts the import. Redact fields that look like secrets (API keys, tokens, passwords).
 
 ### Phase 3: Mapping Preview
 
-**Objetivo:** Map intermediate items to SDD artifact fields and present for confirmation.
-
-Load [references/mapping-rules.md](references/mapping-rules.md) and:
-
-1. Apply format-specific mapping rules:
-   - Map each item to its SDD equivalent (requirement, use case, contract, etc.)
-   - Convert descriptions to EARS syntax where possible
-   - Map priority/status to SDD equivalents
-   - Group items by business domain
-2. Detect potential duplicates (if `--merge`):
-   - Compare imported items against existing SDD artifacts
-   - Match by: ID similarity, title similarity, description overlap
-   - Flag duplicates for user review
-3. Generate mapping preview:
+Apply [references/mapping-rules.md](references/mapping-rules.md): map each item to its SDD artifact, convert to EARS (tag `[UNCONVERTED]` when conversion is not reliable), map priority, assign groups, and with `--merge` detect duplicates against existing artifacts. Show:
 
 ```
-Import Preview
-━━━━━━━━━━━━━━
-Source: {file(s)}
-Format: {detected format}
-
-Mapping Summary:
-  → {N} requirements (from {source type})
-  → {N} use cases (from {source type})
-  → {N} API contracts (from {source type})
-  → {N} domain entities (from {source type})
-  → {N} NFRs (from {source type})
-
-  Skipped: {N} items (see details)
-  Parse errors: {N}
-  Duplicates detected: {N} (merge mode)
-
-Sample Mappings:
-  Original: "As a user, I want to login with email"
-  → REQ-AUTH-001: WHEN a user submits email credentials THE system SHALL authenticate and return a session token
-
-  Original: POST /api/users (OpenAPI)
-  → API contract: POST /api/users with request/response schemas
-
-Proceed with import?
+Import Preview — {files} ({format})
+  → {N} requirements  → {N} use cases  → {N} contract operations  → {N} entities  → {N} NFRs
+  Skipped: {N}   Parse errors: {N}   Duplicates: {N} (merge)
+Sample:
+  "As a user, I want to login with email"
+  → REQ-F-012: WHEN a user submits valid email credentials THE system SHALL authenticate the user and start a session
+  POST /api/users → API-001-01 (Style: http) in spec/contracts/API-users.md
+Proceed?
 ```
 
-**Output:** Mapping preview for user confirmation.
+### Phase 4: Confirmation
 
-### Phase 4: User Confirmation
+Ask (skipped with `--yes`, see §2): confirm the mapping; for each duplicate Skip / Merge / Replace; resolve items that fit more than one artifact type or resist EARS; whether to include skipped items.
 
-**Objetivo:** Get user approval before generating artifacts.
+When `requirements/` or `spec/` already exist on the default branch (importing into a delivered project), start a work branch before Phase 5: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" branch start change IMPORT-{YYYY-MM-DD} {source-slug}` (branch rule in the plugin-root `references/git-conventions.md`).
 
-Present the mapping preview and ask:
+### Phase 5: Generate Artifacts
 
-1. **Confirm mapping**: "Proceed with these mappings?"
-2. **Handle duplicates** (if `--merge`): "These {N} items match existing artifacts. Options: Skip / Merge / Replace"
-3. **Resolve ambiguities**: Items that couldn't be auto-mapped get presented with options:
-   - "This item could be a requirement OR a use case. Which?"
-   - "This description doesn't fit EARS syntax. Import as-is or convert?"
-4. **Confirm skipped items**: "These {N} items were skipped because {reasons}. Include anyway?"
+Write into the canonical tree owned by `sdd-specifications-engineer` ("Specification Folder Structure") and the requirement format owned by `sdd-requirements-engineer`. Never write flat files such as `spec/domain.md` or `spec/contracts.md`.
 
-In non-interactive mode (if user pre-confirmed with `--yes`): apply default mappings and skip confirmation.
-
-### Phase 5: Generate SDD Artifacts
-
-**Objetivo:** Generate SDD-format artifacts from confirmed mappings.
-
-Based on `--target` and confirmed mappings:
-
-#### Requirements Generation (`requirements/REQUIREMENTS.md`)
+**Requirements** (`requirements/REQUIREMENTS.md`) — IDs `REQ-F-NNN` / `REQ-NF-NNN` / `REQ-C-NNN`, continuing after the highest existing number. The source's grouping (epic, component, tag) goes in a `Group` field, not in the ID:
 
 ```markdown
-### REQ-{GROUP}-{NNN}: {Title} [IMPORTED]
-
-> {EARS statement — converted from original description}
-
-- **Source:** Imported from {format} ({original-id})
+### REQ-F-012: {Title} [IMPORTED]
+- **Statement:** {EARS statement}
+- **Category:** Functional
+- **Priority:** Must have | Should have | Nice to have
+- **Source:** {format} {original-id} ({file}:{line|row})
+- **Group:** {epic/component/tag}
 - **Original text:** "{original description}"
-- **Priority:** {mapped priority}
-- **Imported:** {ISO-8601}
+- **Acceptance criteria:** {imported criteria as GIVEN/WHEN/THEN, or "None imported"}
 ```
 
-#### Specification Generation (`spec/`)
+**Specs** (`spec/`):
 
-**Domain Model** (`spec/domain.md`):
-- Entities from OpenAPI schemas, Jira entity descriptions, or CSV entity rows
-- Fields with types and constraints
+| Imported content | Target |
+|------------------|--------|
+| Entities / DTOs (OpenAPI schemas, entity tables) | `spec/domain/02-ENTITIES.md`, `spec/domain/03-VALUE-OBJECTS.md` |
+| Glossary terms | `spec/domain/01-GLOSSARY.md` |
+| Business rules | `spec/domain/05-INVARIANTS.md` (`INV-{AREA}-NNN`) |
+| Stories / feature descriptions | `spec/use-cases/UC-NNN-{slug}.md` |
+| Acceptance criteria | `spec/tests/BDD-UC-NNN.md` |
+| Ordered processes | `spec/workflows/WF-NNN-{slug}.md` |
+| OpenAPI paths | `spec/contracts/API-{module}.md` (one per tag/module) |
+| Security schemes, servers, performance items | `spec/nfr/SECURITY.md`, `spec/nfr/PERFORMANCE.md`, `spec/nfr/LIMITS.md` |
+| Decision records | `spec/adr/ADR-NNN-{slug}.md` (next free number) |
 
-**Use Cases** (`spec/use-cases.md`):
-- From Jira stories, Markdown feature descriptions, or CSV use case rows
-- Actor, preconditions, main flow, postconditions, alternative flows
+Imported OpenAPI contracts are written as `Style: http` (specifications-engineer Template 12), header row `Style | http — imported from {file}; the published HTTP interface is an existing commitment`. The reason: an OpenAPI document describes an HTTP interface that clients already depend on, so the paths, methods and status codes are requirements, not design choices; recording them as `Style: operations` would drop that information or push it into a design document that does not exist yet. Operation IDs follow the specifications-engineer scheme `API-NNN-NN`.
 
-**API Contracts** (`spec/contracts.md`):
-- From OpenAPI paths — highest fidelity import
-- Endpoints with full request/response schemas
+After writing, create or update `spec/COVERAGE.md` listing each imported module and its status (`IMPORTED`, or `SPECIFIED` only for modules whose UC, contract, domain and BDD files all exist).
 
-**NFRs** (`spec/nfr.md`):
-- From Jira non-functional items, OpenAPI security schemes, CSV NFR rows
-
-**ADRs** (`spec/adr/`):
-- From Markdown decision records, Jira architecture decisions
-
-#### Merge Logic (when `--merge`)
-
-- New items: append to existing files with `[IMPORTED]` marker
-- Duplicates (user chose merge): update existing entry with imported data, mark `[MERGED]`
-- Duplicates (user chose skip): leave existing entry unchanged
-- Duplicates (user chose replace): overwrite existing with imported, mark `[IMPORTED-REPLACED]`
+**Merge (`--merge`)**: new items are appended with `[IMPORTED]`; merged duplicates are marked `[MERGED]`; replaced ones `[IMPORTED-REPLACED]`; skipped ones are left untouched. The `[IMPORTED]` marker is the seed contract with `sdd-reverse-engineer`: it may enrich or merge those entries instead of treating the project as already-specified.
 
 ### Phase 6: Quality Check
 
-**Objetivo:** Verify quality of generated artifacts.
+Check: every item has an SDD ID; requirements are EARS or `[UNCONVERTED]`; use cases have actor, pre- and postconditions; contract operations have request/response shapes; no duplicate IDs; REQ → UC → API references resolve; priorities are not all `Must have`. Report items imported, EARS conversion rate, traceability readiness and the manual-review count.
 
-1. **Completeness check:**
-   - All imported items have SDD IDs
-   - All requirements have EARS syntax (or `[UNCONVERTED]` tag if conversion failed)
-   - All use cases have actors, preconditions, postconditions
-   - All API contracts have request/response schemas
+### Phase 7: Pipeline State and Report
 
-2. **Consistency check:**
-   - No duplicate IDs
-   - All cross-references resolve (REQ→UC links)
-   - Priority distribution is reasonable (not all CRITICAL)
-   - Group structure is coherent
+1. If `pipeline-state.json` is missing, create it from the plugin template as `sdd-setup` Step 1 does (`$SDD_PLUGIN_ROOT/templates/pipeline-state.template.json`), then apply step 2.
+2. Stage updates:
+   - `requirements-engineer` → `done` when requirements were imported.
+   - `specifications-engineer` → `done` only when the full canonical tree for the imported scope exists (domain 01–05, UC, contracts, BDD, NFR) and `spec/COVERAGE.md` shows every module `SPECIFIED`. Otherwise leave it `pending` with `staleReason: "partial import — run sdd-specifications-engineer to complete spec/"` (an OpenAPI-only import is partial).
+   - Downstream stages stay `pending`; nothing runs automatically. Next step is `sdd-specifications-engineer` (partial) or `sdd-spec-auditor` (complete).
+3. Write `import/IMPORT-REPORT.md` from [references/import-report-template.md](references/import-report-template.md), including the Defects section for Jira bugs and the Items Needing Manual Review section.
+4. Commit what the import wrote: `git add requirements/ spec/ import/` (the paths that exist), then `docs(specs): import from {source}` with `Refs:` the imported REQ ids (`docs(requirements)` when only requirements were imported), skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
 
-3. **Traceability readiness:**
-   - Requirements can link to use cases
-   - Use cases can link to API contracts
-   - Identify gaps in the chain
+## 4. Pipeline Integration
 
-4. **Quality metrics:**
-
-```
-Import Quality Report:
-  Items imported: {N}/{total}
-  EARS conversion rate: {X}%
-  Traceability ready: {X}%
-  Quality issues: {N}
-  Manual review needed: {N} items
-```
-
-**Output:** Quality assessment.
-
-### Phase 7: Pipeline State Update
-
-**Objetivo:** Update pipeline state to reflect imported artifacts.
-
-1. If `pipeline-state.json` does not exist → create with imported stages marked `done`
-2. If it exists:
-   - If `requirements-engineer` was `pending` and requirements were imported → set to `done`
-   - If `specifications-engineer` was `pending` and specs were imported → set to `done`
-   - Mark downstream stages as needing run
-3. Generate import report: `import/IMPORT-REPORT.md`
-4. Record import metadata for future reference (source files, mapping rules used)
-
-**Output:** Updated `pipeline-state.json`, import report.
-
----
-
-## 5. Output Format
-
-### File: `import/IMPORT-REPORT.md`
-
-Load [references/import-report-template.md](references/import-report-template.md) for the full template.
-
-Key sections:
-- Source files and formats
-- Import statistics (parsed, mapped, skipped, errors)
-- Mapping summary (original → SDD)
-- Quality assessment
-- Items needing manual review
-- Pipeline state impact
-
----
-
-## 6. Relationship to Other Skills
+| Reads | Writes |
+|-------|--------|
+| Input files; `requirements/REQUIREMENTS.md`, `spec/`, `pipeline-state.json` (when present) | `requirements/REQUIREMENTS.md`, `spec/` (canonical tree), `spec/COVERAGE.md`, `import/IMPORT-REPORT.md`, `pipeline-state.json` |
 
 | Skill | Relationship |
 |-------|-------------|
-| `sdd-onboarding` | Recommends import when external docs detected (scenarios 5, 8) |
-| `sdd-reverse-engineer` | May run after import to fill gaps from code analysis |
-| `sdd-reconcile` | Run after import + reverse-engineer to verify alignment |
-| `sdd-requirements-engineer` | Import feeds into or replaces the requirements engineering step |
-| `sdd-specifications-engineer` | Import may partially replace the spec engineering step |
-| `sdd-spec-auditor` | Run after import to audit imported specs |
-| `sdd-sync-notion` | For real-time Notion sync; import handles one-time file-based import |
+| `sdd-pipeline-status --diagnose` | Recommends import when external docs exist |
+| `sdd-reverse-engineer` | May run after import; merges into `[IMPORTED]` entries |
+| `sdd-reconcile` | Verifies spec ↔ code alignment after import + reverse-engineer |
+| `sdd-specifications-engineer` | Completes a partial import |
+| `sdd-spec-auditor` | Audits the imported specs |
 
----
-
-## 7. Pipeline Integration
-
-### Reads
-- Input files specified by user (various formats)
-- `requirements/REQUIREMENTS.md` (if `--merge`)
-- `spec/` directory (if `--merge`)
-- `pipeline-state.json` (if exists)
-
-### Writes
-- `requirements/REQUIREMENTS.md` (new or merged)
-- `spec/` documents (new or merged)
-- `import/IMPORT-REPORT.md`
-- `pipeline-state.json` (stage updates)
-
-### Pipeline State
-- Can set `requirements-engineer` to `done` (if requirements imported)
-- Can set `specifications-engineer` to `done` (if full specs imported, e.g., OpenAPI → contracts)
-- Downstream stages become eligible for execution
-- Does NOT run downstream skills automatically
-
----
-
-## 8. Constraints
-
-1. **File-based only**: Works from exported files, NOT direct API access to Jira/Notion/etc.
-2. **No overwrites**: NEVER overwrites existing SDD artifacts without explicit user confirmation via `--merge`.
-3. **Preview first**: ALWAYS shows mapping preview before generating artifacts.
-4. **EARS conversion**: ATTEMPT to convert all requirements to EARS syntax. Tag as `[UNCONVERTED]` if automatic conversion fails.
-5. **Source tracing**: Every imported item MUST reference its source (file, line/row, original ID).
-6. **Error tolerance**: Parse errors on individual items do NOT abort the entire import. Log errors, skip items, continue.
-7. **Encoding safe**: Handle UTF-8, Latin-1, and common encodings gracefully.
-8. **No secrets**: Skip/redact any fields that appear to contain secrets (API keys, tokens, passwords).
-9. **Language-adaptive**: Output language follows the user's language. Technical terms remain in English.
+Every imported item keeps its source reference (file, line/row, original ID). Output language follows the user's language; technical terms stay in English.

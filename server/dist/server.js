@@ -30211,9 +30211,11 @@ function getNextStepHint(toolName, args) {
     case "sdd_impact":
       return "\n\n---\n**Next:** Review depth=1 first (WILL_BREAK). Run `/sdd-req-change` to manage the change formally.";
     case "sdd_coverage":
-      return "\n\n---\n**Next:** For each gap, use `sdd_trace` to understand why coverage is missing.";
+      return "\n\n---\n**Next:** No acceptance ledger yet \u2014 run `/sdd-acceptance --check` (or `sdd accept`) for a verdict per requirement; use `sdd_trace` on a gap to see which link is missing.";
+    case "sdd_coverage_acceptance":
+      return "\n\n---\n**Next:** For FAILING/MISSING Musts run `/sdd-acceptance --loop`; use `sdd_context` on a requirement for its per-criterion evidence.";
     case "sdd_trace":
-      return "\n\n---\n**Next:** Broken links? Run `/sdd-traceability-check` for full chain verification.";
+      return "\n\n---\n**Next:** Broken links or unverified requirements? Run `/sdd-acceptance --check` for the verdict and evidence per requirement.";
     case "sdd_gaps":
       return '\n\n---\n**Next:** Use `sdd_gaps({ format: "detail" })` for full findings, or `sdd_trace` on specific artifacts to investigate gaps.';
     default:
@@ -30368,28 +30370,6 @@ function executeImpact(args, graph, index) {
   if ((byDepth[1]?.length ?? 0) > 5 || totalAffected > 20) risk = "HIGH";
   else if ((byDepth[1]?.length ?? 0) > 2 || totalAffected > 10) risk = "MEDIUM";
   else risk = "LOW";
-  let codeImpact;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const relatedSymbols = ci.symbols.filter(
-      (s) => s.artifactRefs.includes(artifact_id) || s.inferredRefs.includes(artifact_id)
-    );
-    if (relatedSymbols.length > 0) {
-      const callerSet = /* @__PURE__ */ new Set();
-      for (const sym of relatedSymbols) {
-        for (const caller of sym.callers) callerSet.add(caller);
-      }
-      codeImpact = {
-        directSymbols: relatedSymbols.map((s) => ({
-          name: s.name,
-          file: s.filePath,
-          type: s.type
-        })),
-        transitiveCallers: [...callerSet],
-        totalCallChainDepth: relatedSymbols.length + callerSet.size
-      };
-    }
-  }
   const output = {
     artifact: {
       id: root.id,
@@ -30410,16 +30390,92 @@ function executeImpact(args, graph, index) {
         }
       ])
     ),
-    affectedStages: [...affectedStages],
-    ...codeImpact ? { codeImpact } : {}
+    affectedStages: [...affectedStages]
   };
   return JSON.stringify(output) + getNextStepHint("sdd_impact", args);
 }
 
+// src/acceptance.ts
+import { readFileSync as readFileSync2, existsSync as existsSync2 } from "node:fs";
+import { join as join2, dirname as dirname2 } from "node:path";
+var ACCEPTANCE_SCHEMA = "sdd-acceptance-v1";
+function findAcceptanceFile(startDir) {
+  let dir = startDir;
+  for (let i = 0; i < 6; i++) {
+    const candidate = join2(dir, ".sdd", "acceptance.json");
+    if (existsSync2(candidate)) return candidate;
+    const parent = dirname2(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+function loadAcceptance(cwd) {
+  const file2 = findAcceptanceFile(cwd ?? process.cwd());
+  if (!file2) return null;
+  try {
+    const ledger = JSON.parse(readFileSync2(file2, "utf-8"));
+    if (ledger?.$schema !== ACCEPTANCE_SCHEMA || !Array.isArray(ledger.requirements)) return null;
+    return { path: file2, ledger };
+  } catch {
+    return null;
+  }
+}
+function acceptanceHeader(path, ledger) {
+  return {
+    source: "acceptance",
+    ledger: path,
+    evaluated_sha: ledger.evaluated_sha,
+    dirty: ledger.dirty,
+    generatedAt: ledger.generatedAt,
+    scope: ledger.scope,
+    note: "Verdicts are valid for evaluated_sha; after new commits run `sdd accept` (or /sdd-acceptance --check) again."
+  };
+}
+function criteriaLabel(r) {
+  return `${r.criteria_passing}/${r.criteria_total}`;
+}
+
 // src/tools/context.ts
-function executeContext(args, graph, index) {
+function acceptanceView(r) {
+  return {
+    verdict: r.verdict,
+    priority: r.priority,
+    verification: r.verification,
+    needs: r.needs,
+    criteria: criteriaLabel(r),
+    stale_evidence: r.stale_evidence,
+    waiver: r.waiver,
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, scenarios: c.scenarios, evidence: c.evidence }))
+  };
+}
+function acceptanceGaps(r) {
+  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return [];
+  const gaps = [];
+  if (!r.verification) gaps.push("NO_VERIFICATION_METHOD: the requirement has no valid Verification line");
+  for (const c of r.criteria) {
+    if (c.state === "fail") gaps.push(`FAILING_AC${c.n}: evidence fails${c.text ? ` \u2014 ${c.text}` : ""}`);
+    else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code \u2014 re-run the tests or re-record`);
+    else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
+    else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
+  }
+  return gaps;
+}
+function executeContext(args, graph, index, cwd) {
   const { artifact_id } = args;
+  const acc = loadAcceptance(cwd);
+  const accReq = acc?.ledger.requirements.find((r) => r.id === artifact_id) ?? null;
   const artifact = index.byId.get(artifact_id);
+  if (!artifact && accReq && acc) {
+    return JSON.stringify({
+      artifact: { id: accReq.id, type: "REQ", category: accReq.type, title: accReq.title, priority: accReq.priority },
+      coverageStatus: accReq.verdict,
+      acceptance: { ...acceptanceHeader(acc.path, acc.ledger), ...acceptanceView(accReq) },
+      upstream: [],
+      downstream: [],
+      gaps: acceptanceGaps(accReq)
+    }) + getNextStepHint("sdd_context", args);
+  }
   if (!artifact) {
     return JSON.stringify({
       error: `Artifact "${artifact_id}" not found`,
@@ -30448,8 +30504,8 @@ function executeContext(args, graph, index) {
       file: rel.sourceFile
     };
   });
-  const gaps = [];
-  if (artifact.type === "REQ") {
+  const gaps = accReq ? acceptanceGaps(accReq) : [];
+  if (artifact.type === "REQ" && !accReq) {
     if (upstream.length === 0 && downstream.length === 0) {
       gaps.push("ORPHAN: No relationships found \u2014 this REQ is isolated");
     }
@@ -30472,40 +30528,13 @@ function executeContext(args, graph, index) {
   const hasUCLink = downstream.some((d) => d.type === "UC") || upstream.some((u) => u.type === "UC");
   const hasBDDLink = downstream.some((d) => d.type === "BDD") || upstream.some((u) => u.type === "BDD");
   let coverageStatus;
-  if (hasUCLink && hasBDDLink && codeCount > 0 && testCount > 0)
+  if (accReq) coverageStatus = accReq.verdict;
+  else if (hasUCLink && hasBDDLink && codeCount > 0 && testCount > 0)
     coverageStatus = "Complete";
   else if (hasUCLink && (codeCount > 0 || testCount > 0))
     coverageStatus = "In Progress";
   else if (hasUCLink) coverageStatus = "Specified";
   else coverageStatus = "Not Started";
-  let codeIntel;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const symbols = ci.symbols.filter(
-      (s) => s.artifactRefs.includes(artifact_id) || s.inferredRefs.includes(artifact_id)
-    );
-    if (symbols.length > 0) {
-      const processes = ci.processes.filter(
-        (p) => p.artifactRefs.includes(artifact_id)
-      );
-      codeIntel = {
-        symbols: symbols.map((s) => ({
-          name: s.name,
-          type: s.type,
-          file: s.filePath,
-          lines: `${s.startLine}-${s.endLine}`,
-          callers: s.callers,
-          callees: s.callees,
-          isInferred: s.inferredRefs.includes(artifact_id)
-        })),
-        processes: processes.map((p) => ({
-          name: p.name,
-          steps: p.steps,
-          entryPoint: p.entryPoint
-        }))
-      };
-    }
-  }
   const allCodeRefs = artifact.codeRefs ?? [];
   const directCodeRefs = allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct");
   const inferredCodeRefs = allCodeRefs.filter((cr) => cr.origin && cr.origin !== "direct");
@@ -30522,6 +30551,7 @@ function executeContext(args, graph, index) {
       classification: artifact.classification
     },
     coverageStatus,
+    ...accReq && acc ? { acceptance: { ...acceptanceHeader(acc.path, acc.ledger), ...acceptanceView(accReq) } } : {},
     upstream,
     downstream,
     codeRefs: directCodeRefs,
@@ -30531,15 +30561,69 @@ function executeContext(args, graph, index) {
     })),
     testRefs: artifact.testRefs ?? [],
     commitRefs: artifact.commitRefs ?? [],
-    gaps,
-    ...codeIntel ? { codeIntelligence: codeIntel } : {}
+    gaps
   };
   return JSON.stringify(output) + getNextStepHint("sdd_context", args);
 }
 
 // src/tools/coverage.ts
-function executeCoverage(args, graph, index) {
+function coverageFromAcceptance(args, path, ledger, index) {
   const { domain: domain2, layer } = args;
+  let reqs = ledger.requirements;
+  const filtered = Boolean(domain2 || layer);
+  if (filtered) {
+    reqs = reqs.filter((r) => {
+      const c = index.byId.get(r.id)?.classification;
+      if (!c) return false;
+      if (domain2 && !c.businessDomain?.toLowerCase().includes(domain2.toLowerCase())) return false;
+      if (layer && !c.technicalLayer?.toLowerCase().includes(layer.toLowerCase())) return false;
+      return true;
+    });
+  }
+  const verdicts = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
+  const byVerdict = Object.fromEntries(verdicts.map((v) => [v, reqs.filter((r) => r.verdict === v).length]));
+  const byPriority = {};
+  for (const r of reqs) {
+    if (r.verdict === "DEPRECATED") continue;
+    const k = r.priority ?? "Unspecified";
+    byPriority[k] ??= { total: 0, VERIFIED: 0, FAILING: 0, MISSING: 0, WAIVED: 0 };
+    byPriority[k].total++;
+    byPriority[k][r.verdict]++;
+  }
+  const musts = reqs.filter((r) => r.priority === "Must" && r.verdict !== "DEPRECATED");
+  const row = (r) => ({
+    id: r.id,
+    title: r.title,
+    priority: r.priority,
+    verification: r.verification,
+    verdict: r.verdict,
+    criteria: criteriaLabel(r),
+    ...r.stale_evidence ? { stale_evidence: true } : {}
+  });
+  return {
+    ...acceptanceHeader(path, ledger),
+    filters: { domain: domain2 ?? null, layer: layer ?? null },
+    ...filtered && index.byId.size === 0 ? { filterNote: "domain/layer filters need dashboard/traceability-graph.json for the classification" } : {},
+    totalReqs: reqs.filter((r) => r.verdict !== "DEPRECATED").length,
+    byVerdict,
+    byPriority,
+    must: {
+      total: musts.length,
+      verified: musts.filter((r) => r.verdict === "VERIFIED").length,
+      waived: musts.filter((r) => r.verdict === "WAIVED").map((r) => r.id),
+      goal: musts.every((r) => r.verdict === "VERIFIED" || r.verdict === "WAIVED")
+    },
+    open: reqs.filter((r) => r.verdict === "FAILING" || r.verdict === "MISSING").map(row),
+    requirements: reqs.filter((r) => r.verdict !== "DEPRECATED").map(row),
+    deprecated: reqs.filter((r) => r.verdict === "DEPRECATED").map((r) => r.id)
+  };
+}
+function executeCoverage(args, graph, index, cwd) {
+  const { domain: domain2, layer } = args;
+  const acc = loadAcceptance(cwd);
+  if (acc) {
+    return JSON.stringify(coverageFromAcceptance(args, acc.path, acc.ledger, index)) + getNextStepHint("sdd_coverage_acceptance", args);
+  }
   let reqs = index.byType.get("REQ") ?? [];
   if (domain2) {
     const domainLower = domain2.toLowerCase();
@@ -30557,6 +30641,8 @@ function executeCoverage(args, graph, index) {
   const byLayer = {};
   const uncovered = [];
   const topGaps = [];
+  let reqsWithDirectCode = 0;
+  let reqsWithInferredCodeOnly = 0;
   for (const req of reqs) {
     const domainKey = req.classification?.businessDomain ?? "Unclassified";
     const layerKey = req.classification?.technicalLayer ?? "Unknown";
@@ -30577,8 +30663,10 @@ function executeCoverage(args, graph, index) {
     });
     const hasCode = (req.codeRefs?.length ?? 0) > 0;
     const hasDirectCode = req.codeRefs?.some((cr) => (cr.origin ?? "direct") === "direct") ?? false;
-    const hasInferredCode = req.codeRefs?.some((cr) => cr.origin === "commit-inferred" || cr.origin === "task-inferred") ?? false;
+    const hasInferredCode = req.codeRefs?.some((cr) => (cr.origin ?? "direct") !== "direct") ?? false;
     const hasTests = (req.testRefs?.length ?? 0) > 0;
+    if (hasDirectCode) reqsWithDirectCode++;
+    else if (hasInferredCode) reqsWithInferredCodeOnly++;
     const missing = [];
     if (!hasUC) missing.push("UC");
     if (!hasBDD) missing.push("BDD");
@@ -30600,31 +30688,22 @@ function executeCoverage(args, graph, index) {
     }
   }
   topGaps.sort((a, b) => a.missingLinks.length - b.missingLinks.length);
-  let codeIntelCoverage;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    codeIntelCoverage = {
-      totalSymbols: ci.stats.totalSymbols,
-      annotated: ci.stats.symbolsWithRefs,
-      inferred: ci.stats.symbolsWithInferredRefs,
-      uncoveredSymbols: ci.stats.uncoveredSymbols,
-      annotatedPercentage: ci.stats.totalSymbols > 0 ? Math.round(
-        ci.stats.symbolsWithRefs / ci.stats.totalSymbols * 100
-      ) : 0,
-      totalCoveredPercentage: ci.stats.totalSymbols > 0 ? Math.round(
-        (ci.stats.symbolsWithRefs + ci.stats.symbolsWithInferredRefs) / ci.stats.totalSymbols * 100
-      ) : 0
-    };
-  }
   const allCodeRefs = reqs.flatMap((r) => r.codeRefs ?? []);
   const codeInferenceBreakdown = {
     directRefs: allCodeRefs.filter((cr) => (cr.origin ?? "direct") === "direct").length,
     commitInferred: allCodeRefs.filter((cr) => cr.origin === "commit-inferred").length,
     taskInferred: allCodeRefs.filter((cr) => cr.origin === "task-inferred").length,
     manualOverrides: allCodeRefs.filter((cr) => cr.origin === "manual-override").length,
-    codeIndex: allCodeRefs.filter((cr) => cr.origin === "code-index").length
+    blameInferred: allCodeRefs.filter((cr) => cr.origin === "blame-inferred").length,
+    propagated: allCodeRefs.filter((cr) => cr.origin === "propagated").length,
+    llmVerified: allCodeRefs.filter((cr) => cr.origin === "llm-verified").length,
+    /** Every ref whose origin is not `direct` (the sum of the inferred kinds above and any new ones). */
+    inferredTotal: allCodeRefs.filter((cr) => (cr.origin ?? "direct") !== "direct").length,
+    reqsWithDirectCode,
+    reqsWithInferredCodeOnly
   };
   const output = {
+    source: "graph-links",
     filters: { domain: domain2 ?? null, layer: layer ?? null },
     totalReqs: reqs.length,
     overallCoverage: graph.statistics.traceabilityCoverage,
@@ -30640,8 +30719,7 @@ function executeCoverage(args, graph, index) {
       coveragePercent: stats.total > 0 ? Math.round(stats.covered / stats.total * 100) : 0
     })),
     uncovered: uncovered.slice(0, 20),
-    topGaps: topGaps.slice(0, 15),
-    ...codeIntelCoverage ? { codeIntelligence: codeIntelCoverage } : {}
+    topGaps: topGaps.slice(0, 15)
   };
   return JSON.stringify(output) + getNextStepHint("sdd_coverage", args);
 }
@@ -30834,14 +30912,14 @@ function executeTrace(args, graph, index) {
 }
 
 // src/tools/gaps.ts
-import { readFileSync as readFileSync2, existsSync as existsSync2 } from "node:fs";
-import { join as join2, dirname as dirname2 } from "node:path";
+import { readFileSync as readFileSync3, existsSync as existsSync3 } from "node:fs";
+import { join as join3, dirname as dirname3 } from "node:path";
 function findGapAnalysisFile(startDir) {
   let dir = startDir;
   for (let i = 0; i < 6; i++) {
-    const candidate = join2(dir, ".sdd", "gap-analysis.json");
-    if (existsSync2(candidate)) return candidate;
-    const parent = dirname2(dir);
+    const candidate = join3(dir, ".sdd", "gap-analysis.json");
+    if (existsSync3(candidate)) return candidate;
+    const parent = dirname3(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -30852,7 +30930,7 @@ function loadGapAnalysis(cwd) {
   const filePath = findGapAnalysisFile(searchDir);
   if (!filePath) return null;
   try {
-    const raw = readFileSync2(filePath, "utf-8");
+    const raw = readFileSync3(filePath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -31044,6 +31122,8 @@ function readResource(uri, graph, index) {
     const current = stages.find((s) => s.name === currentStage);
     const staleStages = stages.filter((s) => s.status === "stale");
     const doneStages = stages.filter((s) => s.status === "done");
+    const skippedStages = stages.filter((s) => s.status === "skipped");
+    const activeStages = stages.length - skippedStages.length;
     let nextAction = "Run /sdd-requirements-engineer to start the pipeline";
     const pendingStage = stages.find((s) => s.status === "pending" || s.status === "running");
     if (pendingStage) {
@@ -31061,8 +31141,9 @@ function readResource(uri, graph, index) {
             currentStage,
             currentStatus: current?.status ?? "unknown",
             lastRun: current?.lastRun ?? null,
-            progress: `${doneStages.length}/${stages.length} stages complete`,
+            progress: `${doneStages.length}/${activeStages} stages complete` + (skippedStages.length ? `, ${skippedStages.length} skipped` : ""),
             staleStages: staleStages.map((s) => s.name),
+            skippedStages: skippedStages.map((s) => ({ name: s.name, reason: s.skipReason ?? null })),
             nextAction,
             generatedAt: graph.generatedAt
           })
@@ -31090,16 +31171,14 @@ function readResource(uri, graph, index) {
           text: [
             "SDD Traceability Graph Schema v3",
             "",
-            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption?, codeIntelligence? }",
+            "Root: { $schema, generatedAt, projectName, pipeline, artifacts[], relationships[], statistics, adoption? }",
             "",
             "Artifact types: REQ, UC, WF, API, BDD, INV, ADR, NFR, RN, FASE, TASK",
             "Relationship types: implements, orchestrates, verifies, guarantees, decides, decomposes, implemented-by, implemented-by-code, tested-by, implemented-by-commit, reads-from, traces-to",
             "",
             "Each artifact has: id, type, category, title, file, line, priority, stage, classification?, codeRefs[], testRefs[], commitRefs[]",
             "",
-            "codeIntelligence (optional, from /sdd-code-index): symbols[], callGraph[], processes[], stats",
-            "",
-            "Full schema: see skills/dashboard/references/graph-schema.md"
+            "Full schema: see docs/design/graph-schema.md in the sdd-pipeline plugin"
           ].join("\n")
         }
       ]

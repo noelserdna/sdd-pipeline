@@ -1,5 +1,7 @@
 # Perfilado de una etapa: `sdd-spec-auditor` (2026-08-25)
 
+> **Nota (5.0):** las status lines, `sdd-watch` y `.sdd/activity.jsonl` que se citan se retiraron en 5.0; que el fan-out se activó queda en `summary.metrics.mode` y `task_agents` de `pipeline-state.json`.
+
 Herramienta: `scripts/sdd-profile.sh` (ejecuta la skill con `claude -p --output-format stream-json --verbose` y desglosa el flujo de eventos; `--analyze FILE.jsonl` sobre una captura existente).
 
 Caso: re-auditoría de `spec/` del todo-app (7 UC, 4 contratos, 7 ADR, dominio, NFR) en modo solo auditoría.
@@ -110,7 +112,7 @@ sobre el mismo proyecto:
 
 Conclusión: **pasa el flag** (`--fanout`, o `--parallel` en el implementer) siempre que se supere el umbral, y añade una
 frase a la invocación ("lanzar los N carriles se pide explícitamente"). Eso convierte el criterio de la skill en petición
-del que llama, que es lo único determinista. `sdd-orchestrator` y `sdd-lead` ya lo hacen; `tests/e2e/20-smoke.sh` también,
+del que llama, que es lo único determinista. `sdd-orchestrator` (entonces agente, hoy skill) y `sdd-lead` ya lo hacen; `tests/e2e/20-smoke.sh` también,
 para que las mediciones sean comparables. Si aun así una etapa reporta `metrics.mode: sequential`, el motivo está en
 `summary.highlights`.
 

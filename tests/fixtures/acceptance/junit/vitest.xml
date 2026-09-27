@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="4" failures="1" errors="0" time="0.51">
+    <testsuite name="tests/add.test.ts" timestamp="2026-09-27T10:00:00.000Z" hostname="ci" tests="4" failures="1" errors="0" skipped="1" time="0.02">
+        <testcase classname="tests/add.test.ts" name="todo add &gt; AC-001-01 adds a pending task" time="0.004">
+        </testcase>
+        <testcase classname="tests/add.test.ts" name="todo add &gt; AC-001-02 rejects an empty title" time="0.002">
+            <failure message="expected 0 to be 2 // Object.is equality" type="AssertionError">
+AssertionError: expected 0 to be 2 // Object.is equality
+ ❯ tests/add.test.ts:14:21
+            </failure>
+        </testcase>
+        <testcase classname="tests/add.test.ts" name="todo add &gt; AC-001-03 long title" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="tests/add.test.ts" name="helper without scenario" time="0.001"/>
+    </testsuite>
+</testsuites>

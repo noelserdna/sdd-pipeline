@@ -5,6 +5,7 @@
 # worktrees) e inyecta el contexto del pipeline. Lee dashboard/traceability-graph.json
 # (si existe) para la cobertura. Con rol (SDD_ROLE o registro de sesiones) añade
 # "Rol: … | Pares vivos: …" y exporta SDD_STATE_ROOT / SDD_PLUGIN_ROOT vía CLAUDE_ENV_FILE.
+# Sin pipeline-state.json, sin .sdd/ y sin rol (repositorio que no usa SDD) no emite nada.
 
 set -euo pipefail
 
@@ -40,6 +41,14 @@ write_env_file() {
     fi
   } >> "$f" 2>/dev/null || true
 }
+# Proyectos sin SDD (ni pipeline-state.json ni .sdd/ ni rol): silencio total, sin variables.
+# Los hooks del plugin son globales; no hay que pedir /sdd-setup en cada repositorio.
+if [ ! -f "$PIPELINE_STATE" ] && [ ! -d "$STATE_ROOT/.sdd" ] && [ -z "$ROLE" ]; then
+  exit 0
+fi
+
+# SDD_STATE_ROOT se exporta para las skills (worktrees); si se hereda a otro repositorio,
+# sdd_roots la ignora (solo vale dentro del mismo git-common-dir).
 write_env_file
 
 # --- Contexto de rol (solo si hay rol) ---
@@ -69,48 +78,30 @@ if [ ! -f "$PIPELINE_STATE" ]; then
   emit "SDD Pipeline: No pipeline-state.json found. Fresh pipeline — all stages pending. Run /sdd-setup to initialize automation."
 fi
 
-# Try jq first, fall back to node
-parse_with_jq() {
-  jq -r '
-    "SDD Pipeline [" + (.currentStage // "unknown") + "]: " +
-    ([.stages | to_entries[] | select(.value.status == "done") | .key] | length | tostring) + "/7 done" +
-    (if ([.stages | to_entries[] | select(.value.status == "stale")] | length) > 0
-     then ". STALE: " + ([.stages | to_entries[] | select(.value.status == "stale") | .key] | join(", "))
-     else "" end) +
-    (if ([.stages | to_entries[] | select(.value.status == "running")] | length) > 0
-     then ". RUNNING: " + ([.stages | to_entries[] | select(.value.status == "running") | .key] | join(", "))
-     else "" end) +
-    (if ([.stages | to_entries[] | select(.value.status == "error")] | length) > 0
-     then ". ERROR: " + ([.stages | to_entries[] | select(.value.status == "error") | .key] | join(", "))
-     else "" end) +
-    ". Next: " + ([.stages | to_entries[] | select(.value.status == "pending" or .value.status == "stale") | .key] | first // "all complete")
-  ' "$PIPELINE_STATE" 2>/dev/null
+# Progreso sobre las etapas lineales no saltadas (las laterales no cuentan; las `skipped` por la ruta adaptativa
+# salen del total y se nombran aparte: "N/M done, K skipped"); listas en orden de pipeline.
+build_context() {
+  local sum done_n total running stale errors next current skipped msg k
+  sum=$(sdd_stage_summary "$PIPELINE_STATE") || sum=""
+  [ -n "$sum" ] || return 0
+  IFS='|' read -r done_n total running stale errors next current skipped <<< "$sum"
+  msg="SDD Pipeline [${current:-unknown}]: ${done_n}/${total} done"
+  if [ -n "$skipped" ]; then
+    # shellcheck disable=SC2086  # contar palabras de la lista
+    set -- $skipped
+    k=$#
+    msg="$msg, $k skipped (${skipped// /, })"
+  fi
+  [ -n "$stale" ] && msg="$msg. STALE: ${stale// /, }"
+  [ -n "$running" ] && msg="$msg. RUNNING: ${running// /, }"
+  [ -n "$errors" ] && msg="$msg. ERROR: ${errors// /, }"
+  if [ -n "$next" ]; then msg="$msg. Next: $next"
+  elif [ "$done_n" = "$total" ]; then msg="$msg. Next: all complete"
+  fi
+  printf '%s\n' "$msg"
 }
 
-parse_with_node() {
-  SDD_STATE_FILE="$PIPELINE_STATE" node -e "
-    const fs = require('fs');
-    try {
-      const state = JSON.parse(fs.readFileSync(process.env.SDD_STATE_FILE, 'utf8'));
-      const entries = Object.entries(state.stages || {});
-      const done = entries.filter(([,v]) => v.status === 'done').length;
-      const stale = entries.filter(([,v]) => v.status === 'stale').map(([k]) => k);
-      const running = entries.filter(([,v]) => v.status === 'running').map(([k]) => k);
-      const errors = entries.filter(([,v]) => v.status === 'error').map(([k]) => k);
-      const next = entries.find(([,v]) => v.status === 'pending' || v.status === 'stale');
-      let msg = 'SDD Pipeline [' + (state.currentStage || 'unknown') + ']: ' + done + '/7 done';
-      if (stale.length) msg += '. STALE: ' + stale.join(', ');
-      if (running.length) msg += '. RUNNING: ' + running.join(', ');
-      if (errors.length) msg += '. ERROR: ' + errors.join(', ');
-      msg += '. Next: ' + (next ? next[0] : 'all complete');
-      console.log(msg);
-    } catch(e) {
-      console.log('SDD Pipeline: could not parse pipeline-state.json');
-    }
-  " 2>/dev/null
-}
-
-CONTEXT=$(parse_with_jq) || CONTEXT=$(parse_with_node) || CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
+CONTEXT=$(build_context) || CONTEXT=""
 
 [ -z "$CONTEXT" ] && CONTEXT="SDD Pipeline: could not parse pipeline-state.json"
 
@@ -145,6 +136,32 @@ if [ -f "$GRAPH_FILE" ]; then
 
   COVERAGE=$(coverage_with_jq) || COVERAGE=$(coverage_with_node) || COVERAGE=""
   [ -n "$COVERAGE" ] && CONTEXT="$CONTEXT $COVERAGE"
+fi
+
+# Resumen de aceptación del último `sdd accept` / `sdd gate` / `sdd loop next` (.sdd/acceptance.json, ignorado por git)
+ACCEPT_FILE="$STATE_ROOT/.sdd/acceptance.json"
+if [ -f "$ACCEPT_FILE" ]; then
+  acceptance_with_jq() {
+    jq -r '.summary as $s | select($s != null)
+      | "| Acceptance: Must " + ($s.must_verified | tostring) + "/" + ($s.must_total | tostring) + " verified"
+        + (if ($s.must_waived // 0) > 0 then ", " + ($s.must_waived | tostring) + " waived" else "" end)
+        + (if $s.goal then " (goal met)" else " (open: /sdd-acceptance --loop)" end)
+        + (if ($s.stale_evidence // 0) > 0 then ", stale evidence " + ($s.stale_evidence | tostring) else "" end)
+        + " @" + ((.evaluated_sha // "no-git") | .[0:7])' "$ACCEPT_FILE" 2>/dev/null
+  }
+  acceptance_with_node() {
+    SDD_ACCEPT_FILE="$ACCEPT_FILE" node -e "
+      try {
+        const l = JSON.parse(require('fs').readFileSync(process.env.SDD_ACCEPT_FILE, 'utf8')); const s = l.summary;
+        if (s) console.log('| Acceptance: Must ' + s.must_verified + '/' + s.must_total + ' verified'
+          + (s.must_waived ? ', ' + s.must_waived + ' waived' : '') + (s.goal ? ' (goal met)' : ' (open: /sdd-acceptance --loop)')
+          + (s.stale_evidence ? ', stale evidence ' + s.stale_evidence : '') + ' @' + String(l.evaluated_sha || 'no-git').slice(0, 7));
+      } catch (e) {}
+    " 2>/dev/null
+  }
+  ACCEPTANCE=$(acceptance_with_jq) || ACCEPTANCE=""
+  [ -n "$ACCEPTANCE" ] || ACCEPTANCE=$(acceptance_with_node) || ACCEPTANCE=""
+  [ -n "$ACCEPTANCE" ] && CONTEXT="$CONTEXT $ACCEPTANCE"
 fi
 
 # Handoff del último stage done que lo registre (stages[*].summary.handoff = {to, sentAt, result})

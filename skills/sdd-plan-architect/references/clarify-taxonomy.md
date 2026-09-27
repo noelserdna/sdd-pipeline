@@ -122,7 +122,7 @@ SKIP IF:
 
 1. Read all ADR files with `technology|stack|framework|runtime|language` in content
 2. Read CLAUDE.md for "Active Technologies" and `## SDD Stack Profile`; if `stack` names a kit, read `templates/stacks/{stack}/kit.json`
-3. Read FASE-0 (bootstrap) for technology decisions
+3. Read `plan/PLAN.md` §2 and FASE-0 (the walking skeleton) for technology decisions
 4. Read nfr/ for technology constraints (compatibility, licensing)
 
 ### Question Templates
@@ -185,7 +185,7 @@ SKIP IF:
 1. Read 01-SYSTEM-CONTEXT.md for bounded contexts
 2. Read ADRs with `architecture|topology|deploy|scale|monolith|microservice`
 3. Read nfr/PERFORMANCE.md for scaling targets
-4. Read FASE-0 for deployment platform decisions
+4. Read `plan/PLAN.md` §2 and FASE-0 for deployment platform decisions
 
 ### Question Templates
 
@@ -360,9 +360,9 @@ NFR define p99 latency targets pero no hay estrategia de caching.
 
 | Opción | Descripción |
 |--------|-------------|
-| Cloudflare KV + Cache API (Recomendado) | Edge caching, global distribution |
-| In-memory (Workers) | Request-scoped only, no persistence |
-| External Redis | Full-featured, extra hop |
+| HTTP caching + framework cache store (Recomendado) | Uses the stack's built-in cache, no new service |
+| In-memory per process | Simple, lost on restart, not shared |
+| External Redis / edge KV | Shared, extra service and hop |
 
 **Contexto:** [latency targets], [data access patterns], [platform]
 ```
@@ -380,7 +380,7 @@ Security specifications (encryption, auth, RBAC) without concrete library/patter
 ```
 SCAN FOR:
 - nfr/SECURITY.md specifying controls → check for library selection
-- ADR-002 (encryption) → check for specific library
+- Encryption ADRs → check for specific library
 - Auth specs → check for JWT/session library
 - RBAC specs → check for enforcement mechanism
 - Audit logging → check for storage + format
@@ -393,7 +393,7 @@ SKIP IF:
 ### Context-Aware Checks
 
 1. Read nfr/SECURITY.md for security requirements
-2. Read ADR-002 and related security ADRs
+2. Read the security ADRs (grep `encrypt|auth|session|rbac`)
 3. Read domain/05-INVARIANTS.md for security invariants
 4. Read runbooks/ for operational security procedures
 
@@ -440,7 +440,7 @@ SKIP IF:
 1. Check for .github/workflows/, .gitlab-ci.yml, or similar
 2. Read ADRs with `cicd|pipeline|deploy|release|environment`
 3. Read runbooks/ for deployment procedures
-4. Read FASE-0 for bootstrap/deploy decisions
+4. Read `plan/PLAN.md` §2 and FASE-0 for build/deploy decisions
 
 ### Question Templates
 
@@ -450,9 +450,9 @@ No hay estrategia de deployment definida.
 
 | Opción | Descripción |
 |--------|-------------|
-| Wrangler direct deploy (Recomendado) | Simple, Cloudflare-native |
-| GitHub Actions + Wrangler | Automated CI/CD pipeline |
-| Terraform + Wrangler | Infrastructure as Code |
+| CI pipeline + platform deploy (Recomendado) | Tests gate every deploy, one environment to start |
+| Manual deploy from a script | Simple, no gate |
+| Infrastructure as Code + CI | Reproducible environments, more setup |
 
 **Contexto:** [platform], [environment count], [team size]
 ```
@@ -534,7 +534,7 @@ SKIP IF:
 2. Read ADRs with `monorepo|tooling|lint|format|dev-environment|workspace`
 3. Check for existing config files (.eslintrc, prettier, turbo.json, nx.json)
 4. Check for Dockerfile or devcontainer.json
-5. Read FASE-0 for bootstrap/setup decisions
+5. Read `plan/PLAN.md` §2 and FASE-0 for setup decisions
 
 ### Question Templates
 

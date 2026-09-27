@@ -29,9 +29,14 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - server: <cmd with {port}|none>
 - port: <n>
 - acceptance: <cmd from repo root; ID filter appended as --grep <ID>|none>
+- test_report: <cmd that writes JUnit XML to .sdd/junit/ (or test_report_path)|none>
+- test_report_path: <file, dir or dir/*.xml>   # optional; default .sdd/junit/
+- acceptance_gate: off|warn|enforce
+- tracker: github|gitlab|off
 - e2e_scaffold: allowed|never
 - task_state: checkbox|trailers
 - task_format: full|compact
+- default_branch: <branch>   # optional; see the table
 ```
 
 Parsing: one `- key: value` per line until the next `## ` heading; text after `#` preceded by whitespace is a comment;
@@ -41,7 +46,7 @@ detected/kit/legacy value (§3), then the default below.
 | Key | Used in | Default when absent everywhere |
 |-----|---------|--------------------------------|
 | `app_dir` | every command except `acceptance` runs from it | `.` |
-| `code_paths` / `test_paths` | Output Artifacts, trace scope, coverage scope | `src` / `tests` |
+| `code_paths` / `test_paths` | Output Artifacts, trace scope, coverage scope, acceptance freshness (below) | `src` / `tests` |
 | `install` | Setup tasks, G-08 | `none` |
 | `test` | Foundation checkpoint, Phase 9, Phase 9-S, after each merge of `--integrate` | — (G-08 HALT) |
 | `test_file` | Phase 4 RED, Phase 5 GREEN, Phase 6 per task | `test` without a file filter |
@@ -50,13 +55,30 @@ detected/kit/legacy value (§3), then the default below.
 | `lint_files` | Phase 6 per task (changed files only) | `none` |
 | `lint` | Phase 9 | `none` |
 | `build` | Phase 9 only | `none` |
-| `coverage` | Phase 9 step 4, `--verify` Dimension 4 | `none` |
+| `coverage` | Phase 9 step 4, `--verify` Dimension 4 (its output directory is git-ignored, below) | `none` |
 | `db_reset_safe` | after a schema/migration change when the test runner does not prepare the DB; AI Tool Guardrails | `none` |
 | `server` / `port` | server helper (§8): config tasks without tests, manual smoke | `none` / `3000` |
 | `acceptance` | E2E tasks (`--grep <E2E-ID>`), Phase 9 (once, fail fast) | `none` |
+| `test_report` | `sdd-acceptance --check/--loop` captures test results before `sdd accept`; runs from `app_dir` and writes JUnit XML whose test names carry the scenario id (`AC-NNN-NN`) | `none` (the acceptance ledger then finds no test evidence) |
+| `test_report_path` | where `sdd accept`/`sdd gate` read that JUnit (file, directory or `dir/*.xml`, comma-separated) | `.sdd/junit/` |
+| `acceptance_gate` | mode of `sdd gate` (`off` · `warn` prints and exits 0 · `enforce` fails when a Must is not VERIFIED or WAIVED) | `enforce`; set `warn` when adopting SDD in a brownfield project |
+| `tracker` | issue/PR provider for `sdd issue`/`sdd pr-body` (any push, issue or PR still asks the human) | `off` |
 | `e2e_scaffold` | construction-protocol.md E2E step 2 | `allowed` |
 | `task_state` | Phase 2, Phase 7, Modes 3/6/7, G-11, `--verify`, I-06/I-09 (§6) | `checkbox` |
 | `task_format` | Phase 6 review, Revert (§6) | `full` |
+| `default_branch` | branch rule (G-13, `sdd.mjs branch start`), `--integrate` merge target | `origin/HEAD`, then `init.defaultBranch`, then `main`/`master` |
+
+`code_paths` and `test_paths` also decide when acceptance evidence goes stale: `sdd accept` discards test results and
+records without `--paths` only when files under those paths changed since they were captured, so a docs or feedback
+commit leaves them valid. List a build or test config there (`vitest.config.ts`, `package.json`) when a change to it
+should invalidate evidence.
+
+Coverage output is generated, never versioned: the task that first configures a coverage tool adds its output
+directory (`coverage/`, `.nyc_output/`, `htmlcov/`) to `.gitignore`, below the SDD managed block and in the same task
+commit, so later stage commits do not pick up the reports.
+
+`/sdd-setup` writes `task_state: trailers` for new projects: the commit is the evidence, so nothing has to keep a
+checkbox in sync. `checkbox` stays the default when the key is absent, for projects created before that.
 
 ## 2. Substituting placeholders
 
@@ -170,10 +192,17 @@ Rendered by the kit installer (`templates/stacks/<kit>/kit.json` is the source o
 - server: bin/rails server -p 3001 -b 127.0.0.1 -P tmp/pids/sdd-server.pid
 - port: 3001
 - acceptance: cd acceptance && BASE_URL=http://127.0.0.1:3001 npx playwright test
+- test_report: MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR="$(git rev-parse --show-toplevel)/.sdd/junit/minitest" bin/rails test
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: never
 - task_state: trailers
 - task_format: compact
 ```
+
+`test_report` needs the `minitest-reporters` gem (see the kit's testing rule). `$(git rev-parse --show-toplevel)` puts
+the JUnit under the repo root's `.sdd/junit/` even when `app_dir` is a subdirectory; the JUnit reporter empties its own
+directory, hence the `minitest/` subdirectory.
 
 `bin/rails test` keeps the test schema in sync by itself: `db_reset_safe` is only for the development database the
 server and the acceptance suite use, after a migration.
@@ -200,6 +229,9 @@ server and the acceptance suite use, after a migration.
 - server: npx next dev -p 3000 -H 127.0.0.1
 - port: 3000
 - acceptance: none
+- test_report: npx vitest run --reporter=junit --outputFile="$(git rev-parse --show-toplevel)/.sdd/junit/vitest.xml"
+- acceptance_gate: enforce
+- tracker: off
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact
@@ -220,15 +252,16 @@ clean local database without any consent step.
 Regex: ``^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$``. Continuation lines (Acceptance,
 Commit, Refs, Review, Revert…) are indented two spaces.
 
-Tool (same plugin): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs" lint|json|status [--fase N] [--json]|index`.
+Tool (same plugin): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint | tasks json|status|index [--fase N] [--json]`
+(`scripts/sdd-task-lint.mjs lint|json|status|index` remains as an alias).
 
 - `lint --fase N` — G-12. Its findings (V-19 grammar, legacy `### TASK-F0-001: …` headings, `**TASK-…**` bold ids,
   unindented fields) never stop the implementer: a non-zero exit is logged as `WARN G-12: <n> findings in
-  task/TASK-FASE-N.md` and the tasks are parsed tolerantly with `json` (which reads legacy shapes). **0 tasks from
-  `json` → HALT** (`task document has no parseable tasks: re-run sdd-task-generator`). When `node` or the script is
-  unavailable, parse with the regex above plus the legacy heading form and log `WARN G-12: sdd-task-lint.mjs unavailable`.
-- `json --fase N` — task list for Phase 2 (id, `[P]`, description, write-set, blocked-by, Stream).
-- `status --fase N --json [--rev <ref>] [--state checkbox|trailers]` — done-state per task: `Task:` trailers reachable
+  task/TASK-FASE-N.md` and the tasks are parsed tolerantly with `tasks json` (which reads legacy shapes). **0 tasks from
+  `tasks json` → HALT** (`task document has no parseable tasks: re-run sdd-task-generator`). When `node` or the script is
+  unavailable, parse with the regex above plus the legacy heading form and log `WARN G-12: sdd.mjs unavailable`.
+- `tasks json --fase N` — task list for Phase 2 (id, `[P]`, description, write-set, blocked-by, Stream).
+- `tasks status --fase N --json [--rev <ref>] [--state checkbox|trailers]` — done-state per task: `Task:` trailers reachable
   from `--rev` (default `HEAD`) minus reverted commits, the checkbox state, `[!]`, and divergences between both.
   `--state` defaults to the profile's `task_state`; with `trailers` an unchecked box is not a divergence.
   `--require-done` exits 1 when a selected task is not done (useful for G-11 / I-06 / I-09).
@@ -242,12 +275,12 @@ Current behaviour: Phase 7 marks `- [x]` before the commit and stages the task d
 
 - Phase 7 never edits checkboxes and never stages the task document: the `Task:` trailer of the commit *is* the
   done-state.
-- Every done check of the skill reads `status`: Phase 2 (done/pending), Mode 3 `--continue`, Mode 6 `--new-tasks-only`,
+- Every done check of the skill reads `tasks status`: Phase 2 (done/pending), Mode 3 `--continue`, Mode 6 `--new-tasks-only`,
   Mode 7 EXTERNAL dependencies and G-11 (run at the worktree's `HEAD`), `--verify` Completeness,
   integration-protocol I-06 (main checkout `HEAD`) and I-09 (the Stream branch — see integration-protocol.md).
 - `[!]` (blocked) is derived: a task is blocked while `feedback/IMPL-FEEDBACK-FASE-{N}.md` has an entry with
   `Severity: BLOCKER`, `Status: OPEN` and that `Task`. Wherever SKILL.md says "mark `[!]`", write or keep that entry.
-- Divergences reported by `status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
+- Divergences reported by `tasks status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
   auto-fixed; the trailer wins.
 - Merge conflicts in `task/TASK-FASE-{N}.md` cannot come from task progress, so the "keep both `[x]`" rule of
   integration-protocol.md §2 does not apply; any conflict there is a real content conflict → resolve by hand.

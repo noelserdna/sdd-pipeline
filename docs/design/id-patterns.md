@@ -1,0 +1,265 @@
+# Extended ID Patterns for the Traceability Graph
+
+Extended regex patterns for extracting artifact IDs from real SDD projects. Superset of the basic patterns in `skills/sdd-acceptance/references/chain-integrity.md` (which replaced `sdd-traceability-check` in 5.0) — covers compound IDs, named IDs, and range expansions.
+
+## Definition Patterns (where IDs are defined)
+
+| Type | Regex | Examples | Typical Files |
+|------|-------|----------|---------------|
+| REQ (simple) | `^#+\s*REQ-(\d{3,4})` | REQ-001, REQ-042 | `requirements/REQUIREMENTS.md` |
+| REQ (categorized) | `^#+\s*REQ-([A-Z]{1,4})-(\d{3,4})` | REQ-EXT-001, REQ-CVA-002, REQ-F-001 | `requirements/REQUIREMENTS.md` |
+| REQ (table) | `\|\s*REQ-([A-Z]{0,4}-?\d{3,4})\s*\|` | table cells | `requirements/`, `spec/` |
+| UC | `^#+\s*UC-(\d{3,4})` | UC-001, UC-041 | `spec/use-cases/` |
+| WF | `^#+\s*WF-(\d{3,4})` | WF-001, WF-015 | `spec/workflows/` |
+| API (operation, canonical) | `^#+\s*API-(\d{3,4}-\d{2})` or table row `^\|\s*API-(\d{3,4}-\d{2})\s*\|` | API-001-01, API-002-03 | `spec/contracts/API-{module}.md` (Templates 12/12b) |
+| API (module) | contract row `^\|\s*Module\s*\|\s*(API-\d{3,4})` | API-001, API-002 (`category: module`, defined in its `API-{module}.md`) | `spec/contracts/` (Templates 12/12b) |
+| API (numeric, legacy) | `^#+\s*API-(\d{3,4})` | API-001, API-020 | `spec/contracts/` |
+| API (named) | `^#+\s*API-([a-z][a-z0-9-]+)` or filename `API-{module}.md` | API-tasks, API-auth | `spec/contracts/` (contract file / module) |
+| BDD (numeric) | `^#+\s*BDD-(\d{3,4})` or `Scenario:\s*BDD-(\d{3,4})` | BDD-001, BDD-042 | `spec/tests/`, `test/` |
+| BDD (named) | `Scenario:\s*BDD-([a-z][a-z0-9-]+)` | BDD-extraction, BDD-login-flow | `spec/tests/`, `test/` |
+| INV (simple) | `^#+\s*INV-(\d{3,4})` | INV-001, INV-015 | `spec/domain/` |
+| INV (scoped) | `^#+\s*INV-([A-Z]{2,6})-(\d{3,4})` | INV-SYS-001, INV-SEC-007 | `spec/domain/` |
+| INV (table) | `\|\s*INV-([A-Z]{0,6}-?\d{3,4})\s*\|` | table cells | `spec/` |
+| ADR | `^#+\s*ADR-(\d{3,4})` or filename `ADR-(\d{3,4})` | ADR-001 | `spec/adr/` |
+| NFR | `^#+\s*NFR-(\d{3,4})` or `\|\s*NFR-(\d{3,4})\s*\|` | NFR-001 | `spec/nfr/` |
+| NFR (table, any prefix) | in `spec/nfr/*.md`: first cell `^\|\s*([A-Z][A-Z0-9-]*-\d{2,4})\s*\|` or a heading with that id, when no other type claims the prefix | SEC-005, SPEC-MNT-001, SPEC-PERF-001 | `spec/nfr/` (Template 7) |
+| RN | `^#+\s*RN-(\d{3,4})` or `\|\s*RN-(\d{3,4})\s*\|` | RN-001 | `spec/` |
+| FASE | `^#+\s*FASE-(\d{1,2})` or filename `FASE-(\d{1,2})` | FASE-0, FASE-3 | `plan/fases/` |
+| TASK | `^#+\s*TASK-F(\d{1,2})-(\d{3,4})` | TASK-F0-001, TASK-F2-012 | `task/` |
+
+## Reference Pattern (Universal)
+
+Single regex to match **any** ID reference in running text:
+
+```regex
+(REQ|UC|WF|API|BDD|INV|ADR|NFR|RN|FASE|TASK)[-‑](?:[A-Z]{0,6}[-‑])?(?:[a-z][a-z0-9-]*|\d{1,4})(?:[-‑]\d{2,4})?
+```
+
+### Breakdown
+
+| Component | Matches |
+|-----------|---------|
+| `(REQ\|UC\|...)` | Type prefix |
+| `[-‑]` | Hyphen or non-breaking hyphen |
+| `(?:[A-Z]{0,6}[-‑])?` | Optional category (EXT, SYS, SEC, CVA, F, NF) |
+| `(?:[a-z][a-z0-9-]*\|\d{1,4})` | Named ID (pdf-reader) or numeric (001) |
+| `(?:[-‑]\d{3,4})?` | Optional sub-number (for TASK-F0-001) |
+
+## Range Expansion
+
+Some documents use range notation. `scripts/sdd-graph.py` expands these:
+
+| Pattern | Example | Expansion |
+|---------|---------|-----------|
+| `{ID}..{END}` | `INV-SEC-001..007` | INV-SEC-001 through INV-SEC-007 |
+| `{ID}..{ID}` | `UC-001..UC-005` | UC-001 through UC-005 |
+| `{ID} a/al/hasta/to {ID}` | `REQ-F-007 a REQ-F-019` | REQ-F-007 through REQ-F-019 |
+| `{ID} – {ID}` (dash, en/em dash) | `UC-001 – UC-005` | UC-001 through UC-005 |
+| `{ID}, {ID}, {ID}` | `UC-001, UC-003, UC-005` | Three separate references |
+
+Only `..` accepts a bare end number. Every other separator needs the same prefix repeated on the end ID, so prose such
+as `NFR-001 — 150 ms p95` or `REQ-F-001 - 120 req/s` is left alone. Ranges wider than 200 IDs are not expanded.
+The category segment uses `[A-Z][A-Z0-9]*` to support `TASK-F1-`, `TASK-F10-`.
+
+**NFR ids with free prefixes** (`SEC-005`, `SPEC-MNT-001`) are not in the universal pattern: references to them (in
+any scanned file and in commit `Refs:`) count only when a `spec/nfr/` table defines the exact id, so audit finding ids
+such as `SEC-12` elsewhere stay out of the graph.
+
+**Digit rule**: a referenced ID needs a digit (`REQ-F-001`, `API-001-01`) unless some file defines it (named
+contracts such as `API-auth`); otherwise it is prose ("BDD-style", "API-first") and not a broken reference.
+
+## Type-to-Stage Mapping
+
+| Artifact Type | Pipeline Stage | Directory |
+|---------------|---------------|-----------|
+| REQ | requirements-engineer | `requirements/` |
+| UC, WF, API, BDD, INV, ADR, NFR, RN | specifications-engineer | `spec/` |
+| AUDIT | spec-auditor | `audits/` |
+| TEST | test-planner | `test/` |
+| FASE | plan-architect | `plan/` |
+| TASK | task-generator | `task/` |
+| (code) | task-implementer | `src/`, `tests/` |
+
+## Priority Extraction
+
+When found in tables, extract priority from adjacent columns:
+
+| Column Headers | Values |
+|----------------|--------|
+| Priority, Prioridad | Must Have, Should Have, Could Have, Won't Have |
+| MoSCoW | M, S, C, W |
+| Level, Nivel | Critical, High, Medium, Low |
+
+## Code Reference Patterns
+
+Scan `src/**/*.{ts,js,tsx,jsx,py,java,go,rs,cs}` for references to SDD artifact IDs.
+
+### JSDoc / Block Comment Refs
+
+```regex
+Refs:\s*((?:(?:REQ|UC|INV|RN|WF|API|BDD|ADR|NFR)[-‑][A-Za-z0-9-]+(?:,\s*)?)+)
+```
+
+Matches `Refs:` lines inside JSDoc or block comments. Example:
+
+```
+/**
+ * Validates PDF file size against extraction invariants.
+ * Refs: UC-001, INV-EXT-005, RN-001
+ */
+```
+
+### Inline Comment Refs
+
+```regex
+//\s*(REQ|UC|INV|RN|WF|API|BDD|ADR|NFR)[-‑][A-Za-z0-9-]+
+```
+
+Matches single-line comments containing artifact IDs. Example:
+
+```typescript
+const MAX_SIZE = 52_428_800; // INV-EXT-005
+```
+
+### Decorator / Annotation Refs
+
+```regex
+@(?:implements|refs|traces)\s*\(\s*['"]?(REQ|UC|INV|WF|API|BDD|ADR|NFR)[-‑][A-Za-z0-9-]+['"]?\s*\)
+```
+
+Matches decorator patterns in Python/Java/TypeScript. Example:
+
+```python
+@implements("UC-001")
+def extract_text(pdf_path: str) -> str:
+```
+
+### Symbol Extraction
+
+After finding a Ref, extract the nearest symbol from the surrounding code:
+
+| Language | Pattern | Example |
+|----------|---------|---------|
+| TypeScript/JS | `export\s+(function\|class\|const\|let\|var\|interface\|type\|enum)\s+(\w+)` | `export function validateSize` |
+| TypeScript/JS | `(function\|class\|const\|let\|var)\s+(\w+)` | `const MAX_SIZE` |
+| Python | `def\s+(\w+)\|class\s+(\w+)` | `def extract_text` |
+| Go | `func\s+(\w+)` | `func ValidateSize` |
+| Rust | `fn\s+(\w+)\|struct\s+(\w+)\|enum\s+(\w+)` | `fn validate_size` |
+| Java/C# | `(public\|private\|protected)?\s*(static\s+)?(class\|interface\|void\|int\|String\|boolean)\s+(\w+)` | `public void validateSize` |
+| Fallback | Use `filename:lineNumber` | `pdf-validator.ts:8` |
+
+**Symbol search scope**: Look backward from the Ref line (up to 5 lines) and forward (up to 2 lines) for the nearest symbol definition.
+
+## Test Reference Patterns
+
+Scan `tests/**/*.{test,spec}.{ts,js,tsx,jsx}` + `tests/**/*.py` + `test/**/*.{test,spec}.{ts,js,tsx,jsx}` for references to SDD artifact IDs.
+
+### Test File Header Refs
+
+Same pattern as Code JSDoc Refs. Example:
+
+```typescript
+/**
+ * Unit tests for PDF extraction validation.
+ * Refs: UC-001, INV-EXT-005
+ */
+```
+
+### Test Block Description Refs
+
+```regex
+(describe|it|test)\(\s*['"`].*?(REQ|UC|INV|BDD|WF|API|ADR|NFR)[-‑][A-Za-z0-9-]+
+```
+
+Matches artifact IDs within test/describe/it block descriptions. Example:
+
+```typescript
+describe('PDF Validator - UC-001', () => {
+  it('validates size per INV-EXT-005', () => { ... });
+  it('rejects files exceeding limit per INV-EXT-005', () => { ... });
+});
+```
+
+### Python Test Refs
+
+```regex
+def\s+test_\w+.*?#\s*(REQ|UC|INV|BDD)[-‑][A-Za-z0-9-]+
+```
+
+Or docstring-based:
+
+```python
+def test_validates_size():
+    """Verifies INV-EXT-005: max file size 50MB."""
+```
+
+### Test-to-Code Association
+
+Link test files to source files via:
+
+1. **Path convention**: Strip `tests/` prefix + test suffix to find source:
+   - `tests/unit/extraction/pdf-validator.test.ts` → `src/extraction/pdf-validator.ts`
+   - `tests/integration/auth/login.spec.ts` → `src/auth/login.ts`
+
+2. **Import statements**: Parse imports to find the tested module:
+   ```regex
+   import\s+.*?\s+from\s+['"]([^'"]+)['"]
+   ```
+   Example: `import { validateSize } from '../../src/extraction/validators/pdf-validator'`
+
+3. **Test filename pattern**: `{name}.test.{ext}` or `{name}.spec.{ext}` → search for `{name}.{ext}` in `src/`
+
+### Test Name Extraction
+
+Extract the test name from the enclosing test block:
+
+```regex
+(?:it|test)\(\s*['"`](.*?)['"`]
+```
+
+If the test is inside a `describe` block, prepend the describe name: `"PDF Validator > validates size per INV-EXT-005"`.
+
+### Framework Detection
+
+Per test file, from its extension and the project configuration (root and the Stack Profile `app_dir`):
+
+| Indicator | Framework |
+|-----------|-----------|
+| `vitest` dependency or `vitest.config.*` | vitest |
+| `jest` dependency or `jest.config.*` | jest |
+| `*_spec.rb`, or `.rspec`/`rspec` in the Gemfile | rspec |
+| `*_test.rb`, or `rails`/`minitest` in the Gemfile | minitest |
+| `*.py` | pytest |
+| `*_test.go` | go-test |
+| E2E paths with `@playwright/test` / `cypress` | playwright / cypress |
+| Fallback | unknown |
+
+## Classification Taxonomy
+
+### Business Domain
+
+1. The requirement's section heading ("### 3.1 Authentication" → `Authentication`), numbering stripped. Headings that
+   only say "Functional Requirements", "Requisitos no funcionales" and the like do not count.
+2. Else the ID group of grouped IDs (`REQ-AUTH-003` → `AUTH`); the IEEE-style groups F, NF, C carry no domain.
+3. Else `General`.
+
+### Technical Layer (inferred from the title)
+
+Title keywords matched as whole words: ui, form, screen → Frontend; deploy, logs, server → Infrastructure; webhook,
+import, sync → Integration/Deployment; anything else → Backend.
+
+FASE numbers are not used: FASEs are vertical increments (one user journey each, `skills/sdd-plan-architect/references/phase-assignment-rules.md`),
+so FASE-0 is a walking skeleton, not an infrastructure layer, and every FASE crosses every layer.
+
+### Functional Category (auto-inferred from REQ section headers)
+
+| Section Header Keywords | Functional Category |
+|-------------------------|---------------------|
+| Functional, Funcional, Feature, Core | Functional |
+| Non-Functional, No Funcional, Quality, Performance, NFR | Non-Functional |
+| Security, Seguridad, Auth, Access | Security |
+| Data, Datos, Storage, Database, Migration | Data |
+| Integration, Integracion, API, External, Webhook | Integration |
+| *(no match)* | Functional *(default)* |
+
+**Inference rule**: Find the nearest H2/H3 heading above the REQ definition in `REQUIREMENTS.md`. Match its text against the keywords above.

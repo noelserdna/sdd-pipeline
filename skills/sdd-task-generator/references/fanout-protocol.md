@@ -1,22 +1,15 @@
 # Execution Protocol: Index, Budgets, Fan-out by FASE
 
-> Profile that motivated this (`docs/perfilado.md`, `docs/medidas.md`): the 2026-08-27 smoke run generated 58 tasks
-> across 3 FASEs in **14 min** in a single thread. Writing `task/TASK-FASE-{N}.md` is mechanical (decompose a plan
-> into atomic tasks, one commit each) and the files are independent: no FASE file references another FASE file.
-> Target: wall-clock ≈ the slowest FASE + consolidation, main-thread plan context ≤ ~25 k tokens.
+Writing `task/TASK-FASE-{N}.md` is mechanical and the files are independent (no FASE file references another), so
+the work fans out by FASE. Target: wall-clock ≈ the slowest FASE + consolidation, main-thread plan context ≤ ~25 k tokens.
 
 ## 0. Fan-out is part of this skill's contract
 
-Launching one task agent per FASE is **the requested behaviour of `/sdd-task-generator`** above the threshold, not an
-optional expansion of scope: invoking this skill on a plan with several FASEs *is* the explicit request for them. Each
-agent is bounded to one FASE, writes exactly one file (`task/TASK-FASE-{N}.md`, no other agent writes it), reads only
-its own FASE's plan artifacts, does not nest, does not commit, does not touch `spec/`, `plan/` or `pipeline-state.json`.
-They cost less wall-clock than the single-thread generation they replace. **Do not downgrade to sequential out of
-caution.** Downgrade only for one of the reasons in §1, and always record the reason in `metrics.mode` and in
-`summary.highlights`.
-
-The same fix applied to `sdd-spec-auditor` in 4.0.3 (`docs/medidas.md`): the audit that ran sequentially "because the
-session guidance forbids spawning subagents without an explicit request" took 11 min; with fan-out it took 5 min.
+Launching one task agent per FASE is the requested behaviour of `/sdd-task-generator` above the threshold, not an
+optional expansion of scope. Each agent is bounded to one FASE, writes exactly one file (`task/TASK-FASE-{N}.md`, no
+other agent writes it), reads only its own FASE's plan artifacts, does not nest, does not commit, and does not touch
+`spec/`, `plan/` or `pipeline-state.json`. Downgrade to sequential only for a reason in §1, and record it in
+`metrics.mode` and `summary.highlights`.
 
 ## 1. Choose the mode (Phase 0, before opening any plan file)
 
@@ -66,7 +59,7 @@ independently would diverge. It then owns everything that is global by nature.
 |---|---|
 | **main thread, before the fan-out** | Phase 0 gates G-01..G-05; the plan index; the **cross-cutting contract** passed verbatim to every agent: id format `TASK-F{N}-{SEQ}` (3 digits, sequential within the FASE, starting at 001 — ids are never reused across FASEs because the FASE number is part of them), the commit convention (types table + the `Refs:` / `Task:` trailers of `references/commit-conventions.md`), the project's path conventions from `CLAUDE.md`, the glossary terms (ids + one line, from `spec/domain/01-GLOSSARY.md`), the task-line and Stream-Ownership templates of `references/task-template.md`, the review-checklist patterns of `references/review-checklist.md` (full format only), the output format (`full` | `compact`), the Stack Profile paths (`app_dir`, `code_paths`, `test_paths`) and the kit `layers` / `wiring` lists, and, **per FASE, its `## Módulos y Conjuntos de Escritura` table** (`plan/fases/FASE-{N}-*.md` §5), which is the seed of that FASE's Streams |
 | **one agent per FASE** | Phases 1–7 scoped to its FASE: FASE analysis, plan decomposition, intra-FASE dependency resolution (Phase 3), Stream assignment (Phase 3b) from the Módulos table, commit messages (Phase 4), revert strategies (Phase 5), review checklists (Phase 6). Writes **only** `task/TASK-FASE-{N}.md`, including its `## Stream Ownership` table and its Rollback Checkpoints. Self-checks the FASE-local validations and returns them in `checks` |
-| **main thread, after the fan-out** | `task/TASK-ORDER.md` (global: FASE dependency graph, Waves, `Streams:` lines, **Cross-FASE Dependencies**; full format adds MVP strategy and delivery checkpoints), `task/TASK-INDEX.md` in full format only (`node "$TASK_LINT" index`: flat list + traceability matrix over all FASEs), the **global validations** of §7 including V-19, the gap report, Persist Summary and Handoff |
+| **main thread, after the fan-out** | `task/TASK-ORDER.md` (global: FASE dependency graph, Waves, `Streams:` lines, **Cross-FASE Dependencies**; full format adds MVP strategy and delivery checkpoints), `task/TASK-INDEX.md` in full format only (`node "$SDD_CLI" tasks index`: flat list + traceability matrix over all FASEs), the **global validations** of §7 including V-19, the gap report, Persist Summary and Handoff |
 
 **Validation ownership** — the global checks stay in the main thread and are computed from the returned JSON, not
 re-derived by each agent:
@@ -83,7 +76,7 @@ re-derived by each agent:
 | **V-16** (every task in exactly one Stream) | **main thread** | `tasks[].id` vs the union of `streams[].tasks` — no task missing, none listed twice |
 | **V-17** (verification tasks and checkpoints only in `verificación` / the main checkout) | **main thread** | `streams[].runs` + `checkpoints` of each JSON |
 | **V-18** (`blocked-by` points to the same Stream, `base`, or an earlier FASE) | **main thread** | the global edge list + the Stream of each task — the cross-FASE half of this check cannot be done inside one FASE |
-| **V-19** (task-line grammar, no `### TASK-` / `**TASK-…**`) | **main thread** | `node "$TASK_LINT" lint --dir task` over the written files (each agent also runs it on its own file before returning); fix only the reported lines |
+| **V-19** (task-line grammar, no `### TASK-` / `**TASK-…**`) | **main thread** | `node "$SDD_CLI" lint --dir task` over the written files (each agent also runs it on its own file before returning); fix only the reported lines |
 
 An agent that reports a `fail` in `checks` does not fix it: the main thread folds it into the validation summary with
 the FASE it came from.
@@ -107,8 +100,8 @@ the FASE it came from.
 ## 6. FASE-agent prompt template
 
 Substitute `{…}`. `{REFS}` = `${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/sdd-task-generator/references`; if that
-path is unknown, inline the relevant template sections (≤ 60 lines) instead of the pointer. `{TASK_LINT}` =
-`${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-task-lint.mjs` (the same `$TASK_LINT` of SKILL.md).
+path is unknown, inline the relevant template sections (≤ 60 lines) instead of the pointer. `{SDD_CLI}` =
+`${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs` (the same `$SDD_CLI` of SKILL.md).
 
 ```
 You generate the task document of FASE-{N} for the SDD pipeline (sdd-task-generator). Write in {project language}.
@@ -149,7 +142,7 @@ sections of the format (full: Summary, Traceability, Dependencies, Parallel Exec
 and ### Rollback Checkpoints).
 Plan gaps: never invent plan content — emit the task with [PLAN GAP] as SKILL.md "Handling Plan Gaps" describes and
 list it in `gaps`.
-Before returning, run `node {TASK_LINT} lint task/TASK-FASE-{N}.md` and fix every line it reports.
+Before returning, run `node {SDD_CLI} lint task/TASK-FASE-{N}.md` and fix every line it reports.
 Self-check V-01, V-02, V-03, V-05, V-06, V-07, V-08, V-10, V-12, V-13, V-14 over your own tasks and report them in
 `checks`. Do NOT check V-04, V-09, V-15, V-16, V-17, V-18: they are global and the main thread computes them from
 your JSON.
@@ -168,13 +161,13 @@ Return ONLY this JSON (no prose, no file body, ≤ 8 000 chars):
 
 `w` = write-set of the task (the backticked paths of the task line plus its `- **Files:**` bullet). `bb` = blocked-by.
 `p` = the `[P]` marker. The main thread needs no other field: `TASK-ORDER.md` is built from this JSON, **not** by
-re-reading the generated files (`TASK-INDEX.md`, full format only, comes from `sdd-task-lint.mjs index`).
+re-reading the generated files (`TASK-INDEX.md`, full format only, comes from `sdd.mjs tasks index`).
 
 ## 7. Consolidation (main thread, main model)
 
 1. Parse one JSON per FASE. A missing or invalid JSON → re-launch once (§5), then generate that FASE sequentially.
 2. Verify each `file` exists and its size matches `chars` (`wc -c task/TASK-FASE-*.md`). Do not read the bodies.
-   Run `node "$TASK_LINT" lint --dir task` (**V-19**; it also re-checks V-05/V-06/V-09/V-16 on the files) and edit only
+   Run `node "$SDD_CLI" lint --dir task` (**V-19**; it also re-checks V-05/V-06/V-09/V-16 on the files) and edit only
    the lines it reports.
 3. Build the **global task graph**: nodes = every `tasks[].id`, edges = every `bb` entry (intra- and cross-FASE) plus the
    FASE-level `Dependencias`. Run **V-04** (no cycles, every node reachable) and compute the critical path (**V-11**)
@@ -183,7 +176,7 @@ re-reading the generated files (`TASK-INDEX.md`, full format only, comes from `s
    **V-16** (every `tasks[].id` in exactly one `streams[].tasks`), **V-17** (`checkpoints[].runs` = main checkout, and
    no verification task in a lettered Stream), **V-18** (each `bb` edge resolves to the same Stream, to `base`, or to a
    task of an earlier FASE). Fold the agents' `checks` failures in without re-computing them.
-5. Full format only: `node "$TASK_LINT" index > task/TASK-INDEX.md` (Summary by FASE, flat task list, traceability
+5. Full format only: `node "$SDD_CLI" tasks index > task/TASK-INDEX.md` (Summary by FASE, flat task list, traceability
    matrix from the Refs lines, across all FASEs). Compact format: no index.
 6. Write `task/TASK-ORDER.md`: FASE dependency graph, Waves, one `Streams:` line per FASE built from `streams[].tasks`
    counts (`Streams: base(2) → A(10) ∥ B(9) → integración(1) → verificación(10)`, or exactly `Streams: serial` for a

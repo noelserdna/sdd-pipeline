@@ -120,32 +120,6 @@ export function executeImpact(
   else if ((byDepth[1]?.length ?? 0) > 2 || totalAffected > 10) risk = "MEDIUM";
   else risk = "LOW";
 
-  // Code intelligence enrichment (if available)
-  let codeImpact: Record<string, unknown> | undefined;
-  if (graph.codeIntelligence?.indexed) {
-    const ci = graph.codeIntelligence;
-    const relatedSymbols = ci.symbols.filter(
-      (s) =>
-        s.artifactRefs.includes(artifact_id) ||
-        s.inferredRefs.includes(artifact_id)
-    );
-    if (relatedSymbols.length > 0) {
-      const callerSet = new Set<string>();
-      for (const sym of relatedSymbols) {
-        for (const caller of sym.callers) callerSet.add(caller);
-      }
-      codeImpact = {
-        directSymbols: relatedSymbols.map((s) => ({
-          name: s.name,
-          file: s.filePath,
-          type: s.type,
-        })),
-        transitiveCallers: [...callerSet],
-        totalCallChainDepth: relatedSymbols.length + callerSet.size,
-      };
-    }
-  }
-
   const output = {
     artifact: {
       id: root.id,
@@ -167,7 +141,6 @@ export function executeImpact(
       ])
     ),
     affectedStages: [...affectedStages],
-    ...(codeImpact ? { codeImpact } : {}),
   };
 
   return JSON.stringify(output) + getNextStepHint("sdd_impact", args);

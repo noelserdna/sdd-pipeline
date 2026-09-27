@@ -2,7 +2,8 @@ import { readFileSync, existsSync, watchFile, unwatchFile } from "node:fs";
 import { join, dirname } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Types mirroring traceability-graph-v3 schema
+// Types mirroring the traceability-graph-v6 schema emitted by scripts/sdd-graph.py
+// (docs/design/graph-schema.md). Older v3-v5 graphs are a subset.
 // ---------------------------------------------------------------------------
 
 export interface StageSummary {
@@ -15,7 +16,10 @@ export interface StageSummary {
 
 export interface PipelineStage {
   name: string;
-  status: "done" | "stale" | "running" | "error" | "pending";
+  /** `unknown`: no pipeline-state.json or unreadable; `partial`: aggregated group status; `skipped`: left out by
+   * the adaptive route (`sdd route --write`), with its reason in `skipReason`. */
+  status: "done" | "stale" | "running" | "error" | "pending" | "unknown" | "partial" | "skipped";
+  skipReason?: string | null;
   lastRun: string | null;
   artifactCount: number;
   stageLabel?: string;
@@ -34,14 +38,29 @@ export interface Classification {
   functionalCategory: string;
 }
 
+export type CodeRefOrigin =
+  | "direct"
+  | "commit-inferred"
+  | "task-inferred"
+  | "blame-inferred"
+  | "propagated"
+  | "llm-verified"
+  | "manual-override"
+  | "gap-detected";
+
 export interface CodeRef {
   file: string;
   line: number;
   symbol: string;
   symbolType: string;
   refIds: string[];
-  origin?: "direct" | "commit-inferred" | "task-inferred" | "manual-override" | "code-index";
+  /** Absent means `direct`. Every value other than `direct` counts as inferred coverage. */
+  origin?: CodeRefOrigin;
   inferredFrom?: { commitSha: string; taskId?: string; trailerRefs?: string[] } | null;
+  /** 0.0-1.0; 1.0 for direct refs (graph-schema.md). */
+  confidence?: number;
+  /** Artifact ID the ref was copied from when origin is `propagated`. */
+  propagatedFrom?: string;
 }
 
 export interface TestRef {
@@ -115,48 +134,6 @@ export interface Statistics {
   adoptionStats: Record<string, unknown> | null;
 }
 
-export interface CodeIntelligence {
-  indexed: boolean;
-  indexedAt: string;
-  engine: string;
-  engineVersion: string;
-  symbols: Array<{
-    id: string;
-    name: string;
-    type: string;
-    filePath: string;
-    startLine: number;
-    endLine: number;
-    isExported: boolean;
-    artifactRefs: string[];
-    inferredRefs: string[];
-    callers: string[];
-    callees: string[];
-    processes: string[];
-    community: string;
-  }>;
-  callGraph: Array<{
-    from: string;
-    to: string;
-    confidence: number;
-    type: string;
-  }>;
-  processes: Array<{
-    name: string;
-    steps: string[];
-    entryPoint: string;
-    artifactRefs: string[];
-  }>;
-  stats: {
-    totalSymbols: number;
-    symbolsWithRefs: number;
-    symbolsWithInferredRefs: number;
-    uncoveredSymbols: number;
-    totalProcesses: number;
-    processesWithRefs: number;
-  };
-}
-
 export interface TraceabilityGraph {
   $schema: string;
   generatedAt: string;
@@ -166,7 +143,6 @@ export interface TraceabilityGraph {
   relationships: Relationship[];
   statistics: Statistics;
   adoption?: Record<string, unknown>;
-  codeIntelligence?: CodeIntelligence;
 }
 
 // ---------------------------------------------------------------------------

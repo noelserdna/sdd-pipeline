@@ -323,6 +323,7 @@ None. *(or a table: Event | Step | Payload | Consumers)*
 
 | Field | Value |
 |---|---|
+| Module | API-NNN (number from the id ledger; operation ids are `API-NNN-NN`) |
 | Style | http — REQ-… demands an HTTP API for external clients |
 | Base / Version | `/api/v1` · v1 |
 | Auth | JWT bearer *(or: Not applicable — in-process calls, ADR-NNN)* |
@@ -379,6 +380,7 @@ Rule (`Style: http` only — a REQ demands an HTTP API for external clients; cit
 
 | Field | Value |
 |---|---|
+| Module | API-NNN (number from the id ledger; operation ids are `API-NNN-NN`) |
 | Style | operations |
 | Auth | session user *(or: Not applicable — single local user, ADR-NNN)* |
 | Refs | REQ-…; UC-…; ADR-… |
@@ -459,7 +461,7 @@ Rules: exactly one scenario per main flow, per extension, per exception row and 
 
 | Name | Value | Unit | Category | Source | Used in (ids) |
 |---|---|---|---|---|---|
-| `TITLE_MAX_LENGTH` | 1000 | UTF-16 units | limit | RN-003 | INV-TSK-003, UC-001, API-002 |
+| `TITLE_MAX_LENGTH` | 1000 | UTF-16 units | limit | RN-003 | INV-TSK-003, UC-001, API-001-01, API-001-03 |
 | `PERF_P95_LATENCY` | 200 | ms | performance | REQ-NF-001 | SPEC-PERF-001, WF-001 |
 | `TASK_STATUS` | pending, completed | enum | enum | VO-003 | UC-002, UC-005 |
 | `RATE_LIMIT_USER` | 100 | req/min | rate limit | RN-NNN | API-001 |
