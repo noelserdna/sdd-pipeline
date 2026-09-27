@@ -44,7 +44,7 @@ Reads `plan/` (from `sdd-plan-architect`) and writes only `task/`. Code is writt
 
 ### Mode 5: Incremental Generation (cascade)
 
-Typically invoked by `sdd-req-change` Phase 9, once per affected FASE (`--fase` is mandatory; a missing `task/TASK-FASE-{N}.md` falls back to Mode 2).
+Typically invoked by `sdd-req-change` Phase 9, once per affected FASE (`--fase` is mandatory; a missing `task/TASK-FASE-{N}.md` falls back to Mode 2). Also invoked from the FASE gate for a confirmed defect, and by `sdd-acceptance --loop` for a MISSING criterion: then the plan has not changed, and the input is the defect text or the ledger's target (requirement, criterion, scenario id). Write one fix task per defect or missing criterion, citing the scenario ids in Acceptance and Refs, with `Source: FEEDBACK-FASE-{N}` (defect) or `Source: ACCEPTANCE-LOOP` (missing), then continue with steps 5-6.
 
 1. Compare `plan/fase-plans/PLAN-FASE-{N}.md` with the existing `task/TASK-FASE-{N}.md`.
 2. Leave done and unchanged tasks untouched. Done = `[x]` with `task_state: checkbox` (default); with `task_state: trailers`, `done` in `node "$SDD_CLI" tasks status --fase N --json` (a `Task:` trailer reachable from HEAD, not reverted).
@@ -104,7 +104,11 @@ INPUTS:
                                          kit templates/stacks/{stack}/kit.json → layers, wiring)
 8. design/OPERATION-MAPPING.md          (transport per API-op; written by sdd-tech-designer, or by
                                          sdd-plan-architect when the tech designer did not run)
+9. plan style                           grep -m1 -i 'Plan-Style' plan/PLAN.md → vertical | vertical (from FASE-N)
+                                         | absent (horizontal)
 ```
+
+**Plan style.** With `Plan-Style: vertical` each FASE is an increment (one user journey, `sdd-plan-architect/references/phase-assignment-rules.md`) and the rules marked *vertical* below apply; `vertical (from FASE-N)` applies them from FASE-N on. Without the marker the plan is horizontal: generate as before (Foundation may hold everything shared, Slices ungrouped). Pass the style to every FASE agent in the cross-cutting contract.
 
 | Gate | Condition | If failed |
 |------|-----------|-----------|
@@ -118,7 +122,7 @@ INPUTS:
 
 ### Phase 1: FASE Analysis
 
-From each FASE file: **Criterios de Exito** → acceptance groups; **Specs a Leer** → Refs; **Invariantes Aplicables** → validation constraints; **Contratos Resultantes** → deliverable tasks; **Alcance** → scope boundary; **Dependencias** → FASE ordering.
+From each FASE file: **Criterios de Exito** → acceptance groups; **Specs a Leer** → Refs; **Invariantes Aplicables** → validation constraints; **Contratos Resultantes** → deliverable tasks; **Alcance** → scope boundary; **Dependencias** → FASE ordering. *Vertical:* the header's **Requisitos** go into the Refs of the tasks that deliver them, and every scenario of **Escenarios** (`AC-NNN-NN`, `REQ-X-NNN ACn`) must be cited by at least one task's Acceptance or Refs (V-20), so the implementer names a test after it and the acceptance ledger can find it. The `## Demo` is not decomposed into tasks: `sdd-task-implementer` Phase 9 runs it; a demo step that needs seed data gets it from the task whose slice owns that data (fixture file in its write-set).
 
 ### Phase 2: Plan Decomposition
 
@@ -142,8 +146,8 @@ Per task: write-set (files it creates/modifies) and read-set. B depends on A whe
 **Internal phases within each FASE** (these names are the contract `sdd-task-implementer` follows):
 
 1. **Setup**: scaffold, dependencies, configuration (merged per concern)
-2. **Foundation**: infrastructure shared by ≥ 2 slices (schema, base layout, error handling, shared models)
-3. **Slices**: one vertical slice per API operation / behaviour, test-first, kit `layers` order
+2. **Foundation**: infrastructure shared by ≥ 2 slices (schema, base layout, error handling, shared models). *Vertical:* only what ≥ 2 slices **of this increment** share and no earlier FASE delivered — everything else is built inside the first slice that needs it, so the increment stays thin and each FASE adds only its own journey's infrastructure (FASE-0, the skeleton, has the most)
+3. **Slices**: one vertical slice per API operation / behaviour, test-first, kit `layers` order. *Vertical:* grouped under one `### UC-NNN — {title}` sub-heading per use case inside the Slices section (task lines unchanged; the sub-heading is not a phase name, so tools keep reading the tasks as Slices)
 4. **Integration**: wiring touching ≥ 2 slices (routes table, layout, navigation, barrels)
 5. **Verification**: cross-Stream suites, BDD/E2E journeys, FASE Criterios de Éxito, checkpoint
 
@@ -261,8 +265,9 @@ A FASE agent writes only its own `TASK-FASE-{N}.md`: never the global files, `pi
 | V-17 | Verification tasks and checkpoints only in `verificación` / the main checkout | ERROR |
 | V-18 | Every `blocked-by` of a Stream task points to the same Stream, `base`, or an earlier FASE | WARN |
 | V-19 | Every task line matches the grammar; no `### TASK-` headings, no `**TASK-…**` ids | ERROR |
+| V-20 | *Vertical:* every scenario of the FASE's `Escenarios` header line is cited by some task (Acceptance or Refs) | ERROR |
 
-**Ownership.** The FASE agent (or the main thread in sequential mode) self-checks V-01..V-03, V-05..V-08, V-10, V-12..V-14 and reports them in `checks`. The main thread always computes V-04, V-09, V-11 and V-15..V-18 from the union of the returned JSONs (they span FASEs, and an agent should not grade its own homework). V-19 is mechanical: run `node "$SDD_CLI" lint --dir task` (it also re-checks V-05, V-06, V-09, V-16) and edit only the lines it reports. `--audit` runs everything read-only.
+**Ownership.** The FASE agent (or the main thread in sequential mode) self-checks V-01..V-03, V-05..V-08, V-10, V-12..V-14 and reports them in `checks`. The main thread always computes V-04, V-09, V-11 and V-15..V-18 from the union of the returned JSONs (they span FASEs, and an agent should not grade its own homework). V-19 is mechanical: run `node "$SDD_CLI" lint --dir task` (it also re-checks V-05, V-06, V-09, V-16) and edit only the lines it reports. V-20 is mechanical too: `node "$SDD_CLI" lint --plan` prints a `V-20` line per uncited scenario once the task files exist. `--audit` runs everything read-only.
 
 ---
 
@@ -289,9 +294,9 @@ Templates: `references/task-template.md` (full and compact).
 
 `[ ]` pending · `[x]` done (checkbox state) · `[!]` blocked. Forbidden: `### TASK-…` headings, `**TASK-…**` bold ids, indented task lines, paths outside backticks; a `[PLAN GAP]` line may omit the path (WARN).
 
-**Full format** (default), in order: header (`> **Input:**`, `> **Total tasks:**`, `> **Parallel capacity:**`, `> **Critical path:**`), `## Summary`, `## Traceability`, one `## Phase N: {Setup|Foundation|Slices|Integration|Verification}` section per internal phase (Purpose + Checkpoint, then its task lines; Verification ends with the Test Exclusions table), `## Dependencies` (ASCII Task Dependency Graph, Critical Path, Parallel Execution Plan), `## Stream Ownership`, `### Rollback Checkpoints`.
+**Full format** (default), in order: header (`> **Input:**`, `> **Total tasks:**`, `> **Parallel capacity:**`, `> **Critical path:**`), `## Summary`, `## Traceability`, one `## Phase N: {Setup|Foundation|Slices|Integration|Verification}` section per internal phase (Purpose + Checkpoint, then its task lines — *vertical:* Slices under `### UC-NNN — {title}` sub-headings; Verification ends with the Test Exclusions table), `## Dependencies` (ASCII Task Dependency Graph, Critical Path, Parallel Execution Plan), `## Stream Ownership`, `### Rollback Checkpoints`.
 
-**Compact format** (`--compact` or `task_format: compact`): `# Tasks: FASE-{N} — {Title}`, one `> **Critical path:** …` line, `## Stream Ownership`, `### Rollback Checkpoints`, then `## Setup` … `## Verification` with task lines only. Derived views come from `$SDD_CLI tasks json|index|status`; the absence of `TASK-INDEX.md` is never an inconsistency.
+**Compact format** (`--compact` or `task_format: compact`): `# Tasks: FASE-{N} — {Title}`, one `> **Critical path:** …` line, `## Stream Ownership`, `### Rollback Checkpoints`, then `## Setup` … `## Verification` with task lines only (*vertical:* `### UC-NNN` sub-headings inside `## Slices`). Derived views come from `$SDD_CLI tasks json|index|status`; the absence of `TASK-INDEX.md` is never an inconsistency.
 
 ## Handling Plan Gaps
 

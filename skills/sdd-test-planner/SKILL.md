@@ -1,6 +1,6 @@
 ---
 name: sdd-test-planner
-description: "Test planning per SWEBOK v4: strategy, matrices, coverage per FASE, performance (NFRs) and E2E acceptance scenarios. Triggers: 'test plan', 'test strategy', 'test matrix', 'performance tests', 'test coverage', 'e2e scenarios', 'acceptance tests', 'playwright', 'plan de pruebas', 'estrategia de testing', 'cobertura de tests', 'tests de aceptacion'."
+description: "Test planning per SWEBOK v4: strategy, matrices, coverage per use case, performance (NFRs) and E2E acceptance scenarios. Triggers: 'test plan', 'test strategy', 'test matrix', 'performance tests', 'test coverage', 'e2e scenarios', 'acceptance tests', 'playwright', 'plan de pruebas', 'estrategia de testing', 'cobertura de tests', 'tests de aceptacion'."
 ---
 
 # SDD Test Planner
@@ -17,7 +17,7 @@ Generation time is dominated by output tokens; reading the whole corpus only add
    ```bash
    grep -rn -E '^#{1,4} |^\| *(UC|WF|INV|API|AC|PROP|RN|REQ|SPEC|SEC|SLO)-[A-Z0-9-]+ *\|' spec/ requirements/ 2>/dev/null | cut -c1-160
    ```
-   Every heading and every id-bearing table row with `file:line`. Add `plan/fases/FASE-*.md` (per-FASE targets) and `audits/SECURITY-AUDIT-BASELINE.md` (finding ids) when they exist.
+   Every heading and every id-bearing table row with `file:line`. Add `audits/SECURITY-AUDIT-BASELINE.md` (finding ids) when it exists, and `plan/fases/FASE-*.md` only on a re-run after planning (to show which FASE each use case landed in).
 2. **Open by section** with `sed -n 'A,Bp' file` from the line numbers of the index:
 
    | Need | Open only |
@@ -113,9 +113,9 @@ Gates G0–G3 apply.
    - Quantified NFRs without a scenario → `MISSING-NFR-TEST`
    - User-facing WFs without E2E scenarios → `MISSING-E2E` (addressed by Mode 5)
 
-4. **Define coverage targets per FASE:**
+4. **Define coverage targets by use case:**
    - Ask user for overall coverage target (recommend 80% minimum)
-   - Map test types to FASEs using `plan/fases/FASE-*.md` (if exists); otherwise group by bounded context and mark the table as a proposal
+   - Group the targets by use case (§5): this skill runs before `sdd-plan-architect`, which cuts vertical FASEs from these groups (one user journey = 1-3 use cases). On a re-run after planning, add the FASE each use case landed in as a column; never group by technical layer
 
 5. **Write `test/TEST-PLAN.md`** with the template below. Tables, not prose; every row carries ids; budget ≤ 12 000 chars. Write §3 before launching matrix subagents.
 
@@ -166,11 +166,13 @@ One row per decision the implementer needs (clock injection, I/O fault injection
 | GAP-004 | MISSING-NFR-TEST | SPEC-PERF-{NNN} | No scenario for the p99 target | High |
 | GAP-005 | MISSING-E2E | WF-{NNN} | No E2E for user-facing workflow | High |
 
-## 5. Per-FASE Targets
+## 5. Targets by Use Case
 
-| FASE | Unit | Integration | E2E | Perf |
-|------|------|-------------|-----|------|
-| FASE-{N} | {INV/PROP ids} | {UC ids} | {tier or E2E ids} | {PERF ids} |
+One row per use case, in the order of its dependencies; `sdd-plan-architect` maps groups of rows to FASEs. Scenario ids are the ones test names must carry (Test Naming).
+
+| UC | REQs | Scenarios (AC ids) | Unit | Integration | E2E | Perf |
+|----|------|--------------------|------|-------------|-----|------|
+| UC-{NNN} | REQ-F-{NNN} | AC-{NNN}-01, AC-{NNN}-02 | {INV/PROP ids} | {matrix rows} | {E2E ids} | {PERF ids} |
 
 ## 6. Traceability REQ → tests
 
@@ -193,7 +195,7 @@ Only tests that belong to no single UC matrix or E2E scenario (integration harne
 | Trigger | Runs |
 |---------|------|
 | every commit | unit + affected integration |
-| FASE completion | full integration + E2E Critical |
+| FASE completion (increment demo) | full integration + E2E Critical |
 | release candidate | full suite + performance + security |
 
 ## 9. Inputs for sdd-plan-architect
@@ -242,7 +244,7 @@ only with `--sequential`, at ≤ 3 UCs, or without the `Agent` tool, and say why
    - test/TEST-PLAN.md §3 (conventions; never repeat them in the matrix)
    For each UC write test/TEST-MATRIX-UC-{NNN}.md following this template exactly:
    {template}
-   Rules: one row per case; expected = domain error code + observable outcome, HTTP status only with `Style: http`, exit code for a CLI; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
+   Rules: one row per case; every row's Refs cites the scenario id it verifies (AC-NNN-NN, or REQ-X-NNN ACn) — the implemented test is named with it; expected = domain error code + observable outcome, HTTP status only with `Style: http`, exit code for a CLI; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
    Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
    ```
 4. Main thread: continue with Mode 3 (and with Mode 5's Smoke tier and field-inventory cross-validation when Mode 5 is delegated) while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
@@ -280,7 +282,7 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 
 ## Cases
 
-`Type`: happy · error · boundary · state · derived (no AC of its own — cite the rule in Refs).
+`Type`: happy · error · boundary · state · derived (no AC of its own — cite the rule in Refs). The test implementing a row is named with the row's scenario id (Test Naming).
 
 | ID | Precondition / Input | Expected (status · output · state) | Type | Refs |
 |----|----------------------|-------------------------------------|------|------|
@@ -426,11 +428,15 @@ Use for end-to-end acceptance scenarios that validate complete user journeys, tr
 
 ---
 
+## Test Naming (scenario ids)
+
+Every planned test carries the scenario it verifies in its name, because `sdd accept` binds JUnit results to acceptance criteria by that id and ignores file-level `Refs:` (a file-level ref would mark every criterion of the file as verified). The name contains `AC-NNN-NN` (BDD scenario) or, for a requirement criterion without a scenario (measured NFR, constraint check), `REQ-X-NNN ACn`: `it("AC-001-03 rejects an empty title with exit 2")`, `test_AC_001_03_rejects_empty_title`, `test "REQ-NF-001 AC1 list p95 under 200 ms"`. Matrix rows and E2E scenarios therefore cite at least one scenario id in their `Refs` column; a row that verifies no criterion (derived, harness) says so. The implementer copies the id into the test name (`sdd-task-implementer/references/tdd-workflow.md`).
+
 ## Observable Outcomes, Not Transport
 
 Expected results are domain error codes (`E_TITLE_EMPTY`) and what the user or caller observes: message shown, accessible role/name, state after reload or restart, exit code for a CLI. An HTTP status, route or redirect is expected only when the contract declares `Style: http` (pre-4.3 contracts with `Method | Path` columns count as http); with `Style: operations` transport lives in `design/OPERATION-MAPPING.md` and is never a test oracle, except a URL a REQ mandates. Every test traces to a spec element and stays independent of other tests (no shared mutable state, no ordering).
 
-**Next step:** `sdd-plan-architect` (reads TEST-PLAN §5 per-FASE targets and §9 design requirements).
+**Next step:** `sdd-plan-architect` (reads TEST-PLAN §5 targets by use case and §9 design requirements).
 
 ## Persist Summary
 

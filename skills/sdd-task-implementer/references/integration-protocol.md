@@ -84,7 +84,7 @@ done
 
 - The message must start with `Merge ` — the SDD `commit-msg` hook lets merge commits through without trailers.
 - NEVER `--squash`, NEVER `--ff-only`, NEVER rebase a pushed Stream branch: each task commit must keep its SHA and
-  trailers (`Task:` uniqueness and `sdd-traceability-check` depend on it).
+  trailers (`Task:` uniqueness, `sdd tasks status` and `sdd-acceptance` depend on it).
 - After a successful merge: `sdd_bench_event merge "" "$(git rev-parse --short HEAD)"` (helper: `references/recovery-and-report.md` → Bench Events) and
   add the Stream to the `merged` list with its merge SHA.
 - Run the full test suite (`{test}`, Stack Profile) after **every** merge, not only at the end; a failure here is a

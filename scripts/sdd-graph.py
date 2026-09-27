@@ -1786,14 +1786,6 @@ def classify_requirements(artifacts, incoming, outgoing):
     Business domain: the requirement's section heading when it names one, else the ID group of grouped IDs
     (REQ-AUTH-003 → AUTH), else "General". No project-specific maps.
     """
-    # Find FASE linked to each REQ via TASK chain
-    task_to_fase = {}
-    for art in artifacts.values():
-        if art["type"] == "TASK":
-            m = re.match(r'TASK-F(\d+)-', art["id"])
-            if m:
-                task_to_fase[art["id"]] = int(m.group(1))
-
     classification_stats = {"byDomain": {}, "byLayer": {}, "byCategory": {}}
 
     def _infer_layer_from_title(title):
@@ -1805,8 +1797,6 @@ def classify_requirements(artifacts, incoming, outgoing):
 
     # Generic REQ prefixes that don't carry domain information (IEEE 830 style)
     generic_cats = {"F", "NF", "C", "R", "D", "G", "S", "P"}
-
-    from collections import Counter
 
     for art in artifacts.values():
         if art["type"] != "REQ":
@@ -1821,35 +1811,9 @@ def classify_requirements(artifacts, incoming, outgoing):
         if not domain:
             domain = cat if (cat and cat not in generic_cats) else "General"
 
-        # Technical layer: follow REQ -> UC -> TASK -> FASE
-        fases = set()
-        # Direct TASK links
-        for tgt in outgoing.get(art["id"], set()):
-            if tgt in task_to_fase:
-                fases.add(task_to_fase[tgt])
-        # Via UCs
-        for src in incoming.get(art["id"], set()):
-            if classify_id(src) == "UC":
-                for tgt in outgoing.get(src, set()):
-                    if tgt in task_to_fase:
-                        fases.add(task_to_fase[tgt])
-
-        if fases:
-            # Most frequent layer
-            layers = []
-            for fn in fases:
-                if fn == 0:
-                    layers.append("Infrastructure")
-                elif 1 <= fn <= 6:
-                    layers.append("Backend")
-                elif 7 <= fn <= 8:
-                    layers.append("Frontend")
-                else:
-                    layers.append("Integration/Deployment")
-            layer = Counter(layers).most_common(1)[0][0]
-        else:
-            # Fallback: infer from title keywords instead of showing "Unknown"
-            layer = _infer_layer_from_title(title)
+        # Technical layer from the title. FASEs are vertical increments (one user journey each), so a FASE
+        # number says nothing about the layer.
+        layer = _infer_layer_from_title(title)
 
         # Functional category from section or category prefix
         nfr_cats = {"PERF", "SEC", "SCAL", "AVAIL", "TECH", "CACHE", "OBS", "RATE", "VAL", "I18N", "ACC", "NF"}

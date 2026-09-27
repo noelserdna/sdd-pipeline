@@ -5,6 +5,11 @@ without `ux/`) uses the WF sections; API-ONLY uses "Scenarios for API-ONLY proje
 sections; CLI uses the WF sections with a command in `Action` and stdout/stderr/exit code in `Assertion`, no
 viewport matrix, no locators and no axe-core rows. Smoke and Critical tiers in full, Full tier as a list.
 
+Every scenario and variation cites the acceptance scenarios it proves (`AC-NNN-NN`, or `REQ-X-NNN ACn`) in its
+`Acceptance` line or `Spec Ref` cell, and the implemented test title carries the E2E id followed by those ids —
+`test("E2E-WF-001-01 AC-001-01 AC-002-01 create a task and see it listed", …)` — because `sdd accept` binds results to
+criteria only through ids in the test name. A step or row that proves no criterion (navigation, fixture) needs none.
+
 ````markdown
 # E2E Acceptance Scenarios
 
@@ -68,6 +73,7 @@ viewport matrix, no locators and no axe-core rows. Smoke and Critical tiers in f
 
 - **Workflow:** WF-{NNN}
 - **Use Cases:** UC-{NNN}, UC-{NNN}
+- **Acceptance:** AC-{NNN}-01, AC-{NNN}-01 (test title: `E2E-WF-{NNN}-01 AC-{NNN}-01 AC-{NNN}-01 {title}`)
 - **Requirements (transitive):** REQ-F-{NNN}, REQ-F-{NNN}
 - **Priority:** P0
 - **Tier:** smoke

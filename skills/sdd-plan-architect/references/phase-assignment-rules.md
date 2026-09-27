@@ -1,335 +1,90 @@
-# Phase Assignment Rules (Generic Algorithm)
-
-> Algorithm for assigning spec files to implementation phases (FASEs). This is project-agnostic: it uses structural analysis of the spec/ directory to derive phase assignments automatically.
->
-> See `phase-assignment-rules.example.md` for a concrete project-specific example.
-
----
-
-## Overview
-
-Phase assignment determines which FASE owns which spec files. The algorithm uses **dependency analysis** and **bounded context detection** to group related specs into coherent implementation units. Rules are applied in priority order; the first match wins.
-
----
-
-## Priority Order
-
-1. **By Invariant Prefix** — strongest signal, groups invariants by their domain prefix
-2. **By Use Case Grouping** — clusters UCs that share actors, entities, or workflows
-3. **By ADR Topic** — assigns ADRs to the phase whose concern they address
-4. **By Contract Module** — maps API contract files to phases by the bounded context they expose
-5. **By Workflow** — assigns workflow documents to the phase that implements the primary flow
-6. **By Domain Section** — assigns entity, value object, and state machine sections to owning phases
-7. **By Keyword Fallback** — scans content for domain-specific terms to infer phase ownership
-
----
-
-## Rule 1: By Invariant Prefix
-
-**How to detect:** Parse `domain/05-INVARIANTS.md` (or equivalent). Each invariant has a code like `INV-{PREFIX}-{NNN}`. Extract the `{PREFIX}` portion (e.g., `SEC`, `AUTH`, `ORD`).
-
-**How to assign:**
-
-1. Group all invariants by their prefix.
-2. For each prefix group, identify the **primary bounded context** it belongs to by reading the invariant descriptions:
-   - Prefixes mentioning security, encryption, audit, system-level concerns --> infrastructure/foundation phase (typically FASE-0).
-   - Prefixes mentioning a specific domain aggregate (e.g., `ORD` for Order, `PAY` for Payment) --> the phase that implements that aggregate.
-3. If a prefix group's invariants reference entities from multiple bounded contexts, assign to the **earliest** phase that introduces the primary entity.
-
-**Decision table template:**
-
-| INV Prefix | Detected Bounded Context | Assigned FASE | Rationale |
-|------------|--------------------------|---------------|-----------|
-| `{PREFIX}` | {context name from entity analysis} | FASE-{N} | {why this prefix maps here} |
-
----
-
-## Rule 2: By Use Case Grouping
-
-**How to detect:** Read all `UC-*.md` files in `use-cases/`. For each UC, extract:
-- **Primary actor** (who initiates the UC)
-- **Primary entity** (which aggregate root is created/modified)
-- **Referenced invariants** (which INV-* codes appear)
-- **Referenced workflows** (which WF-* are triggered)
-
-**How to assign:**
-
-1. **Cluster by primary entity:** UCs that create, read, update, or delete the same aggregate root belong to the same FASE.
-2. **Cluster by actor:** If multiple UCs share the same primary actor AND operate on closely related entities, consider grouping them in one FASE.
-3. **Dependency ordering:** If UC-A produces output consumed by UC-B, then UC-A's FASE must come before UC-B's FASE.
-4. **Infrastructure UCs:** UCs involving monitoring, health checks, admin panels, security incident handling --> FASE-0.
-5. **CRUD split:** If a UC has both read-only and write operations, the read-only portion may be assigned to an earlier FASE (e.g., "view prompts" in one phase, "manage prompts" in a later phase) using an **operation qualifier**.
-
-**Decision table template:**
-
-| UC ID | Primary Actor | Primary Entity | Assigned FASE | Rationale |
-|-------|---------------|----------------|---------------|-----------|
-| UC-{NNN} | {actor} | {entity} | FASE-{N} | {clustering reason} |
-
----
-
-## Rule 3: By ADR Topic
-
-**How to detect:** Read each `ADR-*.md` file. Identify the **primary concern** from its title and "Decision" section:
-- Infrastructure concerns (event architecture, error handling, caching, API versioning, observability) --> foundation phase.
-- Domain-specific concerns (scoring algorithms, matching strategies, notification channels) --> the phase that implements the relevant domain logic.
-- Cross-cutting concerns (encryption, multi-tenancy, rate limiting) --> primary assignment to foundation phase, with secondary references in consuming phases.
-
-**How to assign:**
-
-1. Map each ADR to the bounded context its decision affects most directly.
-2. If an ADR affects multiple contexts, list all phases with the **primary** phase first.
-3. Cross-cutting ADRs (security, observability, error handling) default to FASE-0 as primary.
-
-**Decision table template:**
-
-| ADR ID | Primary Concern | Primary FASE | Secondary FASEs | Rationale |
-|--------|-----------------|--------------|-----------------|-----------|
-| ADR-{NNN} | {concern} | FASE-{N} | FASE-{M}, ... | {why primary here} |
-
----
-
-## Rule 4: By Contract Module
-
-**How to detect:** List all files in `contracts/`. Each API contract file (e.g., `API-*.md`) exposes endpoints for a specific bounded context. Examine the base path and endpoint groupings. With `Style: operations` contracts there are no paths: group by operation IDs (`API-NNN-*`) and the UCs/aggregates they serve, and take the per-stack transport from `design/OPERATION-MAPPING.md` when it exists — never invent routes in the plan.
-
-**How to assign:**
-
-1. **Single-context contracts:** If all endpoints in the contract serve one bounded context, assign the entire contract to that context's FASE.
-2. **Multi-context contracts:** If a contract mixes endpoints for different contexts (e.g., an "organization" API with both admin endpoints and reporting endpoints), split by section and assign each section to the appropriate FASE using **section qualifiers**.
-3. **Transversal contracts:** Event catalogs (`EVENTS-domain.md`), error code registries (`ERROR-CODES.md`), and permission matrices are assigned to FASE-0 as primary but referenced by all phases.
-
-**Decision table template:**
-
-| Contract File | Detected Context(s) | Assigned FASE(s) | Qualifier (if split) |
-|---------------|----------------------|-------------------|----------------------|
-| `API-{name}.md` | {context} | FASE-{N} | {section if multi-phase} |
-
----
-
-## Rule 5: By Workflow
-
-**How to detect:** Read each `WF-*.md` file. Identify which entities and services participate in the workflow's sequence.
-
-**How to assign:**
-
-1. A workflow belongs to the FASE that implements the **primary action** of the workflow (the main processing step, not setup or notification steps).
-2. If a workflow spans entities from multiple FASEs, assign it to the FASE that owns the **triggering entity** (the aggregate root that starts the flow).
-3. Workflows that are purely infrastructure (retry, circuit-breaker, health-check) --> FASE-0.
-
-**Decision table template:**
-
-| Workflow | Triggering Entity | Primary Action | Assigned FASE |
-|----------|--------------------|----------------|---------------|
-| WF-{NNN} | {entity} | {action} | FASE-{N} |
-
----
-
-## Rule 6: By Domain Section
-
-**How to detect:** Parse domain model files (`02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, etc.). Each section describes an entity, value object, or state machine.
-
-**How to assign:**
-
-1. **Entities:** Assign each entity to the FASE that first needs it as an aggregate root. If a later FASE extends the entity (e.g., adds new state transitions), the later FASE gets a secondary reference with a section qualifier.
-2. **Value Objects:** Assign to the same FASE as the entity that primarily uses the VO.
-3. **State Machines:** Assign to the FASE that implements the primary state transitions. If later FASEs add transitions to the same state machine, use section qualifiers.
-4. **Glossary:** Transversal -- referenced by all FASEs, primary assignment to FASE-0.
-5. **Event schemas:** Assign to the FASE that produces the event. If consumed by multiple FASEs, primary assignment to the producer.
-
-**Decision table template:**
-
-| Domain Element | Type | Primary FASE | Secondary FASEs | Qualifier |
-|----------------|------|-------------|-----------------|-----------|
-| {ElementName} | Entity/VO/State | FASE-{N} | FASE-{M}, ... | {section if split} |
-
----
-
-## Rule 7: By Keyword Fallback
-
-**How to detect:** When no structural rule matches, scan the spec file's content for domain-specific keywords that are strongly associated with a bounded context.
-
-**How to assign:**
-
-1. Build a **keyword-to-context map** from the project's glossary and entity names. For example, if the glossary defines "Extraction" as a core concept and FASE-1 owns the Extraction entity, then keywords like "extract", "parse", "upload" map to FASE-1.
-2. Count keyword occurrences per context. The context with the highest keyword density wins.
-3. If no context dominates, ask the user.
-
-**Keyword map construction:**
-
-```
-FOR EACH fase IN plan/fases/:
-  context_name = fase.bounded_context
-  keywords = []
-  keywords += fase.entity_names (lowercase, singular)
-  keywords += fase.actor_names (lowercase)
-  keywords += glossary terms associated with this context
-  keyword_map[context_name] = keywords
-```
-
----
-
-## Bounded Context Detection Algorithm
-
-Before applying rules, detect the project's bounded contexts:
-
-```
-1. PARSE domain/02-ENTITIES.md → extract all entity names
-2. PARSE use-cases/ → extract all actor names
-3. PARSE contracts/ → extract all API base paths
-4. BUILD dependency graph:
-   - Entity A depends on Entity B if A references B as a foreign key or aggregate member
-   - UC-X depends on UC-Y if X's precondition includes Y's postcondition
-5. CLUSTER entities into bounded contexts using:
-   a. Entities with no cross-references → each is its own context
-   b. Entities with mutual references → same context
-   c. Entities referenced only via domain events → separate contexts (loosely coupled)
-6. ORDER contexts by dependency depth:
-   - Contexts with no dependencies → earliest FASEs
-   - Contexts depending on others → later FASEs
-   - Infrastructure/cross-cutting → FASE-0
-```
-
----
-
-## Dependency Analysis for FASE Ordering
-
-Once specs are grouped into bounded contexts, determine FASE execution order:
-
-```
-1. BUILD a context dependency graph:
-   - Context A depends on Context B if A's UCs reference B's entities or events
-2. TOPOLOGICAL SORT the graph → produces FASE ordering
-3. ASSIGN FASE numbers:
-   - FASE-0: infrastructure, security, cross-cutting (no domain dependencies)
-   - FASE-1..N: domain contexts in topological order
-   - Tie-breaking: prefer the context with fewer dependencies first
-4. VALIDATE: no circular dependencies (if found, merge contexts or introduce an interface boundary)
-```
-
----
-
-## Transversal Documents
-
-Some documents are referenced by ALL phases. Identify them by checking if:
-- The document defines vocabulary used project-wide (glossary)
-- The document defines event schemas consumed by 3+ bounded contexts
-- The document defines error codes used across multiple APIs
-- The document provides system-level overview or architectural context
-
-Assign transversal documents to FASE-0 as primary, with references in every subsequent FASE.
-
-**Common transversal documents:**
-
-| Document Pattern | Why Transversal |
-|------------------|-----------------|
-| `00-OVERVIEW.md` | System vision and scope |
-| `01-SYSTEM-CONTEXT.md` | Boundaries, actors, external systems |
-| `domain/01-GLOSSARY.md` | Ubiquitous language |
-| `contracts/EVENTS-*.md` | Domain event catalog |
-| `contracts/ERROR-CODES.md` | Error code registry |
-| `CLARIFICATIONS.md` | Business rules (RN-*) |
-| `CHANGELOG.md` | Change history |
-
----
-
-## Multi-Phase Specs
-
-Some specs span multiple phases. Handle with **section qualifiers**:
-
-**Detection:** A spec is multi-phase if:
-- It defines multiple entities assigned to different FASEs
-- It defines an API with endpoint groups serving different bounded contexts
-- It defines BDD scenarios covering features from different FASEs
-
-**Handling:**
-
-```markdown
-| Spec File | FASE | Section Qualifier | What to Extract |
-|-----------|------|-------------------|-----------------|
-| `domain/02-ENTITIES.md` | FASE-{N} | Section: {EntityName} | {specific fields/methods} |
-| `contracts/API-{name}.md` | FASE-{N} | Endpoints: /v1/{path}/* | {specific endpoint group} |
-| `tests/BDD-{name}.md` | FASE-{N} | Feature: {feature name} | {specific scenarios} |
-```
-
----
-
-## Rule 8: By Delivery Channel (UI Pages)
-
-**How to detect:** Check the System Vision Gate's "Delivery Channels" dimension. If it includes web, mobile, or desktop, the project has a user-facing presentation layer that must be planned.
-
-**How to assign:**
-
-1. **Identify user-facing UCs**: Any UC where the primary actor is a human user (not a system/API client) requires a UI page or screen.
-2. **Map UCs to pages**: Group related UCs into pages (e.g., UC-001 Register + UC-002 Login → Auth pages; UC-004 Create Post + UC-006 View Timeline → Timeline page with compose form).
-3. **Assign pages to FASEs**: Each page belongs to the same FASE as the UC(s) it implements. The page is a deliverable of that FASE, not a separate FASE.
-4. **Shared components**: UI components used across multiple pages (nav bar, error toast, user avatar) belong to the earliest FASE that needs them.
-5. **Full-stack frameworks**: When using SvelteKit, Next.js, Remix, or similar, API routes AND pages are in the same project — both must appear in the FASE's deliverables.
-
-**Decision table template:**
-
-| UC ID | Page/Route | Components | Assigned FASE | Rationale |
-|-------|------------|------------|---------------|-----------|
-| UC-{NNN} | `/{path}` | {component list} | FASE-{N} | {same FASE as the UC's backend} |
-
-**Anti-pattern:** Creating all backend FASEs without any UI deliverables, then hoping a "frontend FASE" will appear later. This never happens — the UI must be part of each feature FASE.
-
----
-
-## Conflict Resolution
-
-When a spec matches multiple rules pointing to different phases:
-
-1. **INV prefix wins** over UC number (invariants are the strongest signal of domain ownership)
-2. **UC number wins** over ADR/keyword (UCs are explicit assignments from requirements)
-3. **If still ambiguous:** assign to the **earliest** phase that needs the spec
-4. **If truly multi-phase:** list all phases with section qualifiers
-
----
-
-## New Spec Handling
-
-When a new spec is encountered that does not match any rule:
-
-1. Check if its filename contains a mapped UC/ADR/WF number --> use that rule
-2. Check if its content references INV-* with a mapped prefix --> use Rule 1
-3. Check if it is referenced by an existing FASE file --> use that phase
-4. Trace the spec's primary entity to a UC --> use that UC's phase
-5. If still unclear: **ask the user** which phase it belongs to
-
----
-
-## Hypothetical Example
-
-Consider a hypothetical **e-commerce platform** with these bounded contexts:
-
-- **Infrastructure** (FASE-0): Auth, event bus, error handling, observability
-- **Catalog** (FASE-1): Product management, categories, search indexing
-- **Cart** (FASE-2): Shopping cart, pricing rules, promotions
-- **Orders** (FASE-3): Order placement, payment processing, order lifecycle
-- **Fulfillment** (FASE-4): Shipping, warehouse, tracking
-- **Analytics** (FASE-5): Reports, dashboards, recommendations
-
-Applying the rules:
-
-**Rule 1 (INV prefix):**
-- `INV-SEC-*`, `INV-SYS-*` --> FASE-0 (infrastructure invariants)
-- `INV-CAT-*` --> FASE-1 (e.g., "catalog must have at least one category")
-- `INV-PRC-*` --> FASE-2 (e.g., "price must be non-negative")
-- `INV-ORD-*` --> FASE-3 (e.g., "order total must equal sum of line items")
-- `INV-SHP-*` --> FASE-4 (e.g., "shipment must reference a valid order")
-
-**Rule 2 (UC grouping):**
-- UC-001 "Browse Products", UC-002 "Search Catalog" --> FASE-1 (same actor: Customer, same entity: Product)
-- UC-003 "Add to Cart", UC-004 "Apply Coupon" --> FASE-2 (same entity: Cart)
-- UC-005 "Place Order", UC-006 "Process Payment" --> FASE-3 (dependency chain: order then payment)
-- UC-007 "Ship Order" --> FASE-4 (depends on FASE-3 output)
-
-**Rule 3 (ADR topic):**
-- ADR-001 "Use event sourcing for order lifecycle" --> FASE-0 (infrastructure), FASE-3 (primary consumer)
-- ADR-002 "Elasticsearch for catalog search" --> FASE-1
-
-**Rule 5 (Workflow):**
-- WF-001 "Order-to-Shipment" --> FASE-3 (triggering entity: Order), secondary reference in FASE-4
-
-**Dependency ordering:** Catalog (no deps) < Cart (depends on Catalog) < Orders (depends on Cart) < Fulfillment (depends on Orders) < Analytics (depends on all).
+# Phase Assignment Rules (vertical FASEs)
+
+A FASE is an **increment**: at its end a person runs a short demo from a clean checkout and sees a user journey work
+end to end, through every layer. The customer accepts or rejects increments, so the plan is cut by what a user can
+do, never by technical layer (no "infrastructure FASE", "backend FASE", "frontend FASE"). Plans written this way carry
+`> **Plan-Style:** vertical` in `PLAN.md`; `sdd lint --plan` checks them mechanically.
+
+## Inputs
+
+`requirements/REQUIREMENTS.md` (priority, `Needs:`, dependencies), `spec/use-cases/` (actor, primary entity,
+`Depends`), `spec/tests/BDD-UC-*.md` (scenario ids `AC-NNN-NN` and their `[REQ-X-NNN ACn]` tags), `test/TEST-PLAN.md`
+§5 (test targets grouped by use case) and `requirements/CUSTOMER-NEEDS.md` (`N-NNN`).
+
+## Rules
+
+| # | Rule | Why |
+|---|------|-----|
+| R1 Order | Dependencies are hard constraints (a UC whose precondition is another UC's postcondition goes after it). Among what the dependencies allow, MoSCoW decides: Must before Should before Could. | Value first, but never a journey that cannot run |
+| R2 Skeleton | FASE-0 (`FASE-0-SKELETON`) is the walking skeleton: the minimum **write → observe → persist** path of the central use case, even when it crosses 2-3 requirements, plus only the infrastructure that path needs. | The riskiest integration (all layers, storage, build) is proven first, with something the customer can see |
+| R3 Increments | One user journey per FASE. The CRUD of one entity is one increment (the skeleton may take its create + list slice first). A UC with more than 12 scenarios splits by scenario groups (happy path + validation, then the rest). | A demo tells one story; a FASE the customer can judge in minutes |
+| R4 Budget | At most 3 use cases and about 15 tasks per FASE. Split along R3 when exceeded. | Increments small enough to accept or reject quickly |
+| R5 Whole requirements | Assign each requirement whole to the FASE that completes it: `sdd gate --fase N` judges every criterion of the REQs on the `Requisitos:` line. An earlier FASE may still cite some of that REQ's scenarios in `Escenarios:` and its demo. | A REQ listed early would show its later criteria as MISSING |
+| R6 Security | Authentication, authorization and input validation ship in the first FASE that exposes the resource, never in a later "security FASE". A role enters with its first capability (the admin role arrives with the admin report). | An increment that works but is insecure is not acceptable |
+| R7 NFR | `FASE-N-HARDENING` only for measured NFRs (performance, availability with a threshold), and only when they exist. Other NFRs and REQ-C constraints are criteria of every FASE they touch. | Measurement needs the whole path; constraints apply from day one |
+| R8 Demo | At most 10 steps from a clean checkout, each citing the scenario it shows (`AC-NNN-NN`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario) and the needs it serves (`N-NNN`). Include seed data when a step needs state the FASE cannot create yet. For an API, steps are consumer calls (`curl`, a client script), not unit tests. | The demo is the evidence the customer accepts |
+| R9 Streams | Parallel Streams are the exception: only when the FASE splits into disjoint write-sets (`## Módulos y Conjuntos de Escritura`). A vertical FASE is usually serial. | Parallelism without shared files; never a reason to cut by layer |
+| R10 Mixed plans | A plan already implemented horizontally keeps its FASEs. New FASEs are added vertically after the last verified one (`git tag -l 'fase-*-verified'`) and `PLAN.md` says so: `> **Plan-Style:** vertical (from FASE-4)`. Lint then checks FASE-4 onward and counts REQ ids cited anywhere in the earlier FASEs as assigned. | Never re-plan delivered work |
+
+## Procedure
+
+1. **Central use case.** The UC that is the reason the product exists (the one most `Must` REQs and needs point at).
+   Its minimum write → observe → persist path, with the REQs it crosses, is FASE-0.
+2. **Journeys.** Group the remaining UCs into journeys (R3) using the UC groups of `test/TEST-PLAN.md` §5.
+3. **Order** the journeys by R1; apply R4 and R5; place auth and roles by R6; add HARDENING by R7.
+4. **Write each FASE** with `fase-template.md`: `Incremento`, `Requisitos`, `Escenarios`, `Necesidades`, criteria
+   grouped by use case, `## Demo` (R8).
+5. **Spec files.** A spec file belongs to the FASE of the UC it serves; a file serving several UCs is listed in each,
+   with a section qualifier (`domain/02-ENTITIES.md` · `ENT-002 Vehicle`). Transversal documents (glossary, error
+   catalog, overview, system context, CLARIFICATIONS) are listed in FASE-0 and referenced by the rest.
+6. **Check** with `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --plan` (V8: backed criteria and
+   a demo per FASE; V9: every Must REQ-F/REQ-NF assigned).
+
+## Conflict resolution
+
+1. A dependency beats priority (R1): a Should that a Must depends on moves forward with it.
+2. The skeleton beats the one-journey rule: FASE-0 may cross 2-3 REQs to close write → observe → persist.
+3. Security beats budget: if auth pushes a FASE over R4, move a scenario group out, never the auth.
+4. R5 beats R3: when a journey needs half of a REQ, cite those scenarios early and list the REQ in the FASE that
+   completes it.
+5. Still ambiguous → the earliest FASE whose demo needs it; if two orders are equally valid, ask the user.
+
+## Worked example: todo-app (`examples/todo-app/requirements/REQUIREMENTS.md`)
+
+CLI; central UC = create a task. UCs: UC-001 create, UC-002 list, UC-003 complete, UC-004 delete, UC-005 filter.
+
+| FASE | Incremento | Requisitos | Why |
+|------|-----------|------------|-----|
+| FASE-0-SKELETON | Apuntar tareas y verlas en otra ejecución | REQ-F-001, REQ-F-002, REQ-F-006, REQ-NF-002 | R2: add (write) + list (observe) + `data/todos.json` (persist); coverage (Must, measured on every run) starts here |
+| FASE-1-LIFECYCLE | Completar y borrar tareas | REQ-F-003, REQ-F-004 | Must; both depend on REQ-F-001; one journey (close the tasks you have) |
+| FASE-2-FILTER | Filtrar por estado | REQ-F-005 | Should (R1), depends on REQ-F-002 |
+| FASE-3-HARDENING | Latencia con 1 000 tareas | REQ-NF-001 | R7: measured NFR, needs every command |
+
+REQ-C-001/002 are criteria of every FASE (R7). FASE-0 demo (seed: `data/todos.json` with task 2 completed, because
+`done` arrives in FASE-1):
+
+| # | Acción | Resultado esperado | Escenario |
+|---|--------|--------------------|-----------|
+| 1 | `rm -rf data && todo list` | `No tasks`, exit 0 | AC-002-02 · N-002 |
+| 2 | `todo add "Buy milk"` | task 1 pending; `data/todos.json` has one task | AC-001-01, AC-001-04 · N-001, N-004 |
+| 3 | `todo add ""` | exit 2, `title must not be empty` | AC-001-03 · N-001 |
+| 4 | `cp demo/seed-fase-0.json data/todos.json && todo list` | `1 [ ] …` and `2 [x] …` | AC-002-01, AC-002-03 · N-002, N-004 |
+| 5 | `npm test -- --coverage` | statements of `src/api/**` ≥ 90 % | REQ-NF-002 AC1 · N-005 |
+
+## Worked example: web app (login + 3 CRUD entities + admin report)
+
+Workshop bookings. Entities Customer → Vehicle → Appointment; roles staff and admin. REQ-F-001 log in, REQ-F-002
+register and list customers, REQ-F-003 edit and delete customers, REQ-F-004 manage vehicles, REQ-F-005 manage
+appointments (all Must), REQ-F-006 monthly report for admins (Should), REQ-NF-001 appointment list p95 < 300 ms.
+
+| FASE | Incremento | Requisitos | Rule |
+|------|-----------|------------|------|
+| FASE-0-SKELETON | El personal entra y registra un cliente que sigue ahí al recargar | REQ-F-001, REQ-F-002 | R2 + R6: login ships with the first exposed resource |
+| FASE-1-CUSTOMERS | Corregir y dar de baja clientes | REQ-F-003 | R3: rest of the Customer CRUD |
+| FASE-2-VEHICLES | Registrar los vehículos de un cliente | REQ-F-004 | R1: needs customers; one entity's CRUD |
+| FASE-3-APPOINTMENTS | Dar, mover y anular citas | REQ-F-005 | R1: needs vehicles |
+| FASE-4-REPORT | El administrador ve el informe mensual | REQ-F-006 | R6: the admin role enters with its first capability; Should last |
+| FASE-5-HARDENING | Listado de citas rápido con 10 000 citas | REQ-NF-001 | R7 |
+
+Not like this: FASE-0 "database + auth + CI", FASE-1 "all models", FASE-2 "all endpoints", FASE-3 "all screens" —
+nothing for the customer to accept until the end.

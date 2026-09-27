@@ -30,10 +30,14 @@ Template for generating the `fases/README.md` file. This is the entry point for 
 
 ## Resumen de Fases
 
-| Fase | Documento | Objetivo | Dependencias |
-|------|-----------|----------|--------------|
+Cada fase es un incremento que el cliente ve funcionar en su Demo (`phase-assignment-rules.md`).
+
+| Fase | Documento | Incremento | Requisitos | Dependencias |
+|------|-----------|------------|------------|--------------|
 {For each phase:}
-| **{N}** | [{filename}]({filename}) | {Objective} | {Dependencies} |
+| **{N}** | [{filename}]({filename}) | {Incremento line} | {REQ ids of its Requisitos line} | {Dependencies} |
+
+**Requisitos Must sin fase:** {ninguno | ids} (V9)
 
 ---
 
@@ -123,7 +127,7 @@ Implementar: abre `FASE-N-*.md`, lee las specs listadas, implementa con sus inva
 
 The ASCII dependency graph should be generated from the phase dependency data. Rules:
 
-1. FASE-0 is always the root (no dependencies)
+1. FASE-0 (the walking skeleton) is always the root (no dependencies)
 2. Use `│`, `├`, `▼`, `◄`, `►` for arrows
 3. Show parallel phases side by side
 4. Show the full DAG from FASE-0 to the last phase

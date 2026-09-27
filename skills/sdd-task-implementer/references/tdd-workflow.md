@@ -6,6 +6,27 @@
 
 ---
 
+## Test names carry the scenario id
+
+Every test that verifies an acceptance criterion has the criterion's scenario id in its name: `AC-NNN-NN` (the BDD
+scenario of `spec/tests/BDD-UC-NNN.md`), or `REQ-X-NNN ACn` for a requirement criterion without a scenario (measured
+NFR, constraint check). `sdd accept` reads the JUnit report (Stack Profile `test_report`) and binds each result to a
+criterion only through that id; file-level `Refs:` comments never count, since they would mark every criterion of the
+file as verified. The id may sit in the test name or its enclosing `describe`/class; `-` or `_` both work.
+
+| Stack | Example |
+|-------|---------|
+| vitest / jest / mocha | `it("AC-001-03 rejects an empty title with exit 2", …)` |
+| playwright | `test("E2E-WF-001-01 AC-001-01 AC-002-01 create a task and see it listed", …)` |
+| pytest | `def test_AC_001_03_rejects_empty_title():` |
+| rspec / minitest | `it "AC-001-03 rejects an empty title"` · `test "AC-001-03 rejects an empty title"` |
+| measured NFR | `it("REQ-NF-001 AC1 list p95 under 200 ms with 1000 tasks", …)` |
+
+Tests with no criterion of their own (invariant property tests, helpers, harness) keep their descriptive names and
+their INV/ADR ids.
+
+---
+
 ## The RED-GREEN-REFACTOR Cycle
 
 For each task with testable behavior:
@@ -52,7 +73,7 @@ Location: {test_paths}/unit/{module}.test.ts (stack convention wins: e.g. test/m
 ```typescript
 describe('{ModuleName}', () => {
   describe('{methodName}', () => {
-    it('should {expected behavior} when {condition}', () => {
+    it('AC-{NNN}-{NN} should {expected behavior} when {condition}', () => {
       // Arrange
       // Act
       // Assert
@@ -143,8 +164,8 @@ Location: tests/acceptance/{scenario}.test.ts
 **Structure (Given-When-Then):**
 
 ```typescript
-describe('BDD: {Scenario Name}', () => {
-  it('GIVEN {precondition} WHEN {action} THEN {expected outcome}', async () => {
+describe('BDD-UC-{NNN}', () => {
+  it('AC-{NNN}-{NN} GIVEN {precondition} WHEN {action} THEN {expected outcome}', async () => {
     // GIVEN
     const context = await setupPrecondition();
 
@@ -293,16 +314,16 @@ Is this task testable?
 
 ## Writing Tests from Acceptance Criteria
 
-The task document provides acceptance criteria. Each criterion maps to one or more tests.
+The task document provides acceptance criteria. Each criterion maps to one or more tests, and a criterion that cites a scenario id puts it in the test name (Test names carry the scenario id).
 
 **Example task:**
 
 ```markdown
 - [ ] TASK-F0-003 Create auth middleware | `src/middleware/auth.ts`
   - **Acceptance:**
-    - Extracts user_id, org_id, role from valid JWT
-    - Returns 401 with error body when token missing
-    - Returns 401 when token expired
+    - Extracts user_id, org_id, role from valid JWT (AC-002-01)
+    - Returns 401 with error body when token missing (AC-002-02)
+    - Returns 401 when token expired (AC-002-03)
     - Enforces INV-TENANT-001 (tenant isolation via org_id)
 ```
 
@@ -311,7 +332,7 @@ The task document provides acceptance criteria. Each criterion maps to one or mo
 ```typescript
 describe('AuthMiddleware', () => {
   // Criterion 1: Extracts user context from valid JWT
-  it('should extract user_id, org_id, role from valid JWT', async () => {
+  it('AC-002-01 extracts user_id, org_id, role from valid JWT', async () => {
     const token = createValidJWT({ user_id: 'u1', org_id: 'o1', role: 'recruiter' });
     const req = createRequest({ authorization: `Bearer ${token}` });
     const ctx = await authMiddleware(req);
@@ -321,7 +342,7 @@ describe('AuthMiddleware', () => {
   });
 
   // Criterion 2: Returns 401 when token missing
-  it('should return 401 when Authorization header is missing', async () => {
+  it('AC-002-02 returns 401 when Authorization header is missing', async () => {
     const req = createRequest({ /* no auth header */ });
     const res = await authMiddleware(req);
     expect(res.status).toBe(401);
@@ -329,7 +350,7 @@ describe('AuthMiddleware', () => {
   });
 
   // Criterion 3: Returns 401 when token expired
-  it('should return 401 when token is expired', async () => {
+  it('AC-002-03 returns 401 when token is expired', async () => {
     const token = createExpiredJWT();
     const req = createRequest({ authorization: `Bearer ${token}` });
     const res = await authMiddleware(req);
@@ -401,9 +422,9 @@ it('should generate unique IV for each encryption (INV-SEC-001)', () => {
 Before marking a test as complete:
 
 ```
-[ ] Test name describes behavior, not implementation
+[ ] Test name carries the scenario id and describes behavior, not implementation
     WRONG: "should call validateToken function"
-    RIGHT: "should return 401 when token is expired"
+    RIGHT: "AC-002-03 returns 401 when token is expired"
 
 [ ] Assertions are specific
     WRONG: expect(result).toBeTruthy()

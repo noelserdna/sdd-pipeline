@@ -122,7 +122,7 @@ SKIP IF:
 
 1. Read all ADR files with `technology|stack|framework|runtime|language` in content
 2. Read CLAUDE.md for "Active Technologies" and `## SDD Stack Profile`; if `stack` names a kit, read `templates/stacks/{stack}/kit.json`
-3. Read FASE-0 (bootstrap) for technology decisions
+3. Read `plan/PLAN.md` §2 and FASE-0 (the walking skeleton) for technology decisions
 4. Read nfr/ for technology constraints (compatibility, licensing)
 
 ### Question Templates
@@ -185,7 +185,7 @@ SKIP IF:
 1. Read 01-SYSTEM-CONTEXT.md for bounded contexts
 2. Read ADRs with `architecture|topology|deploy|scale|monolith|microservice`
 3. Read nfr/PERFORMANCE.md for scaling targets
-4. Read FASE-0 for deployment platform decisions
+4. Read `plan/PLAN.md` §2 and FASE-0 for deployment platform decisions
 
 ### Question Templates
 
@@ -440,7 +440,7 @@ SKIP IF:
 1. Check for .github/workflows/, .gitlab-ci.yml, or similar
 2. Read ADRs with `cicd|pipeline|deploy|release|environment`
 3. Read runbooks/ for deployment procedures
-4. Read FASE-0 for bootstrap/deploy decisions
+4. Read `plan/PLAN.md` §2 and FASE-0 for build/deploy decisions
 
 ### Question Templates
 
@@ -534,7 +534,7 @@ SKIP IF:
 2. Read ADRs with `monorepo|tooling|lint|format|dev-environment|workspace`
 3. Check for existing config files (.eslintrc, prettier, turbo.json, nx.json)
 4. Check for Dockerfile or devcontainer.json
-5. Read FASE-0 for bootstrap/setup decisions
+5. Read `plan/PLAN.md` §2 and FASE-0 for setup decisions
 
 ### Question Templates
 

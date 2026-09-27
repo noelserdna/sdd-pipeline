@@ -237,19 +237,13 @@ Per test file, from its extension and the project configuration (root and the St
 2. Else the ID group of grouped IDs (`REQ-AUTH-003` → `AUTH`); the IEEE-style groups F, NF, C carry no domain.
 3. Else `General`.
 
-### Technical Layer (auto-inferred from FASE)
+### Technical Layer (inferred from the title)
 
-Map FASE numbers to technical layers:
+Title keywords matched as whole words: ui, form, screen → Frontend; deploy, logs, server → Infrastructure; webhook,
+import, sync → Integration/Deployment; anything else → Backend.
 
-| FASE | Technical Layer |
-|------|----------------|
-| FASE-0 | Infrastructure |
-| FASE-1 through FASE-6 | Backend |
-| FASE-7 through FASE-8 | Frontend |
-| FASE-9+ | Integration/Deployment |
-| *(no FASE link)* | From title keywords matched as whole words (ui, form, screen → Frontend; deploy, logs, server → Infrastructure; webhook, import, sync → Integration/Deployment), else Backend |
-
-**Inference rule**: For each REQ, follow the traceability chain REQ → UC → TASK → FASE. Use the FASE number to determine the layer. If a REQ maps to multiple FASEs across layers, use the primary (most frequent) layer.
+FASE numbers are not used: FASEs are vertical increments (one user journey each, `skills/sdd-plan-architect/references/phase-assignment-rules.md`),
+so FASE-0 is a walking skeleton, not an infrastructure layer, and every FASE crosses every layer.
 
 ### Functional Category (auto-inferred from REQ section headers)
 

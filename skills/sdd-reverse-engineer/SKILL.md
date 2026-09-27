@@ -109,7 +109,9 @@ Map existing tests to requirements/UCs, list coverage gaps, and write `test/TEST
 
 ### Phase 8: Plan Reconstruction
 
-Write, in the formats of `sdd-plan-architect`: `plan/ARCHITECTURE.md` (C4 context/container/component, stack, deployment from Docker/CI), `plan/PLAN.md` (FASEs from layers or domain areas, order from the module graph), and `plan/fases/FASE-{N}-{SLUG}.md` with the source-to-test mapping table.
+Write, in the formats of `sdd-plan-architect`: `plan/ARCHITECTURE.md` (C4 context/container/component, stack, deployment from Docker/CI), `plan/PLAN.md` with `> **Plan-Style:** vertical`, and `plan/fases/FASE-{N}-{SLUG}.md` with the source-to-test mapping table.
+
+Retroactive FASEs are vertical, as new ones would be (`sdd-plan-architect/references/phase-assignment-rules.md`): one FASE per functional area (a user journey over its UCs, never a technical layer), ordered by the first commit that touched the area (`git log --reverse --format=%as -- <area paths> | head -1`); the oldest area is FASE-0. Each FASE header carries `Incremento`, `Requisitos` (the reconstructed REQs of the area, whole), `Escenarios` (their scenario ids) and `Necesidades` when known. Its `## Demo` is written from the existing behaviour, with every step marked `[INFERRED]` in the Resultado esperado cell: nobody has watched it yet, so the first FASE gate after onboarding runs it and confirms or corrects it. New work after onboarding goes into new FASEs after the last one.
 
 ### Phase 9: Task Reconstruction
 
@@ -150,7 +152,7 @@ Reads: code and test paths, package/CI/config files, git history, `pipeline-stat
 
 ## 6. Related Skills
 
-`sdd-import` may run first to seed requirements (seed mode above); `sdd-reconcile` replaces this skill when SDD artifacts already exist; after this skill run `sdd-spec-auditor`, then `sdd-test-planner` / `sdd-plan-architect` to refine, `sdd-traceability-check` to verify the chain, `sdd-security-auditor` for security.
+`sdd-import` may run first to seed requirements (seed mode above); `sdd-reconcile` replaces this skill when SDD artifacts already exist; after this skill run `sdd-spec-auditor`, then `sdd-test-planner` / `sdd-plan-architect` to refine, `sdd-acceptance --check` to verify the chain and the evidence per requirement, `sdd-security-auditor` for security.
 
 ## 7. Rules
 

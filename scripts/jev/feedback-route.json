@@ -1,0 +1,17 @@
+{
+  "description": "FASE gate (sdd-orchestrator / sdd-lead, skills/sdd-orchestrator/references/fase-gate.md): one item per piece of customer feedback on an increment, state = {feedback: <the customer's words>, fase: {n, increment, requirements: {<REQ id>: <statement>}, scenarios: {<AC id>: <title>}, demo: [{step, action, expected, observed}]}}. The answer only proposes a route: a human always confirms it before anything runs, and below the confidence threshold the question goes to the human with no proposal. Routes: defect → sdd-task-generator --fase N --incremental, then sdd-task-implementer; change_request → sdd-req-change; question → answer it and ask the gate again.",
+  "thresholds": {
+    "confidence": 0.7
+  },
+  "questions": {
+    "route": {
+      "type": "choice",
+      "instructions": "The customer watched the demo of increment `fase.increment` and said `feedback`. The increment was built to satisfy `fase.requirements`, shown by `fase.scenarios` and the steps of `fase.demo`. Is the feedback a defect (what was delivered contradicts what the requirements and scenarios already say), a change request (the customer wants behavior that is new or different from what the requirements say), or a question (the customer asks for information and asks for no change)?",
+      "criteria": {
+        "defect": "The delivery contradicts the specification: a step, output or behavior differs from what a listed requirement or scenario already states, or something a listed requirement promises is missing or broken",
+        "change_request": "The customer asks for behavior the listed requirements do not state, or for different behavior than they state: a new feature, another rule, value, wording or flow, even if phrased as a complaint",
+        "question": "The customer asks how something works, why it behaves as it does, or what comes next, and requests no change to the software"
+      }
+    }
+  }
+}

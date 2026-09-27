@@ -79,7 +79,7 @@
 
 ## Phase 2: Foundation
 
-**Purpose:** Shared infrastructure used by ≥ 2 slices (schema, base layout, error handling, shared models).
+**Purpose:** Shared infrastructure used by ≥ 2 slices (schema, base layout, error handling, shared models). Vertical plan: only what ≥ 2 slices of this increment share and no earlier FASE delivered.
 **Checkpoint:** Foundation tests pass.
 
 - [ ] TASK-F{N}-{SEQ} {Description} | `{file_path}`
@@ -98,13 +98,15 @@
 **Purpose:** One vertical slice per API operation (`API-NNN-NN`), layers in the kit `layers` order (rails: migration → model → controller → views; nextjs-prisma: schema → domain/data → server actions → components/page), tests written first inside the task.
 **Checkpoint:** Every slice's tests green.
 
+### UC-{NNN} — {use case title}   ← vertical plan only: one sub-heading per use case
+
 - [ ] TASK-F{N}-{SEQ} [P] {Operation} ({API-NNN-NN}), test-first | `{test_path}`, `{code_path}`, `{view_or_component_path}`
   - blocked-by: TASK-F{N}-{SEQ}
   - **Commit:** `feat({scope}): {message}`
   - **Acceptance:**
-    - Test first: {failing test that encodes the criterion / invariant}
+    - Test first: `AC-{NNN}-{NN} {behaviour}` — {failing test that encodes the criterion / invariant; its name carries the scenario id}
     - {observable behaviour with specific values; transport per design/OPERATION-MAPPING.md}
-  - **Refs:** {FASE-N}, {UC-XXX}, {API-NNN-NN}, {INV-XXX-XXX}
+  - **Refs:** {FASE-N}, {REQ-X-NNN}, {UC-XXX}, {API-NNN-NN}, {INV-XXX-XXX}
   - **Revert:** {category} — {impact}
   - **Review:**
     - [ ] The test failed before the implementation
@@ -225,10 +227,12 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 ## Slices
 
+### UC-{NNN} — {use case title}
+
 - [ ] TASK-F{N}-{SEQ} [P] {Operation} ({API-NNN-NN}), test-first | `{test_path}`, `{code_path}`
   - blocked-by: TASK-F{N}-{SEQ}
   - **Commit:** `feat({scope}): {message}`
-  - **Acceptance:** Test first: {criterion}; {observable behaviour}
+  - **Acceptance:** Test first: `AC-{NNN}-{NN} {behaviour}`; {observable behaviour}
   - **Refs:** FASE-{N}, {UC}, {API}, {INV}
   - **Revert:** COUPLED — {written only when not SAFE}
 

@@ -27,6 +27,11 @@
 //   sdd lint --needs [CUSTOMER-NEEDS.md] [REQUIREMENTS.md] [--json]
 //       Need coverage (same check as sdd-jev.mjs needs --mechanical): every need covered or out-of-scope with a decision,
 //       every REQ-F/REQ-NF traced to a need, a valid Verification per requirement. Exit 1 on errors.
+//   sdd lint --plan [--dir plan] [--requirements FILE] [--json]
+//       Vertical plan (plan/PLAN.md `Plan-Style: vertical`; a legacy horizontal plan is skipped with a note): each FASE
+//       header has Requisitos (REQ ids) and Escenarios (AC ids), V8 criteria backed by REQ/AC ids and a `## Demo` of
+//       1-10 steps each citing a scenario, cited AC ids exist in spec/tests/BDD-*.md, V9 every Must REQ-F/REQ-NF is in
+//       some Requisitos line; warns above 3 use cases or 15 tasks per FASE. Exit 1 on errors (scripts/lib/plan-lint.mjs).
 //   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
 //              [--report acceptance/ACCEPTANCE-REPORT.md] [--json]
 //       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
@@ -60,6 +65,7 @@ import {
   parseMessage, trailersOf, parseTrailerLines, checkMessage, stackProfile,
 } from "./lib/git-log.mjs";
 import { runAcceptance } from "./lib/acceptance-cli.mjs";
+import { runPlanLint } from "./lib/plan-lint.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -679,6 +685,10 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
   PROG = prog; HELP_URL = helpUrl;
   if (!legacy) {
     const first = firstCommand(argv);
+    if (first.cmd === "lint" && argv.includes("--plan")) {
+      if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
+      return runPlanLint([...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
+    }
     if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && argv.includes("--needs"))) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runAcceptance(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--needs"), { prog });

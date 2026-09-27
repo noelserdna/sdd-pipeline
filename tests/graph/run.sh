@@ -502,6 +502,15 @@ def layer(t):
     return next((l for p, l in lay if p.search(t)), "Backend")
 check("classifier: palabras completas ('Login form' → Frontend, 'require catalog' → Backend)",
       layer("Login form") == "Frontend" and layer("require catalog performance") == "Backend" and layer("Audit logs") == "Infrastructure")
+syn = {"REQ-F-101": {"id": "REQ-F-101", "type": "REQ", "title": "Login form", "category": "F"},
+       "REQ-F-102": {"id": "REQ-F-102", "type": "REQ", "title": "Store orders", "category": "F"},
+       "TASK-F0-001": {"id": "TASK-F0-001", "type": "TASK", "title": "t"},
+       "TASK-F8-001": {"id": "TASK-F8-001", "type": "TASK", "title": "t"}}
+quiet(gen.classify_requirements, syn, {}, {"REQ-F-101": {"TASK-F0-001"}, "REQ-F-102": {"TASK-F8-001"}})
+check("classifier: la capa sale del título, no del número de FASE (FASE-0 ≠ Infrastructure, FASE-8 ≠ Frontend)",
+      syn["REQ-F-101"]["classification"]["technicalLayer"] == "Frontend"
+      and syn["REQ-F-102"]["classification"]["technicalLayer"] == "Backend",
+      {k: v.get("classification") for k, v in syn.items()})
 check("classifier: sin mapas de un proyecto antiguo", "Candidate Portal" not in open(gen_path, encoding="utf-8").read())
 
 # 8. audits

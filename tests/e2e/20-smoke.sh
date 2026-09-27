@@ -68,9 +68,13 @@ if active test; then
 fi
 stop_if_done plan
 if active plan; then
-  run plan "/sdd-plan-architect --skip-clarify — generate plan/ with FASE-0 (foundation) and FASE-1 split so that src/api and src/cli can be implemented independently."
+  run plan "/sdd-plan-architect --skip-clarify — generate plan/ without asking questions; take the recommended option for every decision."
   [ -f plan/ARCHITECTURE.md ] && ok "ARCHITECTURE.md" || bad "ARCHITECTURE.md"
   ls plan/fases/FASE-*.md >/dev/null 2>&1 && ok "plan/fases" || bad "plan/fases"
+  # FASEs verticales (phase-assignment-rules.md): marca, esqueleto y lint mecánico V8/V9
+  grep -qiE 'Plan-Style:?\**:? *vertical' plan/PLAN.md && ok "PLAN.md con Plan-Style: vertical" || bad "PLAN.md sin Plan-Style: vertical"
+  if compgen -G 'plan/fases/FASE-0-[Ss][Kk][Ee][Ll][Ee][Tt][Oo][Nn]*.md' >/dev/null; then ok "FASE-0 es el esqueleto"; else echo "WARN FASE-0 no se llama *-SKELETON"; fi
+  if lint_out=$(node "$ROOT/scripts/sdd.mjs" lint --plan 2>&1); then ok "sdd lint --plan limpio ($(printf '%s\n' "$lint_out" | tail -1))"; else bad "sdd lint --plan: $(printf '%s\n' "$lint_out" | grep -v '^note' | head -5 | tr '\n' ' ')"; fi
   pc=$(jq -r '.stages["plan-architect"].summary.metrics.plan_chars // 0' pipeline-state.json 2>/dev/null)
   pb=$(jq -r '.stages["plan-architect"].summary.metrics.plan_budget_chars // 0' pipeline-state.json 2>/dev/null)
   if [ "${pb:-0}" -gt 0 ] && [ "${pc:-0}" -gt 0 ]; then
@@ -83,7 +87,7 @@ stop_if_done tasks
 if active tasks; then
   run tasks "/sdd-task-generator --fanout — launching one subagent per FASE is requested explicitly. generate task/ for all FASEs without asking questions."
   [ -f task/TASK-ORDER.md ] && ok "TASK-ORDER.md" || bad "TASK-ORDER.md"
-  grep -q "## Stream Ownership" task/TASK-FASE-1.md 2>/dev/null && ok "Stream Ownership en TASK-FASE-1" || echo "WARN sin tabla Stream Ownership"
+  grep -q "## Stream Ownership" task/TASK-FASE-0.md 2>/dev/null && ok "Stream Ownership en TASK-FASE-0" || echo "WARN sin tabla Stream Ownership"
   grep -q "Streams:" task/TASK-ORDER.md && ok "Streams: en TASK-ORDER" || echo "WARN sin línea Streams:"
   gmode=$(jq -r '.stages["task-generator"].summary.metrics.mode // "?"' pipeline-state.json 2>/dev/null)
   gagents=$(jq -r '.stages["task-generator"].summary.metrics.task_agents // 0' pipeline-state.json 2>/dev/null)

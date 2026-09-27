@@ -98,7 +98,7 @@ TASK-F{N}-{SEQ} → {SHA} (captured via `git rev-parse --short HEAD`)
 | **task-implementer Phase 9** | Completion report includes full commit log table |
 | **CHECK-C03 verification** | Validates commit exists and file scope matches task |
 | **sdd-graph.py** | Populates `commitRefs[]` in `traceability-graph.json` (reads `sdd.mjs trace commits`) |
-| **traceability-check** | Verifies TASK → COMMIT link in the extended traceability chain |
+| **sdd-acceptance --check** | Verifies the TASK → COMMIT link and the per-requirement evidence (`sdd tasks status`, `sdd accept`) |
 | **req-change Phase 2** | Commit impact analysis identifies code blast radius per affected artifact |
 
 ### Extended Traceability Chain

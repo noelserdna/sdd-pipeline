@@ -15,7 +15,7 @@ Tests verify the specification, never the code: a failing test means the code is
 
 - Implement exactly what the referenced UC/contract/INV/ADR says; nothing undocumented, no "useful extra" fields.
 - One task = one commit with the task's **Commit** message verbatim; only the task's files; never `git add -A`. Also inside a Stream worktree (never squash when integrating).
-- Test-first: write the tests for every acceptance criterion, see them fail, implement, see them pass.
+- Test-first: write the tests for every acceptance criterion, see them fail, implement, see them pass. A test that verifies a scenario carries its id in the name (`AC-001-03 rejects an empty title`; `references/tdd-workflow.md`), because the acceptance ledger reads results only through that id.
 - Pause on ambiguity, `[DECISION PENDIENTE]` or a spec/plan conflict instead of guessing (Handling Pause Conditions).
 - Every commit leaves the system working; if the FASE lists UI deliverables, deliver backend and frontend, with forms sharing the API's validation.
 - Validate inputs at system boundaries, handle every UC exception flow, never log PII or secrets.
@@ -75,7 +75,7 @@ Never modified: `spec/`, `plan/`, `audits/`, `task/TASK-INDEX.md`, `task/TASK-OR
 ### Phase 0: Context Loading
 
 1. Read the project `CLAUDE.md` and resolve the **Stack Profile** (section Stack Profile): commands, `app_dir`, `task_state`, `task_format`.
-2. Always load: `task/TASK-FASE-{N}.md` (if it has `## Stream Ownership`, parse Stream → tasks, write-set, "Runs in"), `plan/fase-plans/PLAN-FASE-{N}.md`, `plan/fases/FASE-{N}-*.md` (Criterios de Exito), `spec/domain/01-GLOSSARY.md`.
+2. Always load: `task/TASK-FASE-{N}.md` (if it has `## Stream Ownership`, parse Stream → tasks, write-set, "Runs in"), `plan/fase-plans/PLAN-FASE-{N}.md`, `plan/fases/FASE-{N}-*.md` (Criterios de Exito; in a vertical plan also `Requisitos`, `Escenarios` and `## Demo`), `spec/domain/01-GLOSSARY.md`, and the plan style (`grep -m1 -i 'Plan-Style' plan/PLAN.md`: `vertical`, `vertical (from FASE-N)` for FASE-N on, or absent = horizontal).
 3. Load on demand, when a task's **Refs** point there: the referenced UC/contract/ADR files, `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, `design/OPERATION-MAPPING.md`.
 4. Build the context map:
 
@@ -187,14 +187,22 @@ Main checkout only. The tag is placed last, and only when everything passes, so 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
 2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
-4. **All PASS** → `git tag -a fase-{N}-verified -m "FASE-{N} implementation complete and verified"` and `sdd_bench_event fase-verified "" "$(git rev-parse --short HEAD)"`. Any FAIL → no tag; report what failed and keep the stage `running`. An existing `fase-{N}-verified` tag → report instead of re-tagging. The FASE branch is finished by a merge commit into the default branch (`git merge --no-ff`, never squash or rebase, which drop the `Task:` trailers) or by a PR; ask before merging or pushing.
-5. Completion report:
+4. **Demo and acceptance** (vertical plans; skip with a horizontal plan). After steps 1-3 pass:
+   - Run the FASE's `## Demo` steps in order from a clean state (seed data as the steps say; server via the helper of `references/stack-profile.md`). Per step record what was observed, verbatim and short, and pass/fail against its expected result.
+   - Capture the test results as JUnit with the Stack Profile `{test_report}` command (it writes `.sdd/junit/` or `test_report_path`). When the key is missing or `none`, say so and recommend configuring it (`references/stack-profile.md`); the ledger then has no test evidence and every test-verified requirement reads MISSING.
+   - Run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept --fase {N} --report acceptance/ACCEPTANCE-REPORT.md`: one verdict per requirement of the FASE's `Requisitos` line (VERIFIED, FAILING, MISSING, WAIVED), with evidence per criterion.
+   - A FAILING or MISSING requirement is a FAIL of this phase: fix the code, never the test (Art. 12), or pause when the spec is at fault. A demo step whose scenario is verified by tests but whose observed result differs is also a FAIL.
+   - Hand the demo table (step · observed · pass/fail · scenario) and the per-requirement verdicts to the FASE gate (`sdd-orchestrator` / `sdd-lead`), where the customer accepts the increment. Record demo evidence with `sdd accept record demo --req … --observed … --pass …` only after the human confirms what they saw — this skill never records acceptance on its own.
+5. **All PASS** → `git tag -a fase-{N}-verified -m "FASE-{N} implementation complete and verified"` and `sdd_bench_event fase-verified "" "$(git rev-parse --short HEAD)"`. Any FAIL → no tag; report what failed and keep the stage `running`. An existing `fase-{N}-verified` tag → report instead of re-tagging. The FASE branch is finished by a merge commit into the default branch (`git merge --no-ff`, never squash or rebase, which drop the `Task:` trailers) or by a PR; ask before merging or pushing.
+6. Completion report:
 
 ```
 FASE-0 Implementation Complete
 Tasks: 12/12 · Tests: 45 passing, 0 failing · Acceptance: 18/18
 Coverage: 92% lines — below 80%: {list|none}; 0% not excluded: {list|none}
 Criterios de Exito: 5/5 · Checkpoint: fase-0-verified {placed|not placed: reason}
+Demo: 6/6 steps as expected · Requisitos: REQ-F-001 VERIFIED (3/3 test), REQ-F-002 VERIFIED (2/2 test)   (vertical plans)
+Next: FASE gate — show the demo and verdicts to the customer (acceptance/ACCEPTANCE-REPORT.md)
 Skipped: {WARN <key>: n/a (stack profile) | none}
 | Task | SHA | Message | Refs |
 Commits: 12 atomic (abc1234..xyz9012)
