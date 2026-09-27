@@ -51,6 +51,22 @@
 //   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
 //       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}]}; stop is
 //       null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the baseline; hard cap 5).
+//   sdd issue open   fase <N> | change <CHG-ID> [--dry-run] [--json]
+//       One issue per FASE (from plan/fases/FASE-N-*.md: Incremento, Requisitos, Escenarios, Necesidades, Demo) or per
+//       change (changes/CHANGE-REPORT-<ID>.md), labels sdd + sdd:fase|sdd:change, hidden marker <!-- sdd:FASE-N -->.
+//       Idempotent: an issue with label sdd and the marker is reported instead of creating a duplicate.
+//   sdd issue update fase <N> | change <CHG-ID> [--dry-run] [--json]
+//       Rewrites only the region between <!-- sdd:begin --> and <!-- sdd:end -->: tasks done by trailers, verdicts per
+//       requirement, demo records, branch and PR/MR. Text outside the region is kept byte for byte.
+//   sdd issue close  fase <N> [--dry-run] [--json]    after tag fase-N-accepted exists (else exit 1): comment + close
+//   sdd issue read   <N> [--json]                     title, body, labels, comments as data (sdd-req-change --issue)
+//   sdd pr-body [--fase N | --change ID] [--issue N]
+//       PR/MR body on stdout: summary, the `sdd gate --md` table, tasks or commits, `Refs #N` (FASE: the issue closes on
+//       customer acceptance) or `Closes #N` (change), and the merge-commit reminder. Issue default: branch prefix `N-`.
+//       Prints the `gh pr create` / `glab mr create` command on stderr; never runs it.
+//     Tracker: Stack Profile `tracker: github|gitlab|off`, else the origin host. Uses the gh / glab CLI (gh api, glab api).
+//     Exit: 0 ok · 1 not found or refused · 2 usage, CLI missing or not authenticated · 3 tracker disabled.
+//     issue open|update|close write to the tracker: skills ask the human before running them.
 // Commit vocabulary: references/git-conventions.md. Old entry point: scripts/sdd-task-lint.mjs (alias).
 // Exit codes: 0 ok · 1 findings (lint errors, invalid messages, --require-done unmet, nothing traced) · 2 usage or git error.
 // (sdd gate has its own codes, above.)
@@ -66,6 +82,7 @@ import {
 } from "./lib/git-log.mjs";
 import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
+import { runTracker } from "./lib/tracker.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -692,6 +709,10 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
     if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && argv.includes("--needs"))) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runAcceptance(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--needs"), { prog });
+    }
+    if (["issue", "pr-body"].includes(first.cmd)) {
+      if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
+      return runTracker(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
     }
   }
   try {

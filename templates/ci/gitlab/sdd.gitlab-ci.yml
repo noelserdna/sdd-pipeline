@@ -1,0 +1,27 @@
+# SDD traceability checks (sdd-pipeline) — installed by `/sdd-setup --tracker` as .gitlab/sdd.gitlab-ci.yml.
+# Include it from .gitlab-ci.yml:
+#   include:
+#     - local: .gitlab/sdd.gitlab-ci.yml
+# Runs the vendored CLI committed by /sdd-setup (.claude/sdd/sdd.mjs + .claude/sdd/lib/), so the job needs only git
+# and node, not the plugin. Each step skips itself when the artifacts it checks do not exist yet.
+
+sdd:
+  stage: test
+  image: node:20
+  variables:
+    GIT_DEPTH: "0"                # full history: verify reads every commit of the MR and its trailers
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    # Per-task commits and trailers (fails on a squashed MR)
+    - node .claude/sdd/sdd.mjs verify --range "${CI_MERGE_REQUEST_DIFF_BASE_SHA}..HEAD"
+    - if [ -d task ]; then node .claude/sdd/sdd.mjs lint; else echo "sdd - no task/ yet, skipped"; fi
+    - if [ -d plan ]; then node .claude/sdd/sdd.mjs lint --plan; else echo "sdd - no plan/ yet, skipped"; fi
+    # To feed the acceptance gate, run the Stack Profile `test_report` command before this line so it writes JUnit
+    # XML to .sdd/junit/ or to `test_report_path` (install dependencies first).
+    - |
+      if [ -f requirements/REQUIREMENTS.md ] && { [ -d .sdd/junit ] || grep -Eq '^[[:space:]]*[-*][[:space:]]+test_report(_path)?:' CLAUDE.md 2>/dev/null; }; then
+        node .claude/sdd/sdd.mjs gate --mode warn
+      else
+        echo "sdd - no requirements or test reports configured, gate skipped"
+      fi

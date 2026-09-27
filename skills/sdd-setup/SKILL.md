@@ -1,6 +1,6 @@
 ---
 name: sdd-setup
-description: "Initializes the SDD pipeline in the current project: checks the sdd-pipeline plugin and dependencies, creates pipeline-state.json, installs the git commit-msg hook, optional quality gates, versioning policy, --multisession setup, pre-4.0 migration and upgrade cleanup. Triggers: 'setup SDD', 'init pipeline', 'install SDD', 'upgrade SDD', 'iniciar SDD', 'configurar pipeline', 'migrar SDD'."
+description: "Initializes the SDD pipeline in the current project: checks the sdd-pipeline plugin and dependencies, creates pipeline-state.json, installs the commit-msg hook, quality gates, versioning policy, --multisession, --tracker (CI, PR templates), pre-4.0 migration. Triggers: 'setup SDD', 'init pipeline', 'install SDD', 'upgrade SDD', 'iniciar SDD', 'configurar pipeline', 'migrar SDD'."
 ---
 
 # SDD Setup
@@ -19,6 +19,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | H7/H8 quality gates in `.claude/settings.json` | 5 (opt-in) | Yes |
 | `## SDD Stack Profile` + `## Stack Conventions` block in root `CLAUDE.md`, `.claude/rules/sdd-<kit>-*.md` | 4b (`--stack`) | Yes |
 | Minimal `## SDD Stack Profile` (`task_state: trailers`) in root `CLAUDE.md` when no kit is installed | 4b | Yes |
+| CI job, PR/MR and change-request templates (`.github/` or `.gitlab/`), `tracker:` profile key | 4c (`--tracker`) | Yes |
 
 ## Invocation
 
@@ -28,6 +29,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 /sdd-setup --quality-gates               # also merges the H7/H8 quality gates without asking
 /sdd-setup --stack=rails --app-dir web   # also installs the rails stack kit for the app in web/
 /sdd-setup --stack=auto --port 3001      # detects the kit (root and first-level directories)
+/sdd-setup --tracker                     # CI job + PR/issue templates for the provider of origin (github|gitlab)
 ```
 
 ### Flags
@@ -40,6 +42,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | `--app-dir DIR` | 4b | Application directory relative to the repo root (`.` = root) |
 | `--port N` | 4b | Local server port written to the profile |
 | `--set key=value` | 4b | Override one profile key (repeatable, remembered on refresh) |
+| `--tracker[=github\|gitlab]` | 4c | CI job, PR/MR and issue templates, `tracker:` profile key |
 
 ## Ground rules
 
@@ -226,6 +229,27 @@ bash "$KIT_SH"                                           # refresh the installed
 
 Add `- default_branch: <name>` only when the user names a default branch that `origin/HEAD` does not reveal. An existing profile is never edited.
 
+### Step 4c: Tracker, CI and PR templates (`--tracker`)
+
+Only with `--tracker`. SDD keeps one issue per FASE and per change and checks every PR/MR in CI (conventions: the plugin-root `references/git-conventions.md`, section "Issues, PRs and CI").
+
+1. **Provider.** The flag value, else the host of `git remote get-url origin`: `github.com` → github; `gitlab.com`, `gitlab.*` or the host of `glab config get host` → gitlab. Anything else: ask. Report `gh auth status` / `glab auth status`; a missing or unauthenticated CLI does not block this step, but `sdd issue …` will exit 2 until it is fixed.
+2. **Files.** Copy from `$SDD_PLUGIN_ROOT/templates/`. When a destination exists and differs, show the diff and ask before overwriting it; the team may have tailored it.
+
+| Provider | Source | Destination |
+|----------|--------|-------------|
+| github | `ci/github/sdd.yml` | `.github/workflows/sdd.yml` |
+| github | `tracker/github/pull_request_template.md` | `.github/pull_request_template.md` |
+| github | `tracker/github/ISSUE_TEMPLATE/change-request.md` | `.github/ISSUE_TEMPLATE/change-request.md` |
+| gitlab | `ci/gitlab/sdd.gitlab-ci.yml` | `.gitlab/sdd.gitlab-ci.yml`, included from `.gitlab-ci.yml` (`include: [{ local: .gitlab/sdd.gitlab-ci.yml }]`: create the file with only that when missing, ask before editing an existing one) |
+| gitlab | `tracker/gitlab/merge_request_templates/Default.md` | `.gitlab/merge_request_templates/Default.md` |
+| gitlab | `tracker/gitlab/issue_templates/Change-request.md` | `.gitlab/issue_templates/Change-request.md` |
+
+   The CI job runs the vendored `.claude/sdd/sdd.mjs` from Step 2, so those files must be committed too.
+3. **Merge method.** Squash and rebase merges erase the per-task `Task:` trailers. Print the repository setting for the user to apply (it changes the project for the whole team, so do not run it): GitHub `gh repo edit --enable-merge-commit --enable-squash-merge=false --enable-rebase-merge=false`; GitLab: Settings → Merge requests → Merge method "Merge commit" and Squash commits "Do not allow". Suggest making the `sdd` check required on the default branch.
+4. **Profile.** Write `tracker: <provider>` into the `## SDD Stack Profile` (the `--tracker` flag is the consent for this one key): with a kit installed run `bash "$KIT_SH" --set tracker=<provider>`; otherwise add the line `- tracker: <provider>` to the section, creating the minimal profile of Step 4b when there is none.
+5. **Consent.** Setup creates no issue. Afterwards skills ask the human before `sdd issue open|update|close`, any `git push`, opening a PR/MR and merging.
+
 ### Step 5: Quality gates (opt-in)
 
 Unless `--quality-gates` was given, ask. They add latency (about 30 s per Stop, 60 s per TaskCompleted) in exchange for an LLM check of pipeline consistency (H7, `Stop` prompt hook) and commit traceability (H8, `TaskCompleted` agent hook). Merge only the events the project does not define yet:
@@ -248,6 +272,7 @@ node .claude/sdd/sdd.mjs branch status                       # vendored validato
 git check-ignore -q pipeline-state.json && git check-ignore -q .sdd/x
 jq -e '.roles | length > 0' .claude/sdd-sessions.json        # if --multisession
 grep -q '^<!-- sdd-stack-begin kit=' CLAUDE.md && ls .claude/rules/sdd-*.md   # if Step 4b was applied
+ls .github/workflows/sdd.yml 2>/dev/null || ls .gitlab/sdd.gitlab-ci.yml       # if Step 4c was applied
 ls "$SDD_PLUGIN_ROOT/server/dist/server.js"                  # MCP bundle shipped with the plugin
 ```
 
@@ -266,6 +291,7 @@ Report:
 | .gitignore policy | Applied / Already up to date; pipeline-state.json tracked: yes/no |
 | Multi-session | <n> roles in .claude/sdd-sessions.json + .claude/sdd/sdd-up.sh / Not requested |
 | Stack kit | <kit> v<version> (app_dir <dir>, <n> rules) installed / refreshed / Minimal profile written (task_state: trailers) / Profile already present |
+| Tracker | <github\|gitlab>: CI job + PR/MR and issue templates, `tracker:` in the profile; merge setting printed / Not requested |
 | Quality gates H7/H8 | Configured / Skipped |
 | Dependencies | node <v>, git <v> (>= 2.32 for --trailer), jq yes/no (node fallback), python3 yes/no, tmux yes/no |
 
