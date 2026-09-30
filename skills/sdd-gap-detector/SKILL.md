@@ -90,6 +90,10 @@ test file name correlates with its UC/BDD ID; otherwise it is uncovered.
 Answers "is this requirement implemented?" for the requirements the structural phases cannot vouch for. The
 decision rules below are applied by you; Jev only supplies probabilities.
 
+This phase leaves tests out and trusts well-anchored code references, so it cannot say whether the tests assert the
+requirement's letter or whether another production path bypasses the code it found. That check is
+`sdd-acceptance --adversarial`, which reads tests and alternative paths and feeds the acceptance loop.
+
 **S.1 Targets.** Read `requirements/REQUIREMENTS.md`: per `REQ-*` block take the statement and its acceptance
 criteria. Read `dashboard/traceability-graph.json` if present (`artifacts[]` with `codeRefs[]`,
 `classification.businessDomain`; `relationships[]` with `source`/`target`). A REQ is **covered** when a codeRef has
