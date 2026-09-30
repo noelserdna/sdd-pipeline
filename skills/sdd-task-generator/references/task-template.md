@@ -276,12 +276,14 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 One per row of PLAN-FASE §4 `Puertos con doble` (SKILL.md Phase 2). It sits after the slices it depends on, in the provider's Stream (`integración` when the double is written in another work Stream). Compact form (full adds `Revert: SAFE` and a Review block):
 
 ```markdown
-- [ ] TASK-F{N}-{SEQ} Contract test {Port}: double and real provider agree | `{test_path}/contract/{port}.contract.test.{ext}`
+- [ ] TASK-F{N}-{SEQ} Contract test {Port}: double and real provider agree | `{test_paths}/contract/{port contract test file}`
   - blocked-by: {task writing the double}, {task writing the real provider}
   - **Commit:** `test({scope}): contract test for the {Port} double and its real provider`
   - **Acceptance:** Test first: `CONTRACT-{Port} REQ-F-{NNN} AC{n} …` runs the same assertions on the double and on the real provider driven through a fake transport that captures the request; observable: {Observable del contrato of the row}
   - **Refs:** FASE-{N}, REQ-F-{NNN}, PLAN-FASE-{N} §4.{x}
 ```
+
+`{test_paths}` is the Stack Profile directory that holds the tests; the file follows the stack's naming convention so the runner picks it up: `{port}.contract.test.ts` in JS/TS, `{port}_contract_test.rb` in Rails (the kit's testing rule names it).
 
 A double in §7.2 Setup without its row is written as a `[PLAN GAP]` task instead (`Gap: PLAN-FASE-{N} §4.{x} has no row for {double}`).
 
@@ -292,14 +294,15 @@ A double in §7.2 Setup without its row is written as a `[PLAN GAP]` task instea
 Verification phase, Stream `verificación` (SKILL.md Phase 2). The rule lives in Acceptance so it survives the compact format. Compact form:
 
 ```markdown
-- [ ] TASK-F{N}-{SEQ} Journey FASE-{N}: {Incremento} through the user's route | `{acceptance suite dir}/fase-{N}.journey.spec.{ext}`
+- [ ] TASK-F{N}-{SEQ} Journey FASE-{N} {WF-NNN …}: {Incremento} through the user's route | `{acceptance suite dir}/fase-{N}.journey.spec.{ext}`
   - blocked-by: {last slice or integration task of the FASE}
   - **Commit:** `test({scope}): FASE-{N} journey from the user's route with captures`
   - **Acceptance:**
     - Test first: named `{AC-NNN-NN | REQ-F-NNN ACn} …` for each REQ-F scenario of the FASE's Escenarios: {ids}
+    - The journey's title carries {WF-NNN of the FASE's `Workflows:` line (else of its `## Demo`) | FASE-{N} when it names none}, the id the video is named after and `sdd gate --fase N` looks for
     - Enters through Demo step 1 ({URL, screen or command}), never an internal entry point
     - Asserts each criterion's example text on the element that shows it (`toHaveText` / `toContainText`), not the container's visibility: {criterion → "text"}
-    - Saves `evidencias/FASE-{N}/{scenario id}.png` per criterion and `evidencias/FASE-{N}/{WF-NNN | FASE-{N}}.webm` per workflow, attached to the test
+    - Saves `evidencias/FASE-{N}/{scenario id}.png` per criterion and one video per workflow with `{WF-NNN | FASE-{N}}` in its file name, attached to the test
   - **Refs:** FASE-{N}, {REQ-F ids}, {WF ids}
 ```
 

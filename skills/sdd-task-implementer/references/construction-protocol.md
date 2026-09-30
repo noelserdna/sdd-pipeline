@@ -377,19 +377,27 @@
      import AxeBuilder from '@axe-core/playwright';
      const results = await new AxeBuilder({ page }).analyze();
      expect(results.violations).toEqual([]);
-   - Tag with tier: test.describe.configure({ tag: '@smoke' })
+   - Tag with tier: test.describe.configure({ tag: '@smoke' }) (PR tier); post-deploy scenarios of the
+     `smoke-deploy` tier carry `@smoke-deploy` instead, the tag the profile's `smoke` command selects
    - Each criterion's THEN is asserted on its text (`toHaveText`/`toContainText` with the literal the criterion
      quotes); `toBeVisible()` alone proves that an element exists, not what the customer reads
    - Right after that assert, capture the screen for the criterion with `captureCriterion` (below): one image per
      criterion of every REQ-F, since without it the acceptance ledger reads the criterion as `unshown`
+   - The title of a journey test carries its workflow id (`WF-NNN`, or `FASE-N` when the FASE names no workflow):
+     the video helper names the video after it, and `sdd gate --fase N` looks for that id in the file name
+   - `visual_evidence` (Stack Profile): `required` and `warn` capture alike (`warn` only changes what the ledger
+     does with a missing image); `off` writes no captures and no videos — `screenshot: 'off'`, `video: 'off'`, no
+     evidence helper — and keeps the route and the text asserts
 6. IMPLEMENT error variations
    - Each row in the Variations table → a separate test
    - Reuse page objects, change inputs/preconditions
 7. VERIFY
    - `{acceptance} --grep <E2E-ID>` → all pass (new suite without the key: npx playwright test {scenario-file})
    - `{acceptance} --grep @smoke` → smoke tier passes (only when the suite tags tiers)
-   - The run left `{evidence_dir}/FASE-{N}/<criterion>.png` for each criterion and a video whose name carries the
-     WF-NNN (FASE-N without specifications); `{evidence_dir}` is the profile's `evidence_dir`, default `evidencias`
+   - Unless `visual_evidence: off`, the run left `{evidence_dir}/FASE-{N}/<criterion>.png` for each criterion and a
+     video whose name carries the WF-NNN (FASE-N when the FASE names no workflow); `{evidence_dir}` is the profile's
+     `evidence_dir`, default `evidencias`, and the run exported `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}`
+     (stack-profile.md §2)
    - No flaky failures on 3 consecutive runs of the filtered scenario
    - Never the full suite per task and never a manual server start + curl + kill: the suite's webServer (or the
      server helper, stack-profile.md §8) runs the app
@@ -469,15 +477,17 @@ export async function captureCriterion(page: Page, testInfo: TestInfo, criterion
   await testInfo.attach(criterion, { path: file, contentType: 'image/png' });
 }
 
-// One video per test, named after its workflow: evidencias/FASE-{N}/E2E-WF-004-01.webm (FASE-{N}-<title> without WF)
-export const test = base.extend({
-  page: async ({ page }, use, testInfo) => {
+// One video per test, named after its workflow: the first WF-NNN of the title, or the id set with
+// test.use({ videoId: 'WF-004' }); without either, FASE-{N}. evidencias/FASE-2/WF-004-AC-004-01-create-a-task.webm
+export const test = base.extend<{ videoId: string | undefined }>({
+  videoId: [undefined, { option: true }],
+  page: async ({ page, videoId }, use, testInfo) => {
     await use(page);
     const video = page.video();
     if (!video) return;
     await page.close();
-    const id = testInfo.title.match(/E2E-WF-\d{3}-\d{2}/)?.[0]
-      ?? `FASE-${process.env.SDD_FASE ?? '0'}-${testInfo.title.slice(0, 40).replace(/[^A-Za-z0-9-]+/g, '-')}`;
+    const wf = videoId ?? testInfo.title.match(/WF-\d{3}/)?.[0] ?? `FASE-${process.env.SDD_FASE ?? '0'}`;
+    const id = `${wf}-${testInfo.title.slice(0, 40).replace(/[^A-Za-z0-9-]+/g, '-')}`;
     const file = path.join(evidenceDir, `${id}.webm`);
     await video.saveAs(file);
     await testInfo.attach(id, { path: file, contentType: 'video/webm' });
@@ -507,6 +517,7 @@ adapter (`references/tdd-workflow.md` → Category 3b); without it the double ca
 - CSS selectors or XPath instead of role-based locators
 - Running E2E tests without a running server
 - `toBeVisible()` as the only assert of a criterion (assert its text), or a criterion of a REQ-F without its capture
+  (unless `visual_evidence: off`)
 
 ---
 

@@ -23,10 +23,11 @@ Rules that make the results usable as evidence:
 - **Whole suite, current commit.** Run the full suite at `HEAD` on a clean tree (untracked files included) and pass
   `--junit-sha HEAD` to `sdd accept`, which refuses a dirty tree; a partial run leaves criteria MISSING, and old XML
   is reported as stale evidence.
-- **Captures ride on the JUnit.** A test of a `REQ-F` criterion saves its capture as
-  `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` and attaches it (`testInfo.attach(name, { path })` in
-  Playwright), so the XML carries `[[ATTACHMENT|path]]` in `<system-out>` and the ledger binds the image to the
-  criteria the test names. The journey's video goes to `evidencias/FASE-{N}/{WF-NNN | FASE-N}.webm` (`.mp4` and
-  `.jpg` are read too). Without the attachment the criterion reads `unshown` even when the file exists. Traces are
-  never attached.
+- **Captures bind by attachment or by name.** A test of a `REQ-F` criterion saves its capture as
+  `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png`. Playwright attaches it (`testInfo.attach(name, { path })`),
+  so the XML carries `[[ATTACHMENT|path]]` in `<system-out>` and the ledger binds the image to the criteria the test
+  names. Runners that write no attachments (Minitest, pytest) bind through the file name instead: an image under
+  `evidence_dir` named with the criterion's id counts for it, which is why the name must carry the id exactly. The
+  journey's video carries its `WF-NNN` (or `FASE-N`) in the file name, under `evidencias/FASE-{N}/` (`.webm`, `.mp4`;
+  `.jpg` is read for images too). Traces are never attached.
 - **Failures are evidence.** A non-zero exit from the runner is expected when tests fail; the XML is what matters.

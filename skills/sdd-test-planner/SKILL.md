@@ -201,7 +201,7 @@ Only tests that belong to no single UC matrix or E2E scenario (integration harne
 |---------|------|
 | every commit | unit + affected integration |
 | FASE completion (increment demo) | full integration + E2E Critical (with screenshots and videos) |
-| post-deploy (when `staging_url` is set) | E2E `smoke-deploy` (`@smoke`) against the deployed environment |
+| post-deploy (when `staging_url` is set) | E2E `smoke-deploy` (`@smoke-deploy`) against the deployed environment |
 | release candidate | full suite + performance + security |
 
 ## 9. Inputs for sdd-plan-architect
@@ -436,7 +436,7 @@ Use for end-to-end acceptance scenarios that validate complete user journeys, tr
 
 8. **Transitive coverage:** map each scenario to its REQs (`E2E-WF-001-01 → WF-001 → {UC-003, UC-004} → {REQ-F-010, REQ-F-011}`). A REQ with no E2E scenario is `EXEMPT-NFR` (a REQ-NF or REQ-C covered by performance, security or static tests) or `GAP` (review). A REQ-F is never exempt while `visual_evidence` is on (step 9); `EXEMPT-BACKEND` exists only with `visual_evidence: off`.
 
-9. **Visual evidence per criterion** (§ Visual Evidence). List every criterion of every REQ-F: the BDD scenarios tagged `[REQ-F-NNN ACn]` and the REQ-F criteria no scenario covers. Give each one an E2E scenario or variation that satisfies the three rules below, reusing the scenarios of steps 6-8 where they already reach the screen; a criterion left without one is a `MISSING-E2E` gap with the AC id as its spec element. Then add the `smoke-deploy` tier (2-3 `@smoke` journeys, template § Tiered Execution) when the SDD Stack Profile has a `staging_url`; without one, write the tier with `Target environment: none` and no scenarios.
+9. **Visual evidence per criterion** (§ Visual Evidence). List every criterion of every REQ-F: the BDD scenarios tagged `[REQ-F-NNN ACn]` and the REQ-F criteria no scenario covers. A criterion whose THEN starts with the marker `the user sees` / `el usuario ve` (fixed with the customer in `requirements/REQUIREMENTS.md`) states a visible result: the literal after the marker is the text its E2E asserts on screen, so quote it in the `Assertion` cell. Give each criterion an E2E scenario or variation that satisfies the three rules below, reusing the scenarios of steps 6-8 where they already reach the screen; a criterion left without one is a `MISSING-E2E` gap with the AC id as its spec element. Then add the `smoke-deploy` tier (2-3 `@smoke-deploy` journeys, template § Tiered Execution) when the SDD Stack Profile has a `staging_url`; without one, write the tier with `Target environment: none` and no scenarios.
 
 10. **Write `test/E2E-SCENARIOS.md`** — read [references/e2e-template.md](references/e2e-template.md) first. Budget ≤ 15 000 chars for one user-facing WF, +3 000 per additional WF.
 
@@ -452,9 +452,9 @@ Every criterion of a REQ-F is shown to the customer with a screenshot, and every
 
 1. **Enters through the user's route**: it starts where the user starts (entry screen, login) and navigates as they do. Seeding fixtures is fine; deep-linking into internal state or calling the operation directly skips the wiring under test.
 2. **Asserts the criterion's example text**: the literal title, label, message or value of the criterion's THEN (`the user sees …`), with a text assertion (`toHaveText` / `toContainText` in Playwright). That a container is visible proves nothing about what it shows. The `Assertion` cell of the template quotes the expected text.
-3. **Saves its screenshot** as `evidencias/FASE-{N}/{AC-NNN-NN}.png` (`REQ-F-NNN-ACn.png` for a criterion without a scenario) and attaches it to the test, so the JUnit report carries the path. One video per workflow, `evidencias/FASE-{N}/WF-NNN.webm`, records the happy-path journey; it covers every criterion whose id its test title carries.
+3. **Saves its screenshot** as `evidencias/FASE-{N}/{AC-NNN-NN}.png` (`REQ-F-NNN-ACn.png` for a criterion without a scenario) and attaches it to the test, so the JUnit report carries the path. One video per user-facing workflow records the happy-path journey, with the `WF-NNN` in its file name (`evidencias/FASE-{N}/WF-NNN-….webm`) and in the test title: `sdd gate --fase N` asks for a video per WF of the FASE's `Workflows:` header line (written by `sdd-plan-architect`; without it, per WF cited in its `## Demo`) and finds it by that id.
 
-The template's `Evidence` column names each file; `evidencias/` is the Stack Profile's `evidence_dir` (default), `{N}` is the FASE the plan later assigns, and the runner configuration that captures belongs to `sdd-task-implementer`. With `visual_evidence: off` (a project without an interface, decided by a person) the rule, step 9 of Mode 5 and the `D-T-E2E` row are omitted and §3 says so. Without specifications this stage does not run; the FASE journey task of `sdd-task-generator` carries the same rules with one video per FASE.
+The template's `Evidence` column names each file; `evidencias/` is the Stack Profile's `evidence_dir` (default), `{N}` is the FASE the plan later assigns, and the runner configuration that captures belongs to `sdd-task-implementer`. With `visual_evidence: off` (a project without an interface, decided by a person) the rule, step 9 of Mode 5 and the `D-T-E2E` row are omitted and §3 says so. Without specifications this stage does not run; the FASE journey task of `sdd-task-generator` carries the same rules, with one video named `FASE-N` when the FASE names no workflow.
 
 ## Observable Outcomes, Not Transport
 

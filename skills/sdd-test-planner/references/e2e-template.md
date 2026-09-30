@@ -33,7 +33,7 @@ columns.
 | Data strategy | {transaction-rollback | snapshot-restore | unique-per-test} |
 | Accessibility | axe-core scan at each navigation (WCAG 2.2 AA) |
 | Parallelism | {runner sharding across N workers} |
-| Visual evidence | screenshot per REQ-F criterion `evidencias/FASE-{N}/{AC id}.png`, video per WF `WF-{NNN}.webm` · or `off` (Stack Profile) |
+| Visual evidence | screenshot per REQ-F criterion `evidencias/FASE-{N}/{AC id}.png`, video per user-facing WF with `WF-{NNN}` in its name and in the journey's title · or `off` (Stack Profile) |
 | Target environment | local build for PR tiers · `{staging_url}` for `smoke-deploy` · or `none` |
 
 ### Tiered Execution
@@ -43,13 +43,14 @@ columns.
 | Smoke | P0 happy paths only | < 2 min | Every PR |
 | Critical | P0 + P1 paths | < 10 min | Every merge to main |
 | Full | All E2E scenarios | < 30 min | Nightly / release |
-| smoke-deploy | 2-3 `@smoke` journeys (below) | < 3 min | post-deploy, against the target environment |
+| smoke-deploy | 2-3 `@smoke-deploy` journeys (below) | < 3 min | post-deploy, against the target environment |
 
 The `smoke-deploy` tier proves that the deployed increment works, not that the code does: real login with the smoke
 user, the central write of the product, and one path through each external integration (payment, email, storage).
 Its data is idempotent, so a rerun on the same environment neither piles up records nor depends on the previous run
-(fixed smoke account, a record it creates and deletes, or an upsert on a known key). Test titles carry `@smoke`; the
-CI template `sdd-smoke` runs them with `SMOKE_BASE_URL`. Without a `staging_url` in the Stack Profile, keep the row
+(fixed smoke account, a record it creates and deletes, or an upsert on a known key). Test titles carry
+`@smoke-deploy`, a tag of its own because `@smoke` is the PR tier and runs on a local build; the Stack Profile's
+`smoke` command selects `@smoke-deploy` and the CI template `sdd-smoke` runs it with `SMOKE_BASE_URL`. Without a `staging_url` in the Stack Profile, keep the row
 with `Target environment: none` and write no scenarios.
 
 ### Viewport Matrix (WEB-APP only, derived from ux/DESIGN-TOKENS.json)
@@ -94,7 +95,7 @@ with `Target environment: none` and write no scenarios.
 - **Tier:** smoke
 - **Auth fixture:** {authenticated | admin | unauthenticated}
 - **Fields covered:** ALL ({N} fields from inventory)
-- **Video:** `evidencias/FASE-{N}/WF-{NNN}.webm` (the whole journey)
+- **Video:** `evidencias/FASE-{N}/WF-{NNN}-….webm` (the whole journey; the WF id in the test title names it)
 
 #### Elements Referenced (when ux/ exists)
 
@@ -175,7 +176,7 @@ with `Target environment: none` and write no scenarios.
 |------------|-------|--------|----------|----------|
 | E2E-WF-{NNN}-F01 | {precondition ≤ 80 chars} | {action ≤ 60 chars} | {outcome ≤ 80 chars} | {ids} |
 
-### smoke-deploy (@smoke) — list only
+### smoke-deploy (@smoke-deploy) — list only
 
 | Scenario ID | Journey | Idempotent data | Assertion (expected text) | Spec Ref |
 |-------------|---------|-----------------|---------------------------|----------|

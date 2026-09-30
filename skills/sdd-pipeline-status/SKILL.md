@@ -47,15 +47,19 @@ the current directory.
    (`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" route --json`); `sdd-req-change` does this after every approved ADD or MODIFY.
 5. **Acceptance.** Read `$STATE_ROOT/.sdd/acceptance.json` (written by `sdd accept`, `sdd gate` and `sdd loop next`;
    git-ignored) when it exists: `summary.must_verified`/`must_total`, `must_waived` (`waived_musts`), `by_verdict`
-   (FAILING, MISSING), `stale_evidence`, `goal`, plus `evaluated_sha` and `generatedAt`. It answers "is each
-   requirement delivered, with what evidence", which stage statuses cannot. If `evaluated_sha` differs from
-   `git rev-parse HEAD`, say the summary predates the last commit. Do not run `sdd accept` yourself: this skill only
-   reads.
+   (FAILING, MISSING), `stale_evidence`, `goal`, `unshown` (criteria that pass without a capture), `missing_videos`
+   (with a FASE scope) and `must_challenged` (Musts with an open adversarial challenge), plus `evaluated_sha` and
+   `generatedAt`. It answers "is each requirement delivered, with what evidence", which stage statuses cannot. If
+   `evaluated_sha` differs from `git rev-parse HEAD`, say the summary predates the last commit. `goal` true with
+   `must_challenged` > 0 and `adversarial_gate: enforce` (the ledger's, else the Stack Profile's) is what `sdd gate`
+   reports as exit 4: say "goal blocked by open challenges", never "goal met". Do not run `sdd accept` yourself: this
+   skill only reads.
 6. **Report** (template below). Next action: the first stage that is stale, errored or pending (never a skipped one), in pipeline order
    (requirements → specifications → spec-auditor → test-planner → plan-architect → task-generator →
    task-implementer). When all of them are done or skipped: no `acceptance.json` → `/sdd-acceptance --check`; open Musts
    (goal false: some Must FAILING or MISSING) → `/sdd-acceptance --loop`; stale evidence only → `/sdd-acceptance
-   --check` to re-capture the tests; goal met → `/sdd-acceptance --sign-off`.
+   --check` to re-capture the tests; goal blocked by open challenges (exit 4 above) → `/sdd-acceptance --loop`, or a
+   person dismisses them (`challenge-dismissal`); goal met → `/sdd-acceptance --sign-off`.
 
 ```
 ## SDD Pipeline Status
@@ -74,6 +78,7 @@ the current directory.
 
 ### Acceptance           (only with .sdd/acceptance.json)
 - Must 7/9 verified, 1 waived (REQ-NF-002) · FAILING 1 · MISSING 0 · stale evidence 0 · evaluated at a1b2c3d (HEAD) · goal not met
+- Unshown 2 · missing videos: WF-003 · Musts with open challenges 1 (REQ-F-006)
 - Open Musts: REQ-F-004 (FAILING)
 
 ### Handoffs             (multi-session only)

@@ -12,7 +12,7 @@ atómicos. Integración con merge `--no-ff`. No se sube versión ni se crea tag 
 
 | Tema | Decisión |
 |------|----------|
-| Evidencia visual en REQ-F | Obligatoria: captura por criterio y vídeo por workflow (por FASE en la ruta sin specs). Sin ella, el criterio queda `unshown` y el requisito no es VERIFIED |
+| Evidencia visual en REQ-F | Obligatoria: captura por criterio y vídeo por workflow de cara al usuario (`FASE-N` cuando la FASE no nombra workflows). Sin ella, el criterio queda `unshown` y el requisito no es VERIFIED |
 | Dónde | `evidencias/` en la raíz del proyecto, fuera de git (bloque gestionado de `templates/gitignore.sdd`) |
 | REQ-F sin pantalla propia | Captura de la pantalla donde se ve el efecto; sin exención |
 | Puerta adversarial | `adversarial_gate: warn` por defecto en 5.1 |
@@ -38,15 +38,15 @@ atómicos. Integración con merge `--no-ff`. No se sube versión ni se crea tag 
 | `test_slots` | entero | `2` | implementer, lead, sdd-acceptance `--adversarial` |
 | `staging_url` | URL o `none` | `none` | plantillas smoke, test-planner |
 | `smoke` | comando o `none` | `none` | plantillas smoke |
-| `smoke_report_path` | ruta | `.sdd/junit/smoke` | plantillas smoke, CLI |
-| `env_required` | lista de nombres | vacío | implementer, tech-designer |
+| `smoke_report_path` | ruta | `.sdd/junit/smoke` | plantillas smoke (la CLI lee solo `test_report_path`) |
+| `env_required` | lista de nombres | vacío | implementer (compara las variables de cada tarea; falta una → `IF-` `ENV-REQUIRED`), tech-designer (propone los nombres; los escribe una persona) |
 | `deploy` | texto informativo | `none` | nadie la ejecuta |
 
 El parser (`scripts/lib/git-log.mjs` `stackProfile`) es genérico: no hay que tocarlo. `stack-profile.md` §1 las documenta.
 
 ### 2.2 Evidencia visual
 
-- Rutas: `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` y `evidencias/FASE-{N}/{WF-NNN | FASE-N}.webm`
+- Rutas: `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` y `evidencias/FASE-{N}/{WF-NNN | FASE-N}…webm` (el id en el nombre)
   (también se aceptan `.mp4` y `.jpg`).
 - Playwright de la suite de aceptación: `screenshot: 'on'`, `video: 'on'`, y el test adjunta la captura final con
   `testInfo.attach(name, { path })`, de modo que el JUnit lleva `[[ATTACHMENT|ruta]]` en `<system-out>`.
@@ -54,18 +54,26 @@ El parser (`scripts/lib/git-log.mjs` `stackProfile`) es genérico: no hay que to
 - Regla del ledger: con `visual_evidence: required`, un criterio de un `REQ-F` en `pass` sin ningún adjunto `image`
   presente pasa a estado **`unshown`**. El requisito queda `MISSING` con `reason: "no visual evidence"`. Métrica
   `summary.unshown`. Con `warn` se informa y no cambia el estado. Con `off`, nada.
-- Vídeo por workflow: `sdd gate --fase N` exige, con `required`, un adjunto `video` cuyo nombre contenga cada `WF-NNN`
-  citado en el fichero de la FASE; si la FASE no cita ninguno, un vídeo cuyo nombre contenga `FASE-N`. Falta de vídeo
-  → objetivo no cumplido (exit 1), listado como `missing_videos`.
+- Vídeo por workflow: `sdd gate --fase N` exige, con `required`, un vídeo cuyo nombre contenga cada `WF-NNN` de la
+  línea de cabecera `> **Workflows:** WF-…` de la FASE (workflows de cara al usuario, la escribe plan-architect); sin
+  esa línea, los citados en `## Demo`; sin ninguno, `FASE-N`. Cuenta cualquier vídeo bajo `evidence_dir` con el id en
+  el nombre (adjunto del JUnit, fichero o `--attach`), incluida una grabación manual de la demo. Falta de vídeo →
+  objetivo no cumplido (exit 1), listado como `missing_videos`.
+- El título del journey lleva el `WF-NNN` (o `FASE-N`); el helper de vídeo toma el primer `WF-\d{3}` del título o un
+  id explícito (`test.use({ videoId })`).
+- Todo comando `{acceptance}` del implementer exporta `SDD_FASE={N}` y `SDD_EVIDENCE_DIR={evidence_dir}`.
 - Ruta del loop nueva: **`capture-evidence`** (volver a ejecutar el journey con captura; no genera tarea de código).
+  `sdd loop next` emite un target `{video, fase, route_hint: "capture-evidence"}` por vídeo que falta y los cuenta en
+  `progress.videos_missing`; con `warn` van a `others`.
 - `sdd accept pack --fase N`: empaqueta `evidencias/FASE-N/` y un `manifest.json` (ruta, sha256, bytes, criterio,
   `evaluated_sha`) en `.sdd/entregas/FASE-N-evidencias.tar.gz` con `tar`.
 
 ### 2.3 CLI de aceptación: flags y comandos nuevos
 
-- `sdd accept record demo|inspection|measurement … --attach P…` (ficheros bajo `evidence_dir`; se guardan con sha256).
+- `sdd accept record demo|inspection|measurement|fase-acceptance … --attach P…` (ficheros bajo `evidence_dir`; se
+  guardan con sha256 y `kind`). `waiver` y `challenge-dismissal` no aceptan `--attach`.
 - `--allow-dirty` en `accept record` y `accept measure`: graba `dirty: true`. Sin él, con cambios sin commitear en el
-  código → exit 2 con «commit first». `waiver` está exento.
+  código → exit 2 con «commit first». `waiver` y `challenge-dismissal` están exentos (no observan el código).
 - `sdd accept --junit-sha SHA` con código sucio → exit 2. Sin `--junit-sha` y árbol sucio → `warning:` en stderr.
 - Los ficheros sin versionar bajo `code_paths` + `test_paths` cuentan como sucios (`untracked_paths` en el ledger).
 - `sdd req show <REQ-ID> [--ac N] [--json]`: enunciado y criterios literales de `requirements/REQUIREMENTS.md`.
@@ -73,12 +81,13 @@ El parser (`scripts/lib/git-log.mjs` `stackProfile`) es genérico: no hay que to
 ### 2.4 Ronda adversarial (CLI)
 
 - Fichero versionado `acceptance/challenges.jsonl`, escrito solo por la CLI. Una línea por hallazgo:
-  `{ id: "CH-NNN", req, ac, category, quote, evidence: [{path, line}], verifier, counter: confirmed|refuted|inconclusive,
-  head, reqHash, paths, at }`.
+  `{ id: "CH-NNN", req, ac, category, quote, evidence: [{path, line}], verifier, counter: confirmed|inconclusive,
+  head, reqHash, paths, at }`. Un hallazgo `refuted` no se graba (la CLI lo rechaza): se lista en el resumen de la
+  ronda. Una captura de `evidencias/` se cita sin línea y se guarda su sha256.
 - Categorías: `WEAKENED-ASSERT`, `MOCK-ONLY`, `UNWIRED`, `BYPASS-PATH`, `CROSSING`, `NOT-IMPLEMENTED`, `SPEC-QUESTION`,
   `WRONG-CAPTURE`.
 - Evidencia prohibida: rutas bajo `acceptance/`, `feedback/`, `spec/`, `requirements/`, `plan/`, `task/`, `test/`,
-  `audits/`, `changes/` → exit 2.
+  `audits/`, `changes/`, `.sdd/` → exit 2. Excepción: `test/` cuando está en los `test_paths` del perfil (Rails).
 - Comandos:
   - `sdd accept challenge add --req ID --ac N --category CAT --quote TEXT --evidence path:line… --verifier NAME --counter R`
   - `sdd accept challenge list [--open] [--json]`
@@ -89,9 +98,11 @@ El parser (`scripts/lib/git-log.mjs` `stackProfile`) es genérico: no hay que to
     fuera de toda FASE), `fases_without_header` y `criteria_without_test`.
 - Ledger: `requirements[].challenges[]` con estado `open | stale | dismissed` (stale por `unchangedSince(head, paths)`
   o `reqHash`); `summary.must_challenged`. **El veredicto no cambia.**
-- Gate: con `adversarial_gate: enforce`, un challenge abierto en un Must → **exit 4**. `warn` lo imprime y no cambia el
-  código de salida. `off` lo ignora.
-- Loop: challenges abiertos y confirmados salen en `targets` con la ruta **`adversarial-finding`** (y `category`).
+- Gate: con `adversarial_gate: enforce`, un challenge abierto en un Must → **exit 4**, que impide `--sign-off` y la
+  aceptación de FASE hasta que el loop lo arregla o una persona lo descarta. `warn` lo imprime y no cambia el código
+  de salida. `off` lo ignora. Precedencia de salida: 2 > 1 > 4 > 3 > 0.
+- Loop: challenges abiertos y confirmados salen en `targets` con la ruta **`adversarial-finding`** (y `category`); los
+  `inconclusive`, con la ruta `needs-human`.
 - Métricas de `acceptance` en `pipeline-state.json`: `adversarial_findings`, `adversarial_confirmed`,
   `adversarial_refuted`, `adversarial_open`, `adversarial_agents`, `coverage_gaps`, `unshown`.
 
@@ -99,13 +110,18 @@ El parser (`scripts/lib/git-log.mjs` `stackProfile`) es genérico: no hay que to
 
 - Valores de `Source:` de una tarea: `CASCADE-{id}`, `FEEDBACK-FASE-{N}`, `ACCEPTANCE-LOOP`,
   `ACCEPTANCE-ADVERSARIAL-FASE-{N}`. El Mode 6 del implementer (`--new-tasks-only`) acepta todos.
-- Test de contrato: fichero `{test_path}/contract/<port>.contract.test.*`, nombre `CONTRACT-<port> REQ-F-NNN ACn …`.
+- Test de contrato: un fichero bajo `test_paths`, en `contract/`, con la convención del stack
+  (`<port>.contract.test.ts` en JS/TS, `<port>_contract_test.rb` en Rails); nombre `CONTRACT-<port> REQ-F-NNN ACn …`.
 - Cita literal sobre el assert: `// REQ-F-081 AC1: "…THEN su título es 'Proyectos personales'"`.
 - Tipos nuevos de fila de matriz: `replay`, `race`. Tipos nuevos de gap del test-planner: `MISSING-E2E`,
   `MISSING-REPLAY-SPEC`.
 - Tabla nueva de PLAN-FASE: `§4.x Puertos con doble` con columnas
   `| Puerto | Interfaz (fichero) | Doble | Provider real | Observable del contrato |`.
-- Tarea de journey por FASE en el Stream `verificación`: entra por la ruta del usuario, asserta texto y captura.
+- Tarea de journey por FASE en el Stream `verificación`: entra por la ruta del usuario, asserta texto y captura; su
+  título lleva el `WF-NNN` de la línea `Workflows:` (o `FASE-N`).
+- Cabecera de FASE nueva: `> **Workflows:** WF-001, WF-002` (workflows de cara al usuario; la lee `sdd gate --fase N`).
+- Smoke post-deploy: los escenarios del tier `smoke-deploy` se etiquetan **`@smoke-deploy`** (`@smoke` queda para el
+  tier de PR); el comando `smoke` del perfil los selecciona.
 
 ## 3. Paquetes de trabajo
 

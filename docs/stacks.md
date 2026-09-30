@@ -80,9 +80,9 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `adversarial_gate` | Cómo trata `sdd gate` un hallazgo abierto de la ronda adversarial en un Must: `off`, `warn` (por defecto; lo imprime) o `enforce` (sale con 4) |
 | `test_slots` | Procesos de test que pueden correr a la vez en la máquina (por defecto `2`; `1` con base de datos en memoria o compartida, navegadores o contenedores). Ver [Recursos de la máquina](multisesion.md#recursos-de-la-máquina) |
 | `staging_url` | URL del entorno de staging para las plantillas de smoke, o `none` |
-| `smoke` | Comando del smoke contra `staging_url`, o `none` |
-| `smoke_report_path` | Dónde escribe el smoke su JUnit; por defecto `.sdd/junit/smoke` |
-| `env_required` | Nombres (nunca valores) de las variables de entorno que necesita la app, separados por comas, o `none` |
+| `smoke` | Comando del smoke post-deploy contra `staging_url`: ejecuta los tests etiquetados `@smoke-deploy` (`@smoke` es el tier de PR), p. ej. `npx playwright test --grep @smoke-deploy --reporter=junit`; o `none` |
+| `smoke_report_path` | Dónde escribe el smoke su JUnit; lo leen las plantillas `sdd-smoke` (la CLI de aceptación lee solo `test_report_path`). Por defecto `.sdd/junit/smoke` |
+| `env_required` | Nombres (nunca valores) de las variables de entorno que necesita la app, separados por comas, o `none`. El tech-designer los propone y una persona los escribe; el implementer abre una entrada `IF-` `ENV-REQUIRED` cuando una tarea lee una variable que no está en la lista |
 | `deploy` | Nota informativa de cómo se despliega; ninguna skill la ejecuta. `none` si no hay |
 
 Reglas del contrato:
@@ -91,6 +91,8 @@ Reglas del contrato:
   corre desde `app_dir`; los kits escriben en `$(git rev-parse --show-toplevel)/.sdd/junit/` para que el JUnit quede en la
   raíz aunque la app viva en un subdirectorio.
 - `none` salta el paso con un `WARN <clave>: n/a (stack profile)`; nunca es un fallo.
+- Toda ejecución de `acceptance` exporta `SDD_FASE={N}` y `SDD_EVIDENCE_DIR={evidence_dir}`: la suite los lee para
+  dejar capturas y vídeos en `{evidence_dir}/FASE-{N}/`.
 - Las claves de 5.1 (de `visual_evidence` a `deploy`) no son comandos: las leen la CLI de aceptación, las skills y las
   plantillas de smoke. Un perfil sin ellas toma los valores por defecto de la tabla; los kits las escriben explícitas.
 - Marcadores en tiempo de ejecución: `{file}`, `{files}`, `{pattern}` y `{port}`. Las rutas que reciben son relativas a

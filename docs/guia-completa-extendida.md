@@ -1922,7 +1922,10 @@ ecommerce-api/
 │
 ├── acceptance/
 │   ├── ACCEPTANCE-REPORT.md           ← Veredicto por requisito (SHA evaluado)
-│   └── decisions.jsonl                ← Exenciones, demos, mediciones, aceptaciones
+│   ├── decisions.jsonl                ← Exenciones, demos, mediciones, aceptaciones
+│   └── challenges.jsonl               ← Hallazgos de la ronda adversarial
+│
+├── evidencias/FASE-*/                 ← Capturas y videos (no versionado)
 │
 ├── dashboard/
 │   └── traceability-graph.json        ← Grafo para MCP y hooks (sdd-graph.py)
@@ -1989,6 +1992,7 @@ ecommerce-api/
 │  UTILIDADES                                                               │
 │  /sdd-pipeline-status                    Estado del pipeline             │
 │  /sdd-acceptance --check                 Veredictos + integridad cadena │
+│  /sdd-acceptance --adversarial --fase N  Verificadores contra la letra   │
 │  /sdd-acceptance --loop                  Bucle hasta objetivo            │
 │  /sdd-acceptance --sign-off --fase N     Aceptacion + fase-N-accepted    │
 │  /sdd-acceptance --publish               Bloque PR + pagina de estado    │
@@ -2006,7 +2010,9 @@ ecommerce-api/
 │  verify --message F | --range A..B       Reglas de commit (commit-msg)  │
 │  branch start|status                     Rama de trabajo por defecto    │
 │  accept [record ...]                     Libro de aceptacion             │
-│  gate [--mode off|warn|enforce] [--md]   Puerta: exit 0/1/2/3            │
+│  gate [--mode off|warn|enforce] [--md]   Puerta: exit 0/1/2/3/4          │
+│    4 = challenge abierto en un Must (adversarial_gate: enforce)          │
+│  visual_evidence: required|warn|off      Captura por criterio, video/WF  │
 │  loop next                               Un paso del bucle               │
 │                                                                           │
 └──────────────────────────────────────────────────────────────────────────┘
