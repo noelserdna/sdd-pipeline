@@ -13,7 +13,10 @@ its video and captures (`evidencias/FASE-N/`):
 - Question: "Accept FASE {N} at commit {sha7}? Must {v}/{t} verified{, {w} waived}."
   (release: "Accept release {NAME} at commit {sha7}? …")
 - Options: **Accept** · **Accept with observations (say which)** · **Reject (say why)**. When the gate is not met
-  (exit 1 or 2), say so and offer only **Reject**: acceptance needs a met gate, a rejection does not.
+  (exit 1 or 2), or a Must has an open challenge under `adversarial_gate: enforce` (exit 4), say so and offer only
+  **Reject**: acceptance needs a met gate, a rejection does not. Exit 4 clears when the loop fixes the challenge or a
+  person dismisses it (`accept record challenge-dismissal`); with `warn` the challenges are shown and the approver
+  decides with them in view.
 - Also ask, if unknown: the approver's name and role, the channel (e.g. "demo call 2026-09-27", "email") and the demo
   id when a demo was run.
 
@@ -47,7 +50,7 @@ Approver-role: {role}
 Channel: {channel}
 Demo: {demo id or none}
 Commit: $SHA
-Acceptance: Must {v}/{t} verified, {w} waived ({ids}); gate exit {0|3}
+Acceptance: Must {v}/{t} verified, {w} waived ({ids}); gate exit {0|3}; open challenges {n, only under adversarial_gate warn}
 EOF
 ```
 
