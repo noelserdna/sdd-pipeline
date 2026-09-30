@@ -23,3 +23,12 @@
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact
+- visual_evidence: required
+- evidence_dir: evidencias
+- adversarial_gate: warn
+- test_slots: 2
+- staging_url: none
+- smoke: none
+- smoke_report_path: .sdd/junit/smoke
+- env_required: none
+- deploy: none

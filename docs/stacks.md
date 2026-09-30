@@ -38,6 +38,15 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact
+- visual_evidence: required
+- evidence_dir: evidencias
+- adversarial_gate: warn
+- test_slots: 2
+- staging_url: none
+- smoke: none
+- smoke_report_path: .sdd/junit/smoke
+- env_required: none
+- deploy: none
 ```
 
 | Clave | Qué es |
@@ -66,6 +75,15 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `task_state` | `trailers` (el trailer `Task:` del commit es el estado) o `checkbox`. Sin la clave vale `checkbox`; `/sdd-setup` escribe `trailers` en los proyectos nuevos, con kit o sin él |
 | `task_format` | `compact` (Review y Revert opcionales) o `full` |
 | `default_branch` | Opcional. Rama por defecto para la regla de rama (`sdd.mjs branch start`) y el destino del merge; sin la clave: `origin/HEAD`, luego `init.defaultBranch`, luego `main`/`master`. Los kits no la declaran |
+| `visual_evidence` | `required` (por defecto): un criterio de un REQ-F que pasa sin captura queda `unshown` y el requisito no es VERIFIED; `warn` solo lo informa; `off`, solo para proyectos sin interfaz (API pura, CLI) y por decisión de una persona |
+| `evidence_dir` | Carpeta de capturas y vídeos, `<dir>/FASE-N/`, fuera de git; por defecto `evidencias` |
+| `adversarial_gate` | Cómo trata `sdd gate` un hallazgo abierto de la ronda adversarial en un Must: `off`, `warn` (por defecto; lo imprime) o `enforce` (sale con 4) |
+| `test_slots` | Procesos de test que pueden correr a la vez en la máquina (por defecto `2`; `1` con base de datos en memoria o compartida, navegadores o contenedores). Ver [Recursos de la máquina](multisesion.md#recursos-de-la-máquina) |
+| `staging_url` | URL del entorno de staging para las plantillas de smoke, o `none` |
+| `smoke` | Comando del smoke contra `staging_url`, o `none` |
+| `smoke_report_path` | Dónde escribe el smoke su JUnit; por defecto `.sdd/junit/smoke` |
+| `env_required` | Nombres (nunca valores) de las variables de entorno que necesita la app, separados por comas, o `none` |
+| `deploy` | Nota informativa de cómo se despliega; ninguna skill la ejecuta. `none` si no hay |
 
 Reglas del contrato:
 
@@ -73,6 +91,8 @@ Reglas del contrato:
   corre desde `app_dir`; los kits escriben en `$(git rev-parse --show-toplevel)/.sdd/junit/` para que el JUnit quede en la
   raíz aunque la app viva en un subdirectorio.
 - `none` salta el paso con un `WARN <clave>: n/a (stack profile)`; nunca es un fallo.
+- Las claves de 5.1 (de `visual_evidence` a `deploy`) no son comandos: las leen la CLI de aceptación, las skills y las
+  plantillas de smoke. Un perfil sin ellas toma los valores por defecto de la tabla; los kits las escriben explícitas.
 - Marcadores en tiempo de ejecución: `{file}`, `{files}`, `{pattern}` y `{port}`. Las rutas que reciben son relativas a
   `app_dir`.
 - `{app_dir}` solo aparece en las plantillas de los kits y se resuelve al instalar.
@@ -113,6 +133,8 @@ Instalar el kit convierte las fuentes 2-4, que son suposiciones, en la 1, que es
 | `db_reset_safe` | `bin/rails db:reset` | borra los `*.db` locales dentro de `app_dir` (profundidad 2) y luego `npx prisma migrate deploy && npx prisma generate` |
 | `server` | `bin/rails server -p {port} -b 127.0.0.1 -P tmp/pids/sdd-server.pid` | `npx next dev -p {port} -H 127.0.0.1` (la verificación final hace build + `next start`) |
 | `test_report` | `MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR=".../.sdd/junit/minitest" bin/rails test`; requiere la gema `minitest-reporters` (grupo `:test`) y `Minitest::Reporters.use! if ENV["MINITEST_REPORTER"]` en `test/test_helper.rb` | `npx vitest run --reporter=junit --outputFile=".../.sdd/junit/vitest.xml"` (reporter incluido en Vitest) |
+| E2E con captura | en la suite compartida (`acceptance`) o en `test/system/` | en la suite compartida (`acceptance`) o en `tests/e2e/` (Playwright) |
+| Tests de contrato de puertos | `test/contract/` | `tests/contract/` |
 
 `wiring` son los ficheros que casi todas las tareas tocan (rutas, esquema, layout). `layers` es el orden de capas en que
 `sdd-plan-architect` y `sdd-task-generator` trocean una operación de la spec.
