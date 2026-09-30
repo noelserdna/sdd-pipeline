@@ -81,9 +81,9 @@ detected/kit/legacy value (§3), then the default below.
 | `adversarial_gate` | how `sdd gate` treats an open challenge of the adversarial round on a Must (`off` · `warn` prints it · `enforce` exits 4) | `warn` |
 | `test_slots` | how many test processes may run at once on this machine: `[P]` subagents that run tests (SKILL.md → Multi-Agent Strategy), Phase 9-S, one Playwright worker with `1` (§2), the lead's second implementation station, the adversarial verifiers. `1` when tests use an in-memory or shared database, browsers or containers | `2` |
 | `staging_url` | base URL of the deployed staging environment for the smoke templates and the test planner's smoke tier | `none` |
-| `smoke` | command that runs the smoke tier against `staging_url` | `none` |
-| `smoke_report_path` | where the smoke run writes its JUnit, read by the acceptance CLI | `.sdd/junit/smoke` |
-| `env_required` | environment variables the app needs, comma-separated names (never values), set with `install-stack-kit.sh --set env_required=…` or by hand. Read by the tech designer and by the implementer, which records an IF- entry when a task needs a variable the list lacks and never writes `.env` | `none` (no list) |
+| `smoke` | command that runs the post-deploy smoke tier (tests tagged `@smoke-deploy`; `@smoke` is the PR tier) against `staging_url`, e.g. `PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit` | `none` |
+| `smoke_report_path` | where the smoke run writes its JUnit; the `sdd-smoke` CI templates export it as `SMOKE_REPORT_PATH` and publish it. The acceptance CLI reads only `test_report_path`, so list this directory there too when smoke results should enter the ledger | `.sdd/junit/smoke` |
+| `env_required` | environment variables the app needs, comma-separated names (never values). The tech designer proposes the names (DIM-7-002) and a person writes them, with `install-stack-kit.sh --set env_required=…` or by hand. The implementer compares the variables a task reads with this list and records an IF- entry (`ENV-REQUIRED`) for each one missing, because a variable only a local `.env` holds fails first in staging; it never writes `.env` | `none` (no list) |
 | `deploy` | informative note on how the project is deployed; no skill runs it | `none` |
 
 `code_paths` and `test_paths` also decide when acceptance evidence goes stale: `sdd accept` discards test results and
@@ -108,6 +108,11 @@ checkbox in sync. `checkbox` stays the default when the key is absent, for proje
 - Run: `(cd "<app_dir>" && <command>)`. `acceptance` runs from the repo root; to filter append ` --grep <ID>`
   (`--grep "E2E-WF-001-01|E2E-WF-002-03"` for several).
 - `lint_files` with an empty `{files}` (only non-code files changed) is skipped silently.
+- Every `{acceptance}` run (an E2E task's `--grep`, Phase 9) exports `SDD_FASE={N}` (the task's FASE) and
+  `SDD_EVIDENCE_DIR={evidence_dir}`: `SDD_FASE=2 SDD_EVIDENCE_DIR=evidencias <acceptance> --grep AC-004-01`. The
+  suite's configuration reads both to write captures and videos under `{evidence_dir}/FASE-{N}/`; without them a
+  capture lands in `FASE-0` or in the default folder, and the FASE gate and `sdd accept pack --fase N`, which show
+  `{evidence_dir}/FASE-{N}/`, miss it.
 - `test_slots: 1` and a Playwright `acceptance`: append ` --workers=1` as well (another runner: its own one-worker
   flag), so one browser runs at a time on this machine; CI keeps the suite's own setting.
 - A key resolved to `none` skips the step and logs, once per session per key:

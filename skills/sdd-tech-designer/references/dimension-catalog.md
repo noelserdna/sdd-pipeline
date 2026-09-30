@@ -130,7 +130,9 @@ resource naming.
 
 Context: scale targets, budget, team ops expertise. For DIM-7-002 and DIM-7-003, list each variable and machine
 endpoint with its form locally and in staging: that table is where a difference between environments becomes
-visible before deploy. Variable names (never values) go to the profile key `env_required`.
+visible before deploy. The variable names (never values) are a proposal for the profile key `env_required`: show
+the list to a person, who writes it (`install-stack-kit.sh --set env_required=…` or by hand), since this skill does
+not edit `CLAUDE.md`. The implementer then compares each task's variables with it.
 
 Applies to DIM-7-002 when the specs name an external integration, a service account or a scheduled job, and to
 DIM-7-003 when a cron, webhook or other non-human caller reaches the app through a reverse proxy or gateway.

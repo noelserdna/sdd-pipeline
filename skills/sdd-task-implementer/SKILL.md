@@ -143,6 +143,7 @@ For each task:
 1. Read every spec in **Refs**; extract input/output contracts, applicable invariants, state machines, exception flows, and how the task connects to the previous and next ones.
 2. `[DECISION PENDIENTE]` or vagueness → PAUSE.
 3. Plan files, imports and dependencies (a mental note, not a file).
+4. Environment variables the task's code will read (a new `process.env.X`, `ENV["X"]`, a config entry) are compared with the profile's `env_required`. Each name missing from it → an IF- entry (category `ENV-REQUIRED`, WARNING) naming the variable and the task, because a variable that only the local `.env` holds is the first thing to fail in staging; a person adds it to the profile and to each environment. Never write `.env` or a value.
 
 ### Phase 4: Test-First Construction
 
@@ -165,7 +166,7 @@ Checklist before moving on: names follow the glossary; types match `domain/02-EN
 
 1. Run the task's **Review** checklist (compact tasks without Review → the checklist of its type in `skills/sdd-task-generator/references/review-checklist.md`); a failing item → fix and re-check; not applicable → say why.
 2. Per task: `{test_file}` on the task's tests and changed files, `{typecheck}`, `{lint_files}` on changed files.
-3. Never per task: full `{test}` (only at the Foundation checkpoint and Phase 9), `{build}` (Phase 9), full `{acceptance}`, starting a server + `curl`. `{db_reset_safe}` only after schema/migration changes when the runner does not prepare the DB. An E2E task is done when `{acceptance} --grep <E2E-ID>` passes (cadence: `references/stack-profile.md` §9).
+3. Never per task: full `{test}` (only at the Foundation checkpoint and Phase 9), `{build}` (Phase 9), full `{acceptance}`, starting a server + `curl`. `{db_reset_safe}` only after schema/migration changes when the runner does not prepare the DB. An E2E task is done when `{acceptance} --grep <E2E-ID>` passes, run with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported like every `{acceptance}` run (`references/stack-profile.md` §2; cadence §9).
 4. Cross-check every acceptance criterion against the implementation.
 
 ### Phase 7: Atomic Commit & SHA Capture
@@ -196,13 +197,13 @@ git commit -m "feat(auth): add JWT authentication middleware" \
 Main checkout only. The tag is placed last, and only when everything passes, so `fase-{N}-verified` always means verified.
 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
-2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once with `SDD_FASE={N}` exported (the suite writes the captures and videos under `{evidence_dir}/FASE-{N}/`, `references/construction-protocol.md`) and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
+2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported (the suite writes the captures and videos under `{evidence_dir}/FASE-{N}/`, `references/construction-protocol.md`) and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
 4. **Demo and acceptance** (vertical plans; skip with a horizontal plan). After steps 1-3 pass:
    - **4.0 Anchor the evidence to a commit.** Evidence captured over uncommitted code describes a tree no commit holds: the ledger discards it, and `sdd accept --junit-sha` refuses it (exit 2, "commit first"). A new file nobody added counts too, because the tests may depend on it.
      1. `git status --porcelain --untracked-files=all -- {code_paths} {test_paths}` (paths space-separated) prints nothing; otherwise commit the pending work first (the task's commit, or a `fix` commit with `Task:` or `Change:`).
      2. `SHA=$(git rev-parse HEAD)`.
-     3. `SDD_FASE={N} {test_report}` writes the JUnit (`.sdd/junit/` or `test_report_path`). When `{acceptance}` last ran before a code commit, run it again with `SDD_FASE={N}` so its JUnit and captures describe `$SHA`. With `test_report` missing or `none`, say so and recommend configuring it (`references/stack-profile.md`); the ledger then has no test evidence and every test-verified requirement reads MISSING.
+     3. `SDD_FASE={N} {test_report}` writes the JUnit (`.sdd/junit/` or `test_report_path`). When `{acceptance}` last ran before a code commit, run it again with the same exports so its JUnit and captures describe `$SHA`. With `test_report` missing or `none`, say so and recommend configuring it (`references/stack-profile.md`); the ledger then has no test evidence and every test-verified requirement reads MISSING.
      4. `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept --junit-sha "$SHA" --fase {N} --report acceptance/ACCEPTANCE-REPORT.md`: one verdict per requirement of the FASE's `Requisitos` line (VERIFIED, FAILING, MISSING, WAIVED), with evidence per criterion.
 
      A FAIL fixed anywhere in Phase 9 means new code: commit the fix and start again at 4.0, since the earlier capture no longer describes HEAD.
