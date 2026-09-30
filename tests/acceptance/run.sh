@@ -690,5 +690,24 @@ run accept pack; expect "accept pack without --fase → 2" "$rc" 2
 rm -rf "$repo/evidencias" "$repo/.sdd/entregas"
 repo="$saved_repo"
 
+# ---------------------------------------------------------------- 18. req show: the literal text a test quotes (M6)
+run req show REQ-F-001
+expect "req show exits 0" "$rc" 0
+has "req show: title" "REQ-F-001: Create a task"
+has "req show: statement" 'Statement: WHEN the user runs `todo add <title>` THE system SHALL create a pending task with the next id.'
+has "req show: criteria verbatim" 'AC2: GIVEN any state WHEN the user runs `todo add ""` THEN the command exits 2 with `title must not be empty`'
+run req show REQ-F-001 --ac 1
+expect "req show --ac 1: one line, verbatim" "$out" 'REQ-F-001 AC1: GIVEN an empty list WHEN the user runs `todo add "Buy milk"` THEN task 1 "Buy milk" is pending'
+run req show req-f-001 --ac AC2 --json
+expect "req show --json: id, ac, criterion, verification" "$(js 'j.id + "|" + j.ac + "|" + j.criteria.length + "|" + j.criteria[0].n + "|" + j.verification + "|" + j.priority')" "REQ-F-001|2|1|2|test|Must"
+expect "req show --json: reqHash matches the ledger's" "$(js 'j.reqHash')" "$(cd "$repo" && node "$SDD" accept --json --no-out 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requirements.find(r=>r.id==="REQ-F-001").reqHash))')"
+run req show REQ-F-004 --json
+expect "req show: a deprecated requirement is flagged" "$(js 'j.deprecated')" true
+run req show REQ-F-001 --ac 3; expect "req show --ac beyond the criteria → 1" "$rc" 1; has "req show: says how many criteria" "has 2 criteria"
+run req show REQ-X-999; expect "req show of an unknown id → 1" "$rc" 1
+run req show; expect "req show without an id → 2" "$rc" 2
+run req list; expect "req with an unknown subcommand → 2" "$rc" 2
+run req show REQ-F-001 --requirements nope.md; expect "req show --requirements missing file → 2" "$rc" 2
+
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

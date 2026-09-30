@@ -106,6 +106,8 @@ import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
 import { runTracker } from "./lib/tracker.mjs";
 import { runRoute } from "./lib/route.mjs";
+import { parseRequirements } from "./sdd-jev.mjs";
+import { reqHash } from "./lib/acceptance.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -140,6 +142,8 @@ function parseArgs(argv) {
       case "--message": o.message = take(); break;
       case "--range": o.range = take(); break;
       case "--issue": o.issue = take(); break;
+      case "--ac": o.ac = take(); break;
+      case "--requirements": o.requirements = take(); break;
       case "--json": o.json = true; break;
       case "--files": o.withFiles = true; break;
       case "--require-done": o.requireDone = true; break;
@@ -735,6 +739,41 @@ function cmdBranch(o) {
   return switchTo(info.current);
 }
 
+// ------------------------------------------------------------------ req show
+// The literal text of a requirement and its criteria, as requirements/REQUIREMENTS.md has them: what a test quotes
+// above its assert (M6). Parsed with parseRequirements (sdd-jev.mjs), the same reader as the acceptance ledger.
+function cmdReq(o) {
+  const sub = o.args.shift();
+  if (sub !== "show") usage(`unknown req command ${sub ?? "(none)"}: use show`);
+  const id = String(o.args.shift() || "").toUpperCase();
+  if (!id) usage("req show needs a requirement id (REQ-F-001)");
+  if (o.args.length) usage(`unexpected argument ${o.args[0]}`);
+  const file = path.resolve(baseDir(o), o.requirements || "requirements/REQUIREMENTS.md");
+  if (!existsSync(file)) die(`${display(file)} not found`);
+  const req = parseRequirements(readFileSync(file, "utf8")).find((r) => r.id === id);
+  if (!req) { console.error(`${PROG}: ${id} is not in ${display(file)}`); return 1; }
+  let criteria = req.criteria.map((text, i) => ({ n: i + 1, text }));
+  if (o.ac !== undefined) {
+    const m = String(o.ac).match(/^(?:AC)?(\d+)$/i);
+    if (!m) usage("--ac must be a criterion number (2 or AC2)");
+    const n = Number(m[1]);
+    criteria = criteria.filter((c) => c.n === n);
+    if (!criteria.length) { console.error(`${PROG}: ${id} has ${req.criteria.length} criteria; AC${n} does not exist`); return 1; }
+  }
+  if (o.json) {
+    json({ id: req.id, type: req.type, title: req.title, statement: req.statement, priority: req.priority, needs: req.needs || [],
+      verification: req.verification, deprecated: req.deprecated, criteria, ...(o.ac !== undefined ? { ac: criteria[0].n } : {}),
+      reqHash: reqHash(req), file: display(file) });
+    return 0;
+  }
+  if (o.ac !== undefined) { out(`${req.id} AC${criteria[0].n}: ${criteria[0].text}`); return 0; }
+  out(`${req.id}: ${req.title}${req.deprecated ? "  [deprecated]" : ""}`);
+  out(`Statement: ${req.statement}`);
+  out(`Priority: ${req.priority || "—"} · Verification: ${req.verification || "—"} · Needs: ${(req.needs || []).join(", ") || "—"}`);
+  for (const c of criteria) out(`AC${c.n}: ${c.text}`);
+  return 0;
+}
+
 // ------------------------------------------------------------------ main
 /** First positional word of argv (skipping `--repo DIR`): the command. */
 function firstCommand(argv) {
@@ -782,6 +821,7 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
       case "trace": return cmdTrace(o);
       case "verify": return cmdVerify(o);
       case "branch": return cmdBranch(o);
+      case "req": return cmdReq(o);
       default: usage(`unknown command ${cmd}`);
     }
   } catch (e) {
