@@ -25,7 +25,7 @@
 - task_format: compact
 - visual_evidence: required
 - evidence_dir: evidencias
-- adversarial_gate: warn
+- adversarial_gate: enforce
 - literal_gate: enforce
 - test_slots: 2
 - staging_url: none

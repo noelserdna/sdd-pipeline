@@ -15,7 +15,7 @@ atómicos. Integración con merge `--no-ff`. No se sube versión ni se crea tag 
 | Evidencia visual en REQ-F | Obligatoria: captura por criterio y vídeo por workflow de cara al usuario (`FASE-N` cuando la FASE no nombra workflows). Sin ella, el criterio queda `unshown` y el requisito no es VERIFIED |
 | Dónde | `evidencias/` en la raíz del proyecto, fuera de git (bloque gestionado de `templates/gitignore.sdd`) |
 | REQ-F sin pantalla propia | Captura de la pantalla donde se ve el efecto; sin exención |
-| Puerta adversarial | `adversarial_gate: warn` por defecto en 5.1 |
+| Puerta adversarial | `adversarial_gate: enforce` por defecto: un hallazgo abierto en un Must impide la firma |
 | Jev en la ronda adversarial | Solo prioriza criterios y elige la muestra de limpios que se contraverifica. Nunca juzga ni decide |
 | Contraverificación | Todos los hallazgos, más una muestra de veredictos limpios elegida por prioridad |
 | Marcador «ve X» | THEN que empieza por «el usuario ve» / «the user sees», fijado en requirements; el léxico ES/EN solo propone candidatos |
@@ -34,7 +34,7 @@ atómicos. Integración con merge `--no-ff`. No se sube versión ni se crea tag 
 |-------|---------|---------|-----|
 | `visual_evidence` | `required \| warn \| off` | `required` | CLI de aceptación, test-planner, implementer |
 | `evidence_dir` | ruta | `evidencias` | CLI, implementer, kits |
-| `adversarial_gate` | `off \| warn \| enforce` | `warn` | CLI (`sdd gate`), sdd-acceptance |
+| `adversarial_gate` | `off \| warn \| enforce` | `enforce` | CLI (`sdd gate`), sdd-acceptance |
 | `test_slots` | entero | `2` | implementer, lead, sdd-acceptance `--adversarial` |
 | `staging_url` | URL o `none` | `none` | plantillas smoke, test-planner |
 | `smoke` | comando o `none` | `none` | plantillas smoke |

@@ -108,7 +108,7 @@
 //   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
 //       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
 //       Musts · 4 met, but a Must (not waived) has an open adversarial challenge and the Stack Profile says
-//       `adversarial_gate: enforce` (default warn: printed, exit unchanged; off: ignored). Precedence
+//       `adversarial_gate: enforce`, the default (warn: printed, exit unchanged; off: ignored). Precedence
 //       2 > 1 > 4 > 3 > 0. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate,
 //       else enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
 //       required, asks for a video whose name carries each WF-NNN of the FASE file's `Workflows:` header line (without

@@ -120,7 +120,7 @@ Un test ligado por nombre y en verde prueba que *una* aserción se cumplió, no 
 
 **El veredicto no cambia.** El libro añade `challenges[]` por requisito (`open`, `stale` cuando cambia el código que citan o el texto del requisito, `dismissed`) y `summary.must_challenged`. El bucle devuelve los abiertos y confirmados con la ruta `adversarial-finding`, y los no concluyentes con la ruta `needs-human`, y genera tareas con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`; un `SPEC-QUESTION` va a `sdd-req-change`. Descartar un hallazgo es un registro humano: `sdd accept record challenge-dismissal --challenge CH-NNN --reason … --by … --role …`. Los verificadores no escriben código, specs, tests ni `decisions.jsonl`.
 
-La puerta la fija `adversarial_gate` en el Stack Profile: `off` lo ignora, `warn` (por defecto en 5.1) lo imprime sin cambiar el código de salida, `enforce` sale con **4** si hay un challenge abierto en un Must. El protocolo completo está en `skills/sdd-acceptance/references/adversarial-protocol.md`.
+La puerta la fija `adversarial_gate` en el Stack Profile: `off` lo ignora, `warn` lo imprime sin cambiar el código de salida, `enforce` (por defecto) sale con **4** si hay un challenge abierto en un Must. El protocolo completo está en `skills/sdd-acceptance/references/adversarial-protocol.md`.
 
 ## Salidas
 

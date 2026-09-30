@@ -147,7 +147,7 @@ if [ -f "$ACCEPT_FILE" ]; then
   acceptance_with_jq() {
     jq -r '.summary as $s | select($s != null)
       | ($s.unshown // 0) as $un | ($s.missing_videos // []) as $mv | ($s.must_challenged // 0) as $ch | ($s.literal_gaps // 0) as $lg
-      | ($s.goal and (.adversarial_gate // "warn") == "enforce" and $ch > 0) as $g4
+      | ($s.goal and (.adversarial_gate // "enforce") == "enforce" and $ch > 0) as $g4
       | "| Acceptance: Must " + ($s.must_verified | tostring) + "/" + ($s.must_total | tostring) + " verified"
         + (if ($s.must_waived // 0) > 0 then ", " + ($s.must_waived | tostring) + " waived" else "" end)
         + (if $g4 then " (gate 4: fix or dismiss the open challenge on a Must)"
@@ -167,7 +167,7 @@ if [ -f "$ACCEPT_FILE" ]; then
         const l = JSON.parse(require('fs').readFileSync(process.env.SDD_ACCEPT_FILE, 'utf8')); const s = l.summary;
         if (s) {
           const un = s.unshown || 0, mv = s.missing_videos || [], ch = s.must_challenged || 0, lg = s.literal_gaps || 0;
-          const g4 = s.goal && (l.adversarial_gate || 'warn') === 'enforce' && ch > 0;
+          const g4 = s.goal && (l.adversarial_gate || 'enforce') === 'enforce' && ch > 0;
           const hint = g4 ? ' (gate 4: fix or dismiss the open challenge on a Must)'
             : s.goal && (un || mv.length || ch || lg) ? ' (goal met, not ready for sign-off)'
             : s.goal ? ' (goal met: /sdd-acceptance --sign-off)' : ' (open: /sdd-acceptance --loop)';

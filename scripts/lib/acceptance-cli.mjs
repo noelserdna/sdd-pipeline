@@ -689,7 +689,7 @@ function cmdLoop(o) {
   if (!o["no-out"]) writeJson(root, o.out || ".sdd/acceptance.json", ledger);
   const goalSet = ledger.requirements.filter((r) => r.in_scope && r.priority === "Must" && r.verdict !== "DEPRECATED");
   const count = (v) => goalSet.filter((r) => r.verdict === v).length;
-  const adversarial = ledger.adversarial_gate || "warn";
+  const adversarial = ledger.adversarial_gate || "enforce";
   const progress = { verified: count("VERIFIED"), waived: count("WAIVED"), failing: count("FAILING"), missing: count("MISSING"),
     challenged: ledger.summary.must_challenged || 0, videos_missing: (ledger.summary.missing_videos || []).length };
   const verdicts = Object.fromEntries(goalSet.map((r) => [r.id, r.verdict]));

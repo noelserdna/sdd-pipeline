@@ -418,10 +418,10 @@ export const ADVERSARIAL_MODES = ["off", "warn", "enforce"];
  *  ledger in .sdd/). test/ is the exception when the Stack Profile declares it a test path (Rails Minitest). */
 export const FORBIDDEN_EVIDENCE = ["acceptance", "feedback", "spec", "requirements", "plan", "task", "test", "audits", "changes", ".sdd"];
 
-/** Stack Profile `adversarial_gate`: off | warn | enforce; default and any other value: warn. */
+/** Stack Profile `adversarial_gate`: off | warn | enforce; default and any other value: enforce. */
 export function adversarialGate(root) {
   const v = String(stackProfile(root).adversarial_gate || "").trim().toLowerCase();
-  return ADVERSARIAL_MODES.includes(v) ? v : "warn";
+  return ADVERSARIAL_MODES.includes(v) ? v : "enforce";
 }
 
 export function readChallenges(file) {
@@ -969,7 +969,7 @@ function adversarialLine(ledger) {
   const open = ledger.requirements.filter((r) => r.in_scope).flatMap((r) => openOf(r).map((c) => `${c.id} ${r.id} AC${c.ac} ${c.category}`));
   if (!open.length) return null;
   const musts = ledger.summary.must_challenged || 0;
-  return `Adversarial (\`adversarial_gate: ${ledger.adversarial_gate || "warn"}\`): ${open.length} open challenge${open.length === 1 ? "" : "s"}${musts ? `, ${musts} on Must requirement${musts === 1 ? "" : "s"}` : ""} (${open.slice(0, 6).join(", ")}${open.length > 6 ? ", …" : ""}) — route adversarial-finding; the verdicts do not change.`;
+  return `Adversarial (\`adversarial_gate: ${ledger.adversarial_gate || "enforce"}\`): ${open.length} open challenge${open.length === 1 ? "" : "s"}${musts ? `, ${musts} on Must requirement${musts === 1 ? "" : "s"}` : ""} (${open.slice(0, 6).join(", ")}${open.length > 6 ? ", …" : ""}) — route adversarial-finding; the verdicts do not change.`;
 }
 const gapText = (g) => g.code === "Q-02" ? `quote not current (Q-02 ${g.file}:${g.line})` : `literal "${clip(g.literal, 40)}" not in the test (Q-03 ${g.file}:${g.line})`;
 /** One line on literal gaps (sdd lint --quotes) for the PR block and the report, or null when there is none. */
@@ -1034,7 +1034,7 @@ export function renderReport(ledger) {
   const challenged = ledger.requirements.filter((r) => r.in_scope && (r.challenges || []).length);
   if (challenged.length) {
     o.push("", "## Adversarial challenges", "",
-      `Findings of the adversarial round (\`${CHALLENGES_FILE}\`) that sit next to the verdicts without changing them: \`open\` until the cited code or the requirement changes (\`stale\`) or a person dismisses it. Gate \`adversarial_gate: ${ledger.adversarial_gate || "warn"}\`. ${adversarialLine(ledger) || "No challenge is open."}`, "",
+      `Findings of the adversarial round (\`${CHALLENGES_FILE}\`) that sit next to the verdicts without changing them: \`open\` until the cited code or the requirement changes (\`stale\`) or a person dismisses it. Gate \`adversarial_gate: ${ledger.adversarial_gate || "enforce"}\`. ${adversarialLine(ledger) || "No challenge is open."}`, "",
       "| Challenge | Requirement | Criterion | Category | Counter | State | Quote | Evidence |", "|---|---|---|---|---|---|---|---|");
     for (const r of challenged) for (const c of r.challenges) {
       const state = c.state === "stale" ? `stale (${c.stale_reason})` : c.state === "dismissed" ? `dismissed by ${c.dismissal.by} (${c.dismissal.role}): ${c.dismissal.reason}` : "open";

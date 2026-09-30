@@ -865,13 +865,16 @@ expect "accept with challenges → 0" "$rc" 0
 expect "verdict unchanged: F-001 VERIFIED" "$(ledger 'v("REQ-F-001")')" VERIFIED
 expect "ledger: challenges[] per requirement with state" "$(ledger 'R("REQ-F-001").challenges.map(c=>c.id+":"+c.state).join()')" "CH-001:open,CH-002:open"
 expect "ledger: summary.must_challenged" "$(ledger 'L.summary.must_challenged')" 2
-expect "ledger: adversarial_gate default warn" "$(ledger 'L.adversarial_gate')" warn
+expect "ledger: adversarial_gate default enforce" "$(ledger 'L.adversarial_gate')" enforce
 has "accept: prints the open challenges" "challenge CH-001 open REQ-F-001 AC1 WEAKENED-ASSERT"
 grep -q '^## Adversarial challenges' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: Adversarial challenges section" || bad "report: no Adversarial challenges section"
 grep -q '^| CH-001 | REQ-F-001 | AC1 | WEAKENED-ASSERT | confirmed | open |' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: one row per challenge" || bad "report: challenge row"
 grep -q '| VERIFIED · challenged CH-001, CH-002 |' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: the verdict cell names its challenges" || bad "report: verdict cell"
 
-# gate: warn (default) keeps the code; enforce → 4; off ignores; precedence 2 > 1 > 4 > 3 > 0
+# gate: enforce (default) → 4; warn keeps the code; off ignores; precedence 2 > 1 > 4 > 3 > 0
+run gate --fase 1; expect "gate default (enforce): open Must challenge → 4" "$rc" 4
+profile "adversarial_gate: warn"; commit "profile: warn"
+all_green
 run gate --fase 1; expect "gate warn: open Must challenge keeps exit 0" "$rc" 0
 has "gate warn: prints the challenge" "challenge CH-001 open on REQ-F-001 AC1"; has "gate warn: says enforce would exit 4" "enforce would exit 4"
 run gate --fase 1 --md; has "gate --md: adversarial line" "Adversarial (\`adversarial_gate: warn\`): 3 open challenges"
