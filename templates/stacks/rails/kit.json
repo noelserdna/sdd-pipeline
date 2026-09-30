@@ -1,6 +1,6 @@
 {
   "name": "rails",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Ruby on Rails 8.x · Ruby 3.3+ · Minitest with fixtures · Hotwire · Importmap · SQLite",
   "detect": {
     "all": ["Gemfile", "config/application.rb"],
@@ -29,7 +29,16 @@
     "tracker": "off",
     "e2e_scaffold": "allowed",
     "task_state": "trailers",
-    "task_format": "compact"
+    "task_format": "compact",
+    "visual_evidence": "required",
+    "evidence_dir": "evidencias",
+    "adversarial_gate": "warn",
+    "test_slots": "2",
+    "staging_url": "none",
+    "smoke": "none",
+    "smoke_report_path": ".sdd/junit/smoke",
+    "env_required": "none",
+    "deploy": "none"
   },
   "rules": ["models", "controllers", "views", "migrations", "testing"],
   "wiring": ["config/routes.rb", "db/schema.rb", "app/views/layouts/application.html.erb"],

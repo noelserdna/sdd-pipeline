@@ -40,6 +40,29 @@ Una ruta puede tener varios dueños (`src/*` es del lead y de cada `impl-*`; `ac
 
 `sdd-spec` y `sdd-plan` no aportan paralelismo (la cadena es secuencial); su valor es aislar el contexto de etapas largas y poder retomarlas. Las estaciones que sí se ejecutan en paralelo son las `impl-*`.
 
+## Recursos de la máquina
+
+Las estaciones `impl-*`, los subagentes de un lote `[P]` y los verificadores de la ronda adversarial comparten la misma
+máquina: CPU, memoria, el fichero de la base de datos, los puertos y los navegadores. Dos suites completas a la vez no
+terminan antes; se ralentizan, agotan sus tiempos de espera y dan fallos intermitentes que parecen defectos del código.
+
+La clave `test_slots` del SDD Stack Profile (por defecto `2`; `1` cuando los tests usan una base de datos en memoria o
+compartida, navegadores o contenedores) fija cuántos procesos de test corren a la vez en la máquina. Es una convención,
+no un lock: la respetan las skills.
+
+- **Subagentes del implementer.** Como mucho `test_slots` agentes de un lote `[P]` ejecutan tests, siempre de uno en
+  uno con `{test_file}`; nunca `{test}`, `{acceptance}` sin `--grep`, `{coverage}` ni modo watch, y nunca levantan
+  servidores ni bases de datos fuera del runner. Con `test_slots: 1` los agentes escriben en paralelo y el hilo
+  principal ejecuta sus tests en secuencia.
+- **E2E.** Con `test_slots: 1`, Playwright corre con un solo worker en local (`--workers=1`); CI conserva su ajuste.
+- **Streams.** Con `test_slots: 1`, *Stream Complete* (Phase 9-S) ejecuta solo los ficheros de test del Stream; la
+  suite completa corre tras cada merge de `--integrate`, en el principal.
+- **Estaciones.** El lead pregunta antes de despachar una segunda estación de implementación mientras otra está
+  trabajando en la misma máquina. Con `test_slots: 1` recomienda esperar.
+- **Ronda adversarial.** `sdd-acceptance --adversarial` no lanza más verificadores que ejecuten tests que `test_slots`.
+
+Para más paralelismo real, cada estación en su propia máquina (o contenedor) con su propio checkout.
+
 ## Qué hacen los hooks con un rol
 
 - **SessionStart**: muestra `Rol: <rol> (posee …; stages …) | Pares vivos: …` y el último handoff; exporta `SDD_PLUGIN_ROOT` y `SDD_STATE_ROOT` a la sesión.

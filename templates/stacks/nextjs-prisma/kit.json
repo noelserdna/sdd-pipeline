@@ -1,6 +1,6 @@
 {
   "name": "nextjs-prisma",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Next.js 15/16 App Router · TypeScript · Prisma 7 with a driver adapter · SQLite · Vitest",
   "detect": {
     "all": ["package.json"],
@@ -29,7 +29,16 @@
     "tracker": "off",
     "e2e_scaffold": "allowed",
     "task_state": "trailers",
-    "task_format": "compact"
+    "task_format": "compact",
+    "visual_evidence": "required",
+    "evidence_dir": "evidencias",
+    "adversarial_gate": "warn",
+    "test_slots": "2",
+    "staging_url": "none",
+    "smoke": "none",
+    "smoke_report_path": ".sdd/junit/smoke",
+    "env_required": "none",
+    "deploy": "none"
   },
   "rules": ["server-actions", "api-routes", "domain", "prisma", "testing"],
   "wiring": ["src/app/layout.tsx", "prisma/schema.prisma"],

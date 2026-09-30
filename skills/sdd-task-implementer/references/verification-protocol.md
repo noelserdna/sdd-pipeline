@@ -48,6 +48,13 @@ CHECK-C11: Criterios de Exito met
 CHECK-C12: Checkpoint tags placed (main checkout only — Stream worktrees place no tags)
   - Internal phase checkpoints exist
   - Final FASE checkpoint exists
+
+CHECK-C13: Evidence anchored (vertical plans; the ledger behind the FASE's verdicts)
+  - `.sdd/acceptance.json` exists and its `evaluated_sha` is HEAD, or no file under code_paths/test_paths changed
+    since it (`git diff --quiet <evaluated_sha> HEAD -- <code_paths> <test_paths>`)
+  - The ledger is not dirty and lists no `untracked_paths`
+  - `git status --porcelain --untracked-files=all -- <code_paths> <test_paths>` is empty now
+  - Any of these failing → CRITICAL: the verdicts describe code that is not the committed code; re-run Phase 9 step 4.0
 ```
 
 ### Completeness Report Format
@@ -312,6 +319,7 @@ IF glossary term violation → WARNING
 IF complexity limit exceeded → WARNING
 IF naming inconsistency → OBSERVATION
 IF code duplication (< 5 lines) → OBSERVATION
+IF the acceptance ledger is not anchored to the committed code (CHECK-C13) → CRITICAL
 IF source file at 0% coverage (not in exclusions) → CRITICAL
 IF domain logic file below 80% coverage → WARNING
 ```
