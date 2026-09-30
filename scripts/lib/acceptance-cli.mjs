@@ -146,6 +146,12 @@ function printLedger(ledger) {
   for (const d of ledger.stale_decisions) out(`stale decision ${DECISIONS_FILE}:${d.line} ${d.type} ${d.req || `FASE ${d.fase}`}: ${d.reason}`);
   for (const e of ledger.decision_errors) out(`${DECISIONS_FILE}:${e.line}: ${e.msg}`);
   for (const j of ledger.junit.filter((x) => !x.fresh)) out(`stale junit ${j.path}: ${j.stale_reason}`);
+  if (ledger.visual_evidence !== "off") {
+    for (const r of ledger.requirements.filter((x) => x.in_scope && !["WAIVED", "DEPRECATED"].includes(x.verdict)))
+      for (const c of (r.criteria || []).filter((x) => x.visual === "missing" && (x.state === "pass" || x.state === "unshown")))
+        out(`${ledger.visual_evidence === "required" ? "unshown" : "warning: no screenshot"} ${r.id} AC${c.n}: passes without a screenshot in ${ledger.evidence_dir}/ (${ROUTES.capture})`);
+    for (const id of ledger.videos?.missing || []) out(`missing video ${id}: no video named with ${id} (${ROUTES.capture})`);
+  }
   if (!ledger.junit.length) out(`note: no JUnit report read (${ledger.junit_searched.length ? ledger.junit_searched.join(", ") : "pass --junit PATH or write reports to .sdd/junit/"})`);
   const s = ledger.summary;
   const v = s.by_verdict;
@@ -374,12 +380,15 @@ function cmdGate(o) {
   code = gateCode(ledger);
   const s = ledger.summary;
   const labels = { 0: "goal met", 1: "goal not met", 2: "stale evidence — re-run the tests on this commit", 3: "goal met with waived Musts" };
+  const missingVideos = s.missing_videos || [];
   if (o.json) out(JSON.stringify({ code, mode, label: labels[code], evaluated_sha: ledger.evaluated_sha, scope: ledger.scope, summary: s,
-    requirements: ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED").map((r) => ({ id: r.id, priority: r.priority, verdict: r.verdict, criteria: `${r.criteria_passing}/${r.criteria_total}`, stale_evidence: r.stale_evidence })) }, null, 2));
+    visual_evidence: ledger.visual_evidence ?? null, unshown: s.unshown ?? 0, missing_videos: missingVideos,
+    requirements: ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED").map((r) => ({ id: r.id, priority: r.priority, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}), criteria: `${r.criteria_passing}/${r.criteria_total}`, stale_evidence: r.stale_evidence })) }, null, 2));
   else if (o.md) process.stdout.write(renderPrBlock(ledger, code));
   else {
     for (const r of ledger.requirements.filter((x) => x.in_scope && x.priority === "Must" && !["VERIFIED", "DEPRECATED"].includes(x.verdict)))
-      out(`${r.id}  ${r.verdict}${r.stale_evidence ? " (stale evidence)" : ""}  ${r.criteria_passing}/${r.criteria_total}`);
+      out(`${r.id}  ${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}  ${r.criteria_passing}/${r.criteria_total}`);
+    for (const id of missingVideos) out(`missing video ${id}  (${ROUTES.capture})`);
     out(`gate: ${labels[code]} — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}${ledger.scope ? ` · FASE ${ledger.scope.fase}` : ""} · exit ${code}`);
   }
   if (mode === "warn") { if (!o.json && !o.md) out(`gate: would exit ${code} (mode warn)`); return 0; }
@@ -429,7 +438,8 @@ function cmdLoop(o) {
   else if (cycle > max) stop = "max-cycles";
   const result = { cycle, max_cycles: max, stop, evaluated_sha: ledger.evaluated_sha, progress,
     previous: prev ? { cycle: prev.cycle, progress: prev.progress } : null, regressed, targets, others,
-    stale_evidence: ledger.summary.stale_evidence };
+    stale_evidence: ledger.summary.stale_evidence, unshown: ledger.summary.unshown ?? 0,
+    missing_videos: (ledger.summary.missing_videos || []).map((id) => ({ video: id, route_hint: ROUTES.capture })) };
   if (capped) result.note = `--max-cycles capped at ${HARD_CAP}`;
   state.max_cycles = max;
   state.cycles.push({ cycle, at: ledger.generatedAt, evaluated_sha: ledger.evaluated_sha, progress, verdicts, stop });

@@ -5,7 +5,11 @@
 # Covers the verdicts (VERIFIED, FAILING, MISSING, WAIVED, DEPRECATED), NF/C methods (measurement computed in code,
 # demo, inspection freshness by paths), waivers voided by a MODIFY, gate exit codes 0/1/2/3 and modes, stale JUnit,
 # report rows, --fase scoping, loop stops, JUnit dialects, freshness scoped to code_paths/test_paths (a docs or
-# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence cells. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
+# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence
+# cells, untracked files under the code paths, commit before evidence (--junit-sha, --allow-dirty), attachments
+# (JUnit [[ATTACHMENT|…]], record --attach, name-bound captures), the visual rule (required, warn, off; video per
+# FASE), accept pack and req show. The fixture is a CLI app with `visual_evidence: off` in its CLAUDE.md; section 16
+# removes it. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SDD="$ROOT/scripts/sdd.mjs"
@@ -560,6 +564,110 @@ run accept --json --no-out
 expect "a deleted attachment is not present" "$(js "$D.attachments[0].present")" false
 ( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
 rm -rf "$repo/evidencias" "$repo/.sdd/junit/e2e.xml"
+
+# ---------------------------------------------------------------- 16. visual evidence: required (default), warn, off
+# A copy of the fixture without its `visual_evidence: off` profile: the default rule is required.
+repo="$tmp/visual"
+cp -R "$FIX/todo" "$repo"; rm -f "$repo/CLAUDE.md"
+git init -q "$repo"
+commit "init visual"
+green4() { junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass"; }
+C='(id,n)=>j.requirements.find(r=>r.id===id).criteria.find(c=>c.n===n)'
+V='(id)=>j.requirements.find(r=>r.id===id)'
+green4
+run accept --json --no-out
+expect "default rule: visual_evidence required" "$(js 'j.visual_evidence + "/" + j.evidence_dir')" required/evidencias
+expect "required: passing REQ-F criteria without a screenshot are unshown" "$(js "[1,2].map(n=>($C)('REQ-F-001',n).state).join()")" unshown,unshown
+expect "required: F-001 MISSING with reason no visual evidence" "$(js "($V)('REQ-F-001').verdict + '/' + ($V)('REQ-F-001').reason + '/' + ($V)('REQ-F-001').criteria_passing")" "MISSING/no visual evidence/0"
+expect "required: summary.unshown counts the criteria (F-001 ×2, F-002 ×2)" "$(js 'j.summary.unshown')" 4
+expect "required: REQ-NF / REQ-C carry no visual state" "$(js "($V)('REQ-NF-002').criteria[0].visual === undefined")" true
+expect "required: a missing test stays missing, not unshown (F-005 AC2)" "$(js "($C)('REQ-F-005',2).state + '/' + ($V)('REQ-F-005').reason")" missing/null
+run loop next --state .sdd/loop-v.json
+expect "loop: unshown criteria → capture-evidence" "$(loopq 'const t=j.targets.find(t=>t.req==="REQ-F-001"); t.route_hint + "/" + t.criteria.map(c=>c.route_hint).join()')" "capture-evidence/capture-evidence,capture-evidence"
+run gate --fase 1; expect "gate --fase 1 with unshown criteria → 1" "$rc" 1
+has "gate names the reason" "REQ-F-001  MISSING (no visual evidence)"
+run accept --no-out
+has "accept lists the unshown criteria" "unshown REQ-F-001 AC1: passes without a screenshot in evidencias/ (capture-evidence)"
+# Screenshots: one through a JUnit [[ATTACHMENT|…]], the others bound by file name (minitest writes no attachments).
+mkdir -p "$repo/evidencias/FASE-1" "$repo/evidencias/otros"
+printf 'img' > "$repo/evidencias/FASE-1/shot-1.png"
+printf 'img' > "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+printf 'img' > "$repo/evidencias/otros/AC-002-01.png"
+printf 'img' > "$repo/evidencias/FASE-1/AC-002-021.png"
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/shot-1.png]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+run accept --json --no-out
+expect "JUnit screenshot shows F-001 AC1" "$(js "($C)('REQ-F-001',1).state + '/' + ($C)('REQ-F-001',1).visual")" pass/shown
+expect "file named REQ-F-001-AC2 shows F-001 AC2 (bound by name)" "$(js "($C)('REQ-F-001',2).state + '/' + ($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').ref")" pass/evidencias/FASE-1/REQ-F-001-AC2.png
+expect "name-bound capture carries sha256 and present" "$(js "const a=($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').attachments[0]; /^sha256:/.test(a.sha256) + '/' + a.present + '/' + a.kind")" true/true/image
+expect "F-001 VERIFIED with both screenshots" "$(js "($V)('REQ-F-001').verdict + '/' + ($V)('REQ-F-001').reason")" VERIFIED/null
+expect "a scenario id in any subfolder binds (AC-002-01 under evidencias/otros)" "$(js "($C)('REQ-F-002',1).state")" pass
+expect "AC-002-021.png does not bind AC-002-02" "$(js "($C)('REQ-F-002',2).state")" unshown
+touch -t 202001010000 "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+run accept --json --no-out
+expect "a capture older than the last code commit does not count" "$(js "($C)('REQ-F-001',2).state + '/' + ($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').fresh")" unshown/false
+touch "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+printf 'img' > "$repo/evidencias/FASE-1/AC-002-02.png"
+# A demo REQ-F needs its capture too: the record's --attach.
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+run accept --json --no-out
+expect "demo without --attach: F-006 unshown" "$(js "($V)('REQ-F-006').verdict + '/' + ($C)('REQ-F-006',1).state")" MISSING/unshown
+printf 'img' > "$repo/evidencias/FASE-1/columns.png"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --attach evidencias/FASE-1/columns.png --by Laura --role "product owner"
+run accept --json --no-out
+expect "demo with --attach of a screenshot: F-006 VERIFIED" "$(js "($V)('REQ-F-006').verdict")" VERIFIED
+# Video per FASE: the FASE file cites no WF-NNN, so the gate asks for a video named FASE-1.
+run gate --fase 1 --json
+expect "every criterion shown but no FASE-1 video → gate 1" "$rc" 1
+expect "gate --json lists missing_videos" "$(js 'j.missing_videos.join() + "/" + j.summary.goal')" FASE-1/false
+run gate --fase 1 --md
+has "--md: visual evidence line" "Visual evidence (required): missing video: FASE-1"
+run loop next --fase 1 --state .sdd/loop-w.json
+expect "loop: missing video → capture-evidence" "$(loopq 'j.missing_videos.map(v=>v.video+"/"+v.route_hint).join()')" FASE-1/capture-evidence
+printf 'vid' > "$repo/evidencias/FASE-1/FASE-10-otra.webm"
+run gate --fase 1; expect "a FASE-10 video does not satisfy FASE-1 → 1" "$rc" 1
+printf 'vid' > "$repo/evidencias/FASE-1/FASE-1-crear-y-listar.webm"
+run gate --fase 1; expect "video named FASE-1-<title> → gate 0" "$rc" 0
+run accept --fase 1 --report acceptance/F1.md --no-out
+grep -q '^## Visual evidence' "$repo/acceptance/F1.md" && pass "report: Visual evidence section" || bad "report: no Visual evidence section"
+grep -q '^| REQ-F-001 | AC2 | pass | evidencias/FASE-1/REQ-F-001-AC2.png |' "$repo/acceptance/F1.md" && pass "report: screenshot per criterion" || bad "report: screenshot row"
+grep -q '^Videos for FASE 1: FASE-1 present' "$repo/acceptance/F1.md" && pass "report: videos of the FASE" || bad "report: videos line"
+# A FASE that cites workflows asks for one video per WF-NNN (E2E-WF-NNN-NN names), here through a JUnit attachment.
+printf '\n## Workflows\n\nWF-003 alta y listado.\n' >> "$repo/plan/fases/FASE-1-core.md"; commit "docs(plan): cite WF-003"
+run gate --fase 1 --json
+expect "FASE citing WF-003 without its video → 1, missing WF-003" "$rc/$(js 'j.missing_videos.join()')" 1/WF-003
+mkdir -p "$repo/test-results"; printf 'vid' > "$repo/test-results/E2E-WF-003-01.webm"
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/shot-1.png]]
+[[ATTACHMENT|test-results/E2E-WF-003-01.webm]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+run gate --fase 1 --json
+expect "E2E-WF-003-01.webm attached by the journey test → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
+# warn: reported, the verdicts do not change.
+printf '# p\n\n## SDD Stack Profile\n- visual_evidence: warn\n' > "$repo/CLAUDE.md"
+rm -rf "$repo/evidencias" "$repo/test-results" "$repo/.sdd/junit/e2e.xml"
+green4
+run accept --json --no-out
+expect "warn: F-001 VERIFIED without screenshots" "$(js "($V)('REQ-F-001').verdict + '/' + ($C)('REQ-F-001',1).state + '/' + ($C)('REQ-F-001',1).visual")" VERIFIED/pass/missing
+expect "warn: summary.unshown still counts them (F-001 ×2, F-002 ×2, F-006 demo whose capture is gone)" "$(js 'j.summary.unshown')" 5
+run accept --no-out
+has "warn: accept prints a warning per criterion" "warning: no screenshot REQ-F-001 AC1"
+run gate --fase 1 --json
+expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003
+# off: nothing.
+printf '# p\n\n## SDD Stack Profile\n- visual_evidence: off\n' > "$repo/CLAUDE.md"
+run accept --fase 1 --json --no-out
+expect "off: no visual state, no count, no videos" "$(js "String(($C)('REQ-F-001',1).visual) + '/' + j.summary.unshown + '/' + j.videos")" undefined/0/null
+run gate --fase 1; expect "off: gate --fase 1 → 0" "$rc" 0
+rm -f "$repo/CLAUDE.md"
+repo="$saved_repo"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"
