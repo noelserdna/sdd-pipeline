@@ -86,6 +86,13 @@ contains "$d" "fail|spec/requests/tasks_spec.rb|Tasks AC-002-04" && pass "rspec:
 d=$(dialect playwright.xml)
 contains "$d" "pass|e2e/list.spec.ts|list › AC-002-01 — shows tasks in id order" && pass "playwright: unicode name, file from classname" || bad "playwright ($d)"
 expect "playwright: 2 testcases" "$(printf '%s\n' "$d" | wc -l | tr -d ' ')" 2
+att=$(node --input-type=module -e '
+import { parseJUnit } from "'"$ROOT"'/scripts/lib/junit.mjs";
+import { readFileSync } from "node:fs";
+const all = (f) => parseJUnit(readFileSync("'"$FIX"'/junit/" + f, "utf8")).map((x) => x.attachments.join("+")).join("|");
+process.stdout.write(all("playwright.xml") + "\n" + ["vitest.xml", "pytest.xml", "rspec.xml"].map(all).join("").replace(/\|/g, ""));')
+expect "playwright: attachments from <property name=attachment> and [[ATTACHMENT|…]] in <system-out>" "$(printf '%s\n' "$att" | head -1)" "screenshots/list-AC-002-01.png|list-AC-002-02/trace.zip"
+expect "other dialects: no attachments invented" "$(printf '%s\n' "$att" | sed -n 2p)" ""
 d=$(dialect jest.xml); contains "$d" "pass|-|REQ-F-002 AC2 prints No tasks" && pass "jest-junit: parsed" || bad "jest ($d)"
 d=$(dialect minitest.xml); contains "$d" "pass|test/controllers/tasks_controller_test.rb|test_AC-002-03" && pass "minitest-reporters: file from suite filepath" || bad "minitest ($d)"
 d=$(dialect mocha.xml); contains "$d" "pass|test/rm.spec.js|AC-002-04" && pass "mocha-junit: file from suite" || bad "mocha ($d)"
@@ -508,6 +515,51 @@ rm -f "$repo/src/extra.js" "$repo/cov.txt"
 run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
 expect "clean tree: record demo → 0, no dirty flag" "$rc/$(lastrec 'r.dirty === undefined')" 0/true
 ( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
+
+# ---------------------------------------------------------------- 15. attachments: JUnit [[ATTACHMENT|…]] and record --attach
+mkdir -p "$repo/evidencias/FASE-1"
+printf 'png-bytes-1' > "$repo/evidencias/FASE-1/AC-001-01.png"
+printf 'webm' > "$repo/evidencias/FASE-1/FASE-1.webm"
+# Paths relative to the report's directory (Playwright) or to the repo root; a missing file is kept, not present.
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/AC-001-01.png]]
+[[ATTACHMENT|evidencias/FASE-1/FASE-1.webm]]
+[[ATTACHMENT|test-results/add/trace.zip]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+all_green
+run accept --json --no-out
+A='j.requirements.find(r=>r.id==="REQ-F-001").criteria[0].evidence.find(e=>/adds a task/.test(e.name)).attachments'
+expect "test evidence carries its attachments with kind" "$(js "$A.map(a=>a.kind).join()")" image,video,trace
+expect "attachment paths relative to the repo root" "$(js "$A.map(a=>a.path).join()")" "evidencias/FASE-1/AC-001-01.png,evidencias/FASE-1/FASE-1.webm,test-results/add/trace.zip"
+expect "present: existing files yes, missing trace no" "$(js "$A.map(a=>a.present).join()")" true,true,false
+sha=$(node -e 'process.stdout.write("sha256:"+require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$repo/evidencias/FASE-1/AC-001-01.png")
+expect "attachment sha256 and bytes" "$(js "$A[0].sha256 + '/' + $A[0].bytes")" "$sha/11"
+expect "a test without attachments carries an empty list" "$(js 'j.requirements.find(r=>r.id==="REQ-F-002").criteria[0].evidence[0].attachments.length')" 0
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --attach evidencias/FASE-1/AC-001-01.png --by Laura --role "product owner"
+expect "record demo --attach → 0" "$rc" 0
+expect "record stores path, kind and sha256 of the attachment" "$(lastrec 'r.attachments.map(a=>a.path+"|"+a.kind+"|"+a.sha256+"|"+a.bytes).join()')" "evidencias/FASE-1/AC-001-01.png|image|$sha|11"
+before=$(dlines)
+run accept record demo --req REQ-F-006 --observed x --pass true --attach package.json --by Laura --role "product owner"
+expect "--attach outside evidencias/ → 2" "$rc" 2; has "--attach: names the evidence dir" "not under evidencias/"
+run accept record demo --req REQ-F-006 --observed x --pass true --attach evidencias/FASE-1/nope.png --by Laura --role "product owner"
+expect "--attach of a missing file → 2" "$rc" 2; has "--attach: missing file" "no such file"
+run accept record waiver --req REQ-F-005 --reason r --follow-up "#42" --attach evidencias/FASE-1/AC-001-01.png --by Laura --role "product owner"
+expect "--attach on a waiver → 2" "$rc" 2
+expect "refused --attach records append nothing" "$(dlines)" "$before"
+run accept --json --no-out
+D='j.requirements.find(r=>r.id==="REQ-F-006").criteria[0].evidence[0]'
+expect "demo evidence: F-006 VERIFIED with its attachment present" "$(js "j.requirements.find(r=>r.id==='REQ-F-006').verdict + '/' + $D.attachments[0].present")" VERIFIED/true
+printf 'replaced' > "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept --json --no-out
+expect "a replaced attachment no longer counts (hash differs)" "$(js "$D.attachments[0].present + '/' + $D.attachments[0].changed")" false/true
+rm -f "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept --json --no-out
+expect "a deleted attachment is not present" "$(js "$D.attachments[0].present")" false
+( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
+rm -rf "$repo/evidencias" "$repo/.sdd/junit/e2e.xml"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

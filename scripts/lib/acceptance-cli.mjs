@@ -9,7 +9,7 @@ import { readJUnit } from "./junit.mjs";
 import {
   SCHEMA, RECORD_TYPES, DECISIONS_FILE, ROUTES, evaluate, gitContext, loadScenarios, readDecisions,
   validateRecord, reqHash, faseScope, renderReport, renderPrBlock, routeHint, criterionHint, unchangedSince, acNumber,
-  compareMeasurement, dirtyUnder,
+  compareMeasurement, dirtyUnder, evidenceSettings, describeFile,
 } from "./acceptance.mjs";
 import { parseRequirements, parseNeeds, checkNeedCoverage } from "../sdd-jev.mjs";
 
@@ -22,12 +22,12 @@ const die = (msg) => { console.error(`${PROG}: ${msg}`); throw new Exit(2); };
 // Options that take a value; those in MULTI also swallow the following non-option words (`--junit a.xml b.xml`).
 const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "mode", "ledger", "state", "max-cycles",
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
-  "result", "channel", "demo", "requirements", "decisions", "command", "extract"]);
-const MULTI = new Set(["junit", "paths"]);
+  "result", "channel", "demo", "requirements", "decisions", "command", "extract", "attach"]);
+const MULTI = new Set(["junit", "paths", "attach"]);
 const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure", "allow-dirty"]);
 
 function parse(argv) {
-  const o = { _: [], junit: [], paths: [] };
+  const o = { _: [], junit: [], paths: [], attach: [] };
   for (let i = 0; i < argv.length; i++) {
     let a = argv[i], v;
     if (a === "-h") a = "--help";
@@ -201,6 +201,14 @@ function cmdRecord(o) {
   }
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
+  if (o.attach.length) {
+    if (type === "waiver") errors.push("a waiver records no observation: --attach is for demo, inspection, measurement and fase-acceptance");
+    else {
+      const att = attachFiles(root, o.attach);
+      errors.push(...att.errors);
+      rec.attachments = att.files;
+    }
+  }
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
   // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver observes nothing).
   if (type !== "waiver") {
@@ -214,6 +222,23 @@ function cmdRecord(o) {
   if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
   else out(`recorded ${type} ${rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
   return 0;
+}
+
+/** `--attach P…`: files under the Stack Profile's evidence_dir, stored as { path, sha256, bytes, kind } so that a file
+ *  replaced or deleted later no longer counts (the ledger compares the hash). */
+function attachFiles(root, list) {
+  const { dir } = evidenceSettings(root);
+  const base = path.resolve(root, dir);
+  const errors = [], files = [];
+  for (const a of list) {
+    const abs = path.resolve(root, a);
+    const inside = path.relative(base, abs);
+    if (!inside || inside.startsWith("..") || path.isAbsolute(inside)) { errors.push(`--attach ${a}: not under ${dir}/ (the Stack Profile's evidence_dir)`); continue; }
+    const d = describeFile(root, abs);
+    if (!d.present) { errors.push(`--attach ${a}: no such file`); continue; }
+    files.push({ path: d.path, sha256: d.sha256, bytes: d.bytes, kind: d.kind });
+  }
+  return { errors, files };
 }
 
 /** null, or a message naming the uncommitted paths under `paths` (default: the code paths) a record would describe. */

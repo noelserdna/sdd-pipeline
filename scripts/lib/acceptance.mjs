@@ -28,7 +28,7 @@
 //     statement + criteria). A different hash means the text changed (a MODIFY): the record is stale, reported and
 //     not applied.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { git, isRepo, stackProfile } from "./git-log.mjs";
 import { VERIFICATION_METHODS } from "../sdd-jev.mjs";
@@ -263,6 +263,63 @@ export function unchangedSince(root, sha, paths = [], cache = new Map()) {
   return ok;
 }
 
+// ------------------------------------------------------------------ evidence files (screenshots, videos)
+export const DEFAULT_EVIDENCE_DIR = "evidencias";
+export const VISUAL_MODES = ["required", "warn", "off"];
+
+/** Stack Profile `visual_evidence` (required | warn | off; default and any other value: required) and `evidence_dir`. */
+export function evidenceSettings(root) {
+  const prof = stackProfile(root);
+  const v = String(prof.visual_evidence || "").trim().toLowerCase();
+  const dir = String(prof.evidence_dir || "").trim().replace(/^\.\//, "").replace(/\/+$/, "") || DEFAULT_EVIDENCE_DIR;
+  return { visual: VISUAL_MODES.includes(v) ? v : "required", dir };
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const VIDEO_EXT = /\.(webm|mp4|mov|m4v|mkv)$/i;
+/** image | video | trace | other, from the file name. Playwright traces (trace.zip) hold cookies and storage. */
+export function attachmentKind(p) {
+  const b = path.basename(String(p));
+  if (IMAGE_EXT.test(b)) return "image";
+  if (VIDEO_EXT.test(b)) return "video";
+  if (/trace/i.test(b) && /\.(zip|trace)$/i.test(b)) return "trace";
+  return "other";
+}
+
+const toPosix = (p) => p.split(path.sep).join("/");
+/** { path (relative to root when inside it), sha256, bytes, kind, present } of one file; cached by absolute path. */
+export function describeFile(root, abs, cache = new Map()) {
+  if (cache.has(abs)) return cache.get(abs);
+  const rel = path.relative(root, abs);
+  const shown = rel && !rel.startsWith("..") && !path.isAbsolute(rel) ? toPosix(rel) : toPosix(abs);
+  let d = { path: shown, sha256: null, bytes: null, kind: attachmentKind(abs), present: false };
+  try {
+    const st = statSync(abs);
+    if (st.isFile()) d = { ...d, sha256: "sha256:" + createHash("sha256").update(readFileSync(abs)).digest("hex"), bytes: st.size, present: true };
+  } catch { /* absent */ }
+  cache.set(abs, d);
+  return d;
+}
+
+/** A JUnit attachment path: absolute, else relative to the report's directory (Playwright) or to the repo root. */
+export function resolveAttachment(root, report, raw, cache) {
+  const p = String(raw).trim();
+  if (path.isAbsolute(p)) return describeFile(root, p, cache);
+  const cands = [...(report ? [path.resolve(path.dirname(report), p)] : []), path.resolve(root, p)];
+  const hit = cands.find((c) => existsSync(c)) || cands[cands.length - 1];
+  return describeFile(root, hit, cache);
+}
+
+/** Attachments stored on a decision record ({path, sha256}): present only while the file exists with the same hash. */
+export function recordAttachments(root, list, cache) {
+  return (Array.isArray(list) ? list : []).map((a) => {
+    const now = describeFile(root, path.resolve(root, String(a.path || "")), cache);
+    const same = now.present && (!a.sha256 || a.sha256 === now.sha256);
+    return { path: now.path, sha256: a.sha256 || now.sha256, bytes: a.bytes ?? now.bytes, kind: a.kind || now.kind, present: same,
+      ...(now.present && !same ? { changed: true } : {}) };
+  });
+}
+
 // ------------------------------------------------------------------ fase scope
 /** REQ ids of the `Requisitos:` / `Requirements:` line in the header (before the first `## `) of plan/fases/FASE-N-*.md. */
 export function faseScope(root, fase) {
@@ -296,6 +353,8 @@ export function evaluate(opts) {
   const codeDirtyPaths = g.codeDirtyPaths || g.dirtyPaths || [];
   const where = codePaths.length ? ` in ${codePaths.join(", ")}` : "";
   const cache = new Map();
+  const files = new Map(); // evidence files hashed once per evaluation
+  const recAtt = (r) => ({ attachments: recordAttachments(root, r.attachments, files), ...(r.dirty ? { dirty: true } : {}) });
   const untracked = g.untrackedPaths || [];
   // A record is fresh when the worktree equals its commit on its paths and no untracked file sits under them.
   const fresh = (sha, paths) => {
@@ -341,7 +400,8 @@ export function evaluate(opts) {
     if (!testsByCriterion.has(k)) testsByCriterion.set(k, []);
     const jf = junitFresh.get(c.source) || { ok: true, why: null };
     testsByCriterion.get(k).push({ name: c.name, classname: c.classname, file: c.file, status: c.status, message: c.message,
-      via, fresh: jf.ok, stale_reason: jf.why, report: c.source ? rel(c.source) : null });
+      via, fresh: jf.ok, stale_reason: jf.why, report: c.source ? rel(c.source) : null,
+      attachments: (c.attachments || []).map((a) => resolveAttachment(root, c.source, a, files)) });
   };
   for (const c of junit?.cases || []) {
     const keys = testKeys(`${c.classname || ""} ${c.name}`);
@@ -389,7 +449,7 @@ export function evaluate(opts) {
         const ok = fresh(inspection.head, inspection.paths);
         if (!ok) staleDecisions.push({ line: inspection.line, type: "inspection", req: req.id, reason: `files changed since ${String(inspection.head || "?").slice(0, 7)}${inspection.paths?.length ? ` in ${inspection.paths.join(", ")}` : where}` });
         inspectionState = { state: !ok ? "stale" : inspection.pass === false ? "fail" : "pass",
-          evidence: [{ kind: "inspection", ref: `${DECISIONS_FILE}:${inspection.line}`, by: inspection.by, role: inspection.role, note: inspection.note, fresh: ok }] };
+          evidence: [{ kind: "inspection", ref: `${DECISIONS_FILE}:${inspection.line}`, by: inspection.by, role: inspection.role, note: inspection.note, fresh: ok, ...recAtt(inspection) }] };
       }
     }
     for (let i = 1; i <= n; i++) {
@@ -402,7 +462,7 @@ export function evaluate(opts) {
         if (live.some((t) => t.status === "fail" || t.status === "error")) c.state = "fail";
         else if (live.some((t) => t.status === "pass")) c.state = "pass";
         else if (tests.some((t) => !t.fresh && t.status !== "skip")) c.state = "stale";
-        c.evidence = tests.map((t) => ({ kind: "test", ref: t.via, name: t.name, status: t.status, fresh: t.fresh }));
+        c.evidence = tests.map((t) => ({ kind: "test", ref: t.via, name: t.name, status: t.status, fresh: t.fresh, attachments: t.attachments }));
       } else if (method === "demo" || method === "measurement") {
         const r = latest(current.filter((x) => x.type === method && (acNumber(x.ac) === null || acNumber(x.ac) === i)));
         if (r) {
@@ -413,7 +473,7 @@ export function evaluate(opts) {
           c.records.push(r.line);
           c.evidence = [{ kind: method, ref: `${DECISIONS_FILE}:${r.line}`, fresh: ok, pass: pass === true,
             ...(method === "measurement" ? { metric: r.metric, observed: Number(r.observed), op: r.op, threshold: Number(r.threshold),
-              by: r.by, ...(r.command ? { command: r.command } : {}) } : { observed: r.observed }) }];
+              by: r.by, ...(r.command ? { command: r.command } : {}) } : { observed: r.observed }), ...recAtt(r) }];
         }
       } else if (method === "inspection") {
         c.state = inspectionState.state;
@@ -450,7 +510,7 @@ export function evaluate(opts) {
     const changed = Object.entries(r.reqHashes || {}).filter(([id, h]) => hashes.get(id) !== h).map(([id]) => id);
     if (changed.length) staleDecisions.push({ line: r.line, type: "fase-acceptance", fase: r.fase, reason: `requirement text changed: ${changed.join(", ")}` });
     return { fase: r.fase, result: r.result, by: r.by, role: r.role, channel: r.channel, head: r.head, at: r.at || null,
-      demo: r.demo || null, line: r.line, stale: changed.length > 0, changed };
+      demo: r.demo || null, line: r.line, stale: changed.length > 0, changed, ...recAtt(r) };
   });
 
   const summary = summarize(requirements.filter((r) => r.in_scope));
