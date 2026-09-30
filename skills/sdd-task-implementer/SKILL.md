@@ -29,13 +29,24 @@ Tests verify the specification, never the code: a failing test means the code is
 | 3 Continue | `--continue` | Resume at the first pending task whose dependencies are done (never an EXTERNAL one) |
 | 4 Verify | `--verify --fase 0` | Read-only check of acceptance criteria (Verification Protocol) |
 | 5 Checkpoint | `--checkpoint --fase 0` | Place the current internal checkpoint tag (main checkout only) |
-| 6 New tasks only | `--fase 1 --new-tasks-only` | Only tasks carrying `Source: CASCADE-{id}`; done tasks skipped; same Phases 3-8. Invoked by `sdd-req-change` Phase 9 with `--cascade=auto` |
+| 6 New tasks only | `--fase 1 --new-tasks-only` | Only the pending tasks that carry one of the `Source:` values below; same Phases 3-8 |
 | 7 Stream | `--fase 1 --stream A` / `--stream base` | One Stream of `## Stream Ownership` (below) |
 | 8 Integrate | `--integrate --fase 1` (`--wave` = alias) | Merge the Stream branches and finish the FASE (below) |
 
 Execution flags (Modes 1, 3, 6, 7, 8): `--parallel` gives every `[P]` batch to subagents even below the threshold; `--sequential` runs every `[P]` task inline.
 
 Session variables read in every mode: `SDD_ROLE` (station role, `references/handoff-protocol.md`), `SDD_STATE_ROOT` (main checkout holding `pipeline-state.json`; default `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"`). In a worktree `git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`.
+
+### Mode 6: New tasks only
+
+Selects the pending tasks (Task state) of the FASE whose `Source:` line carries one of these values, written by `sdd-task-generator --incremental`; every other task, done or not, is left alone. A fix task the filter skipped would never run, and the loop that asked for it would spin.
+
+| `Source:` | Written for | Who invokes Mode 6 |
+|---|---|---|
+| `CASCADE-{CHG-ID}` / `CASCADE-MANUAL` | a requirement change | `sdd-req-change` Phase 9 with `--cascade=auto` |
+| `FEEDBACK-FASE-{N}` | a defect confirmed at the FASE gate | the FASE gate (`sdd-orchestrator`, `sdd-lead`) after the incremental task generation |
+| `ACCEPTANCE-LOOP` | a MISSING or FAILING criterion routed by the ledger | `sdd-acceptance --loop` (in multi-session, the lead on the QA station's handoff) |
+| `ACCEPTANCE-ADVERSARIAL-FASE-{N}` | a confirmed finding of the adversarial round (route `adversarial-finding`) | `sdd-acceptance --loop` after `--adversarial` |
 
 ### Mode 7: Stream (worktree)
 
