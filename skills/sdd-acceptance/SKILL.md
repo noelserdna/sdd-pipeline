@@ -1,6 +1,6 @@
 ---
 name: sdd-acceptance
-description: "Acceptance per requirement: tests to verdicts (VERIFIED, FAILING, MISSING, WAIVED) with evidence, ID-chain integrity (broken or dangling references), loop until every Must is met, customer sign-off, shareable status page. Triggers: 'acceptance', 'did we reach the goal', 'sign-off', 'broken references', 'status page', 'aceptación', 'verificar requisitos', 'página de estado', 'cerrar entrega'."
+description: "Acceptance per requirement: tests, captures to verdicts (VERIFIED, FAILING, MISSING, WAIVED), chain integrity, adversarial round by independent verifiers, loop until every Must is met, customer sign-off, status page. Triggers: 'acceptance', 'did we reach the goal', 'sign-off', 'adversarial', 'status page', 'aceptación', 'ronda adversarial', 'evidencias', 'verificar requisitos', 'cerrar entrega'."
 hooks:
   Stop:
     - type: prompt
@@ -31,6 +31,7 @@ variable, so `SDD="node …"` followed by `$SDD accept` fails there.
 ```
 /sdd-acceptance --check                 # capture tests, ledger + report, chain integrity (default)
 /sdd-acceptance --fase N                # the same, scoped to the Requisitos: line of plan/fases/FASE-N-*.md
+/sdd-acceptance --adversarial [--fase N]  # independent verifiers read the letter against code and tests
 /sdd-acceptance --loop [--fase N] [--max-cycles 3]   # goal loop until every Must is VERIFIED or WAIVED
 /sdd-acceptance --sign-off [--fase N | --release NAME] # gate + human acceptance + tag
 /sdd-acceptance --publish [--fase N]    # PR/issue block + optional status page
@@ -41,7 +42,8 @@ variable, so `SDD="node …"` followed by `$SDD accept` fails there.
 | Flag | Meaning |
 |---|---|
 | `--check` | Default mode. Steps 1-6 below |
-| `--fase N` | Scope every step to FASE N; combines with `--loop`, `--sign-off`, `--publish` |
+| `--fase N` | Scope every step to FASE N; combines with `--adversarial`, `--loop`, `--sign-off`, `--publish` |
+| `--adversarial` | Adversarial round (below): verifiers per FASE, counter-verification, coverage critic; findings recorded as challenges |
 | `--loop` | Goal loop (below) |
 | `--max-cycles N` | With `--loop`: cycle limit, default 3; the CLI caps it at 5 |
 | `--sign-off` | Release gate and recorded human acceptance (below) |
@@ -177,6 +179,36 @@ git add acceptance/
 git diff --cached --quiet || git commit -m "docs(acceptance): acceptance report at {sha7}" --trailer "Refs: <evaluated REQ ids>"
 ```
 
+## `--adversarial`
+
+A bound, passing test proves that an assertion held, not that the requirement's letter holds: it may assert a
+weakened criterion, pass against a mock the real provider does not honour, or cover a piece no user path mounts. This
+round looks for exactly that, after the implementer and before the customer sees the FASE, so the gate is never the
+first time anyone reads the requirement against the code. Read `references/adversarial-protocol.md` before running it;
+it holds the verifier prompt, the categories and the commands.
+
+1. `--check` for the scope first: the round reads HEAD, and the ledger must describe it.
+2. `node "$SDD" accept adversarial plan [--fase N] --json`: the mechanical coverage critic (requirements in no FASE,
+   FASEs without header, criteria without test) and each FASE's requirements, criteria, bound tests and candidate
+   files.
+3. Priority: Jev's `test-adequacy` over every bound criterion (or your own reading with Jev off) orders what the
+   verifiers read first and picks the clean verdicts to re-check. It never marks anything clean.
+4. One verifier per FASE (Agent, fresh context, read-only), at most `test_slots` at a time and tests one file at a
+   time. It may cite only production and test code, re-reads the letter with `sdd req show`, checks that assertions
+   encode the criterion for real, hunts the path that bypasses the implementation, and reads the captures in
+   `evidencias/FASE-{N}/` against the criterion's literal.
+5. Counter-verification of every finding and a sample of clean verdicts, by fresh agents that never see the first
+   reasoning; an LLM coverage critic confirms the evaluated universe is complete.
+6. `node "$SDD" accept challenge add …` records each confirmed or inconclusive finding in `acceptance/challenges.jsonl`,
+   then regenerate the ledger and commit `docs(acceptance)`. Verdicts do not change; `--loop` routes open challenges
+   as `adversarial-finding`.
+
+Verifiers never write code, specs, tests or `acceptance/`; only this skill's main thread runs `challenge add`, and only
+a person dismisses a challenge (`accept record challenge-dismissal`). The Stack Profile's `adversarial_gate` (`off` ·
+`warn`, the default · `enforce`) decides whether an open challenge on a Must makes `sdd gate` exit 4.
+
+Summary line, added to Step 6's block: `Adversarial: {f} findings · {c} confirmed · {r} refuted · {o} open challenges · {g} coverage gaps · {a} agents`.
+
 ## `--loop`
 
 The loop drives the project toward the goal "every Must VERIFIED or WAIVED", following the pattern of the
@@ -223,6 +255,7 @@ git diff --cached --quiet || git commit -m "docs(feedback): acceptance findings 
 | `spec-gap (human, req-change)` | A criterion without any scenario (when `spec/tests` exists), a requirement without `Verification:`, or a spec that looks wrong | `SPEC-DEVIATION` entry (Spec, Deviation, Impact, Recommendation, `Status: PENDING-REVIEW`) and ask the human: keep the spec (then the missing scenario goes to `sdd-test-planner`/the spec owner) or amend it through `/sdd-req-change`. The loop does not edit specs |
 | `remeasure` | A measurement recorded by `accept measure` is stale (its code paths changed) | `node "$SDD" accept --remeasure [--fase N]` re-runs its command and appends the new value; nobody is asked. A value that now fails its threshold turns the requirement FAILING and routes as `fix-code` |
 | `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory) |
+| `adversarial-finding` | An open, confirmed challenge of the adversarial round (the target carries its `category`) | Feedback entry citing the `CH-NNN`, quote and evidence; one fix task per finding with `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}` (`/sdd-task-generator --fase N --incremental`, then the implementer with `--new-tasks-only`); `SPEC-QUESTION` goes to a person as a spec gap, and `WRONG-CAPTURE` fixes the journey test's capture (`references/adversarial-protocol.md` §7). Re-run `--adversarial --fase N` after the fix |
 | `rerun-tests` | Evidence exists but is stale | Nothing to do beyond Step 1 of the next cycle |
 
 Cycles run sequentially in the main thread: each one needs the commits of the previous one. The implementer's own
