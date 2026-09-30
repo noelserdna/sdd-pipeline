@@ -9,12 +9,26 @@ import { join, dirname } from "node:path";
 
 export type Verdict = "VERIFIED" | "FAILING" | "MISSING" | "WAIVED" | "DEPRECATED";
 
+/** A screenshot, video or trace bound to evidence (JUnit [[ATTACHMENT|…]], `accept record --attach`, a file of the
+ *  evidence dir named after the criterion). `present` is false when the file is gone or its hash changed. */
+export interface AcceptanceAttachment {
+  path: string;
+  sha256: string | null;
+  bytes: number | null;
+  kind: "image" | "video" | "trace" | "other";
+  present: boolean;
+  changed?: boolean;
+}
+
 export interface AcceptanceCriterion {
   n: number;
   text: string | null;
   scenarios: string[];
-  state: "pass" | "fail" | "missing" | "stale";
-  evidence: Array<Record<string, unknown>>;
+  /** `unshown`: a REQ-F criterion that passes without a screenshot under `visual_evidence: required`. */
+  state: "pass" | "fail" | "missing" | "stale" | "unshown";
+  /** REQ-F only, when the visual rule is not off: whether a present screenshot shows the criterion. */
+  visual?: "shown" | "missing";
+  evidence: Array<Record<string, unknown> & { attachments?: AcceptanceAttachment[] }>;
 }
 
 export interface AcceptanceRequirement {
@@ -25,6 +39,8 @@ export interface AcceptanceRequirement {
   needs: string[];
   verification: string | null;
   verdict: Verdict;
+  /** Why a requirement is not VERIFIED when the tests alone would say so, e.g. "no visual evidence". */
+  reason?: string | null;
   criteria: AcceptanceCriterion[];
   criteria_total: number;
   criteria_passing: number;
@@ -45,18 +61,27 @@ export interface AcceptanceSummary {
   waived_musts: string[];
   stale_evidence: number;
   stale_decisions?: number;
+  /** REQ-F criteria passing without a screenshot (unshown under required, reported under warn). */
+  unshown?: number;
+  /** With a FASE scope: WF-NNN (or FASE-N) ids without a video. */
+  missing_videos?: string[];
 }
 
 export interface AcceptanceLedger {
   $schema: string;
   evaluated_sha: string | null;
   dirty: boolean | null;
+  /** Untracked files under the code paths: evidence read with them present is stale. */
+  untracked_paths?: string[];
   generatedAt: string;
   scope: { fase: number; requirements: string[] } | null;
   requirements: AcceptanceRequirement[];
   summary: AcceptanceSummary;
   summary_all?: AcceptanceSummary;
   stale_decisions?: Array<Record<string, unknown>>;
+  visual_evidence?: "required" | "warn" | "off";
+  evidence_dir?: string;
+  videos?: { required: string[]; found: string[]; missing: string[] } | null;
 }
 
 export const ACCEPTANCE_SCHEMA = "sdd-acceptance-v1";

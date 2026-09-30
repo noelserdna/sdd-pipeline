@@ -9,25 +9,33 @@
 //   acceptance/decisions.jsonl     human records: waiver, demo, measurement, inspection, fase-acceptance
 //
 // Verdict per requirement (first match): DEPRECATED · WAIVED · FAILING · MISSING · VERIFIED.
+// Visual evidence (Stack Profile `visual_evidence: required|warn|off`, default required; files under `evidence_dir`,
+// default evidencias/): a REQ-F criterion is shown when a fresh passing test, a fresh record or a fresh file of the
+// evidence dir named after its scenario id (AC-NNN-NN) or `REQ-F-NNN-ACn` brings an image that is present. Under
+// `required` a passing criterion without one is `unshown` and the requirement MISSING with reason "no visual evidence";
+// `warn` only reports it. With a FASE scope, each WF-NNN cited by the FASE file (else FASE-N) needs a video whose name
+// carries it; a missing one makes the goal not met (`summary.missing_videos`). Attachments: [{path, sha256, bytes,
+// kind: image|video|trace|other, present}] from JUnit `[[ATTACHMENT|…]]`, record `--attach` and name-bound files.
 // Freshness (evidence older than the code does not count). "Code" is the Stack Profile's `code_paths` + `test_paths`
 // (defaults `src`, `tests`; only those that exist): a docs, feedback or spec commit does not make evidence stale. When
 // none of those paths exists, code means every file outside acceptance/** and .sdd/ (the conservative fallback).
 // Build and test configuration outside those paths (package.json, vitest.config.*) is not watched: list it in
 // `code_paths` when a change there should invalidate evidence.
 //   - JUnit: with `junitSha`, fresh when the worktree equals that commit on the code paths; otherwise fresh when the
-//     XML file's mtime is >= the time of the last commit that changed the code paths. Either way tracked files under
-//     the code paths must be clean (untracked files are ignored). The mtime rule is a heuristic: a report written after
+//     XML file's mtime is >= the time of the last commit that changed the code paths. Either way the code paths must be
+//     clean: no tracked change and no untracked file under them (`untracked_paths` in the ledger; a new file the tests
+//     depend on does not exist at evaluated_sha). The mtime rule is a heuristic: a report written after
 //     the last code commit on a clean tree was produced from that tree, unless someone ran the tests on another
 //     checkout and copied the XML; CI passes --junit-sha to assert it.
 //   - demo / measurement / inspection records: fresh when `git diff --quiet <record.head> -- <paths>` holds (worktree
-//     vs the record's commit); a record without paths uses the code paths.
+//     vs the record's commit) and no untracked file sits under those paths; a record without paths uses the code paths.
 //   - a measurement record with a `command` (from `sdd accept measure`) is re-run by `sdd accept --remeasure` when it
 //     is stale; the new record becomes the latest.
 //   - waivers, inspections, demos, measurements and fase acceptances carry `reqHash` (sha256 of the requirement's
 //     statement + criteria). A different hash means the text changed (a MODIFY): the record is stale, reported and
 //     not applied.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { git, isRepo, stackProfile } from "./git-log.mjs";
 import { VERIFICATION_METHODS } from "../sdd-jev.mjs";
@@ -45,6 +53,7 @@ export const ROUTES = {
   human: "needs-human",
   rerun: "rerun-tests",
   remeasure: "remeasure",
+  capture: "capture-evidence", // run the journey again with capture; no code task
 };
 /** Symbol-keyed flag on each requirement of a ledger (JSON output ignores it): false when the project has no
  *  spec/tests, i.e. the route skipped the specifications and the requirement criteria are the contract. */
@@ -203,8 +212,22 @@ export function evidencePaths(root) {
 
 const under = (p, dirs) => dirs.some((d) => p === d || p.startsWith(d + "/"));
 
+/** Paths of `git status --porcelain` output minus acceptance/**, .sdd/ and `skip` (files or directories). */
+function statusPaths(stdout, skip) {
+  const all = ["acceptance/", ".sdd/", ...skip];
+  return stdout.split("\n").filter(Boolean)
+    .map((l) => ({ untracked: l.startsWith("??"), p: l.slice(3).replace(/^"|"$/g, "").split(" -> ").pop() }))
+    .filter(({ p }) => !all.some((s) => p === s || p.startsWith(s.endsWith("/") ? s : s + "/") || p === s.replace(/\/$/, "")));
+}
+
+/**
+ * Git state of the worktree. Tracked changes are read over the whole tree; untracked files only under the code paths
+ * (`--untracked-files=all` limited to them): a new file the tests depend on makes the evidence describe a tree that
+ * evaluated_sha does not contain. Without code paths (the whole-tree fallback) untracked files are not read.
+ * dirtyPaths and codeDirtyPaths include those untracked paths, also listed apart in untrackedPaths.
+ */
 export function gitContext(root, { exclude = [] } = {}) {
-  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [], codePaths: null, codeTime: null, codeDirty: null, codeDirtyPaths: [] };
+  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [], codePaths: null, codeTime: null, codeDirty: null, codeDirtyPaths: [], untrackedPaths: [] };
   const h = git(root, ["rev-parse", "-q", "--verify", "HEAD"]);
   const head = h.status === 0 ? h.stdout.trim() : null;
   const codePaths = evidencePaths(root);
@@ -217,13 +240,24 @@ export function gitContext(root, { exclude = [] } = {}) {
     const c = codePaths ? git(root, ["log", "-1", "--format=%ct", "HEAD", "--", ...codePaths]).stdout.trim() : t;
     codeTime = c ? Number(c) : headOnly();
   }
-  const st = git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout;
-  const skip = ["acceptance/", ".sdd/", ...exclude];
-  const dirtyPaths = st.split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "").split(" -> ").pop())
-    .filter((p) => !skip.some((s) => p === s || p.startsWith(s.endsWith("/") ? s : s + "/") || p === s.replace(/\/$/, "")));
+  const tracked = statusPaths(git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout, exclude).map((x) => x.p);
+  const untrackedPaths = codePaths
+    ? statusPaths(git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...codePaths]).stdout, exclude)
+      .filter((x) => x.untracked).map((x) => x.p)
+    : [];
+  const dirtyPaths = [...tracked, ...untrackedPaths];
   const codeDirtyPaths = codePaths ? dirtyPaths.filter((p) => under(p, codePaths)) : dirtyPaths;
   return { repo: true, head, headTime, dirty: dirtyPaths.length > 0, dirtyPaths,
-    codePaths, codeTime, codeDirty: codeDirtyPaths.length > 0, codeDirtyPaths };
+    codePaths, codeTime, codeDirty: codeDirtyPaths.length > 0, codeDirtyPaths, untrackedPaths };
+}
+
+/** Uncommitted paths (tracked changes and untracked files) under `paths`; with no paths, tracked changes over the whole
+ *  tree. acceptance/** and .sdd/ never count. What `accept record` / `accept measure` check before anchoring to HEAD. */
+export function dirtyUnder(root, paths) {
+  if (!isRepo(root)) return [];
+  const list = (paths || []).map((p) => String(p).replace(/^\.\//, "").replace(/\/+$/, "")).filter(Boolean);
+  const args = list.length ? ["status", "--porcelain", "--untracked-files=all", "--", ...list] : ["status", "--porcelain", "--untracked-files=no"];
+  return statusPaths(git(root, args).stdout, []).map((x) => x.p);
 }
 
 /** True when the worktree equals `sha` on `paths` (all paths outside acceptance/** when empty). */
@@ -235,6 +269,98 @@ export function unchangedSince(root, sha, paths = [], cache = new Map()) {
   else ok = git(root, ["diff", "--quiet", sha, "--", ...(paths.length ? paths : WHOLE_TREE)]).status === 0;
   cache.set(key, ok);
   return ok;
+}
+
+// ------------------------------------------------------------------ evidence files (screenshots, videos)
+export const DEFAULT_EVIDENCE_DIR = "evidencias";
+export const VISUAL_MODES = ["required", "warn", "off"];
+
+/** Stack Profile `visual_evidence` (required | warn | off; default and any other value: required) and `evidence_dir`. */
+export function evidenceSettings(root) {
+  const prof = stackProfile(root);
+  const v = String(prof.visual_evidence || "").trim().toLowerCase();
+  const dir = String(prof.evidence_dir || "").trim().replace(/^\.\//, "").replace(/\/+$/, "") || DEFAULT_EVIDENCE_DIR;
+  return { visual: VISUAL_MODES.includes(v) ? v : "required", dir };
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const VIDEO_EXT = /\.(webm|mp4|mov|m4v|mkv)$/i;
+/** image | video | trace | other, from the file name. Playwright traces (trace.zip) hold cookies and storage. */
+export function attachmentKind(p) {
+  const b = path.basename(String(p));
+  if (IMAGE_EXT.test(b)) return "image";
+  if (VIDEO_EXT.test(b)) return "video";
+  if (/trace/i.test(b) && /\.(zip|trace)$/i.test(b)) return "trace";
+  return "other";
+}
+
+const toPosix = (p) => p.split(path.sep).join("/");
+/** { path (relative to root when inside it), sha256, bytes, kind, present } of one file; cached by absolute path. */
+export function describeFile(root, abs, cache = new Map()) {
+  if (cache.has(abs)) return cache.get(abs);
+  const rel = path.relative(root, abs);
+  const shown = rel && !rel.startsWith("..") && !path.isAbsolute(rel) ? toPosix(rel) : toPosix(abs);
+  let d = { path: shown, sha256: null, bytes: null, kind: attachmentKind(abs), present: false };
+  try {
+    const st = statSync(abs);
+    if (st.isFile()) d = { ...d, sha256: "sha256:" + createHash("sha256").update(readFileSync(abs)).digest("hex"), bytes: st.size, present: true };
+  } catch { /* absent */ }
+  cache.set(abs, d);
+  return d;
+}
+
+/** A JUnit attachment path: absolute, else relative to the report's directory (Playwright) or to the repo root. */
+export function resolveAttachment(root, report, raw, cache) {
+  const p = String(raw).trim();
+  if (path.isAbsolute(p)) return describeFile(root, p, cache);
+  const cands = [...(report ? [path.resolve(path.dirname(report), p)] : []), path.resolve(root, p)];
+  const hit = cands.find((c) => existsSync(c)) || cands[cands.length - 1];
+  return describeFile(root, hit, cache);
+}
+
+/** Attachments stored on a decision record ({path, sha256}): present only while the file exists with the same hash. */
+export function recordAttachments(root, list, cache) {
+  return (Array.isArray(list) ? list : []).map((a) => {
+    const now = describeFile(root, path.resolve(root, String(a.path || "")), cache);
+    const same = now.present && (!a.sha256 || a.sha256 === now.sha256);
+    return { path: now.path, sha256: a.sha256 || now.sha256, bytes: a.bytes ?? now.bytes, kind: a.kind || now.kind, present: same,
+      ...(now.present && !same ? { changed: true } : {}) };
+  });
+}
+
+/** True when a file name carries `id` (AC-001-02, REQ-F-001-AC2, WF-003, FASE-1) as a whole token: `-` or `_` between
+ *  parts, not glued to a letter or digit before, no digit after (AC-001-02 is not in AC-001-021, FASE-1 not in FASE-10). */
+export function nameHasId(name, id) {
+  const body = String(id).split(/[-_\s]+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[-_ ]");
+  return new RegExp(`(?:^|[^A-Za-z0-9])${body}(?!\\d)`, "i").test(path.basename(String(name)));
+}
+
+/** Image and video files anywhere under the evidence dir: [{ abs, rel, kind, mtimeMs }]. Name binding reads them. */
+export function scanEvidence(root, dir) {
+  const base = path.resolve(root, dir);
+  const out = [];
+  const walk = (d) => {
+    let entries;
+    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        const kind = attachmentKind(e.name);
+        if (kind === "image" || kind === "video") out.push({ abs: p, rel: toPosix(path.relative(root, p)), kind, mtimeMs: statSync(p).mtimeMs });
+      }
+    }
+  };
+  walk(base);
+  return out.sort((a, b) => a.rel.localeCompare(b.rel));
+}
+
+/** Video ids a FASE gate asks for: each WF-NNN cited in plan/fases/FASE-N-*.md, else FASE-N (route without specs). */
+export function faseVideoIds(root, fase) {
+  const { file } = faseScope(root, fase);
+  const text = file ? readFileSync(path.join(root, file), "utf8") : "";
+  const wf = [...new Set((text.match(/\bWF-\d{3,}\b/g) || []).map((x) => x.toUpperCase()))].sort();
+  return wf.length ? wf : [`FASE-${fase}`];
 }
 
 // ------------------------------------------------------------------ fase scope
@@ -270,14 +396,42 @@ export function evaluate(opts) {
   const codeDirtyPaths = g.codeDirtyPaths || g.dirtyPaths || [];
   const where = codePaths.length ? ` in ${codePaths.join(", ")}` : "";
   const cache = new Map();
-  const fresh = (sha, paths) => (!g.repo ? true : sha ? unchangedSince(root, sha, paths?.length ? paths : codePaths, cache) : false);
+  const files = new Map(); // evidence files hashed once per evaluation
+  const recAtt = (r) => ({ attachments: recordAttachments(root, r.attachments, files), ...(r.dirty ? { dirty: true } : {}) });
+  const settings = opts.visual ? { visual: opts.visual, dir: opts.evidenceDir || DEFAULT_EVIDENCE_DIR } : evidenceSettings(root);
+  const visual = settings.visual;
+  const evFiles = visual === "off" ? [] : scanEvidence(root, settings.dir);
+  // A file of the evidence dir bound by its name counts like a JUnit report read without --junit-sha: captured on a
+  // clean tree, after the last commit that changed the code paths.
+  const fileFresh = (f) => {
+    if (!g.repo || !g.head) return { ok: true, why: null };
+    if (codeDirty) return { ok: false, why: `uncommitted changes${where}` };
+    if (f.mtimeMs < codeTime * 1000) return { ok: false, why: `captured before the last code commit${where}` };
+    return { ok: true, why: null };
+  };
+  /** Images named after one of the criterion's scenario ids (AC-NNN-NN) or after `REQ-F-NNN-ACn`: minitest and other
+   *  runners that write no [[ATTACHMENT|…]] still bind their captures to the criterion. */
+  const captures = (reqId, n, scen) => evFiles
+    .filter((f) => f.kind === "image" && (scen.some((s) => nameHasId(f.rel, s)) || nameHasId(f.rel, `${reqId}-AC${n}`)))
+    .map((f) => { const fr = fileFresh(f); return { kind: "capture", ref: f.rel, fresh: fr.ok, ...(fr.why ? { stale_reason: fr.why } : {}), attachments: [describeFile(root, f.abs, files)] }; });
+  /** Evidence that shows a criterion: a fresh passing test, a fresh capture or a fresh record, with an image present. */
+  const shows = (e) => e.fresh !== false && (e.kind !== "test" || e.status === "pass") && (e.attachments || []).some((a) => a.kind === "image" && a.present);
+  const untracked = g.untrackedPaths || [];
+  // A record is fresh when the worktree equals its commit on its paths and no untracked file sits under them.
+  const fresh = (sha, paths) => {
+    if (!g.repo) return true;
+    if (!sha) return false;
+    const on = (paths?.length ? paths : codePaths).map((p) => String(p).replace(/^\.\//, "").replace(/\/+$/, ""));
+    if (untracked.some((p) => !on.length || under(p, on))) return false;
+    return unchangedSince(root, sha, on, cache);
+  };
 
   // JUnit freshness per file.
   const junitFresh = new Map();
   for (const f of junit?.files || []) {
     let ok = true, why = null;
     if (g.repo && g.head) {
-      if (codeDirty) { ok = false; why = `tracked files changed since HEAD: ${codeDirtyPaths.slice(0, 3).join(", ")}`; }
+      if (codeDirty) { ok = false; why = `uncommitted changes${where}: ${codeDirtyPaths.slice(0, 3).join(", ")}${untracked.length ? ` (untracked: ${untracked.slice(0, 3).join(", ")})` : ""}`; }
       else if (junitSha) { ok = fresh(junitSha); if (!ok) why = `code changed since ${junitSha.slice(0, 7)}${where}`; }
       else if (f.mtimeMs < codeTime * 1000) { ok = false; why = `report older than the last code commit${where}`; }
     }
@@ -307,7 +461,8 @@ export function evaluate(opts) {
     if (!testsByCriterion.has(k)) testsByCriterion.set(k, []);
     const jf = junitFresh.get(c.source) || { ok: true, why: null };
     testsByCriterion.get(k).push({ name: c.name, classname: c.classname, file: c.file, status: c.status, message: c.message,
-      via, fresh: jf.ok, stale_reason: jf.why, report: c.source ? rel(c.source) : null });
+      via, fresh: jf.ok, stale_reason: jf.why, report: c.source ? rel(c.source) : null,
+      attachments: (c.attachments || []).map((a) => resolveAttachment(root, c.source, a, files)) });
   };
   for (const c of junit?.cases || []) {
     const keys = testKeys(`${c.classname || ""} ${c.name}`);
@@ -335,7 +490,7 @@ export function evaluate(opts) {
       in_scope: scope ? scope.has(req.id) : true, [SPEC_TESTS]: specTests };
     const mine = recs.filter((r) => r.req === req.id);
     if (req.deprecated) {
-      requirements.push({ ...base, verdict: "DEPRECATED", criteria: [], criteria_total: 0, criteria_passing: 0, evidence: [], waiver: null, stale_evidence: false });
+      requirements.push({ ...base, verdict: "DEPRECATED", reason: null, criteria: [], criteria_total: 0, criteria_passing: 0, evidence: [], waiver: null, stale_evidence: false });
       continue;
     }
     // Hash-bound records: a different hash means the requirement text changed after the decision.
@@ -355,7 +510,7 @@ export function evaluate(opts) {
         const ok = fresh(inspection.head, inspection.paths);
         if (!ok) staleDecisions.push({ line: inspection.line, type: "inspection", req: req.id, reason: `files changed since ${String(inspection.head || "?").slice(0, 7)}${inspection.paths?.length ? ` in ${inspection.paths.join(", ")}` : where}` });
         inspectionState = { state: !ok ? "stale" : inspection.pass === false ? "fail" : "pass",
-          evidence: [{ kind: "inspection", ref: `${DECISIONS_FILE}:${inspection.line}`, by: inspection.by, role: inspection.role, note: inspection.note, fresh: ok }] };
+          evidence: [{ kind: "inspection", ref: `${DECISIONS_FILE}:${inspection.line}`, by: inspection.by, role: inspection.role, note: inspection.note, fresh: ok, ...recAtt(inspection) }] };
       }
     }
     for (let i = 1; i <= n; i++) {
@@ -368,7 +523,7 @@ export function evaluate(opts) {
         if (live.some((t) => t.status === "fail" || t.status === "error")) c.state = "fail";
         else if (live.some((t) => t.status === "pass")) c.state = "pass";
         else if (tests.some((t) => !t.fresh && t.status !== "skip")) c.state = "stale";
-        c.evidence = tests.map((t) => ({ kind: "test", ref: t.via, name: t.name, status: t.status, fresh: t.fresh }));
+        c.evidence = tests.map((t) => ({ kind: "test", ref: t.via, name: t.name, status: t.status, fresh: t.fresh, attachments: t.attachments }));
       } else if (method === "demo" || method === "measurement") {
         const r = latest(current.filter((x) => x.type === method && (acNumber(x.ac) === null || acNumber(x.ac) === i)));
         if (r) {
@@ -379,14 +534,23 @@ export function evaluate(opts) {
           c.records.push(r.line);
           c.evidence = [{ kind: method, ref: `${DECISIONS_FILE}:${r.line}`, fresh: ok, pass: pass === true,
             ...(method === "measurement" ? { metric: r.metric, observed: Number(r.observed), op: r.op, threshold: Number(r.threshold),
-              by: r.by, ...(r.command ? { command: r.command } : {}) } : { observed: r.observed }) }];
+              by: r.by, ...(r.command ? { command: r.command } : {}) } : { observed: r.observed }), ...recAtt(r) }];
         }
       } else if (method === "inspection") {
         c.state = inspectionState.state;
         c.evidence = inspectionState.evidence;
         if (inspection) c.records.push(inspection.line);
       }
+      if (req.type === "F" && visual !== "off") c.evidence.push(...captures(req.id, i, c.scenarios));
       criteria.push(c);
+    }
+    // Visual evidence (REQ-F): a criterion is shown to the customer only with a screenshot. `required` holds a passing
+    // criterion without one as `unshown` (the requirement is not VERIFIED); `warn` reports it and keeps the state.
+    if (req.type === "F" && visual !== "off") {
+      for (const c of criteria) {
+        c.visual = c.evidence.some(shows) ? "shown" : "missing";
+        if (visual === "required" && c.state === "pass" && c.visual === "missing") c.state = "unshown";
+      }
     }
     // Waiver: the latest current one; a Must waiver without reason, role and follow-up issue is not valid.
     const w = latest(current.filter((r) => r.type === "waiver"));
@@ -404,7 +568,8 @@ export function evaluate(opts) {
     else if (!method || passing < criteria.length) verdict = "MISSING";
     else verdict = "VERIFIED";
     const evidence = criteria.flatMap((c) => c.evidence.map((e) => ({ ac: c.n, ...e })));
-    requirements.push({ ...base, verdict, criteria, criteria_total: criteria.length, criteria_passing: passing, evidence, waiver,
+    const unshownOnly = verdict === "MISSING" && criteria.some((c) => c.state === "unshown") && criteria.every((c) => c.state === "pass" || c.state === "unshown");
+    requirements.push({ ...base, verdict, reason: unshownOnly ? "no visual evidence" : null, criteria, criteria_total: criteria.length, criteria_passing: passing, evidence, waiver,
       stale_evidence: verdict === "MISSING" && criteria.some((c) => c.state === "stale") });
   }
 
@@ -416,19 +581,40 @@ export function evaluate(opts) {
     const changed = Object.entries(r.reqHashes || {}).filter(([id, h]) => hashes.get(id) !== h).map(([id]) => id);
     if (changed.length) staleDecisions.push({ line: r.line, type: "fase-acceptance", fase: r.fase, reason: `requirement text changed: ${changed.join(", ")}` });
     return { fase: r.fase, result: r.result, by: r.by, role: r.role, channel: r.channel, head: r.head, at: r.at || null,
-      demo: r.demo || null, line: r.line, stale: changed.length > 0, changed };
+      demo: r.demo || null, line: r.line, stale: changed.length > 0, changed, ...recAtt(r) };
   });
 
+  // Video per FASE: each WF-NNN cited by the FASE file (or FASE-N) needs a present video whose name carries it, from a
+  // fresh JUnit attachment, a fresh file of the evidence dir or a decision record.
+  let videos = null;
+  if (fase !== null && fase !== undefined && visual !== "off") {
+    const wanted = faseVideoIds(root, fase);
+    const found = [];
+    for (const c of junit?.cases || []) {
+      if (!(junitFresh.get(c.source)?.ok ?? true) || c.status === "skip") continue;
+      for (const a of c.attachments || []) { const d = resolveAttachment(root, c.source, a, files); if (d.kind === "video" && d.present) found.push(d.path); }
+    }
+    for (const f of evFiles) if (f.kind === "video" && fileFresh(f).ok) found.push(f.rel);
+    for (const r of recs) for (const a of recordAttachments(root, r.attachments, files)) if (a.kind === "video" && a.present) found.push(a.path);
+    const all = [...new Set(found)].sort();
+    videos = { required: wanted, found: all.filter((p) => wanted.some((id) => nameHasId(p, id))), missing: wanted.filter((id) => !all.some((p) => nameHasId(p, id))) };
+  }
+
   const summary = summarize(requirements.filter((r) => r.in_scope));
+  if (videos) {
+    summary.missing_videos = videos.missing;
+    if (visual === "required" && videos.missing.length) summary.goal = false;
+  }
   summary.stale_decisions = staleDecisions.length;
   summary.junit_files = (junit?.files || []).length;
   summary.junit_stale_files = [...junitFresh.values()].filter((x) => !x.ok).length;
   const ledger = {
-    $schema: SCHEMA, evaluated_sha: g.head, dirty: g.dirty, generatedAt: (opts.now || new Date()).toISOString(),
+    $schema: SCHEMA, evaluated_sha: g.head, dirty: g.dirty, untracked_paths: untracked, generatedAt: (opts.now || new Date()).toISOString(),
     scope: scope ? { fase, requirements: [...scope] } : null,
     junit: (junit?.files || []).map((f) => ({ path: rel(f.path), cases: f.cases.length, fresh: junitFresh.get(f.path).ok, stale_reason: junitFresh.get(f.path).why })),
     junit_sha: junitSha,
     spec_tests: specTests,
+    visual_evidence: visual, evidence_dir: settings.dir, videos,
     requirements, summary,
     fase_acceptances: faseAcceptances,
     stale_decisions: staleDecisions,
@@ -459,6 +645,9 @@ export function summarize(list) {
     goal: musts.every((r) => r.verdict === "VERIFIED" || r.verdict === "WAIVED"),
     waived_musts: waived.map((r) => r.id),
     stale_evidence: list.filter((r) => r.stale_evidence).length,
+    // REQ-F criteria whose tests pass without a screenshot (state unshown under `required`, still pass under `warn`).
+    unshown: list.filter((r) => r.verdict !== "DEPRECATED" && r.verdict !== "WAIVED")
+      .flatMap((r) => r.criteria || []).filter((c) => c.visual === "missing" && (c.state === "pass" || c.state === "unshown")).length,
   };
 }
 
@@ -477,6 +666,7 @@ export function routeHint(r, ctx) {
   if (r.verdict === "FAILING") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
   const open = r.criteria.filter((c) => c.state !== "pass");
+  if (open.length && open.every((c) => c.state === "unshown")) return ROUTES.capture;
   if (r.verification === "measurement" && open.length && open.every(remeasurable)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
   if (open.some((c) => uncovered(c))) return specGapFor(r, ctx);
@@ -486,6 +676,7 @@ export function routeHint(r, ctx) {
 export function criterionHint(r, c, ctx) {
   if (c.state === "pass") return null;
   if (c.state === "fail") return ROUTES.fix;
+  if (c.state === "unshown") return ROUTES.capture;
   if (!r.verification) return ROUTES.specGap;
   if (r.verification === "measurement" && remeasurable(c)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
@@ -525,14 +716,38 @@ function evidenceCell(r) {
     const t = testSummary(c.n, c.evidence);
     if (t) parts.push(t);
     for (const e of c.evidence) {
-      if (e.kind === "test") continue;
+      if (e.kind === "test" || e.kind === "capture") continue;
       const mark = !e.fresh ? "stale" : (e.kind === "inspection" ? (c.state === "pass" ? "pass" : c.state) : (e.pass ? "pass" : "fail"));
       if (e.kind === "measurement") parts.push(`AC${c.n} ${e.metric} ${e.observed} ${e.op} ${e.threshold} — ${e.ref} (${mark})`);
       else if (e.kind === "inspection") { if (c.n === 1) parts.push(`inspection by ${e.by} (${e.role}) — ${e.ref} (${mark})`); }
       else parts.push(`AC${c.n} demo — ${e.ref} (${mark})`);
     }
+    if (c.visual) { const img = screenshotOf(c); parts.push(img ? `AC${c.n} screenshot ${img}` : `AC${c.n} no screenshot`); }
   }
   return parts.length ? parts.join("; ") : "—";
+}
+/** First screenshot that shows the criterion (same rule as the ledger), or null. */
+function screenshotOf(c) {
+  for (const e of c.evidence) {
+    if (e.fresh === false || (e.kind === "test" && e.status !== "pass")) continue;
+    const a = (e.attachments || []).find((x) => x.kind === "image" && x.present);
+    if (a) return a.path;
+  }
+  return null;
+}
+const verdictCell = (r) => `${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}`;
+/** One line on visual evidence for the PR block and the report, or null when the rule is off or nothing is missing. */
+function visualLine(ledger) {
+  const mode = ledger.visual_evidence, s = ledger.summary;
+  if (!mode || mode === "off") return null;
+  const missing = s.missing_videos || [];
+  if (!s.unshown && !missing.length) return null;
+  const crit = ledger.requirements.filter((r) => r.in_scope && r.verdict !== "WAIVED" && r.verdict !== "DEPRECATED")
+    .flatMap((r) => (r.criteria || []).filter((c) => c.visual === "missing" && (c.state === "pass" || c.state === "unshown")).map((c) => `${r.id} AC${c.n}`));
+  const parts = [];
+  if (crit.length) parts.push(`${crit.length} criteri${crit.length === 1 ? "on" : "a"} without a screenshot (${crit.slice(0, 8).join(", ")}${crit.length > 8 ? ", …" : ""})`);
+  if (missing.length) parts.push(`missing video${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`);
+  return `Visual evidence (${mode}): ${parts.join("; ")} — route capture-evidence.`;
 }
 
 export function renderReport(ledger) {
@@ -554,7 +769,15 @@ export function renderReport(ledger) {
   }
   o.push("## Requirements", "", "| ID | Title | Priority | Needs | Verification | Verdict | Criteria | Evidence |", "|---|---|---|---|---|---|---|---|");
   for (const r of ledger.requirements.filter((x) => x.in_scope && x.verdict !== "DEPRECATED")) {
-    o.push(`| ${r.id} | ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.needs.join(", ") || "—")} | ${cell(r.verification || r.verification_raw || "—")} | ${r.verdict}${r.stale_evidence ? " (stale evidence)" : ""} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
+    o.push(`| ${r.id} | ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.needs.join(", ") || "—")} | ${cell(r.verification || r.verification_raw || "—")} | ${verdictCell(r)} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
+  }
+  if (ledger.visual_evidence && ledger.visual_evidence !== "off") {
+    o.push("", "## Visual evidence", "",
+      `Rule \`visual_evidence: ${ledger.visual_evidence}\` · screenshots and videos under \`${ledger.evidence_dir || DEFAULT_EVIDENCE_DIR}/\` (not versioned; \`sdd accept pack --fase N\` bundles them). ${visualLine(ledger) || "Every functional criterion in scope is shown."}`, "");
+    const rows = ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED" && r.verdict !== "WAIVED")
+      .flatMap((r) => (r.criteria || []).filter((c) => c.visual).map((c) => `| ${r.id} | AC${c.n} | ${c.state} | ${cell(screenshotOf(c) || "none")} |`));
+    if (rows.length) o.push("| Requirement | Criterion | State | Screenshot |", "|---|---|---|---|", ...rows, "");
+    if (ledger.videos) o.push(`Videos for FASE ${ledger.scope?.fase ?? "?"}: ${ledger.videos.required.map((id) => `${id} ${ledger.videos.missing.includes(id) ? "missing" : "present"}`).join(" · ")}.`);
   }
   o.push("", "## Deprecated", "");
   const dep = ledger.requirements.filter((r) => r.in_scope && r.verdict === "DEPRECATED");
@@ -580,8 +803,9 @@ export function renderPrBlock(ledger, code) {
   const sha = ledger.evaluated_sha ? ledger.evaluated_sha.slice(0, 7) : "no-git";
   const o = [`### Acceptance${ledger.scope ? ` — FASE ${ledger.scope.fase}` : ""} (evaluated at \`${sha}\`, gate exit ${code})`, "",
     `Goal: **${s.goal ? (s.must_waived ? "met with waivers" : "met") : "not met"}** — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}.`, "",
+    ...(visualLine(ledger) ? [visualLine(ledger), ""] : []),
     "| Requirement | Priority | Verification | Verdict | Criteria | Evidence |", "|---|---|---|---|---|---|"];
-  for (const r of rows) o.push(`| ${r.id} ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.verification || "—")} | ${r.verdict} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
+  for (const r of rows) o.push(`| ${r.id} ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.verification || "—")} | ${verdictCell(r).replace(" (stale evidence)", "")} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
   o.push("", `Refs: ${rows.map((r) => r.id).join(", ") || "—"}`);
   return o.join("\n") + "\n";
 }

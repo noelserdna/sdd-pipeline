@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification and branches. Node >= 18, no deps.
+// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification, branches, requirements and the
+// acceptance ledger. Node >= 18, no deps.
 //
 // Usage (paths are relative to --repo when given, else to the current directory; every command takes --repo DIR):
 //   sdd lint [--dir task] [--fase N] [--json] [file.md ...]
@@ -41,28 +42,47 @@
 //       named with their scenario id (AC-NNN-NN, or `REQ-X-NNN ACn`), the BDD tags of spec/tests/BDD-*.md and the records
 //       of acceptance/decisions.jsonl. JUnit default: Stack Profile test_report_path, else .sdd/junit/. PATH may be a
 //       file, a directory or a `dir/*.xml` glob. Evidence counts only when fresh: nothing under the Stack Profile's
-//       code_paths + test_paths (default src, tests) changed since it was captured (see scripts/lib/acceptance.mjs).
-//       --remeasure first re-runs each stale measurement whose latest record came from `accept measure` (exit 1 when
-//       one of them yields no number).
+//       code_paths + test_paths (default src, tests) changed since it was captured, and no untracked file sits under
+//       them (listed in `untracked_paths`; see scripts/lib/acceptance.mjs). --junit-sha on uncommitted code exits 2
+//       (commit first); without it, a dirty tree prints a `warning:` line on stderr. --remeasure first re-runs each
+//       stale measurement whose latest record came from `accept measure` (exit 1 when one of them yields no number).
+//       Visual evidence (Stack Profile `visual_evidence: required|warn|off`, default required; `evidence_dir`, default
+//       evidencias): a REQ-F criterion needs a screenshot — a JUnit `[[ATTACHMENT|…]]`, a record's --attach, or a file
+//       of the evidence dir named after its AC-NNN-NN or REQ-F-NNN-ACn — else it is `unshown` and the requirement
+//       MISSING ("no visual evidence"); warn only reports it. The ledger counts them in summary.unshown.
 //   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NAME --role ROLE [fields]
+//              [--attach FILE...] [--allow-dirty]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
 //       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
 //       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
 //       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID].
+//       --attach stores files under evidence_dir with their sha256 (not on a waiver). Every type but waiver exits 2 on
+//       uncommitted changes under its --paths (default the code paths, untracked files included): commit first, or
+//       --allow-dirty to store the record with dirty: true.
 //   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
-//              --threshold NUM [--paths P...] [--json]
+//              --threshold NUM [--paths P...] [--allow-dirty] [--json]
 //       Machine measurement: runs CMD from the repo root, takes the first capture group of REGEX in its output as the
 //       observed number and appends a measurement record with by "command", role "automated", the command and the
-//       regex (re-run later by `sdd accept --remeasure`). Exit 1 when no number matches. For objective metrics only
-//       (coverage, a benchmark); a value a person must confirm goes through `accept record measurement`.
+//       regex (re-run later by `sdd accept --remeasure`). Exit 1 when no number matches; exit 2 on uncommitted code
+//       unless --allow-dirty (dirty: true). For objective metrics only (coverage, a benchmark); a value a person must
+//       confirm goes through `accept record measurement`.
+//   sdd accept pack --fase N [--out .sdd/entregas/FASE-N-evidencias.tar.gz] [--json]
+//       Bundle {evidence_dir}/FASE-N/ with a manifest.json (path, sha256, bytes, kind, criterion, criteria from the
+//       ledger, evaluated_sha) into a tar.gz, for the customer after the sign-off. Exit 1 when the FASE has no evidence.
 //   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
 //       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
 //       Musts. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate, else
-//       enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md. --md prints a PR-body block.
+//       enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
+//       required, asks for a video whose name carries each WF-NNN the FASE file cites (else FASE-N): a missing one is
+//       goal not met (`missing_videos`). --md prints a PR-body block (with a visual-evidence line when one is missing).
 //   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
-//       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}]}; stop is
-//       null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the baseline; hard cap 5).
+//       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}],
+//       missing_videos}; stop is null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the
+//       baseline; hard cap 5). route_hint capture-evidence: run the journey again with capture (no code task).
+//   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
+//       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
+//       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
 //   sdd issue open   fase <N> | change <CHG-ID> [--dry-run] [--json]
 //       One issue per FASE (from plan/fases/FASE-N-*.md: Incremento, Requisitos, Escenarios, Necesidades, Demo) or per
 //       change (changes/CHANGE-REPORT-<ID>.md), labels sdd + sdd:fase|sdd:change, hidden marker <!-- sdd:FASE-N -->.
@@ -106,6 +126,8 @@ import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
 import { runTracker } from "./lib/tracker.mjs";
 import { runRoute } from "./lib/route.mjs";
+import { parseRequirements } from "./sdd-jev.mjs";
+import { reqHash } from "./lib/acceptance.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -140,6 +162,8 @@ function parseArgs(argv) {
       case "--message": o.message = take(); break;
       case "--range": o.range = take(); break;
       case "--issue": o.issue = take(); break;
+      case "--ac": o.ac = take(); break;
+      case "--requirements": o.requirements = take(); break;
       case "--json": o.json = true; break;
       case "--files": o.withFiles = true; break;
       case "--require-done": o.requireDone = true; break;
@@ -735,6 +759,41 @@ function cmdBranch(o) {
   return switchTo(info.current);
 }
 
+// ------------------------------------------------------------------ req show
+// The literal text of a requirement and its criteria, as requirements/REQUIREMENTS.md has them: what a test quotes
+// above its assert (M6). Parsed with parseRequirements (sdd-jev.mjs), the same reader as the acceptance ledger.
+function cmdReq(o) {
+  const sub = o.args.shift();
+  if (sub !== "show") usage(`unknown req command ${sub ?? "(none)"}: use show`);
+  const id = String(o.args.shift() || "").toUpperCase();
+  if (!id) usage("req show needs a requirement id (REQ-F-001)");
+  if (o.args.length) usage(`unexpected argument ${o.args[0]}`);
+  const file = path.resolve(baseDir(o), o.requirements || "requirements/REQUIREMENTS.md");
+  if (!existsSync(file)) die(`${display(file)} not found`);
+  const req = parseRequirements(readFileSync(file, "utf8")).find((r) => r.id === id);
+  if (!req) { console.error(`${PROG}: ${id} is not in ${display(file)}`); return 1; }
+  let criteria = req.criteria.map((text, i) => ({ n: i + 1, text }));
+  if (o.ac !== undefined) {
+    const m = String(o.ac).match(/^(?:AC)?(\d+)$/i);
+    if (!m) usage("--ac must be a criterion number (2 or AC2)");
+    const n = Number(m[1]);
+    criteria = criteria.filter((c) => c.n === n);
+    if (!criteria.length) { console.error(`${PROG}: ${id} has ${req.criteria.length} criteria; AC${n} does not exist`); return 1; }
+  }
+  if (o.json) {
+    json({ id: req.id, type: req.type, title: req.title, statement: req.statement, priority: req.priority, needs: req.needs || [],
+      verification: req.verification, deprecated: req.deprecated, criteria, ...(o.ac !== undefined ? { ac: criteria[0].n } : {}),
+      reqHash: reqHash(req), file: display(file) });
+    return 0;
+  }
+  if (o.ac !== undefined) { out(`${req.id} AC${criteria[0].n}: ${criteria[0].text}`); return 0; }
+  out(`${req.id}: ${req.title}${req.deprecated ? "  [deprecated]" : ""}`);
+  out(`Statement: ${req.statement}`);
+  out(`Priority: ${req.priority || "—"} · Verification: ${req.verification || "—"} · Needs: ${(req.needs || []).join(", ") || "—"}`);
+  for (const c of criteria) out(`AC${c.n}: ${c.text}`);
+  return 0;
+}
+
 // ------------------------------------------------------------------ main
 /** First positional word of argv (skipping `--repo DIR`): the command. */
 function firstCommand(argv) {
@@ -782,6 +841,7 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
       case "trace": return cmdTrace(o);
       case "verify": return cmdVerify(o);
       case "branch": return cmdBranch(o);
+      case "req": return cmdReq(o);
       default: usage(`unknown command ${cmd}`);
     }
   } catch (e) {

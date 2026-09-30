@@ -5,7 +5,11 @@
 # Covers the verdicts (VERIFIED, FAILING, MISSING, WAIVED, DEPRECATED), NF/C methods (measurement computed in code,
 # demo, inspection freshness by paths), waivers voided by a MODIFY, gate exit codes 0/1/2/3 and modes, stale JUnit,
 # report rows, --fase scoping, loop stops, JUnit dialects, freshness scoped to code_paths/test_paths (a docs or
-# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence cells. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
+# feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence
+# cells, untracked files under the code paths, commit before evidence (--junit-sha, --allow-dirty), attachments
+# (JUnit [[ATTACHMENT|…]], record --attach, name-bound captures), the visual rule (required, warn, off; video per
+# FASE), accept pack and req show. The fixture is a CLI app with `visual_evidence: off` in its CLAUDE.md; section 16
+# removes it. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SDD="$ROOT/scripts/sdd.mjs"
@@ -16,6 +20,8 @@ bad()  { echo "FAIL $1"; fail=1; }
 contains() { case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
 # run ARGS… → output (stdout+stderr) in $out, exit code in $rc; runs inside the temp repo
 run() { rc=0; out=$(cd "$repo" && node "$SDD" "$@" 2>&1) || rc=$?; }
+# runo ARGS… → like run, but $out holds stdout only and $err stderr (JSON output next to a stderr warning)
+runo() { rc=0; out=$(cd "$repo" && node "$SDD" "$@" 2>"$tmp/stderr") || rc=$?; err=$(cat "$tmp/stderr"); }
 # js EXPR → EXPR evaluated with j = JSON.parse($out)
 js() { printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(eval(process.argv[1])))})' "$1"; }
 # ledger EXPR → EXPR over .sdd/acceptance.json (L), with v(id) = verdict of a requirement
@@ -63,6 +69,11 @@ run --help; expect "--help exits 0" "$rc" 0
 has "--help documents accept" "sdd accept [--junit PATH...]"
 has "--help documents gate codes" "3 met with waived"
 has "--help documents loop" "sdd loop next"
+has "--help documents accept pack" "sdd accept pack --fase N"
+has "--help documents req show" "sdd req show <REQ-ID> [--ac N]"
+has "--help documents --attach and --allow-dirty" "[--attach FILE...] [--allow-dirty]"
+has "--help documents the visual rule" "visual_evidence: required|warn|off"
+has "--help documents capture-evidence" "route_hint capture-evidence"
 
 # ---------------------------------------------------------------- 2. JUnit dialects
 dialect() { node --input-type=module -e '
@@ -84,6 +95,13 @@ contains "$d" "fail|spec/requests/tasks_spec.rb|Tasks AC-002-04" && pass "rspec:
 d=$(dialect playwright.xml)
 contains "$d" "pass|e2e/list.spec.ts|list › AC-002-01 — shows tasks in id order" && pass "playwright: unicode name, file from classname" || bad "playwright ($d)"
 expect "playwright: 2 testcases" "$(printf '%s\n' "$d" | wc -l | tr -d ' ')" 2
+att=$(node --input-type=module -e '
+import { parseJUnit } from "'"$ROOT"'/scripts/lib/junit.mjs";
+import { readFileSync } from "node:fs";
+const all = (f) => parseJUnit(readFileSync("'"$FIX"'/junit/" + f, "utf8")).map((x) => x.attachments.join("+")).join("|");
+process.stdout.write(all("playwright.xml") + "\n" + ["vitest.xml", "pytest.xml", "rspec.xml"].map(all).join("").replace(/\|/g, ""));')
+expect "playwright: attachments from <property name=attachment> and [[ATTACHMENT|…]] in <system-out>" "$(printf '%s\n' "$att" | head -1)" "screenshots/list-AC-002-01.png|list-AC-002-02/trace.zip"
+expect "other dialects: no attachments invented" "$(printf '%s\n' "$att" | sed -n 2p)" ""
 d=$(dialect jest.xml); contains "$d" "pass|-|REQ-F-002 AC2 prints No tasks" && pass "jest-junit: parsed" || bad "jest ($d)"
 d=$(dialect minitest.xml); contains "$d" "pass|test/controllers/tasks_controller_test.rb|test_AC-002-03" && pass "minitest-reporters: file from suite filepath" || bad "minitest ($d)"
 d=$(dialect mocha.xml); contains "$d" "pass|test/rm.spec.js|AC-002-04" && pass "mocha-junit: file from suite" || bad "mocha ($d)"
@@ -225,7 +243,7 @@ run accept --json --no-out
 expect "an uncommitted docs change does not make JUnit stale" "$(js 'j.junit[0].fresh + "/" + j.dirty')" true/true
 ( cd "$repo" && git checkout -q -- NOTES.md )
 printf 'export const add = (t) => t.toUpperCase();\n' > "$repo/src/api.js"
-run accept --json --no-out
+runo accept --json --no-out
 expect "an uncommitted src/ change makes JUnit stale" "$(js 'j.junit[0].fresh')" false
 expect "an uncommitted src/ change makes a demo without paths stale" "$(js 'j.requirements.find(r=>r.id==="REQ-F-006").verdict')" MISSING
 ( cd "$repo" && git checkout -q -- src/api.js )
@@ -440,6 +458,261 @@ contains "$md" "(fail) +2 more" && pass "evidence: failing beyond 5 counted" || 
 contains "$md" "AC1: 1 test pass — " && pass "evidence: singular" || bad "evidence: singular"
 size=$(printf '%s' "$md" | sed '/@@REPORT@@/q' | wc -c | tr -d ' ')
 [ "$size" -lt 2500 ] && pass "PR block stays small with 48 bound tests ($size bytes)" || bad "PR block size $size"
+
+# ---------------------------------------------------------------- 13. untracked files under the code paths (bug 1)
+# A new file under src/ that nobody added does not exist at evaluated_sha: the evidence would describe another tree.
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --paths src --by Laura --role "product owner"
+commit "record demo again"
+all_green
+run accept --json --no-out
+expect "baseline: clean tree, F-001 and F-006 VERIFIED, no untracked paths" "$(js '["REQ-F-001","REQ-F-006"].map(id=>j.requirements.find(r=>r.id===id).verdict).join() + "/" + j.untracked_paths.length')" VERIFIED,VERIFIED/0
+printf 'export const helper = 1;\n' > "$repo/src/helper.js"
+runo accept --json --no-out
+expect "untracked file under src/: JUnit stale" "$(js 'j.junit[0].fresh')" false
+expect "untracked file under src/: listed in untracked_paths" "$(js 'j.untracked_paths.join()')" src/helper.js
+expect "untracked file under src/: ledger dirty" "$(js 'j.dirty')" true
+expect "untracked file under src/: F-001 MISSING with stale evidence" "$(js 'const r=j.requirements.find(r=>r.id==="REQ-F-001"); r.verdict + "/" + r.stale_evidence')" MISSING/true
+expect "untracked file under a demo record's paths: F-006 stale" "$(js 'j.requirements.find(r=>r.id==="REQ-F-006").verdict')" MISSING
+contains "$(js 'j.junit[0].stale_reason')" "src/helper.js" && pass "stale reason names the untracked file" || bad "stale reason ($(js 'j.junit[0].stale_reason'))"
+rm -f "$repo/src/helper.js"
+printf 'scratch\n' > "$repo/scratch.txt"
+all_green
+run accept --json --no-out
+expect "untracked file outside the code paths: JUnit fresh, not listed" "$(js 'j.junit[0].fresh + "/" + j.untracked_paths.length')" true/0
+rm -f "$repo/scratch.txt"
+
+# ---------------------------------------------------------------- 14. commit before evidence (M7.1, bug 3)
+# Evidence and human observations are anchored to a commit: on uncommitted code they would be stale from birth.
+printf 'export const add = (t) => t;\n' > "$repo/src/api.js"
+run accept --junit-sha HEAD --no-out
+expect "--junit-sha with uncommitted code → 2" "$rc" 2; has "--junit-sha: says commit first" "commit first"
+run gate --junit-sha HEAD
+expect "gate --junit-sha with uncommitted code → 2" "$rc" 2
+runo accept --no-out --json
+expect "accept without --junit-sha on uncommitted code still exits 0" "$rc" 0
+contains "$err" "warning: uncommitted changes under the code paths (src/api.js)" && pass "…with a warning: line on stderr" || bad "dirty warning ($err)"
+expect "…and stdout stays JSON" "$(js 'j.$schema')" sdd-acceptance-v1
+before=$(dlines)
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "record demo on uncommitted code → 2" "$rc" 2; has "record: names the path and says commit first" "uncommitted changes in src/api.js: commit first"
+run accept record inspection --req REQ-C-001 --note ok --by Ana --role "tech lead"
+expect "record inspection without paths on uncommitted code → 2" "$rc" 2
+run accept record measurement --req REQ-NF-002 --metric statements --observed 95 --op ge --threshold 90 --by Ana --role "tech lead"
+expect "record measurement on uncommitted code → 2" "$rc" 2
+run accept record fase-acceptance --fase 1 --result accepted --channel call --by Laura --role "product owner"
+expect "record fase-acceptance on uncommitted code → 2" "$rc" 2
+printf 'Statements   : 93.4%% ( 120/128 )\n' > "$repo/cov.txt"
+run accept measure "${M[@]}"
+expect "accept measure on uncommitted code → 2" "$rc" 2; has "measure: says commit first" "commit first"
+expect "refused records append nothing" "$(dlines)" "$before"
+run accept record waiver --req REQ-F-005 --reason "customer defers delete" --by Laura --role "product owner" --follow-up "#42"
+expect "a waiver is exempt (observes nothing) → 0" "$rc" 0
+expect "…and carries no dirty flag" "$(lastrec 'r.dirty === undefined')" true
+run accept record inspection --req REQ-C-001 --note "no deps" --paths package.json --by Ana --role "tech lead"
+expect "a record whose own paths are clean is accepted → 0" "$rc" 0
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner" --allow-dirty
+expect "record demo --allow-dirty → 0" "$rc" 0
+expect "…recorded with dirty: true" "$(lastrec 'r.dirty')" true
+run accept measure "${M[@]}" --allow-dirty
+expect "accept measure --allow-dirty → 0" "$rc" 0
+expect "…recorded with dirty: true" "$(lastrec 'r.dirty')" true
+( cd "$repo" && git checkout -q -- src/api.js )
+printf 'export const extra = 1;\n' > "$repo/src/extra.js"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "an untracked file under src/ also refuses a record → 2" "$rc" 2
+rm -f "$repo/src/extra.js" "$repo/cov.txt"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "clean tree: record demo → 0, no dirty flag" "$rc/$(lastrec 'r.dirty === undefined')" 0/true
+( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
+
+# ---------------------------------------------------------------- 15. attachments: JUnit [[ATTACHMENT|…]] and record --attach
+mkdir -p "$repo/evidencias/FASE-1"
+printf 'png-bytes-1' > "$repo/evidencias/FASE-1/AC-001-01.png"
+printf 'webm' > "$repo/evidencias/FASE-1/FASE-1.webm"
+# Paths relative to the report's directory (Playwright) or to the repo root; a missing file is kept, not present.
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/AC-001-01.png]]
+[[ATTACHMENT|evidencias/FASE-1/FASE-1.webm]]
+[[ATTACHMENT|test-results/add/trace.zip]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+all_green
+run accept --json --no-out
+A='j.requirements.find(r=>r.id==="REQ-F-001").criteria[0].evidence.find(e=>/adds a task/.test(e.name)).attachments'
+expect "test evidence carries its attachments with kind" "$(js "$A.map(a=>a.kind).join()")" image,video,trace
+expect "attachment paths relative to the repo root" "$(js "$A.map(a=>a.path).join()")" "evidencias/FASE-1/AC-001-01.png,evidencias/FASE-1/FASE-1.webm,test-results/add/trace.zip"
+expect "present: existing files yes, missing trace no" "$(js "$A.map(a=>a.present).join()")" true,true,false
+sha=$(node -e 'process.stdout.write("sha256:"+require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$repo/evidencias/FASE-1/AC-001-01.png")
+expect "attachment sha256 and bytes" "$(js "$A[0].sha256 + '/' + $A[0].bytes")" "$sha/11"
+expect "a test without attachments carries an empty list" "$(js 'j.requirements.find(r=>r.id==="REQ-F-002").criteria[0].evidence[0].attachments.length')" 0
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --attach evidencias/FASE-1/AC-001-01.png --by Laura --role "product owner"
+expect "record demo --attach → 0" "$rc" 0
+expect "record stores path, kind and sha256 of the attachment" "$(lastrec 'r.attachments.map(a=>a.path+"|"+a.kind+"|"+a.sha256+"|"+a.bytes).join()')" "evidencias/FASE-1/AC-001-01.png|image|$sha|11"
+before=$(dlines)
+run accept record demo --req REQ-F-006 --observed x --pass true --attach package.json --by Laura --role "product owner"
+expect "--attach outside evidencias/ → 2" "$rc" 2; has "--attach: names the evidence dir" "not under evidencias/"
+run accept record demo --req REQ-F-006 --observed x --pass true --attach evidencias/FASE-1/nope.png --by Laura --role "product owner"
+expect "--attach of a missing file → 2" "$rc" 2; has "--attach: missing file" "no such file"
+run accept record waiver --req REQ-F-005 --reason r --follow-up "#42" --attach evidencias/FASE-1/AC-001-01.png --by Laura --role "product owner"
+expect "--attach on a waiver → 2" "$rc" 2
+expect "refused --attach records append nothing" "$(dlines)" "$before"
+run accept --json --no-out
+D='j.requirements.find(r=>r.id==="REQ-F-006").criteria[0].evidence[0]'
+expect "demo evidence: F-006 VERIFIED with its attachment present" "$(js "j.requirements.find(r=>r.id==='REQ-F-006').verdict + '/' + $D.attachments[0].present")" VERIFIED/true
+printf 'replaced' > "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept --json --no-out
+expect "a replaced attachment no longer counts (hash differs)" "$(js "$D.attachments[0].present + '/' + $D.attachments[0].changed")" false/true
+rm -f "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept --json --no-out
+expect "a deleted attachment is not present" "$(js "$D.attachments[0].present")" false
+( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
+rm -rf "$repo/evidencias" "$repo/.sdd/junit/e2e.xml"
+
+# ---------------------------------------------------------------- 16. visual evidence: required (default), warn, off
+# A copy of the fixture without its `visual_evidence: off` profile: the default rule is required.
+repo="$tmp/visual"
+cp -R "$FIX/todo" "$repo"; rm -f "$repo/CLAUDE.md"
+git init -q "$repo"
+commit "init visual"
+green4() { junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass"; }
+C='(id,n)=>j.requirements.find(r=>r.id===id).criteria.find(c=>c.n===n)'
+V='(id)=>j.requirements.find(r=>r.id===id)'
+green4
+run accept --json --no-out
+expect "default rule: visual_evidence required" "$(js 'j.visual_evidence + "/" + j.evidence_dir')" required/evidencias
+expect "required: passing REQ-F criteria without a screenshot are unshown" "$(js "[1,2].map(n=>($C)('REQ-F-001',n).state).join()")" unshown,unshown
+expect "required: F-001 MISSING with reason no visual evidence" "$(js "($V)('REQ-F-001').verdict + '/' + ($V)('REQ-F-001').reason + '/' + ($V)('REQ-F-001').criteria_passing")" "MISSING/no visual evidence/0"
+expect "required: summary.unshown counts the criteria (F-001 ×2, F-002 ×2)" "$(js 'j.summary.unshown')" 4
+expect "required: REQ-NF / REQ-C carry no visual state" "$(js "($V)('REQ-NF-002').criteria[0].visual === undefined")" true
+expect "required: a missing test stays missing, not unshown (F-005 AC2)" "$(js "($C)('REQ-F-005',2).state + '/' + ($V)('REQ-F-005').reason")" missing/null
+run loop next --state .sdd/loop-v.json
+expect "loop: unshown criteria → capture-evidence" "$(loopq 'const t=j.targets.find(t=>t.req==="REQ-F-001"); t.route_hint + "/" + t.criteria.map(c=>c.route_hint).join()')" "capture-evidence/capture-evidence,capture-evidence"
+run gate --fase 1; expect "gate --fase 1 with unshown criteria → 1" "$rc" 1
+has "gate names the reason" "REQ-F-001  MISSING (no visual evidence)"
+run accept --no-out
+has "accept lists the unshown criteria" "unshown REQ-F-001 AC1: passes without a screenshot in evidencias/ (capture-evidence)"
+# Screenshots: one through a JUnit [[ATTACHMENT|…]], the others bound by file name (minitest writes no attachments).
+mkdir -p "$repo/evidencias/FASE-1" "$repo/evidencias/otros"
+printf 'img' > "$repo/evidencias/FASE-1/shot-1.png"
+printf 'img' > "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+printf 'img' > "$repo/evidencias/otros/AC-002-01.png"
+printf 'img' > "$repo/evidencias/FASE-1/AC-002-021.png"
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/shot-1.png]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+run accept --json --no-out
+expect "JUnit screenshot shows F-001 AC1" "$(js "($C)('REQ-F-001',1).state + '/' + ($C)('REQ-F-001',1).visual")" pass/shown
+expect "file named REQ-F-001-AC2 shows F-001 AC2 (bound by name)" "$(js "($C)('REQ-F-001',2).state + '/' + ($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').ref")" pass/evidencias/FASE-1/REQ-F-001-AC2.png
+expect "name-bound capture carries sha256 and present" "$(js "const a=($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').attachments[0]; /^sha256:/.test(a.sha256) + '/' + a.present + '/' + a.kind")" true/true/image
+expect "F-001 VERIFIED with both screenshots" "$(js "($V)('REQ-F-001').verdict + '/' + ($V)('REQ-F-001').reason")" VERIFIED/null
+expect "a scenario id in any subfolder binds (AC-002-01 under evidencias/otros)" "$(js "($C)('REQ-F-002',1).state")" pass
+expect "AC-002-021.png does not bind AC-002-02" "$(js "($C)('REQ-F-002',2).state")" unshown
+touch -t 202001010000 "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+run accept --json --no-out
+expect "a capture older than the last code commit does not count" "$(js "($C)('REQ-F-001',2).state + '/' + ($C)('REQ-F-001',2).evidence.find(e=>e.kind==='capture').fresh")" unshown/false
+touch "$repo/evidencias/FASE-1/REQ-F-001-AC2.png"
+printf 'img' > "$repo/evidencias/FASE-1/AC-002-02.png"
+# A demo REQ-F needs its capture too: the record's --attach.
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+run accept --json --no-out
+expect "demo without --attach: F-006 unshown" "$(js "($V)('REQ-F-006').verdict + '/' + ($C)('REQ-F-006',1).state")" MISSING/unshown
+printf 'img' > "$repo/evidencias/FASE-1/columns.png"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --attach evidencias/FASE-1/columns.png --by Laura --role "product owner"
+run accept --json --no-out
+expect "demo with --attach of a screenshot: F-006 VERIFIED" "$(js "($V)('REQ-F-006').verdict")" VERIFIED
+# Video per FASE: the FASE file cites no WF-NNN, so the gate asks for a video named FASE-1.
+run gate --fase 1 --json
+expect "every criterion shown but no FASE-1 video → gate 1" "$rc" 1
+expect "gate --json lists missing_videos" "$(js 'j.missing_videos.join() + "/" + j.summary.goal')" FASE-1/false
+run gate --fase 1 --md
+has "--md: visual evidence line" "Visual evidence (required): missing video: FASE-1"
+run loop next --fase 1 --state .sdd/loop-w.json
+expect "loop: missing video → capture-evidence" "$(loopq 'j.missing_videos.map(v=>v.video+"/"+v.route_hint).join()')" FASE-1/capture-evidence
+printf 'vid' > "$repo/evidencias/FASE-1/FASE-10-otra.webm"
+run gate --fase 1; expect "a FASE-10 video does not satisfy FASE-1 → 1" "$rc" 1
+printf 'vid' > "$repo/evidencias/FASE-1/FASE-1-crear-y-listar.webm"
+run gate --fase 1; expect "video named FASE-1-<title> → gate 0" "$rc" 0
+run accept --fase 1 --report acceptance/F1.md --no-out
+grep -q '^## Visual evidence' "$repo/acceptance/F1.md" && pass "report: Visual evidence section" || bad "report: no Visual evidence section"
+grep -q '^| REQ-F-001 | AC2 | pass | evidencias/FASE-1/REQ-F-001-AC2.png |' "$repo/acceptance/F1.md" && pass "report: screenshot per criterion" || bad "report: screenshot row"
+grep -q '^Videos for FASE 1: FASE-1 present' "$repo/acceptance/F1.md" && pass "report: videos of the FASE" || bad "report: videos line"
+# A FASE that cites workflows asks for one video per WF-NNN (E2E-WF-NNN-NN names), here through a JUnit attachment.
+printf '\n## Workflows\n\nWF-003 alta y listado.\n' >> "$repo/plan/fases/FASE-1-core.md"; commit "docs(plan): cite WF-003"
+run gate --fase 1 --json
+expect "FASE citing WF-003 without its video → 1, missing WF-003" "$rc/$(js 'j.missing_videos.join()')" 1/WF-003
+mkdir -p "$repo/test-results"; printf 'vid' > "$repo/test-results/E2E-WF-003-01.webm"
+cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
+<testsuites><testsuite name="e2e/add.spec.ts">
+<testcase classname="e2e/add.spec.ts" name="add › AC-001-01 adds a task"><system-out><![CDATA[[[ATTACHMENT|../../evidencias/FASE-1/shot-1.png]]
+[[ATTACHMENT|test-results/E2E-WF-003-01.webm]]
+]]></system-out></testcase>
+</testsuite></testsuites>
+XML
+run gate --fase 1 --json
+expect "E2E-WF-003-01.webm attached by the journey test → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
+# warn: reported, the verdicts do not change.
+printf '# p\n\n## SDD Stack Profile\n- visual_evidence: warn\n' > "$repo/CLAUDE.md"
+rm -rf "$repo/evidencias" "$repo/test-results" "$repo/.sdd/junit/e2e.xml"
+green4
+run accept --json --no-out
+expect "warn: F-001 VERIFIED without screenshots" "$(js "($V)('REQ-F-001').verdict + '/' + ($C)('REQ-F-001',1).state + '/' + ($C)('REQ-F-001',1).visual")" VERIFIED/pass/missing
+expect "warn: summary.unshown still counts them (F-001 ×2, F-002 ×2, F-006 demo whose capture is gone)" "$(js 'j.summary.unshown')" 5
+run accept --no-out
+has "warn: accept prints a warning per criterion" "warning: no screenshot REQ-F-001 AC1"
+run gate --fase 1 --json
+expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003
+# off: nothing.
+printf '# p\n\n## SDD Stack Profile\n- visual_evidence: off\n' > "$repo/CLAUDE.md"
+run accept --fase 1 --json --no-out
+expect "off: no visual state, no count, no videos" "$(js "String(($C)('REQ-F-001',1).visual) + '/' + j.summary.unshown + '/' + j.videos")" undefined/0/null
+run gate --fase 1; expect "off: gate --fase 1 → 0" "$rc" 0
+rm -f "$repo/CLAUDE.md"
+
+# ---------------------------------------------------------------- 17. accept pack: evidencias/FASE-N/ + manifest
+mkdir -p "$repo/evidencias/FASE-1/sub"
+printf 'img' > "$repo/evidencias/FASE-1/AC-001-01.png"
+printf 'vid' > "$repo/evidencias/FASE-1/sub/FASE-1-crear.webm"
+green4
+run accept pack --fase 1
+expect "accept pack --fase 1 → 0" "$rc" 0
+has "pack prints the archive" ".sdd/entregas/FASE-1-evidencias.tar.gz"
+arch="$repo/.sdd/entregas/FASE-1-evidencias.tar.gz"
+listing=$(tar -tzf "$arch" | sort | tr '\n' ' ')
+expect "archive holds manifest.json and evidencias/FASE-1/…" "$listing" "evidencias/FASE-1/ evidencias/FASE-1/AC-001-01.png evidencias/FASE-1/sub/ evidencias/FASE-1/sub/FASE-1-crear.webm manifest.json "
+out=$(tar -xOzf "$arch" manifest.json)
+expect "manifest: evaluated_sha = HEAD, 2 files" "$(js 'j.evaluated_sha + "/" + j.files.length + "/" + j.fase')" "$(cd "$repo" && git rev-parse HEAD)/2/1"
+sha=$(node -e 'process.stdout.write("sha256:"+require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$repo/evidencias/FASE-1/AC-001-01.png")
+expect "manifest: path, sha256, bytes, kind, criterion per file" "$(js 'const f=j.files[0]; [f.path,f.sha256,f.bytes,f.kind,f.criterion].join("|")')" "evidencias/FASE-1/AC-001-01.png|$sha|3|image|AC-001-01"
+expect "manifest: criteria the capture shows (from the ledger)" "$(js 'j.files[0].criteria.join()')" "REQ-F-001 AC1"
+expect "manifest: the video named after its FASE" "$(js 'j.files[1].kind + "/" + j.files[1].criterion')" video/FASE-1
+run accept pack --fase 2; expect "accept pack of a FASE without evidence → 1" "$rc" 1; has "pack: says there is nothing" "no evidence under evidencias/FASE-2/"
+run accept pack; expect "accept pack without --fase → 2" "$rc" 2
+rm -rf "$repo/evidencias" "$repo/.sdd/entregas"
+repo="$saved_repo"
+
+# ---------------------------------------------------------------- 18. req show: the literal text a test quotes (M6)
+run req show REQ-F-001
+expect "req show exits 0" "$rc" 0
+has "req show: title" "REQ-F-001: Create a task"
+has "req show: statement" 'Statement: WHEN the user runs `todo add <title>` THE system SHALL create a pending task with the next id.'
+has "req show: criteria verbatim" 'AC2: GIVEN any state WHEN the user runs `todo add ""` THEN the command exits 2 with `title must not be empty`'
+run req show REQ-F-001 --ac 1
+expect "req show --ac 1: one line, verbatim" "$out" 'REQ-F-001 AC1: GIVEN an empty list WHEN the user runs `todo add "Buy milk"` THEN task 1 "Buy milk" is pending'
+run req show req-f-001 --ac AC2 --json
+expect "req show --json: id, ac, criterion, verification" "$(js 'j.id + "|" + j.ac + "|" + j.criteria.length + "|" + j.criteria[0].n + "|" + j.verification + "|" + j.priority')" "REQ-F-001|2|1|2|test|Must"
+expect "req show --json: reqHash matches the ledger's" "$(js 'j.reqHash')" "$(cd "$repo" && node "$SDD" accept --json --no-out 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requirements.find(r=>r.id==="REQ-F-001").reqHash))')"
+run req show REQ-F-004 --json
+expect "req show: a deprecated requirement is flagged" "$(js 'j.deprecated')" true
+run req show REQ-F-001 --ac 3; expect "req show --ac beyond the criteria → 1" "$rc" 1; has "req show: says how many criteria" "has 2 criteria"
+run req show REQ-X-999; expect "req show of an unknown id → 1" "$rc" 1
+run req show; expect "req show without an id → 2" "$rc" 2
+run req list; expect "req with an unknown subcommand → 2" "$rc" 2
+run req show REQ-F-001 --requirements nope.md; expect "req show --requirements missing file → 2" "$rc" 2
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

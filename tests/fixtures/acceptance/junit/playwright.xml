@@ -4,6 +4,7 @@
 <properties>
 <property name="annotation" value="REQ-F-002">
 </property>
+<property name="attachment" value="screenshots/list-AC-002-01.png"/>
 </properties>
 </testcase>
 <testcase name="list › AC-002-02 — empty state" classname="e2e/list.spec.ts" time="1.0">

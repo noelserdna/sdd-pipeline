@@ -69,6 +69,7 @@ function coverageFromAcceptance(
     priority: r.priority,
     verification: r.verification,
     verdict: r.verdict,
+    ...(r.reason ? { reason: r.reason } : {}),
     criteria: criteriaLabel(r),
     ...(r.stale_evidence ? { stale_evidence: true } : {}),
   });

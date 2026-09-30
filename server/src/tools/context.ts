@@ -26,13 +26,14 @@ interface ContextArgs {
 function acceptanceView(r: AcceptanceRequirement) {
   return {
     verdict: r.verdict,
+    ...(r.reason ? { reason: r.reason } : {}),
     priority: r.priority,
     verification: r.verification,
     needs: r.needs,
     criteria: criteriaLabel(r),
     stale_evidence: r.stale_evidence,
     waiver: r.waiver,
-    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, scenarios: c.scenarios, evidence: c.evidence })),
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...(c.visual ? { visual: c.visual } : {}), scenarios: c.scenarios, evidence: c.evidence })),
   };
 }
 
@@ -43,6 +44,7 @@ function acceptanceGaps(r: AcceptanceRequirement): string[] {
   for (const c of r.criteria) {
     if (c.state === "fail") gaps.push(`FAILING_AC${c.n}: evidence fails${c.text ? ` — ${c.text}` : ""}`);
     else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code — re-run the tests or re-record`);
+    else if (c.state === "unshown") gaps.push(`UNSHOWN_AC${c.n}: passes without a screenshot — run the journey again with capture (capture-evidence)`);
     else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
     else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
   }

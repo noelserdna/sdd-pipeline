@@ -1,15 +1,16 @@
-// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd gate`,
-// `sdd loop next`.
+// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd accept pack`,
+// `sdd gate`, `sdd loop next`.
 // Node >= 18, no dependencies. Called from scripts/sdd.mjs; returns an exit code (never calls process.exit).
-import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, readdirSync, statSync, mkdtempSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { git, stackProfile } from "./git-log.mjs";
 import { readJUnit } from "./junit.mjs";
 import {
   SCHEMA, RECORD_TYPES, DECISIONS_FILE, ROUTES, evaluate, gitContext, loadScenarios, readDecisions,
   validateRecord, reqHash, faseScope, renderReport, renderPrBlock, routeHint, criterionHint, unchangedSince, acNumber,
-  compareMeasurement,
+  compareMeasurement, dirtyUnder, evidenceSettings, describeFile,
 } from "./acceptance.mjs";
 import { parseRequirements, parseNeeds, checkNeedCoverage } from "../sdd-jev.mjs";
 
@@ -22,12 +23,12 @@ const die = (msg) => { console.error(`${PROG}: ${msg}`); throw new Exit(2); };
 // Options that take a value; those in MULTI also swallow the following non-option words (`--junit a.xml b.xml`).
 const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "mode", "ledger", "state", "max-cycles",
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
-  "result", "channel", "demo", "requirements", "decisions", "command", "extract"]);
-const MULTI = new Set(["junit", "paths"]);
-const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure"]);
+  "result", "channel", "demo", "requirements", "decisions", "command", "extract", "attach"]);
+const MULTI = new Set(["junit", "paths", "attach"]);
+const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure", "allow-dirty"]);
 
 function parse(argv) {
-  const o = { _: [], junit: [], paths: [] };
+  const o = { _: [], junit: [], paths: [], attach: [] };
   for (let i = 0; i < argv.length; i++) {
     let a = argv[i], v;
     if (a === "-h") a = "--help";
@@ -103,6 +104,9 @@ export function buildLedger(o) {
   try { junit = specs.length ? readJUnit(root, specs) : null; } catch (e) { die(e.message); }
   const exclude = [...(junit?.files || []).map((f) => path.relative(root, f.path)), o.out, o.report].filter(Boolean);
   const g = gitContext(root, { exclude });
+  // A report asserted to come from a commit cannot come from a worktree that differs from it on the code paths.
+  if (o["junit-sha"] && g.repo && g.codeDirty)
+    die(`--junit-sha: uncommitted changes under the code paths (${g.codeDirtyPaths.slice(0, 3).join(", ")}): commit first, then run the tests and capture again`);
   const junitSha = o["junit-sha"] ? (g.repo ? resolveSha(root, o["junit-sha"]) : o["junit-sha"]) : null;
   const decisions = readDecisions(path.resolve(root, o.decisions || DECISIONS_FILE));
   const scope = scopeFor(root, reqs, o.fase);
@@ -110,7 +114,13 @@ export function buildLedger(o) {
     scope: scope ? scope.set : null, fase: o.fase ?? null });
   if (scope) { ledger.scope.file = scope.file; ledger.scope.from_header = scope.fromHeader; }
   ledger.junit_searched = specs;
-  return { root, ledger };
+  return { root, ledger, git: g };
+}
+/** stderr warning: evidence read from a dirty tree without --junit-sha (the JUnit then counts as stale). */
+function warnDirty(o, g) {
+  if (o["junit-sha"] || !g?.repo || !g.codeDirty) return;
+  const list = `${g.codeDirtyPaths.slice(0, 3).join(", ")}${g.codeDirtyPaths.length > 3 ? ", …" : ""}`;
+  console.error(`warning: uncommitted changes under the code paths (${list}): test evidence counts as stale. Commit first, run the tests, then capture with --junit-sha <HEAD>`);
 }
 function resolveSha(root, rev) {
   const r = git(root, ["rev-parse", "-q", "--verify", `${rev}^{commit}`]);
@@ -137,6 +147,12 @@ function printLedger(ledger) {
   for (const d of ledger.stale_decisions) out(`stale decision ${DECISIONS_FILE}:${d.line} ${d.type} ${d.req || `FASE ${d.fase}`}: ${d.reason}`);
   for (const e of ledger.decision_errors) out(`${DECISIONS_FILE}:${e.line}: ${e.msg}`);
   for (const j of ledger.junit.filter((x) => !x.fresh)) out(`stale junit ${j.path}: ${j.stale_reason}`);
+  if (ledger.visual_evidence !== "off") {
+    for (const r of ledger.requirements.filter((x) => x.in_scope && !["WAIVED", "DEPRECATED"].includes(x.verdict)))
+      for (const c of (r.criteria || []).filter((x) => x.visual === "missing" && (x.state === "pass" || x.state === "unshown")))
+        out(`${ledger.visual_evidence === "required" ? "unshown" : "warning: no screenshot"} ${r.id} AC${c.n}: passes without a screenshot in ${ledger.evidence_dir}/ (${ROUTES.capture})`);
+    for (const id of ledger.videos?.missing || []) out(`missing video ${id}: no video named with ${id} (${ROUTES.capture})`);
+  }
   if (!ledger.junit.length) out(`note: no JUnit report read (${ledger.junit_searched.length ? ledger.junit_searched.join(", ") : "pass --junit PATH or write reports to .sdd/junit/"})`);
   const s = ledger.summary;
   const v = s.by_verdict;
@@ -146,9 +162,11 @@ function printLedger(ledger) {
 function cmdAccept(o) {
   if (o._[0] === "record") { o._.shift(); return cmdRecord(o); }
   if (o._[0] === "measure") { o._.shift(); return cmdMeasure(o); }
+  if (o._[0] === "pack") { o._.shift(); return cmdPack(o); }
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
   const failed = o.remeasure ? remeasure(o) : 0;
-  const { root, ledger } = buildLedger(o);
+  const { root, ledger, git: g } = buildLedger(o);
+  warnDirty(o, g);
   const outFile = o["no-out"] ? null : (o.out || ".sdd/acceptance.json");
   if (outFile && outFile !== "-") writeJson(root, outFile, ledger);
   if (o.report) writeText(root, o.report, renderReport(ledger));
@@ -191,11 +209,51 @@ function cmdRecord(o) {
   }
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
+  if (o.attach.length) {
+    if (type === "waiver") errors.push("a waiver records no observation: --attach is for demo, inspection, measurement and fase-acceptance");
+    else {
+      const att = attachFiles(root, o.attach);
+      errors.push(...att.errors);
+      rec.attachments = att.files;
+    }
+  }
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
+  // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver observes nothing).
+  if (type !== "waiver") {
+    const d = uncommitted(root, g, rec.paths);
+    if (d) {
+      if (!o["allow-dirty"]) { console.error(`${PROG}: accept record ${type}: ${d}: commit first, or pass --allow-dirty to record it with dirty: true`); return 2; }
+      rec.dirty = true;
+    }
+  }
   const { file, n } = appendRecord(root, o, rec);
   if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
   else out(`recorded ${type} ${rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
   return 0;
+}
+
+/** `--attach P…`: files under the Stack Profile's evidence_dir, stored as { path, sha256, bytes, kind } so that a file
+ *  replaced or deleted later no longer counts (the ledger compares the hash). */
+function attachFiles(root, list) {
+  const { dir } = evidenceSettings(root);
+  const base = path.resolve(root, dir);
+  const errors = [], files = [];
+  for (const a of list) {
+    const abs = path.resolve(root, a);
+    const inside = path.relative(base, abs);
+    if (!inside || inside.startsWith("..") || path.isAbsolute(inside)) { errors.push(`--attach ${a}: not under ${dir}/ (the Stack Profile's evidence_dir)`); continue; }
+    const d = describeFile(root, abs);
+    if (!d.present) { errors.push(`--attach ${a}: no such file`); continue; }
+    files.push({ path: d.path, sha256: d.sha256, bytes: d.bytes, kind: d.kind });
+  }
+  return { errors, files };
+}
+
+/** null, or a message naming the uncommitted paths under `paths` (default: the code paths) a record would describe. */
+function uncommitted(root, g, paths) {
+  if (!g.repo) return null;
+  const d = dirtyUnder(root, paths?.length ? paths : g.codePaths);
+  return d.length ? `uncommitted changes in ${d.slice(0, 3).join(", ")}${d.length > 3 ? ", …" : ""}` : null;
 }
 
 function decisionsPath(root, o) { return path.resolve(root, o.decisions || DECISIONS_FILE); }
@@ -214,12 +272,15 @@ function appendRecord(root, o, rec) {
 // it when the code paths change. A measurement a person must confirm stays `accept record measurement`.
 const MEASURE_OUTPUT_MAX = 64 * 1024 * 1024;
 
-/** Run spec.command, extract the number, build and validate the record. Returns { rec, note } or { error, code }. */
-function machineMeasurement(root, reqs, spec) {
+/** Run spec.command, extract the number, build and validate the record. Returns { rec, note } or { error, code }.
+ *  Uncommitted changes under the record's paths (default: the code paths) refuse it unless allowDirty (dirty: true). */
+function machineMeasurement(root, reqs, spec, { allowDirty = false } = {}) {
   let re;
   try { re = new RegExp(spec.extract, "m"); } catch (e) { return { error: `--extract is not a valid regular expression: ${e.message}`, code: 2 }; }
   if (new RegExp(`${spec.extract}|`).exec("").length !== 2) return { error: "--extract needs exactly one capture group, e.g. 'All files[^|]*\\|\\s*([0-9.]+)'", code: 2 };
   const g = gitContext(root);
+  const dirt = uncommitted(root, g, spec.paths);
+  if (dirt && !allowDirty) return { error: `${dirt}: commit first, or pass --allow-dirty to record it with dirty: true`, code: 2 };
   const r = spawnSync(spec.command, { cwd: root, shell: true, encoding: "utf8", maxBuffer: MEASURE_OUTPUT_MAX });
   if (r.error) return { error: `could not run the command: ${r.error.message}`, code: 1 };
   const text = `${r.stdout || ""}\n${r.stderr || ""}`;
@@ -237,10 +298,11 @@ function machineMeasurement(root, reqs, spec) {
   Object.assign(rec, { metric: spec.metric, observed, op: spec.op, threshold: spec.threshold === undefined ? "" : Number(spec.threshold),
     command: spec.command, extract: spec.extract });
   if (r.status !== 0) rec.exitCode = r.status;
+  if (dirt) rec.dirty = true;
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
   if (errors.length) return { error: errors.join("; "), code: 2 };
-  const note = g.codeDirty ? `note: uncommitted changes in ${g.codeDirtyPaths.slice(0, 3).join(", ")}: the value reflects the worktree, and the record goes stale once they are committed` : null;
+  const note = dirt ? `note: ${dirt}: recorded with dirty: true; the value reflects the worktree and goes stale once they are committed` : null;
   return { rec, note };
 }
 
@@ -250,7 +312,7 @@ function cmdMeasure(o) {
   for (const k of ["req", "metric", "command", "extract", "op", "threshold"]) if (o[k] === undefined || o[k] === "") usage(`accept measure needs --${k}`);
   const root = rootOf(o);
   const reqs = readReqs(root, o);
-  const res = machineMeasurement(root, reqs, { req: o.req, ac: o.ac, paths: o.paths, metric: o.metric, op: o.op, threshold: o.threshold, command: o.command, extract: o.extract });
+  const res = machineMeasurement(root, reqs, { req: o.req, ac: o.ac, paths: o.paths, metric: o.metric, op: o.op, threshold: o.threshold, command: o.command, extract: o.extract }, { allowDirty: Boolean(o["allow-dirty"]) });
   if (res.error) { console.error(`${PROG}: accept measure: ${res.error}`); return res.code; }
   const { file, n } = appendRecord(root, o, res.rec);
   const r = res.rec;
@@ -275,12 +337,63 @@ function remeasure(o) {
   for (const l of [...lines].sort((a, b) => a - b)) {
     const prev = records.find((x) => x.line === l);
     if (!prev || !prev.command || !prev.extract) continue;
-    const res = machineMeasurement(root, reqs, prev);
+    const res = machineMeasurement(root, reqs, prev, { allowDirty: Boolean(o["allow-dirty"]) });
     if (res.error) { failed++; console.error(`${PROG}: remeasure ${prev.req} (${DECISIONS_FILE}:${l}): ${res.error}`); continue; }
     const { file, n } = appendRecord(root, o, res.rec);
     if (!o.json) out(`remeasured ${prev.req}${res.rec.ac ? ` AC${res.rec.ac}` : ""} ${res.rec.metric} = ${res.rec.observed} (was ${prev.observed}) at ${file}:${n}`);
   }
   return failed;
+}
+
+// ------------------------------------------------------------------ pack (evidence bundle for the customer)
+// `sdd accept pack --fase N`: {evidence_dir}/FASE-N/ is not versioned, so after the sign-off it is bundled with a
+// manifest of hashes: .sdd/entregas/FASE-N-evidencias.tar.gz holding manifest.json + {evidence_dir}/FASE-N/…
+const ID_IN_NAME = /(?:^|[^A-Za-z0-9])(AC[-_]\d{3,}[-_]\d{2,}|REQ[-_][A-Z]+[-_]\d+[-_]AC\d+|WF[-_]\d{3,}|FASE[-_]\d+)(?!\d)/i;
+function filesUnder(dir) {
+  const acc = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) acc.push(...filesUnder(p)); else if (e.isFile()) acc.push(p);
+  }
+  return acc.sort();
+}
+function cmdPack(o) {
+  if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  if (o.fase === undefined) usage("accept pack needs --fase N");
+  const root = rootOf(o);
+  const { dir } = evidenceSettings(root);
+  const rel = `${dir}/FASE-${o.fase}`;
+  const abs = path.join(root, rel);
+  const list = existsSync(abs) && statSync(abs).isDirectory() ? filesUnder(abs) : [];
+  if (!list.length) { console.error(`${PROG}: accept pack: no evidence under ${rel}/ — run the FASE journey with capture first`); return 1; }
+  // Criteria each file shows, from the ledger when the requirements are there (attachments and name-bound captures).
+  const hasReqs = existsSync(path.resolve(root, o.requirements || "requirements/REQUIREMENTS.md"));
+  const ledger = hasReqs ? buildLedger({ ...o, out: undefined }).ledger : null;
+  const shows = new Map();
+  for (const r of ledger?.requirements || []) for (const c of r.criteria || []) for (const e of c.evidence || [])
+    for (const a of e.attachments || []) { if (!shows.has(a.path)) shows.set(a.path, new Set()); shows.get(a.path).add(`${r.id} AC${c.n}`); }
+  const files = list.map((p) => {
+    const d = describeFile(root, p);
+    const m = path.basename(p).match(ID_IN_NAME);
+    return { path: d.path, sha256: d.sha256, bytes: d.bytes, kind: d.kind, criterion: m ? m[1].replace(/_/g, "-").toUpperCase() : null,
+      criteria: [...(shows.get(d.path) || [])].sort() };
+  });
+  const g = gitContext(root);
+  const manifest = { $schema: "sdd-evidence-pack-v1", fase: o.fase, evaluated_sha: ledger?.evaluated_sha ?? g.head, dirty: ledger?.dirty ?? g.dirty,
+    generatedAt: new Date().toISOString(), evidence_dir: dir, files };
+  const archive = path.resolve(root, o.out || `.sdd/entregas/FASE-${o.fase}-evidencias.tar.gz`);
+  mkdirSync(path.dirname(archive), { recursive: true });
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "sdd-pack-"));
+  try {
+    writeFileSync(path.join(tmp, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+    const t = spawnSync("tar", ["-czf", archive, "-C", tmp, "manifest.json", "-C", root, rel],
+      { encoding: "utf8", env: { ...process.env, COPYFILE_DISABLE: "1" } }); // no macOS ._ resource files
+    if (t.error || t.status !== 0) die(`accept pack: tar failed: ${t.error ? t.error.message : (t.stderr || "").trim()}`);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+  const shown = path.relative(root, archive) || archive;
+  if (o.json) out(JSON.stringify({ archive: shown, files: files.length, manifest }, null, 2));
+  else out(`packed ${files.length} file(s) of ${rel}/ into ${shown} (manifest.json with sha256; evaluated at ${String(manifest.evaluated_sha || "no git").slice(0, 7)})`);
+  return 0;
 }
 
 // ------------------------------------------------------------------ gate
@@ -312,18 +425,23 @@ function cmdGate(o) {
     }
     if (o.fase !== undefined && (!ledger.scope || ledger.scope.fase !== o.fase)) die(`${o.ledger} was not evaluated for FASE ${o.fase}; run sdd gate --fase ${o.fase} without --ledger`);
   } else {
-    ({ ledger } = buildLedger(o));
+    let g;
+    ({ ledger, git: g } = buildLedger(o));
+    warnDirty(o, g);
     if (o.out) writeJson(root, o.out, ledger);
   }
   code = gateCode(ledger);
   const s = ledger.summary;
   const labels = { 0: "goal met", 1: "goal not met", 2: "stale evidence — re-run the tests on this commit", 3: "goal met with waived Musts" };
+  const missingVideos = s.missing_videos || [];
   if (o.json) out(JSON.stringify({ code, mode, label: labels[code], evaluated_sha: ledger.evaluated_sha, scope: ledger.scope, summary: s,
-    requirements: ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED").map((r) => ({ id: r.id, priority: r.priority, verdict: r.verdict, criteria: `${r.criteria_passing}/${r.criteria_total}`, stale_evidence: r.stale_evidence })) }, null, 2));
+    visual_evidence: ledger.visual_evidence ?? null, unshown: s.unshown ?? 0, missing_videos: missingVideos,
+    requirements: ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED").map((r) => ({ id: r.id, priority: r.priority, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}), criteria: `${r.criteria_passing}/${r.criteria_total}`, stale_evidence: r.stale_evidence })) }, null, 2));
   else if (o.md) process.stdout.write(renderPrBlock(ledger, code));
   else {
     for (const r of ledger.requirements.filter((x) => x.in_scope && x.priority === "Must" && !["VERIFIED", "DEPRECATED"].includes(x.verdict)))
-      out(`${r.id}  ${r.verdict}${r.stale_evidence ? " (stale evidence)" : ""}  ${r.criteria_passing}/${r.criteria_total}`);
+      out(`${r.id}  ${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}  ${r.criteria_passing}/${r.criteria_total}`);
+    for (const id of missingVideos) out(`missing video ${id}  (${ROUTES.capture})`);
     out(`gate: ${labels[code]} — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}${ledger.scope ? ` · FASE ${ledger.scope.fase}` : ""} · exit ${code}`);
   }
   if (mode === "warn") { if (!o.json && !o.md) out(`gate: would exit ${code} (mode warn)`); return 0; }
@@ -347,7 +465,8 @@ function cmdLoop(o) {
     try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch { die(`${o.state || ".sdd/acceptance-loop.json"} is not JSON (use --reset)`); }
     if (!Array.isArray(state.cycles)) state.cycles = [];
   }
-  const { ledger } = buildLedger(o);
+  const { ledger, git: g } = buildLedger(o);
+  warnDirty(o, g);
   if (!o["no-out"]) writeJson(root, o.out || ".sdd/acceptance.json", ledger);
   const goalSet = ledger.requirements.filter((r) => r.in_scope && r.priority === "Must" && r.verdict !== "DEPRECATED");
   const count = (v) => goalSet.filter((r) => r.verdict === v).length;
@@ -372,7 +491,8 @@ function cmdLoop(o) {
   else if (cycle > max) stop = "max-cycles";
   const result = { cycle, max_cycles: max, stop, evaluated_sha: ledger.evaluated_sha, progress,
     previous: prev ? { cycle: prev.cycle, progress: prev.progress } : null, regressed, targets, others,
-    stale_evidence: ledger.summary.stale_evidence };
+    stale_evidence: ledger.summary.stale_evidence, unshown: ledger.summary.unshown ?? 0,
+    missing_videos: (ledger.summary.missing_videos || []).map((id) => ({ video: id, route_hint: ROUTES.capture })) };
   if (capped) result.note = `--max-cycles capped at ${HARD_CAP}`;
   state.max_cycles = max;
   state.cycles.push({ cycle, at: ledger.generatedAt, evaluated_sha: ledger.evaluated_sha, progress, verdicts, stop });

@@ -139,6 +139,34 @@ test("sdd_context sin libro conserva la lógica de enlaces", () => {
   assert.ok(j.gaps.includes("MISSING_TESTS: No test references found"));
 });
 
+test("evidencia visual: un criterio unshown sale como hueco UNSHOWN y el motivo acompaña al veredicto", () => {
+  const dir = proyecto(false);
+  mkdirSync(path.join(dir, ".sdd"));
+  const shot = { path: "evidencias/FASE-1/AC-001-01.png", sha256: "sha256:ab", bytes: 3, kind: "image", present: true };
+  const ledger = {
+    $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
+    visual_evidence: "required", evidence_dir: "evidencias", videos: null,
+    requirements: [{
+      id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "MISSING",
+      reason: "no visual evidence", criteria_total: 2, criteria_passing: 1, waiver: null, stale_evidence: false,
+      criteria: [
+        { n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", visual: "shown", evidence: [{ kind: "test", status: "pass", fresh: true, attachments: [shot] }] },
+        { n: 2, text: "b", scenarios: ["AC-001-02"], state: "unshown", visual: "missing", evidence: [{ kind: "test", status: "pass", fresh: true, attachments: [] }] },
+      ],
+    }],
+    summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 0, FAILING: 0, MISSING: 1, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
+      must_total: 1, must_verified: 0, must_waived: 0, goal: false, waived_musts: [], stale_evidence: 0, unshown: 1, missing_videos: [] },
+  };
+  writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
+  const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
+  assert.equal(ctx.acceptance.reason, "no visual evidence");
+  assert.equal(ctx.acceptance.perCriterion[1].visual, "missing");
+  assert.ok(ctx.gaps.some((g: string) => g.startsWith("UNSHOWN_AC2")), "el criterio sin captura es un hueco");
+  assert.ok(!ctx.gaps.some((g: string) => g.includes("AC1")), "el criterio con captura no lo es");
+  const cov = parsear(executeCoverage({}, emptyGraph(), indiceVacio(), dir));
+  assert.equal(cov.open[0].reason, "no visual evidence");
+});
+
 test("la pista de sdd_trace apunta a sdd-acceptance, no a traceability-check", () => {
   const h = getNextStepHint("sdd_trace");
   assert.ok(h.includes("/sdd-acceptance"));
