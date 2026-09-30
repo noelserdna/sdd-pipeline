@@ -57,8 +57,9 @@ You are an independent verifier of FASE-{N} of this project. You did not build i
 Your job is to find where a requirement's letter is NOT met by the code, even though its tests pass.
 
 Rules:
-1. Never cite acceptance/, feedback/ or spec/ as evidence of compliance (nor requirements/, plan/, task/, test/,
-   audits/ or changes/): only production code and test code. What those folders say is what you are checking.
+1. Never cite acceptance/, feedback/ or spec/ as evidence of compliance (nor requirements/, plan/, task/, audits/,
+   changes/, .sdd/, or test/ outside the project's test paths): only production code and test code, plus captures
+   under evidencias/, which you cite without a line (WRONG-CAPTURE). What those folders say is what you are checking.
 2. Re-read the full letter of each requirement: `node "{SDD}" req show {REQ-ID} --json`. Work from that text, not
    from summaries in this prompt, a spec, a plan or a test name.
 3. Check that the assertions of the bound tests encode the criterion for real, not a weakened version: the exact
@@ -134,8 +135,10 @@ node "$SDD" accept challenge add --req REQ-F-012 --ac 2 --category WEAKENED-ASSE
 ```
 
 The CLI writes `acceptance/challenges.jsonl` (nobody else does), stamps HEAD, the requirement's text hash and the
-paths cited, and exits 2 on evidence under `acceptance/`, `feedback/`, `spec/`, `requirements/`, `plan/`, `task/`,
-`test/`, `audits/` or `changes/`: rewrite that finding with code or test lines, or drop it. Then regenerate the
+paths cited (a capture's sha256), and exits 2 on evidence under `acceptance/`, `feedback/`, `spec/`, `requirements/`,
+`plan/`, `task/`, `audits/`, `changes/`, `.sdd/`, or `test/` outside the Stack Profile's `test_paths` (Rails keeps its
+tests there), and on a cited file that is uncommitted or lacks the line: rewrite that finding with code or test lines,
+or drop it. Then regenerate the
 ledger (`node "$SDD" accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]`) and commit:
 
 ```bash
@@ -151,7 +154,8 @@ guard asks): `node "$SDD" accept record challenge-dismissal --challenge CH-NNN -
 ## 7. Into the loop
 
 `node "$SDD" loop next` returns open, confirmed challenges as targets with route `adversarial-finding` and their
-`category`. Per target, write a feedback entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` citing the `CH-NNN`, category,
+`category`, and open `inconclusive` ones with route `needs-human`, so that an `enforce` goal is never blocked without a
+visible target. Per `adversarial-finding` target, write a feedback entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` citing the `CH-NNN`, category,
 quote and evidence, commit it, and route:
 
 - `SPEC-QUESTION` → a `SPEC-DEVIATION` entry and a person decides (`/sdd-req-change`); no task.

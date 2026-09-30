@@ -197,7 +197,7 @@ and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with 
 the last `--adversarial` run and are kept by later runs of other modes (patch only the keys a mode computes):
 `adversarial_findings` (findings the verifiers raised, including those from the clean sample),
 `adversarial_confirmed`, `adversarial_refuted` (counter-verification results; `inconclusive` is the remainder),
-`adversarial_open` (`node "$SDD" accept challenge list --open --json`, after recording), `adversarial_agents` (verifiers,
+`adversarial_open` (field `open` of `node "$SDD" accept challenge list --json`, after recording), `adversarial_agents` (verifiers,
 counter-verifiers and critics launched) and `coverage_gaps` (requirements in no FASE, FASEs without header and the
 LLM critic's gaps). Then commit what this run wrote under `acceptance/` (the report and any records
 appended by `--remeasure`), as every stage commits its outputs (plugin-root `references/git-conventions.md`,

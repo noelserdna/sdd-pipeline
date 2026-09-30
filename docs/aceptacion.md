@@ -82,7 +82,7 @@ Un test ligado por nombre y en verde prueba que *una* aserción se cumplió, no 
 3. **Un verificador por FASE**, un agente en contexto limpio y de solo lectura, con cuatro reglas: no citar `acceptance/`, `feedback/` ni `spec/` como evidencia (solo código de producción y tests); releer la letra completa del requisito (`sdd req show`); comprobar que los asserts codifican el criterio de verdad; y buscar el camino de producción que esquiva la implementación. Además lee las capturas de `evidencias/` y comprueba que muestran el literal. Se lanzan como mucho `test_slots` a la vez, con los tests de uno en uno.
 4. **Contraverificación** de todos los hallazgos y de una muestra de limpios, por agentes nuevos que no ven el razonamiento del primero: `confirmed`, `refuted` o `inconclusive` (este último lo decide una persona).
 5. **Crítico de cobertura LLM:** confirma que el universo evaluado está completo.
-6. **Registro:** `sdd accept challenge add` escribe cada hallazgo confirmado o no concluyente en `acceptance/challenges.jsonl`. La CLI rechaza (exit 2) la evidencia bajo `acceptance/`, `feedback/`, `spec/`, `requirements/`, `plan/`, `task/`, `test/`, `audits/` o `changes/`.
+6. **Registro:** `sdd accept challenge add` escribe cada hallazgo confirmado o no concluyente en `acceptance/challenges.jsonl`. La CLI rechaza (exit 2) la evidencia bajo `acceptance/`, `feedback/`, `spec/`, `requirements/`, `plan/`, `task/`, `audits/`, `changes/` o `.sdd/`, y bajo `test/` cuando no está en los `test_paths` del perfil (en Rails los tests viven ahí). También rechaza un fichero citado sin commitear o una línea que no existe. Una captura de `evidencias/` se cita sin línea (`WRONG-CAPTURE`) y se guarda su sha256.
 
 | Categoría | Qué encontró el verificador |
 |---|---|
@@ -95,7 +95,7 @@ Un test ligado por nombre y en verde prueba que *una* aserción se cumplió, no 
 | `SPEC-QUESTION` | El criterio no se puede cumplir tal como está escrito: pregunta para una persona |
 | `WRONG-CAPTURE` | La captura no muestra el literal del criterio |
 
-**El veredicto no cambia.** El libro añade `challenges[]` por requisito (`open`, `stale` cuando cambia el código que citan o el texto del requisito, `dismissed`) y `summary.must_challenged`. El bucle devuelve los abiertos y confirmados con la ruta `adversarial-finding` y genera tareas con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`; un `SPEC-QUESTION` va a `sdd-req-change`. Descartar un hallazgo es un registro humano: `sdd accept record challenge-dismissal --challenge CH-NNN --reason … --by … --role …`. Los verificadores no escriben código, specs, tests ni `decisions.jsonl`.
+**El veredicto no cambia.** El libro añade `challenges[]` por requisito (`open`, `stale` cuando cambia el código que citan o el texto del requisito, `dismissed`) y `summary.must_challenged`. El bucle devuelve los abiertos y confirmados con la ruta `adversarial-finding`, y los no concluyentes con la ruta `needs-human`, y genera tareas con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`; un `SPEC-QUESTION` va a `sdd-req-change`. Descartar un hallazgo es un registro humano: `sdd accept record challenge-dismissal --challenge CH-NNN --reason … --by … --role …`. Los verificadores no escriben código, specs, tests ni `decisions.jsonl`.
 
 La puerta la fija `adversarial_gate` en el Stack Profile: `off` lo ignora, `warn` (por defecto en 5.1) lo imprime sin cambiar el código de salida, `enforce` sale con **4** si hay un challenge abierto en un Must. El protocolo completo está en `skills/sdd-acceptance/references/adversarial-protocol.md`.
 
