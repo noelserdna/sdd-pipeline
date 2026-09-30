@@ -7,14 +7,29 @@ plain question of the Flow table instead ("FASE-{N} completa. ¿Continuamos con 
 
 `SDD="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs"`, run with `node`.
 
+## 0. Adversarial round
+
+Before the customer sees the increment, run `sdd-acceptance --adversarial --fase {N}` with no question: independent
+verifiers read each requirement's letter against the code and tests, so the gate is never the first time anyone
+does. Confirmed findings become fix tasks through the loop (route `adversarial-finding`) before presenting; the ones
+left open, and the `inconclusive` ones, are shown in §1 and never hidden, whatever `adversarial_gate` says. A person
+may dismiss one (`accept record challenge-dismissal`, with their name and role); nobody else can.
+
 ## 1. Present
 
 1. The increment: the `Incremento`, `Requisitos` and `Necesidades` lines of `plan/fases/FASE-{N}-*.md`.
-2. The demo the implementer ran: one row per step (# · acción · resultado esperado · observado · escenario). Offer to
-   run it again live, step by step, when the customer wants to watch it.
+2. The demo the implementer ran: one row per step (# · acción · resultado esperado · observado · escenario), with the
+   FASE's video (`evidencias/FASE-{N}/{WF-NNN | FASE-N}.webm`) and, per criterion, its capture
+   (`evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png`): the customer accepts what they can see. Show the files by
+   path (and on the status page, when the project has one). A criterion `unshown` or a workflow in `missing_videos`
+   is re-captured first (route `capture-evidence`: re-run the journey with capture, no code task). Offer to run the
+   demo again live, step by step, when the customer wants to watch it.
 3. The verdict per requirement: `node "$SDD" gate --fase {N} --md` (or the table of
    `acceptance/ACCEPTANCE-REPORT.md`): requirement · verdict · evidence ("3/3 test") · needs. Say plainly when the
    gate is not met (exit 1) or the evidence is stale (exit 2): the customer should not accept on stale evidence.
+   Exit 4 means open challenges on a Must under `adversarial_gate: enforce`.
+4. The open challenges of §0 (`node "$SDD" accept challenge list --open`): requirement, category, the quote of the
+   criterion not met and where.
 
 ## 2. Human evidence
 
