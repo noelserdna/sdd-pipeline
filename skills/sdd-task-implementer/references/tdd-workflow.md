@@ -30,6 +30,39 @@ their INV/ADR ids.
 
 ---
 
+## The criterion's letter sits above its assert
+
+The letter of a criterion lives only in `requirements/REQUIREMENTS.md`; the BDD scenario, the FASE line and the task
+paraphrase it, and a paraphrase drops the literal the customer will look for. The test is the link that carries the
+letter to the code, so every test bound to a criterion quotes it:
+
+- Open the criterion by id at its source: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" req show
+  REQ-F-081 --ac 1` prints the statement and the criterion verbatim (without the CLI, read that requirement's section
+  of `REQUIREMENTS.md`). Never quote from the task, the FASE or the BDD summary.
+- Put the quote, in the criterion's own language, in a comment directly above the assert that checks it:
+  `// REQ-F-081 AC1: "…"`. A long criterion may elide its GIVEN/WHEN with `…`; a literal (a quoted label, title,
+  message, amount or date) is never elided.
+- Every literal of the quote appears in the assert, character for character. When the assert cannot hold it (the
+  criterion contradicts another, or the literal cannot be produced), implement the rest and record a `SPEC-DEVIATION`
+  (Art. 12) instead of asserting something close.
+
+```typescript example
+// requirements/REQUIREMENTS.md, REQ-F-081 AC1, written in Spanish with the customer:
+//   CUANDO el usuario abre la lista de proyectos ENTONCES el usuario ve el título 'Proyectos personales'
+//   y el proyecto de ejemplo 'Huerto 2026'
+test('E2E-WF-004-01 REQ-F-081 AC1 project list shows the personal section', async ({ page }) => {
+  await page.goto('/projects');
+  // REQ-F-081 AC1: "…ENTONCES el usuario ve el título 'Proyectos personales' y el proyecto de ejemplo 'Huerto 2026'"
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('Proyectos personales');
+  await expect(page.getByRole('list', { name: 'Proyectos personales' })).toContainText('Huerto 2026');
+});
+```
+
+An assert on `/proyectos/i` or on `toBeVisible()` of the list passes while the page reads 'Mis proyectos': the quote
+next to it makes that gap visible to the reviewer and to the adversarial round.
+
+---
+
 ## The RED-GREEN-REFACTOR Cycle
 
 For each task with testable behavior:
@@ -428,6 +461,12 @@ Before marking a test as complete:
 [ ] Test name carries the scenario id and describes behavior, not implementation
     WRONG: "should call validateToken function"
     RIGHT: "AC-002-03 returns 401 when token is expired"
+
+[ ] A test bound to a criterion quotes it above the assert, from requirements/REQUIREMENTS.md,
+    and every literal of the quote appears in the assert
+    WRONG: // should show the title       expect(title).toBeVisible()
+    RIGHT: // REQ-F-081 AC1: "…ENTONCES el usuario ve el título 'Proyectos personales'…"
+           await expect(title).toHaveText('Proyectos personales')
 
 [ ] Assertions are specific
     WRONG: expect(result).toBeTruthy()

@@ -87,7 +87,7 @@ Never modified: `spec/`, `plan/`, `audits/`, `task/TASK-INDEX.md`, `task/TASK-OR
 
 1. Read the project `CLAUDE.md` and resolve the **Stack Profile** (section Stack Profile): commands, `app_dir`, `task_state`, `task_format`.
 2. Always load: `task/TASK-FASE-{N}.md` (if it has `## Stream Ownership`, parse Stream → tasks, write-set, "Runs in"), `plan/fase-plans/PLAN-FASE-{N}.md`, `plan/fases/FASE-{N}-*.md` (Criterios de Exito; in a vertical plan also `Requisitos`, `Escenarios` and `## Demo`), `spec/domain/01-GLOSSARY.md`, and the plan style (`grep -m1 -i 'Plan-Style' plan/PLAN.md`: `vertical`, `vertical (from FASE-N)` for FASE-N on, or absent = horizontal).
-3. Load on demand, when a task's **Refs** point there: the referenced UC/contract/ADR files, `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, `design/OPERATION-MAPPING.md`.
+3. Load on demand, when a task's **Refs** point there: the referenced UC/contract/ADR files, `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, `design/OPERATION-MAPPING.md`. For every `REQ-*` the task cites (Refs, Acceptance, or through its scenario ids), its statement and criteria verbatim: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" req show <REQ-ID> [--ac N]` (without the command, that requirement's section of `requirements/REQUIREMENTS.md`). The task, the FASE and the BDD scenario paraphrase the criterion; the tests quote its letter (`references/tdd-workflow.md` → The criterion's letter sits above its assert).
 4. Build the context map:
 
 ```
@@ -147,7 +147,7 @@ For each task:
 ### Phase 4: Test-First Construction
 
 1. Create the test file where the Stack Profile / plan places it.
-2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`, `references/tdd-workflow.md`).
+2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`), and each criterion's quote sits above its assert (`references/tdd-workflow.md`).
 3. Run `{test_file}` (or `{test_name}`) → they must FAIL. Tests that pass without implementation are wrong; fix them.
 
 Tasks without behaviour (`chore`/`build`/config, e.g. a runner setting or a fixture) write no test: run the `Verify:` command the task states and check its output (e.g. `config parses → {server} starts without errors`). A chore task that says `Test first` but lists no test file is a task defect: record it as IF feedback and verify with a command.
@@ -263,7 +263,10 @@ Agent prompt:
 ```
 You are a TASK IMPLEMENTER agent for sdd-task-implementer. Implement {TASK-ID} from task/TASK-FASE-{N}.md.
 Read first: task/TASK-FASE-{N}.md (your entry), plan/fase-plans/PLAN-FASE-{N}.md, {spec files from Refs},
-spec/domain/01-GLOSSARY.md, design/OPERATION-MAPPING.md when the task implements an API operation.
+spec/domain/01-GLOSSARY.md, design/OPERATION-MAPPING.md when the task implements an API operation, and the letter
+of every requirement the task cites: {one line per REQ-ID: node "{plugin_root}/scripts/sdd.mjs" req show <REQ-ID>
+[--ac N]}. Quote that letter, not the task's paraphrase, in a comment above the assert that checks it; every literal
+of the quote appears in the assert ({plugin_root}/skills/sdd-task-implementer/references/tdd-workflow.md).
 Task: {full task entry}
 Process: write failing tests for each acceptance criterion → implement → run the Review checklist → report (do not commit).
 Constraints: modify only the files of the task entry; implement only what the acceptance criteria require; run only
