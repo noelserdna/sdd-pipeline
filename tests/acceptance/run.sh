@@ -770,8 +770,8 @@ printf 'export const store = new Map();\n' > "$repo/src/store.js"
 commitT "feat(todo): store" "Task: TASK-F1-002" "Refs: REQ-F-001"
 printf 'export const csv = () => "";\n' > "$repo/src/other.js"
 commitT "feat(todo): export" "Task: TASK-F2-001"
-all_green() { junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass"; }
-all_green
+adv_green() { junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass"; }
+adv_green
 add_ok() {
   run accept challenge add --req REQ-F-001 --ac 1 --category WEAKENED-ASSERT --quote 'task 1 "Buy milk" is pending' \
     --evidence src/api.js:1 tests/todo.test.js:3 --verifier verifier-FASE-1 --counter confirmed "$@"
@@ -859,7 +859,7 @@ has "list: one line per challenge" "CH-001  open"
 has "list: summary line" "challenges: 3 · open 3"
 
 # ledger: the verdict does not change; challenges[] and summary.must_challenged
-all_green
+adv_green
 run accept --fase 1 --report acceptance/ACCEPTANCE-REPORT.md
 expect "accept with challenges → 0" "$rc" 0
 expect "verdict unchanged: F-001 VERIFIED" "$(ledger 'v("REQ-F-001")')" VERIFIED
@@ -874,16 +874,16 @@ grep -q '| VERIFIED · challenged CH-001, CH-002 |' "$repo/acceptance/ACCEPTANCE
 # gate: enforce (default) → 4; warn keeps the code; off ignores; precedence 2 > 1 > 4 > 3 > 0
 run gate --fase 1; expect "gate default (enforce): open Must challenge → 4" "$rc" 4
 profile "adversarial_gate: warn"; commit "profile: warn"
-all_green
+adv_green
 run gate --fase 1; expect "gate warn: open Must challenge keeps exit 0" "$rc" 0
 has "gate warn: prints the challenge" "challenge CH-001 open on REQ-F-001 AC1"; has "gate warn: says enforce would exit 4" "enforce would exit 4"
 run gate --fase 1 --md; has "gate --md: adversarial line" "Adversarial (\`adversarial_gate: warn\`): 3 open challenges"
 profile "adversarial_gate: off"; commit "profile: off"
-all_green
+adv_green
 run gate --fase 1; expect "gate off: exit 0" "$rc" 0
 if contains "$out" "challenge CH-001"; then bad "gate off: challenges not printed"; else pass "gate off: challenges not printed"; fi
 profile "adversarial_gate: enforce"; commit "profile: enforce"
-all_green
+adv_green
 run gate --fase 1; expect "gate enforce: open challenge on a Must → 4" "$rc" 4; has "gate: label 4" "open adversarial challenge on a Must"
 run gate --fase 1 --json; expect "gate --json: code 4 and the challenges" "$(js 'j.code + "|" + j.adversarial_gate + "|" + j.must_challenged + "|" + j.open_challenges.map(c=>c.id).join()')" "4|enforce|2|CH-001,CH-002,CH-003"
 run gate --fase 1 --md; has "gate --md: exit 4 in the header" "gate exit 4"
@@ -891,7 +891,7 @@ run gate --fase 1 --mode warn; expect "acceptance_gate warn over enforce → 0" 
 run gate; expect "precedence: goal not met (1) over an open challenge (4)" "$rc" 1
 junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=fail" "AC-002-01 order=pass" "AC-002-02 empty list=pass"
 run gate --fase 1; expect "precedence: failing (1) over 4" "$rc" 1
-all_green
+adv_green
 echo '// wip' >> "$repo/tests/todo.test.js"
 run gate --fase 1; expect "precedence: stale evidence (2) over 4" "$rc" 2
 ( cd "$repo" && git checkout -q -- tests/todo.test.js )
@@ -925,7 +925,7 @@ expect "CH-001 stale once src/api.js changed" "$(js 'const c=j.challenges.find(x
 expect "CH-003 still open (test/models untouched)" "$(js 'j.challenges.find(x=>x.id==="CH-003").state')" open
 run accept challenge list --open --json
 expect "list --open: only the open ones" "$(js 'j.challenges.map(c=>c.id).join()')" CH-003
-all_green
+adv_green
 run gate --fase 1; expect "enforce: still 4 while CH-003 is open on REQ-F-002" "$rc" 4
 run accept record challenge-dismissal --challenge CH-003 --reason "the real provider is the one tested" --by Laura --role "product owner"
 run gate --fase 1; expect "enforce: 0 once no Must challenge is open" "$rc" 0
@@ -954,7 +954,7 @@ rm -rf "$repo/evidencias"
 # adversarial plan: the mechanical coverage critic
 printf '# FASE 2: Export\n\nNo header here.\n\n## Objetivo\n\nExport.\n' > "$repo/plan/fases/FASE-2-export.md"
 commit "plan: FASE-2 without header"
-all_green
+adv_green
 run accept adversarial plan --json
 expect "plan: exit 0" "$rc" 0
 expect "plan: FASEs listed" "$(js 'j.fases.map(f=>f.fase + ":" + f.header).join()')" "1:true,2:false"
