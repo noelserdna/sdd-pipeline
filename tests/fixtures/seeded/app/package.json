@@ -1,0 +1,12 @@
+{
+  "name": "cv-alumnos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CV de alumnos del campus: generación, revisión del staff y publicación",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test",
+    "test:report": "node --test --test-reporter=junit --test-reporter-destination=junit/fase-1.xml"
+  }
+}
