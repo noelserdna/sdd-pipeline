@@ -81,6 +81,7 @@ For each change in the input:
 | SPEC-DEVIATION | The implementer built the spec as written and proposes a different behaviour. A human decides: **keep** the spec → close the entry, no CR; **amend** → a MODIFY CR through this skill, after which the cascade updates tests and code (Art. 12). The code never leads the spec. |
 | COVERAGE-GAP | None: the spec is fine but tasks miss it; recommend `/sdd-task-generator --fase=N --incremental` and leave the entry open for that run |
 | TOOL-GUARDRAIL | None: a tool refused an AI agent; a human acts or adds a non-destructive command to the SDD Stack Profile |
+| ENV-REQUIRED | None: a person adds the variable's name to the Stack Profile's `env_required` and its value to each environment |
 
 After the CRs are applied, set `Status: RESOLVED` (or `CLOSED — spec kept`) on each processed entry and cite the `IF-` IDs in the Change Report.
 

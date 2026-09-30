@@ -55,6 +55,18 @@ grep -niE 'failed|error|cancel|fallid|cancelad' spec/domain/04-STATES.md
 
 For each operation check: failure, timeout, partial data, duplicates, no data, user cancels, concurrent access.
 
+**Replay of a write.** Every operation with a write effect (creates, changes, deletes, sends, charges, consumes) needs a
+`replay` row in the `Exceptions & errors` table of its UC (E row with condition `replay`, specifications-engineer Step 6a
+question 6) stating what a second identical call keeps. A write operation without one is a CAT-03 finding, P1 (P0 when
+the write moves money or consumes a limited resource), located at the operation row, fix "what does the same call with
+the same input do the second time?". Without the row the retry outcome is whatever the code happens to do, and
+`sdd-test-planner` can only plan a replay test with `Refs: —`.
+
+```bash
+# UC files with an Exceptions table but no replay row; then check their operations for a write effect
+grep -L -iE '^\| *E[0-9]+ *\|[^|]*\| *replay' $(grep -l '^## Exceptions' spec/use-cases/*.md)
+```
+
 ## CAT-04: Semantic ambiguities
 
 ```bash

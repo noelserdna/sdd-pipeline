@@ -139,7 +139,7 @@ entry). `sdd-req-change --file feedback/IMPL-FEEDBACK-FASE-{N}.md` processes it.
 | **Severity**       | BLOCKER | WARNING |
 | **Task**           | TASK-F{N}-{SEQ} |
 | **Affected Specs** | {comma-separated spec file paths} |
-| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION | TOOL-GUARDRAIL | COVERAGE-GAP |
+| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION | TOOL-GUARDRAIL | COVERAGE-GAP | ENV-REQUIRED |
 | **Status**         | OPEN | RESOLVED | WONT-FIX |
 
 **Problem:**
@@ -161,7 +161,8 @@ A `SPEC-DEVIATION` entry (the implementer believes the spec should differ; the s
 also carries `| **Spec** | {spec ID and exact text} |`, `| **Deviation** | … |`, `| **Impact** | … |` and
 `| **Recommendation** | AMEND \| KEEP \| NEEDS-DISCUSSION |`, with `Status: PENDING-REVIEW`. A `COVERAGE-GAP` entry
 (Phase 9: a source file at 0% coverage and not excluded) names the file and recommends
-`/sdd-task-generator --fase=N --incremental`.
+`/sdd-task-generator --fase=N --incremental`. An `ENV-REQUIRED` entry (Phase 3: the task reads an environment
+variable that the profile's `env_required` does not list) names the variable, never its value.
 
 ---
 

@@ -359,7 +359,8 @@
      - projects: chromium (default), firefox + webkit (for full tier)
      - retries: 2 in CI, 0 locally
      - workers: parallel by default
-     - reporter: html for CI, list for local
+     - evidence: screenshot and video on, outputDir under {evidence_dir}/FASE-{N}/, JUnit into .sdd/junit/
+       (template below)
 3. CREATE auth fixture (if first E2E task)
    - tests/e2e/fixtures/auth.setup.ts
    - Perform login once, save storageState
@@ -376,13 +377,27 @@
      import AxeBuilder from '@axe-core/playwright';
      const results = await new AxeBuilder({ page }).analyze();
      expect(results.violations).toEqual([]);
-   - Tag with tier: test.describe.configure({ tag: '@smoke' })
+   - Tag with tier: test.describe.configure({ tag: '@smoke' }) (PR tier); post-deploy scenarios of the
+     `smoke-deploy` tier carry `@smoke-deploy` instead, the tag the profile's `smoke` command selects
+   - Each criterion's THEN is asserted on its text (`toHaveText`/`toContainText` with the literal the criterion
+     quotes); `toBeVisible()` alone proves that an element exists, not what the customer reads
+   - Right after that assert, capture the screen for the criterion with `captureCriterion` (below): one image per
+     criterion of every REQ-F, since without it the acceptance ledger reads the criterion as `unshown`
+   - The title of a journey test carries its workflow id (`WF-NNN`, or `FASE-N` when the FASE names no workflow):
+     the video helper names the video after it, and `sdd gate --fase N` looks for that id in the file name
+   - `visual_evidence` (Stack Profile): `required` and `warn` capture alike (`warn` only changes what the ledger
+     does with a missing image); `off` writes no captures and no videos — `screenshot: 'off'`, `video: 'off'`, no
+     evidence helper — and keeps the route and the text asserts
 6. IMPLEMENT error variations
    - Each row in the Variations table → a separate test
    - Reuse page objects, change inputs/preconditions
 7. VERIFY
    - `{acceptance} --grep <E2E-ID>` → all pass (new suite without the key: npx playwright test {scenario-file})
    - `{acceptance} --grep @smoke` → smoke tier passes (only when the suite tags tiers)
+   - Unless `visual_evidence: off`, the run left `{evidence_dir}/FASE-{N}/<criterion>.png` for each criterion and a
+     video whose name carries the WF-NNN (FASE-N when the FASE names no workflow); `{evidence_dir}` is the profile's
+     `evidence_dir`, default `evidencias`, and the run exported `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}`
+     (stack-profile.md §2)
    - No flaky failures on 3 consecutive runs of the filtered scenario
    - Never the full suite per task and never a manual server start + curl + kill: the suite's webServer (or the
      server helper, stack-profile.md §8) runs the app
@@ -391,23 +406,35 @@
    - Task: TASK-F{N}-{SEQ}
 ```
 
-**Playwright config template** (new suites only — step 2):
+**Playwright config template** (new suites only — step 2; an existing suite gets the `use`, `outputDir` and
+`reporter` lines below in its own E2E setup task, because every REQ-F criterion needs its capture to be VERIFIED):
 
 ```typescript
 // playwright.config.ts
 import { defineConfig, devices } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+
+const root = execSync('git rev-parse --show-toplevel').toString().trim();
+const fase = process.env.SDD_FASE ?? '0';                          // Phase 9 exports SDD_FASE={N}
+export const evidenceDir = path.join(root, process.env.SDD_EVIDENCE_DIR ?? 'evidencias', `FASE-${fase}`);
 
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? 'html' : 'list',
+  workers: process.env.CI ? 1 : undefined,                         // test_slots: 1 → write 1 here
+  outputDir: path.join(evidenceDir, '.playwright'),                  // raw per-test artifacts, git-ignored
+  reporter: [
+    [process.env.CI ? 'html' : 'list'],
+    ['junit', { outputFile: path.join(root, '.sdd/junit/playwright.xml') }], // read by sdd accept
+  ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
+    video: 'on',
+    trace: 'off',            // traces hold cookies and storage: never under evidencias/ (use --trace on locally)
   },
   projects: [
     // Auth setup — runs once before all tests
@@ -433,6 +460,42 @@ export default defineConfig({
 });
 ```
 
+**Evidence helper** (one per suite, next to the fixtures). `testInfo.attach` with a `path` makes the JUnit reporter
+write `[[ATTACHMENT|<path>]]` into the test's `<system-out>`; `sdd accept` reads it, hashes the file and binds it to the
+criterion ids in the test name.
+
+```typescript
+// tests/e2e/fixtures/evidence.ts
+import { test as base, type Page, type TestInfo } from '@playwright/test';
+import path from 'node:path';
+import { evidenceDir } from '../../../playwright.config';
+
+// One image per criterion: evidencias/FASE-{N}/AC-004-01.png (or REQ-F-081-AC1.png without specifications)
+export async function captureCriterion(page: Page, testInfo: TestInfo, criterion: string) {
+  const file = path.join(evidenceDir, `${criterion.replace(/\s+/g, '-')}.png`);
+  await page.screenshot({ path: file, fullPage: true });
+  await testInfo.attach(criterion, { path: file, contentType: 'image/png' });
+}
+
+// One video per test, named after its workflow: the first WF-NNN of the title, or the id set with
+// test.use({ videoId: 'WF-004' }); without either, FASE-{N}. evidencias/FASE-2/WF-004-AC-004-01-create-a-task.webm
+export const test = base.extend<{ videoId: string | undefined }>({
+  videoId: [undefined, { option: true }],
+  page: async ({ page, videoId }, use, testInfo) => {
+    await use(page);
+    const video = page.video();
+    if (!video) return;
+    await page.close();
+    const wf = videoId ?? testInfo.title.match(/WF-\d{3}/)?.[0] ?? `FASE-${process.env.SDD_FASE ?? '0'}`;
+    const id = `${wf}-${testInfo.title.slice(0, 40).replace(/[^A-Za-z0-9-]+/g, '-')}`;
+    const file = path.join(evidenceDir, `${id}.webm`);
+    await video.saveAs(file);
+    await testInfo.attach(id, { path: file, contentType: 'video/webm' });
+  },
+});
+export { expect } from '@playwright/test';
+```
+
 **Network interception (for third-party APIs):**
 
 ```typescript
@@ -443,6 +506,9 @@ await page.route('**/api.stripe.com/**', route =>
 // Internal API calls hit the real backend — do NOT mock these
 ```
 
+A double that replaces an external port in unit and slice tests needs its `CONTRACT-<port>` test against the real
+adapter (`references/tdd-workflow.md` → Category 3b); without it the double can drift from the provider unnoticed.
+
 **Anti-patterns:**
 - Mocking internal APIs in E2E (defeats the purpose)
 - Using `page.waitForTimeout()` instead of auto-retrying assertions
@@ -450,6 +516,8 @@ await page.route('**/api.stripe.com/**', route =>
 - Login-through-UI in every test instead of `storageState`
 - CSS selectors or XPath instead of role-based locators
 - Running E2E tests without a running server
+- `toBeVisible()` as the only assert of a criterion (assert its text), or a criterion of a REQ-F without its capture
+  (unless `visual_evidence: off`)
 
 ---
 

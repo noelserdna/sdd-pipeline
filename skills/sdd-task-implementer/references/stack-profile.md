@@ -37,6 +37,16 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - task_state: checkbox|trailers
 - task_format: full|compact
 - default_branch: <branch>   # optional; see the table
+- visual_evidence: required|warn|off
+- evidence_dir: <dir>        # default evidencias
+- adversarial_gate: off|warn|enforce
+- literal_gate: off|warn|enforce
+- test_slots: <n>
+- staging_url: <url|none>
+- smoke: <cmd|none>
+- smoke_report_path: <dir>   # default .sdd/junit/smoke
+- env_required: <NAME, NAME…|none>
+- deploy: <text|none>        # informative; nothing runs it
 ```
 
 Parsing: one `- key: value` per line until the next `## ` heading; text after `#` preceded by whitespace is a comment;
@@ -59,7 +69,7 @@ detected/kit/legacy value (§3), then the default below.
 | `db_reset_safe` | after a schema/migration change when the test runner does not prepare the DB; AI Tool Guardrails | `none` |
 | `server` / `port` | server helper (§8): config tasks without tests, manual smoke | `none` / `3000` |
 | `acceptance` | E2E tasks (`--grep <E2E-ID>`), Phase 9 (once, fail fast) | `none` |
-| `test_report` | `sdd-acceptance --check/--loop` captures test results before `sdd accept`; runs from `app_dir` and writes JUnit XML whose test names carry the scenario id (`AC-NNN-NN`) | `none` (the acceptance ledger then finds no test evidence) |
+| `test_report` | Phase 9 step 4.0 and `sdd-acceptance --check/--loop` capture test results before `sdd accept`; runs from `app_dir` and writes JUnit XML whose test names carry the scenario id (`AC-NNN-NN`) | `none` (the acceptance ledger then finds no test evidence) |
 | `test_report_path` | where `sdd accept`/`sdd gate` read that JUnit (file, directory or `dir/*.xml`, comma-separated) | `.sdd/junit/` |
 | `acceptance_gate` | mode of `sdd gate` (`off` · `warn` prints and exits 0 · `enforce` fails when a Must is not VERIFIED or WAIVED) | `enforce`; set `warn` when adopting SDD in a brownfield project |
 | `tracker` | issue/PR provider for `sdd issue`/`sdd pr-body` (any push, issue or PR still asks the human) | `off` |
@@ -67,6 +77,16 @@ detected/kit/legacy value (§3), then the default below.
 | `task_state` | Phase 2, Phase 7, Modes 3/6/7, G-11, `--verify`, I-06/I-09 (§6) | `checkbox` |
 | `task_format` | Phase 6 review, Revert (§6) | `full` |
 | `default_branch` | branch rule (G-13, `sdd.mjs branch start`), `--integrate` merge target | `origin/HEAD`, then `init.defaultBranch`, then `main`/`master` |
+| `visual_evidence` | `sdd accept`: with `required`, a criterion of a REQ-F that passes without an image attached reads `unshown` and its requirement stays MISSING; `warn` only reports it; `off` (no UI at all: a pure API or CLI, decided by a person) ignores it. Read by the test planner and the E2E steps (construction-protocol.md) | `required` |
+| `evidence_dir` | where the acceptance suite writes captures and videos, `<dir>/FASE-{N}/` (git-ignored; `sdd accept pack` bundles it) | `evidencias` |
+| `adversarial_gate` | how `sdd gate` treats an open challenge of the adversarial round on a Must (`off` · `warn` prints it · `enforce` exits 4) | `enforce` |
+| `literal_gate` | how `sdd accept` treats a test that names a criterion without carrying its letter (`sdd lint --quotes` Q-02 stale quote, Q-03 missing literal): `enforce` holds a passing Must criterion back as `weakened` (requirement not VERIFIED, loop route `weakened-test`) · `warn` lists the gap · `off` skips the check | `enforce` |
+| `test_slots` | how many test processes may run at once on this machine: `[P]` subagents that run tests (SKILL.md → Multi-Agent Strategy), Phase 9-S, one Playwright worker with `1` (§2), the lead's second implementation station, the adversarial verifiers. `1` when tests use an in-memory or shared database, browsers or containers | `2` |
+| `staging_url` | base URL of the deployed staging environment for the smoke templates and the test planner's smoke tier | `none` |
+| `smoke` | command that runs the post-deploy smoke tier (tests tagged `@smoke-deploy`; `@smoke` is the PR tier) against `staging_url`, e.g. `PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit` | `none` |
+| `smoke_report_path` | where the smoke run writes its JUnit; the `sdd-smoke` CI templates export it as `SMOKE_REPORT_PATH` and publish it. The acceptance CLI reads only `test_report_path`, so list this directory there too when smoke results should enter the ledger | `.sdd/junit/smoke` |
+| `env_required` | environment variables the app needs, comma-separated names (never values). The tech designer proposes the names (DIM-7-002) and a person writes them, with `install-stack-kit.sh --set env_required=…` or by hand. The implementer compares the variables a task reads with this list and records an IF- entry (`ENV-REQUIRED`) for each one missing, because a variable only a local `.env` holds fails first in staging; it never writes `.env` | `none` (no list) |
+| `deploy` | informative note on how the project is deployed; no skill runs it | `none` |
 
 `code_paths` and `test_paths` also decide when acceptance evidence goes stale: `sdd accept` discards test results and
 records without `--paths` only when files under those paths changed since they were captured, so a docs or feedback
@@ -90,6 +110,13 @@ checkbox in sync. `checkbox` stays the default when the key is absent, for proje
 - Run: `(cd "<app_dir>" && <command>)`. `acceptance` runs from the repo root; to filter append ` --grep <ID>`
   (`--grep "E2E-WF-001-01|E2E-WF-002-03"` for several).
 - `lint_files` with an empty `{files}` (only non-code files changed) is skipped silently.
+- Every `{acceptance}` run (an E2E task's `--grep`, Phase 9) exports `SDD_FASE={N}` (the task's FASE) and
+  `SDD_EVIDENCE_DIR={evidence_dir}`: `SDD_FASE=2 SDD_EVIDENCE_DIR=evidencias <acceptance> --grep AC-004-01`. The
+  suite's configuration reads both to write captures and videos under `{evidence_dir}/FASE-{N}/`; without them a
+  capture lands in `FASE-0` or in the default folder, and the FASE gate and `sdd accept pack --fase N`, which show
+  `{evidence_dir}/FASE-{N}/`, miss it.
+- `test_slots: 1` and a Playwright `acceptance`: append ` --workers=1` as well (another runner: its own one-worker
+  flag), so one browser runs at a time on this machine; CI keeps the suite's own setting.
 - A key resolved to `none` skips the step and logs, once per session per key:
   `WARN <key>: n/a (stack profile)` — e.g. `WARN typecheck: n/a (stack profile)`. `none` is never a failure and never
   counts as a passed check in the Task Quality Report (`Typecheck: n/a`).
@@ -198,6 +225,16 @@ Rendered by the kit installer (`templates/stacks/<kit>/kit.json` is the source o
 - e2e_scaffold: never
 - task_state: trailers
 - task_format: compact
+- visual_evidence: required
+- evidence_dir: evidencias
+- adversarial_gate: enforce
+- literal_gate: enforce
+- test_slots: 2
+- staging_url: none
+- smoke: none
+- smoke_report_path: .sdd/junit/smoke
+- env_required: none
+- deploy: none
 ```
 
 `test_report` needs the `minitest-reporters` gem (see the kit's testing rule). `$(git rev-parse --show-toplevel)` puts
@@ -235,6 +272,16 @@ server and the acceptance suite use, after a migration.
 - e2e_scaffold: allowed
 - task_state: trailers
 - task_format: compact
+- visual_evidence: required
+- evidence_dir: evidencias
+- adversarial_gate: enforce
+- literal_gate: enforce
+- test_slots: 2
+- staging_url: none
+- smoke: none
+- smoke_report_path: .sdd/junit/smoke
+- env_required: none
+- deploy: none
 ```
 
 Never `prisma migrate reset` from the agent: Prisma refuses it for AI agents and the refusal must not be bypassed
@@ -349,6 +396,6 @@ sdd_server_start "$PORT" && curl -s "http://127.0.0.1:$PORT/health"
 | Other internal checkpoints | `{test_file}` over the phase's test files |
 | `--integrate`, after each merge | `{test}` |
 | Phase 9 | `{test}`, `{typecheck}`, `{lint}`, `{build}`, `{coverage}`, then `{acceptance}` once, re-running only failures by `--grep` |
-| Phase 9-S (Stream complete) | `{test}` |
+| Phase 9-S (Stream complete) | `{test}` (`test_slots: 1`: `{test_file}` over the Stream's test files) |
 
 Not per task: `{build}`, full `{test}`, full `{acceptance}`, `{db_reset_safe}`, manual server start + `curl` + kill.

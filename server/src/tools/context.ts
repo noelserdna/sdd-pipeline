@@ -26,27 +26,39 @@ interface ContextArgs {
 function acceptanceView(r: AcceptanceRequirement) {
   return {
     verdict: r.verdict,
+    ...(r.reason ? { reason: r.reason } : {}),
     priority: r.priority,
     verification: r.verification,
     needs: r.needs,
     criteria: criteriaLabel(r),
     stale_evidence: r.stale_evidence,
     waiver: r.waiver,
-    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, scenarios: c.scenarios, evidence: c.evidence })),
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...(c.visual ? { visual: c.visual } : {}), ...(c.literal_gaps?.length ? { literal_gaps: c.literal_gaps } : {}), scenarios: c.scenarios, evidence: c.evidence })),
+    ...(r.challenges?.length ? { challenges: r.challenges } : {}),
   };
 }
 
+/** Open adversarial challenges are gaps whatever the verdict: they question a criterion a green test counts as met.
+ *  A confirmed one routes to adversarial-finding (a fix); an inconclusive one to a person (needs-human), as in sdd loop. */
+function challengeGaps(r: AcceptanceRequirement): string[] {
+  if (r.verdict === "DEPRECATED") return [];
+  return (r.challenges ?? []).filter((c) => c.state === "open")
+    .map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) — "${c.quote}" at ${c.evidence.map((e) => (e.line ? `${e.path}:${e.line}` : e.path)).join(", ")} (${c.counter === "inconclusive" ? "needs-human" : "adversarial-finding"})`);
+}
+
 function acceptanceGaps(r: AcceptanceRequirement): string[] {
-  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return [];
+  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return challengeGaps(r);
   const gaps: string[] = [];
   if (!r.verification) gaps.push("NO_VERIFICATION_METHOD: the requirement has no valid Verification line");
   for (const c of r.criteria) {
     if (c.state === "fail") gaps.push(`FAILING_AC${c.n}: evidence fails${c.text ? ` — ${c.text}` : ""}`);
     else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code — re-run the tests or re-record`);
+    else if (c.state === "unshown") gaps.push(`UNSHOWN_AC${c.n}: passes without a screenshot — run the journey again with capture (capture-evidence)`);
+    else if (c.state === "weakened") gaps.push(`WEAKENED_AC${c.n}: the test passes without the criterion's literal (${(c.literal_gaps ?? []).map((g) => (g.code === "Q-02" ? `stale quote at ${g.file}:${g.line}` : `"${g.literal}" missing in ${g.file}`)).join("; ")}) — weakened-test`);
     else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
     else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
   }
-  return gaps;
+  return [...gaps, ...challengeGaps(r)];
 }
 
 export function executeContext(

@@ -150,11 +150,12 @@ Budgets: UC ≤ 3 500 chars, BDD ≤ 2 500 chars. Follow Template 2 and Template
 order, same `Refs` header row. Do not add sections; a mandatory section with nothing to say is the single line `None.`
 
 METHOD, per use case (all of it in memory before the first Write):
-- Error Flow Forcing Function: for every main-flow step answer the 5 questions (step failure / invalid input /
-  authorization denied / concurrent conflict / precondition broken mid-flight). Each "yes" becomes ONE row of the
+- Error Flow Forcing Function: for every main-flow step answer the 6 questions of SKILL.md Step 6a (step failure /
+  invalid input / authorization denied / concurrent conflict, including who consumes and who reads a consumable
+  resource / precondition broken mid-flight / replay of the same write). Each "yes" becomes ONE row of the
   `Exceptions & errors` table with error code + effect + AC id (+ HTTP status only in a `Style: http` module, exit
-  code for a CLI). A "no" produces NO text — no N/A rows,
-  no "not applicable" prose, no record of the questions.
+  code for a CLI). A "no" produces NO text — no N/A rows, no "not applicable" prose, no record of the questions —
+  except question 6: every step that writes state gets its `replay` row.
 - Invariant Extraction: scan the requirement and your flow for "must, shall not, always, never, at most, at least,
   between X and Y, unique, only if, requires, cannot exceed". If `05-INVARIANTS.md` already has it, cite that id.
   If not, mint one from {INV-{AREA}-{L}NN}, cite it inline in the step or postcondition, and return it in `inv_new`

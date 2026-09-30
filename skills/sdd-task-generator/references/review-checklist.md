@@ -15,7 +15,10 @@ Every task, regardless of type, includes these base checks:
 - [ ] Satisfies acceptance criteria listed above
 - [ ] No secrets, credentials, or API keys in code
 - [ ] No TODO/FIXME left unresolved
+- [ ] Every assert that encodes an acceptance criterion has the criterion's literal text above it, opened from requirements/REQUIREMENTS.md (`// REQ-F-081 AC1: "…THEN su título es 'Proyectos personales'"`), and every quoted literal appears in the assert
 ```
+
+The quote keeps the customer's words next to the check that claims to verify them: a paraphrase in the task or the BDD summary is where a title or a label drifts unnoticed.
 
 ---
 
@@ -44,6 +47,7 @@ Every task, regardless of type, includes these base checks:
 - [ ] Error responses follow ADR-026 format *(example id — cite the project's own ADR)*
 - [ ] API versioning prefix /api/v1/ per ADR-033 *(example id; `Style: http` only)*
 - [ ] Tenant isolation in queries (multi-tenant domains)
+- [ ] The operation has a caller on the user's route (the page, route or command the FASE Demo uses), not only a test that calls it directly *(full format; in compact the FASE journey task covers it)*
 ```
 
 ### Middleware Tasks
@@ -91,13 +95,31 @@ Every task, regardless of type, includes these base checks:
 ### Test Tasks
 
 ```markdown
-- [ ] Tests cover acceptance criteria from FASE file
+- [ ] Tests cover the acceptance criteria as written in requirements/REQUIREMENTS.md, not the FASE file's one-line summary
+- [ ] Every `replay` and `race` row of the test matrix for this operation has its test; a race row runs two concurrent calls on the same fixture, without sleeps
 - [ ] Happy path tested
 - [ ] Error/exception paths tested
 - [ ] Edge cases from spec tested
 - [ ] Test names describe behavior, not implementation
 - [ ] No hardcoded values that should come from spec
 - [ ] Assertions are specific (not just "truthy")
+```
+
+### Journey Tasks (one per FASE)
+
+```markdown
+- [ ] Enters through the user's route (Demo step 1: URL, screen or command), never an internal entry point
+- [ ] Asserts the example text of each criterion on the element that shows it (`toHaveText` / `toContainText`), not the visibility of a container
+- [ ] Saves a screenshot per REQ-F criterion and a video per workflow under evidencias/FASE-{N}/, attached to the test
+- [ ] Test names carry every REQ-F scenario id of the FASE's Escenarios, and the journey's title the WF-NNN of the FASE's `Workflows:` line (else of its Demo; FASE-{N} when it names none), which names the video
+```
+
+### Contract Tasks (`CONTRACT-<port>`)
+
+```markdown
+- [ ] The same assertions run on the double and on the real provider (real one through a fake transport that captures the request)
+- [ ] Asserts the observable of the port's row in PLAN-FASE §4 Puertos con doble
+- [ ] Test name `CONTRACT-<port> REQ-F-NNN ACn …`, in a file under `test_paths` `contract/` named by the stack's convention (`<port>.contract.test.ts`, `<port>_contract_test.rb`)
 ```
 
 ### PII / Encryption Tasks
@@ -146,6 +168,7 @@ Every task, regardless of type, includes these base checks:
 - [ ] Dependencies injected, not hard-coded
 - [ ] Event handlers registered correctly
 - [ ] Service initialization order correct
+- [ ] Every component this FASE adds is reachable from the user's route after the wiring *(full format)*
 - [ ] Error propagation across boundaries handled
 - [ ] Circuit breaker / retry patterns where appropriate
 ```

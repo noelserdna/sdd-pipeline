@@ -121,6 +121,7 @@
 ### Errores (tabla `Exceptions & errors`)
 - [ ] ¿Cada error tiene código de dominio del catálogo? (HTTP status solo con `Style: http`, exit code en una CLI)
 - [ ] ¿Cada error indica cuándo ocurre y su efecto?
+- [ ] ¿Cada paso que escribe estado tiene su fila `replay` (misma entrada otra vez: qué se conserva)? Si falta → CAT-03
 
 ### Trazabilidad (fila `Refs` del header)
 - [ ] ¿Cita el REQ-F-NNN que origina el UC?

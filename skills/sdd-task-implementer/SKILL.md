@@ -29,13 +29,24 @@ Tests verify the specification, never the code: a failing test means the code is
 | 3 Continue | `--continue` | Resume at the first pending task whose dependencies are done (never an EXTERNAL one) |
 | 4 Verify | `--verify --fase 0` | Read-only check of acceptance criteria (Verification Protocol) |
 | 5 Checkpoint | `--checkpoint --fase 0` | Place the current internal checkpoint tag (main checkout only) |
-| 6 New tasks only | `--fase 1 --new-tasks-only` | Only tasks carrying `Source: CASCADE-{id}`; done tasks skipped; same Phases 3-8. Invoked by `sdd-req-change` Phase 9 with `--cascade=auto` |
+| 6 New tasks only | `--fase 1 --new-tasks-only` | Only the pending tasks that carry one of the `Source:` values below; same Phases 3-8 |
 | 7 Stream | `--fase 1 --stream A` / `--stream base` | One Stream of `## Stream Ownership` (below) |
 | 8 Integrate | `--integrate --fase 1` (`--wave` = alias) | Merge the Stream branches and finish the FASE (below) |
 
 Execution flags (Modes 1, 3, 6, 7, 8): `--parallel` gives every `[P]` batch to subagents even below the threshold; `--sequential` runs every `[P]` task inline.
 
 Session variables read in every mode: `SDD_ROLE` (station role, `references/handoff-protocol.md`), `SDD_STATE_ROOT` (main checkout holding `pipeline-state.json`; default `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"`). In a worktree `git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`.
+
+### Mode 6: New tasks only
+
+Selects the pending tasks (Task state) of the FASE whose `Source:` line carries one of these values, written by `sdd-task-generator --incremental`; every other task, done or not, is left alone. A fix task the filter skipped would never run, and the loop that asked for it would spin.
+
+| `Source:` | Written for | Who invokes Mode 6 |
+|---|---|---|
+| `CASCADE-{CHG-ID}` / `CASCADE-MANUAL` | a requirement change | `sdd-req-change` Phase 9 with `--cascade=auto` |
+| `FEEDBACK-FASE-{N}` | a defect confirmed at the FASE gate | the FASE gate (`sdd-orchestrator`, `sdd-lead`) after the incremental task generation |
+| `ACCEPTANCE-LOOP` | a MISSING or FAILING criterion routed by the ledger | `sdd-acceptance --loop` (in multi-session, the lead on the QA station's handoff) |
+| `ACCEPTANCE-ADVERSARIAL-FASE-{N}` | a confirmed finding of the adversarial round (route `adversarial-finding`) | `sdd-acceptance --loop` after `--adversarial` |
 
 ### Mode 7: Stream (worktree)
 
@@ -76,7 +87,7 @@ Never modified: `spec/`, `plan/`, `audits/`, `task/TASK-INDEX.md`, `task/TASK-OR
 
 1. Read the project `CLAUDE.md` and resolve the **Stack Profile** (section Stack Profile): commands, `app_dir`, `task_state`, `task_format`.
 2. Always load: `task/TASK-FASE-{N}.md` (if it has `## Stream Ownership`, parse Stream → tasks, write-set, "Runs in"), `plan/fase-plans/PLAN-FASE-{N}.md`, `plan/fases/FASE-{N}-*.md` (Criterios de Exito; in a vertical plan also `Requisitos`, `Escenarios` and `## Demo`), `spec/domain/01-GLOSSARY.md`, and the plan style (`grep -m1 -i 'Plan-Style' plan/PLAN.md`: `vertical`, `vertical (from FASE-N)` for FASE-N on, or absent = horizontal).
-3. Load on demand, when a task's **Refs** point there: the referenced UC/contract/ADR files, `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, `design/OPERATION-MAPPING.md`.
+3. Load on demand, when a task's **Refs** point there: the referenced UC/contract/ADR files, `spec/domain/02-ENTITIES.md`, `03-VALUE-OBJECTS.md`, `04-STATES.md`, `05-INVARIANTS.md`, `design/OPERATION-MAPPING.md`. For every `REQ-*` the task cites (Refs, Acceptance, or through its scenario ids), its statement and criteria verbatim: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" req show <REQ-ID> [--ac N]` (without the command, that requirement's section of `requirements/REQUIREMENTS.md`). The task, the FASE and the BDD scenario paraphrase the criterion; the tests quote its letter (`references/tdd-workflow.md` → The criterion's letter sits above its assert).
 4. Build the context map:
 
 ```
@@ -132,11 +143,12 @@ For each task:
 1. Read every spec in **Refs**; extract input/output contracts, applicable invariants, state machines, exception flows, and how the task connects to the previous and next ones.
 2. `[DECISION PENDIENTE]` or vagueness → PAUSE.
 3. Plan files, imports and dependencies (a mental note, not a file).
+4. Environment variables the task's code will read (a new `process.env.X`, `ENV["X"]`, a config entry) are compared with the profile's `env_required`. Each name missing from it → an IF- entry (category `ENV-REQUIRED`, WARNING) naming the variable and the task, because a variable that only the local `.env` holds is the first thing to fail in staging; a person adds it to the profile and to each environment. Never write `.env` or a value.
 
 ### Phase 4: Test-First Construction
 
 1. Create the test file where the Stack Profile / plan places it.
-2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`, `references/tdd-workflow.md`).
+2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`), and each criterion's quote sits above its assert (`references/tdd-workflow.md`).
 3. Run `{test_file}` (or `{test_name}`) → they must FAIL. Tests that pass without implementation are wrong; fix them.
 
 Tasks without behaviour (`chore`/`build`/config, e.g. a runner setting or a fixture) write no test: run the `Verify:` command the task states and check its output (e.g. `config parses → {server} starts without errors`). A chore task that says `Test first` but lists no test file is a task defect: record it as IF feedback and verify with a command.
@@ -154,7 +166,7 @@ Checklist before moving on: names follow the glossary; types match `domain/02-EN
 
 1. Run the task's **Review** checklist (compact tasks without Review → the checklist of its type in `skills/sdd-task-generator/references/review-checklist.md`); a failing item → fix and re-check; not applicable → say why.
 2. Per task: `{test_file}` on the task's tests and changed files, `{typecheck}`, `{lint_files}` on changed files.
-3. Never per task: full `{test}` (only at the Foundation checkpoint and Phase 9), `{build}` (Phase 9), full `{acceptance}`, starting a server + `curl`. `{db_reset_safe}` only after schema/migration changes when the runner does not prepare the DB. An E2E task is done when `{acceptance} --grep <E2E-ID>` passes (cadence: `references/stack-profile.md` §9).
+3. Never per task: full `{test}` (only at the Foundation checkpoint and Phase 9), `{build}` (Phase 9), full `{acceptance}`, starting a server + `curl`. `{db_reset_safe}` only after schema/migration changes when the runner does not prepare the DB. An E2E task is done when `{acceptance} --grep <E2E-ID>` passes, run with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported like every `{acceptance}` run (`references/stack-profile.md` §2; cadence §9).
 4. Cross-check every acceptance criterion against the implementation.
 
 ### Phase 7: Atomic Commit & SHA Capture
@@ -185,13 +197,19 @@ git commit -m "feat(auth): add JWT authentication middleware" \
 Main checkout only. The tag is placed last, and only when everything passes, so `fase-{N}-verified` always means verified.
 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
-2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
+2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported (the suite writes the captures and videos under `{evidence_dir}/FASE-{N}/`, `references/construction-protocol.md`) and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
 4. **Demo and acceptance** (vertical plans; skip with a horizontal plan). After steps 1-3 pass:
+   - **4.0 Anchor the evidence to a commit.** Evidence captured over uncommitted code describes a tree no commit holds: the ledger discards it, and `sdd accept --junit-sha` refuses it (exit 2, "commit first"). A new file nobody added counts too, because the tests may depend on it.
+     1. `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --quotes --fase {N}` exits 0: every test that names a criterion quotes its current text and asserts its literals (`references/tdd-workflow.md`, "The criterion's letter sits above its assert"). Fix a Q-02 or Q-03 in the test before capturing, since under `literal_gate: enforce` the ledger holds that criterion back as `weakened`; a literal the code cannot produce is a `SPEC-DEVIATION`, and a literal a helper builds is for a person to except, never for this skill. Q-01 warnings are listed in the report.
+     2. `git status --porcelain --untracked-files=all -- {code_paths} {test_paths}` (paths space-separated) prints nothing; otherwise commit the pending work first (the task's commit, or a `fix` commit with `Task:` or `Change:`).
+     3. `SHA=$(git rev-parse HEAD)`.
+     4. `SDD_FASE={N} {test_report}` writes the JUnit (`.sdd/junit/` or `test_report_path`). When `{acceptance}` last ran before a code commit, run it again with the same exports so its JUnit and captures describe `$SHA`. With `test_report` missing or `none`, say so and recommend configuring it (`references/stack-profile.md`); the ledger then has no test evidence and every test-verified requirement reads MISSING.
+     5. `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept --junit-sha "$SHA" --fase {N} --report acceptance/ACCEPTANCE-REPORT.md`: one verdict per requirement of the FASE's `Requisitos` line (VERIFIED, FAILING, MISSING, WAIVED), with evidence per criterion.
+
+     A FAIL fixed anywhere in Phase 9 means new code: commit the fix and start again at 4.0, since the earlier capture no longer describes HEAD.
    - Run the FASE's `## Demo` steps in order from a clean state (seed data as the steps say; server via the helper of `references/stack-profile.md`). Per step record what was observed, verbatim and short, and pass/fail against its expected result.
-   - Capture the test results as JUnit with the Stack Profile `{test_report}` command (it writes `.sdd/junit/` or `test_report_path`). When the key is missing or `none`, say so and recommend configuring it (`references/stack-profile.md`); the ledger then has no test evidence and every test-verified requirement reads MISSING.
-   - Run `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept --fase {N} --report acceptance/ACCEPTANCE-REPORT.md`: one verdict per requirement of the FASE's `Requisitos` line (VERIFIED, FAILING, MISSING, WAIVED), with evidence per criterion.
-   - Route each open requirement with `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" loop next --no-out --state .sdd/acceptance-check.json --reset --fase {N}` (`targets` and `others`, each with its `route_hint`; it does not touch the loop's own state). A FAILING requirement, or a MISSING one whose route is not `needs-human`, is a FAIL of this phase: fix the code, never the test (Art. 12), or pause when the spec is at fault. A demo step whose scenario is verified by tests but whose observed result differs is also a FAIL.
+   - Route each open requirement with `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" loop next --no-out --state .sdd/acceptance-check.json --reset --fase {N}` (`targets` and `others`, each with its `route_hint`; it does not touch the loop's own state). A FAILING requirement, or a MISSING one whose route is not `needs-human`, is a FAIL of this phase: fix the code, never the test (Art. 12), or pause when the spec is at fault. The one test fix is `weakened-test`: the test passed without the criterion's letter, so the quote and the assert are brought to the letter (never loosened), and a failure that follows is fixed in the code. A demo step whose scenario is verified by tests but whose observed result differs is also a FAIL.
    - A MISSING requirement routed `needs-human` (verified by `demo`, `measurement` or `inspection`, with no human record yet) is not a FAIL: only a person can supply that evidence, at the FASE gate. Report it as "pending at the FASE gate" with what the person will need (the demo steps and their observed output, the measurement taken, or the inspection checklist).
    - A `measurement` requirement whose metric this FASE introduces and that is objective and machine-measurable (coverage, a latency benchmark with a fixed command) is registered once as a machine measurement, so later FASEs re-measure it without asking anyone: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept measure --req ID [--ac N] --metric TEXT --command "<cmd>" --extract '<regex with one capture group>' --op ge|le|… --threshold NUM [--paths P…]`. It runs the command, records the value with `by: command` and keeps the command, and `sdd accept --remeasure` re-runs it whenever the code paths change (route `remeasure`). A value that fails its threshold is a FAIL like a failing test. Subjective or customer-facing measurements (perceived speed, a figure the customer must read off their own system) stay human, at the FASE gate.
    - Hand the demo table (step · observed · pass/fail · scenario), the per-requirement verdicts and the pending list to the FASE gate (`sdd-orchestrator` / `sdd-lead`, `skills/sdd-orchestrator/references/fase-gate.md`), where the customer confirms that evidence and accepts the increment. This skill never records human evidence or acceptance on its own; the gate records demo evidence, after the human confirms what they saw, with `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" accept record demo --req ID --ac N --observed TEXT --pass true|false --by NAME --role ROLE`.
@@ -213,7 +231,7 @@ Commits: 12 atomic (abc1234..xyz9012)
 
 ### Phase 9-S: Stream Complete (`--stream X`, X ≠ base)
 
-1. `{test}` in the worktree (report the Stream's own test files separately). Failure → `PAUSE: Test regression`, no push.
+1. `{test}` in the worktree (report the Stream's own test files separately); with `test_slots: 1`, `{test_file}` over the Stream's test files one at a time instead, because other worktrees on the machine may be running theirs and the full suite runs after each merge of `--integrate` anyway. Failure → `PAUSE: Test regression`, no push.
 2. Report `Stream A complete: 2 tasks, commits 9f3c2a1..b71e0d4, branch feat/fase-1-a` with a `| Task | SHA | Message |` table (`git log fase-{N}-foundation..HEAD --format='%h %s'`) and `Next: /sdd-task-implementer --integrate --fase 1 (main checkout, once every Stream is complete)`.
 3. When a remote exists, ask before pushing: `git push -u origin feat/fase-{N}-{x}`.
 4. No Persist Summary (the hooks already recorded the stage as `running`).
@@ -243,6 +261,7 @@ Placed when every task of an internal phase is done, in the main checkout only:
 Non-trivial `[P]` batches go to parallel subagents by default; invoking the skill on a FASE with `[P]` tasks is the explicit request. A batch goes to subagents with **≥ 2 non-trivial `[P]` tasks** (write-set ≥ 2 files including the test, ≥ 3 acceptance criteria, not setup/config/scaffold); other `[P]` tasks run inline, because a subagent costs more than a trivial task. Run sequentially only with `--sequential`, below the threshold, or without the `Agent` tool; record the reason in `summary.highlights`, `metrics.mode` and `metrics.inline_p_tasks`. `--parallel` launches agents even below the threshold.
 
 - At most 4 agents per batch, launched in the foreground in one response; wait for all of them before ending the turn.
+- **Machine resources.** At most `test_slots` of them (Stack Profile, default 2) run tests. Every test process competes for the same CPU, memory, database file and ports, so more of them at once time out and flake instead of finishing sooner. With `test_slots: 1` the agents write in parallel with the prompt's "do not run tests" line, and the main agent runs each agent's `{test_file}` in sequence before its Phase 7; with a larger value, the agents beyond `test_slots` get that line too.
 - Each agent runs Phases 3-6 for one task, writes only its files (disjoint, guaranteed by `sdd-task-generator`), never commits, never nests. The main agent runs Phase 7 for each, sequentially. A failed agent does not stop the others; report it at the end.
 - Launch agents with `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`). Review, commit and Phase 9 stay with the main agent.
 - Inside a Stream worktree the same rule applies to the Stream's `[P]` tasks; subagents inherit the worktree cwd and never touch EXTERNAL tasks or files outside the Stream's `Owns` column.
@@ -252,11 +271,17 @@ Agent prompt:
 ```
 You are a TASK IMPLEMENTER agent for sdd-task-implementer. Implement {TASK-ID} from task/TASK-FASE-{N}.md.
 Read first: task/TASK-FASE-{N}.md (your entry), plan/fase-plans/PLAN-FASE-{N}.md, {spec files from Refs},
-spec/domain/01-GLOSSARY.md, design/OPERATION-MAPPING.md when the task implements an API operation.
+spec/domain/01-GLOSSARY.md, design/OPERATION-MAPPING.md when the task implements an API operation, and the letter
+of every requirement the task cites: {one line per REQ-ID: node "{plugin_root}/scripts/sdd.mjs" req show <REQ-ID>
+[--ac N]}. Quote that letter, not the task's paraphrase, in a comment above the assert that checks it; every literal
+of the quote appears in the assert ({plugin_root}/skills/sdd-task-implementer/references/tdd-workflow.md).
 Task: {full task entry}
 Process: write failing tests for each acceptance criterion → implement → run the Review checklist → report (do not commit).
 Constraints: modify only the files of the task entry; implement only what the acceptance criteria require; run only
-{test_file}, {typecheck}, {lint_files} on your files; never set or export human-consent variables or flags
+{test_file}, {typecheck}, {lint_files} on your files, one test file at a time; never {test}, never {acceptance}
+without --grep, never {coverage} or a watch mode, never start a server or a database outside the test runner (the
+machine is shared with other agents); {only when this agent has no test slot: do not run tests at all, and report the
+{test_file} commands for the main agent;} never set or export human-consent variables or flags
 (e.g. PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION) — if a tool refuses, stop and report; report ambiguity or
 [DECISION PENDIENTE] instead of guessing; use the glossary's language.
 ```

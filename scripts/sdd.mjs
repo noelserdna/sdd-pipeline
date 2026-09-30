@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification and branches. Node >= 18, no deps.
+// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification, branches, requirements and the
+// acceptance ledger. Node >= 18, no deps.
 //
 // Usage (paths are relative to --repo when given, else to the current directory; every command takes --repo DIR):
 //   sdd lint [--dir task] [--fase N] [--json] [file.md ...]
@@ -35,34 +36,99 @@
 //       header has Requisitos (REQ ids) and Escenarios (AC ids), V8 criteria backed by REQ/AC ids and a `## Demo` of
 //       1-10 steps each citing a scenario, cited AC ids exist in spec/tests/BDD-*.md, V9 every Must REQ-F/REQ-NF is in
 //       some Requisitos line; warns above 3 use cases or 15 tasks per FASE. Exit 1 on errors (scripts/lib/plan-lint.mjs).
+//   sdd lint --quotes [--fase N] [--json] [--requirements FILE]
+//       Literal letter (scripts/lib/quotes.mjs): for each criterion of requirements/REQUIREMENTS.md and each source file
+//       under the Stack Profile's test_paths (default tests) whose code names it (`REQ-X-NNN ACn`, or a scenario id
+//       AC-NNN-NN bound by a BDD tag of spec/tests/BDD-*.md): Q-01 warn, no quote comment `REQ-X-NNN ACn: "…"` in the
+//       file · Q-02 error, the quote (whitespace and quote marks normalized, case kept, `…` elides) is not part of the
+//       criterion's current text · Q-03 error, a literal of the criterion is missing from the file's code (comments do
+//       not count). Literal: text between "…", '…', «…», “…” or ‘…’, and between backticks only after THEN/ENTONCES
+//       (a backtick span before it is the command or route the test drives). A literal-exception record turns a Q-03
+//       into `excepted`. Prints `file:line Q-0N REQ-X-NNN ACn message` and a summary; --json {findings[{code, severity,
+//       req, ac, file, line, literal?, quote?, exception?, message}], summary}. Exit 1 on any error not excepted.
 //   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
 //              [--report acceptance/ACCEPTANCE-REPORT.md] [--remeasure] [--json]
 //       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
 //       named with their scenario id (AC-NNN-NN, or `REQ-X-NNN ACn`), the BDD tags of spec/tests/BDD-*.md and the records
 //       of acceptance/decisions.jsonl. JUnit default: Stack Profile test_report_path, else .sdd/junit/. PATH may be a
 //       file, a directory or a `dir/*.xml` glob. Evidence counts only when fresh: nothing under the Stack Profile's
-//       code_paths + test_paths (default src, tests) changed since it was captured (see scripts/lib/acceptance.mjs).
-//       --remeasure first re-runs each stale measurement whose latest record came from `accept measure` (exit 1 when
-//       one of them yields no number).
-//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NAME --role ROLE [fields]
+//       code_paths + test_paths (default src, tests) changed since it was captured, and no untracked file sits under
+//       them (listed in `untracked_paths`; see scripts/lib/acceptance.mjs). --junit-sha on uncommitted code exits 2
+//       (commit first); without it, a dirty tree prints a `warning:` line on stderr. --remeasure first re-runs each
+//       stale measurement whose latest record came from `accept measure` (exit 1 when one of them yields no number).
+//       Visual evidence (Stack Profile `visual_evidence: required|warn|off`, default required; `evidence_dir`, default
+//       evidencias): a REQ-F criterion needs a screenshot — a JUnit `[[ATTACHMENT|…]]`, a record's --attach, or a file
+//       of the evidence dir named after its AC-NNN-NN or REQ-F-NNN-ACn — else it is `unshown` and the requirement
+//       MISSING ("no visual evidence"); warn only reports it. The ledger counts them in summary.unshown.
+//       Literal letter (Stack Profile `literal_gate: off|warn|enforce`, default enforce): each criterion lists the
+//       `literal_gaps` of `sdd lint --quotes` (Q-02/Q-03 not excepted); under enforce a passing criterion of a Must with
+//       one is `weakened` and the requirement MISSING ("test does not carry the criterion's literal"); warn only lists
+//       them. summary.literal_gaps counts the criteria, summary.weakened the held-back ones.
+//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal|literal-exception> --by NAME --role ROLE [fields]
+//              [--attach FILE...] [--allow-dirty]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
 //       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
 //       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
-//       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID].
+//       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID]
+//       · challenge-dismissal --challenge CH-NNN --reason TEXT (a person decides a finding does not hold)
+//       · literal-exception --req ID --ac N --literal TEXT --reason TEXT (a literal of the criterion that a helper
+//       builds, so it is never verbatim in the test: its Q-03 is excepted while the requirement keeps its reqHash).
+//       --attach stores files under evidence_dir with their sha256 (not on a waiver, a dismissal or an exception). Every
+//       type but waiver, challenge-dismissal and literal-exception exits 2 on uncommitted changes under its --paths (default the code paths,
+//       untracked files included): commit first, or --allow-dirty to store the record with dirty: true.
 //   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
-//              --threshold NUM [--paths P...] [--json]
+//              --threshold NUM [--paths P...] [--allow-dirty] [--json]
 //       Machine measurement: runs CMD from the repo root, takes the first capture group of REGEX in its output as the
 //       observed number and appends a measurement record with by "command", role "automated", the command and the
-//       regex (re-run later by `sdd accept --remeasure`). Exit 1 when no number matches. For objective metrics only
-//       (coverage, a benchmark); a value a person must confirm goes through `accept record measurement`.
+//       regex (re-run later by `sdd accept --remeasure`). Exit 1 when no number matches; exit 2 on uncommitted code
+//       unless --allow-dirty (dirty: true). For objective metrics only (coverage, a benchmark); a value a person must
+//       confirm goes through `accept record measurement`.
+//   sdd accept pack --fase N [--out .sdd/entregas/FASE-N-evidencias.tar.gz] [--json]
+//       Bundle {evidence_dir}/FASE-N/ with a manifest.json (path, sha256, bytes, kind, criterion, criteria from the
+//       ledger, evaluated_sha) into a tar.gz, for the customer after the sign-off. Exit 1 when the FASE has no evidence.
+//   sdd accept challenge add --req ID --ac N --category CAT --quote TEXT --evidence path:line... --verifier NAME
+//              --counter confirmed|inconclusive [--json]
+//       Append one finding of the adversarial round to acceptance/challenges.jsonl (written only by this command) with
+//       id CH-NNN, HEAD, the requirement's reqHash and the cited paths. CAT: WEAKENED-ASSERT, MOCK-ONLY, UNWIRED,
+//       BYPASS-PATH, CROSSING, NOT-IMPLEMENTED, SPEC-QUESTION, WRONG-CAPTURE. Evidence: committed production or test
+//       code with an existing line; a capture under evidence_dir may be cited without a line (pinned by sha256).
+//       Never under acceptance/, feedback/, spec/, requirements/, plan/, task/, audits/, changes/, .sdd/, nor test/
+//       unless inside the Stack Profile's test_paths (Rails Minitest). --counter refuted is not recorded. Exit 2 on
+//       any invalid field.
+//   sdd accept challenge list [--open] [--fase N] [--json]
+//       Challenges with their state: open · stale (a cited file changed since the challenge's HEAD, or the requirement
+//       text changed) · dismissed (a challenge-dismissal record). JSON: counts, must_open, challenges[].
+//   sdd accept adversarial plan [--fase N] [--json]
+//       Mechanical coverage critic for the adversarial round: per FASE, requirements with their literal statement and
+//       criteria, the tests bound to each criterion (with file), captures and candidate files (files under code_paths
+//       of the commits whose Task: is TASK-F{N}-…); plus uncovered (active requirements in no FASE's Requisitos:),
+//       fases_without_header, criteria_without_test and coverage_gaps. Challenges never change a verdict: the ledger
+//       lists them in requirements[].challenges[] and summary.must_challenged.
 //   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
 //       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
-//       Musts. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate, else
-//       enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md. --md prints a PR-body block.
+//       Musts · 4 met, but a Must (not waived) has an open adversarial challenge and the Stack Profile says
+//       `adversarial_gate: enforce`, the default (warn: printed, exit unchanged; off: ignored). Precedence
+//       2 > 1 > 4 > 3 > 0. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate,
+//       else enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
+//       required, asks for a video whose name carries each WF-NNN of the FASE file's `Workflows:` header line (without
+//       that line, each WF-NNN cited inside `## Demo`; with none, FASE-N). Any video under evidence_dir counts (manual
+//       demo recordings too), as do JUnit attachments and record --attach files: a missing one is goal not met
+//       (`missing_videos`). --md prints a PR-body block (with a visual-evidence line when one is missing).
 //   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
-//       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}]}; stop is
-//       null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the baseline; hard cap 5).
+//       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}],
+//       missing_videos}; stop is null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the
+//       baseline; hard cap 5). route_hint capture-evidence: run the journey again with capture (no code task).
+//       Open challenges are targets of their own {req, challenge, ac, category, counter, quote, evidence, route_hint}:
+//       adversarial-finding when confirmed, needs-human when inconclusive. Under adversarial_gate enforce the stop
+//       `goal` also needs no open challenge on a Must. Each missing FASE video is a target {video: WF-NNN|FASE-N, fase,
+//       route_hint: capture-evidence} (under visual_evidence warn, in `others`); progress counts videos_missing, and a
+//       cycle that captures one is progress like a criterion that turns VERIFIED. route_hint weakened-test: the test
+//       passes without the criterion's literal (a `weakened` criterion, with its literal_gaps); the fix is a test edit
+//       that a person approves (Art. 12).
+//   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
+//       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
+//       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
 //   sdd issue open   fase <N> | change <CHG-ID> [--dry-run] [--json]
 //       One issue per FASE (from plan/fases/FASE-N-*.md: Incremento, Requisitos, Escenarios, Necesidades, Demo) or per
 //       change (changes/CHANGE-REPORT-<ID>.md), labels sdd + sdd:fase|sdd:change, hidden marker <!-- sdd:FASE-N -->.
@@ -106,6 +172,8 @@ import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
 import { runTracker } from "./lib/tracker.mjs";
 import { runRoute } from "./lib/route.mjs";
+import { parseRequirements } from "./sdd-jev.mjs";
+import { reqHash } from "./lib/acceptance.mjs";
 
 const GRAMMAR = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}( \[P\])? .+ \| `[^`]+`(, `[^`]+`)*$/;
 const ID_FORMAT = /^TASK-F\d+-\d{3,4}$/;
@@ -140,6 +208,8 @@ function parseArgs(argv) {
       case "--message": o.message = take(); break;
       case "--range": o.range = take(); break;
       case "--issue": o.issue = take(); break;
+      case "--ac": o.ac = take(); break;
+      case "--requirements": o.requirements = take(); break;
       case "--json": o.json = true; break;
       case "--files": o.withFiles = true; break;
       case "--require-done": o.requireDone = true; break;
@@ -735,6 +805,41 @@ function cmdBranch(o) {
   return switchTo(info.current);
 }
 
+// ------------------------------------------------------------------ req show
+// The literal text of a requirement and its criteria, as requirements/REQUIREMENTS.md has them: what a test quotes
+// above its assert (M6). Parsed with parseRequirements (sdd-jev.mjs), the same reader as the acceptance ledger.
+function cmdReq(o) {
+  const sub = o.args.shift();
+  if (sub !== "show") usage(`unknown req command ${sub ?? "(none)"}: use show`);
+  const id = String(o.args.shift() || "").toUpperCase();
+  if (!id) usage("req show needs a requirement id (REQ-F-001)");
+  if (o.args.length) usage(`unexpected argument ${o.args[0]}`);
+  const file = path.resolve(baseDir(o), o.requirements || "requirements/REQUIREMENTS.md");
+  if (!existsSync(file)) die(`${display(file)} not found`);
+  const req = parseRequirements(readFileSync(file, "utf8")).find((r) => r.id === id);
+  if (!req) { console.error(`${PROG}: ${id} is not in ${display(file)}`); return 1; }
+  let criteria = req.criteria.map((text, i) => ({ n: i + 1, text }));
+  if (o.ac !== undefined) {
+    const m = String(o.ac).match(/^(?:AC)?(\d+)$/i);
+    if (!m) usage("--ac must be a criterion number (2 or AC2)");
+    const n = Number(m[1]);
+    criteria = criteria.filter((c) => c.n === n);
+    if (!criteria.length) { console.error(`${PROG}: ${id} has ${req.criteria.length} criteria; AC${n} does not exist`); return 1; }
+  }
+  if (o.json) {
+    json({ id: req.id, type: req.type, title: req.title, statement: req.statement, priority: req.priority, needs: req.needs || [],
+      verification: req.verification, deprecated: req.deprecated, criteria, ...(o.ac !== undefined ? { ac: criteria[0].n } : {}),
+      reqHash: reqHash(req), file: display(file) });
+    return 0;
+  }
+  if (o.ac !== undefined) { out(`${req.id} AC${criteria[0].n}: ${criteria[0].text}`); return 0; }
+  out(`${req.id}: ${req.title}${req.deprecated ? "  [deprecated]" : ""}`);
+  out(`Statement: ${req.statement}`);
+  out(`Priority: ${req.priority || "—"} · Verification: ${req.verification || "—"} · Needs: ${(req.needs || []).join(", ") || "—"}`);
+  for (const c of criteria) out(`AC${c.n}: ${c.text}`);
+  return 0;
+}
+
 // ------------------------------------------------------------------ main
 /** First positional word of argv (skipping `--repo DIR`): the command. */
 function firstCommand(argv) {
@@ -754,7 +859,7 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runPlanLint([...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
     }
-    if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && argv.includes("--needs"))) {
+    if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && (argv.includes("--needs") || argv.includes("--quotes")))) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runAcceptance(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--needs"), { prog });
     }
@@ -782,6 +887,7 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
       case "trace": return cmdTrace(o);
       case "verify": return cmdVerify(o);
       case "branch": return cmdBranch(o);
+      case "req": return cmdReq(o);
       default: usage(`unknown command ${cmd}`);
     }
   } catch (e) {

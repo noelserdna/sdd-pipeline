@@ -139,6 +139,88 @@ test("sdd_context sin libro conserva la lógica de enlaces", () => {
   assert.ok(j.gaps.includes("MISSING_TESTS: No test references found"));
 });
 
+test("evidencia visual: un criterio unshown sale como hueco UNSHOWN y el motivo acompaña al veredicto", () => {
+  const dir = proyecto(false);
+  mkdirSync(path.join(dir, ".sdd"));
+  const shot = { path: "evidencias/FASE-1/AC-001-01.png", sha256: "sha256:ab", bytes: 3, kind: "image", present: true };
+  const ledger = {
+    $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
+    visual_evidence: "required", evidence_dir: "evidencias", videos: null,
+    requirements: [{
+      id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "MISSING",
+      reason: "no visual evidence", criteria_total: 2, criteria_passing: 1, waiver: null, stale_evidence: false,
+      criteria: [
+        { n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", visual: "shown", evidence: [{ kind: "test", status: "pass", fresh: true, attachments: [shot] }] },
+        { n: 2, text: "b", scenarios: ["AC-001-02"], state: "unshown", visual: "missing", evidence: [{ kind: "test", status: "pass", fresh: true, attachments: [] }] },
+      ],
+    }],
+    summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 0, FAILING: 0, MISSING: 1, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
+      must_total: 1, must_verified: 0, must_waived: 0, goal: false, waived_musts: [], stale_evidence: 0, unshown: 1, missing_videos: [] },
+  };
+  writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
+  const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
+  assert.equal(ctx.acceptance.reason, "no visual evidence");
+  assert.equal(ctx.acceptance.perCriterion[1].visual, "missing");
+  assert.ok(ctx.gaps.some((g: string) => g.startsWith("UNSHOWN_AC2")), "el criterio sin captura es un hueco");
+  assert.ok(!ctx.gaps.some((g: string) => g.includes("AC1")), "el criterio con captura no lo es");
+  const cov = parsear(executeCoverage({}, emptyGraph(), indiceVacio(), dir));
+  assert.equal(cov.open[0].reason, "no visual evidence");
+});
+
+test("letra literal: un criterio weakened sale como hueco WEAKENED con el literal que falta", () => {
+  const dir = proyecto(false);
+  mkdirSync(path.join(dir, ".sdd"));
+  const gap = { code: "Q-03", file: "tests/cv.test.ts", line: 12, literal: "Proyectos personales" };
+  const ledger = {
+    $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
+    visual_evidence: "off", literal_gate: "enforce", videos: null,
+    requirements: [{
+      id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "MISSING",
+      reason: "test does not carry the criterion's literal", criteria_total: 2, criteria_passing: 1, waiver: null, stale_evidence: false,
+      criteria: [
+        { n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", literal_gaps: [], evidence: [{ kind: "test", status: "pass", fresh: true }] },
+        { n: 2, text: "b", scenarios: ["AC-001-02"], state: "weakened", literal_gaps: [gap], evidence: [{ kind: "test", status: "pass", fresh: true }] },
+      ],
+    }],
+    summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 0, FAILING: 0, MISSING: 1, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
+      must_total: 1, must_verified: 0, must_waived: 0, goal: false, waived_musts: [], stale_evidence: 0, literal_gaps: 1, weakened: 1 },
+  };
+  writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
+  const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
+  assert.equal(ctx.acceptance.reason, "test does not carry the criterion's literal");
+  assert.deepEqual(ctx.acceptance.perCriterion[1].literal_gaps, [gap]);
+  assert.ok(ctx.gaps.some((g: string) => g.startsWith("WEAKENED_AC2") && g.includes('"Proyectos personales" missing in tests/cv.test.ts')), "el criterio sin literal es un hueco");
+  assert.ok(!ctx.gaps.some((g: string) => g.includes("AC1")), "el criterio con su literal no lo es");
+});
+
+test("ronda adversarial: un challenge abierto es un hueco CHALLENGED aunque el veredicto sea VERIFIED", () => {
+  const dir = proyecto(false);
+  mkdirSync(path.join(dir, ".sdd"));
+  const ch = (id: string, state: string, counter = "confirmed") => ({ id, ac: 1, category: "WEAKENED-ASSERT", counter, quote: "Proyectos personales",
+    evidence: [{ path: "src/cv.ts", line: 41 }], verifier: "verifier-FASE-1", head: "abc", at: null, state });
+  const ledger = {
+    $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
+    adversarial_gate: "enforce",
+    requirements: [{
+      id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "VERIFIED",
+      reason: null, criteria_total: 1, criteria_passing: 1, waiver: null, stale_evidence: false,
+      criteria: [{ n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", evidence: [] }],
+      challenges: [ch("CH-001", "open"), ch("CH-002", "stale"), ch("CH-003", "open", "inconclusive")],
+    }],
+    summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 1, FAILING: 0, MISSING: 0, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
+      must_total: 1, must_verified: 1, must_waived: 0, goal: true, waived_musts: [], stale_evidence: 0,
+      challenges_open: 1, must_challenged: 1, challenged_musts: ["REQ-F-001"] },
+  };
+  writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
+  const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
+  assert.equal(ctx.coverageStatus, "VERIFIED", "el veredicto no cambia");
+  assert.equal(ctx.acceptance.challenges.length, 3);
+  assert.deepEqual(ctx.gaps.filter((g: string) => g.startsWith("CHALLENGED_")), [
+    'CHALLENGED_AC1: CH-001 WEAKENED-ASSERT (confirmed) — "Proyectos personales" at src/cv.ts:41 (adversarial-finding)',
+    'CHALLENGED_AC1: CH-003 WEAKENED-ASSERT (inconclusive) — "Proyectos personales" at src/cv.ts:41 (needs-human)',
+  ], "solo los abiertos son huecos; el inconclusive va a una persona");
+});
+
 test("la pista de sdd_trace apunta a sdd-acceptance, no a traceability-check", () => {
   const h = getNextStepHint("sdd_trace");
   assert.ok(h.includes("/sdd-acceptance"));

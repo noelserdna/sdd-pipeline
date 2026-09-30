@@ -24,6 +24,22 @@ Does a passing test assert the THEN of its criterion and exercise its WHEN?
 tool, fresh context, no implementation history, read-only), asking both questions literally as yes/no with a
 one-line reason per item. Its answers are advisory in the same way.
 
+### Pre-pass for the adversarial round
+
+`--adversarial` uses the same question set as a cheap pass over the whole universe before the verifiers start:
+
+1. Items as in steps 2-3 above, but for **every** criterion in scope with a bound test, whatever its verdict,
+   priority or method (`.sdd/adversarial-plan.json` lists them with their tests), written to
+   `.sdd/jev/adversarial.jsonl`; judge them into `.sdd/jev/adversarial.json`.
+2. Priority of a criterion = the lowest `asserts_then` or `exercises_when` over its tests. The verifiers get their
+   criteria in ascending order, and the clean verdicts counter-verified are the lowest-scored ones
+   (`adversarial-protocol.md` §2, §4).
+
+That is all it does. The verifiers read every criterion whatever it scored, a high score marks nothing clean, and
+the scores never reach `challenges.jsonl`, the gate or CI. Jev reads text only, so it says nothing about the
+captures and videos of `evidencias/`; the verifiers read the captures. With Jev off (exit 3) the main thread orders
+the criteria from their text and test names, with the same limits.
+
 ## Demo evidence — `scripts/jev/evidence.json`
 
 Before asking a human to confirm a demo (`needs-human` route), screen the captured output:

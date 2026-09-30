@@ -14,12 +14,18 @@
 //   P-SIZE    warning when a FASE spans more than 3 use cases, or its task/TASK-FASE-N.md has more than 15 tasks.
 //   V-20      (task file present) warning for each scenario of `Escenarios:` that no task of task/TASK-FASE-N.md cites
 //             (sdd-task-generator treats it as an error in its own validation).
+//   V-21      (task file present; warnings only, never an error) a port of `Puertos con doble` in
+//             plan/fase-plans/PLAN-FASE-N.md with no task whose Acceptance cites `CONTRACT-<port>`; and, when the project
+//             has an acceptance suite (Stack Profile `acceptance`, e2e/, test/system/, acceptance/playwright.config.*, or
+//             a task writing an e2e path), a REQ-F scenario of `Escenarios:` that no task with an e2e path cites (the
+//             FASE journey task of sdd-task-generator).
 // A plan without the marker is horizontal (legacy): skipped with a note, exit 0. A mixed plan
 // (`Plan-Style: vertical (from FASE-4)`) checks FASE-4 onward; REQ ids cited in the earlier FASEs count for V9.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { loadScenarios, effectivePriority } from "./acceptance.mjs";
 import { parseRequirements } from "../sdd-jev.mjs";
+import { stackProfile } from "./git-log.mjs";
 
 class Exit extends Error { constructor(code) { super(`exit ${code}`); this.code = code; } }
 let PROG = "sdd";
@@ -120,12 +126,69 @@ export function parseFase(text, file) {
   };
 }
 
+const TASK_LINE_RE = /^- \[( |x|!)\] TASK-F\d+-\d{3,4}\b/;
 function taskFile(root, fase) {
   const f = path.join(root, "task", `TASK-FASE-${fase}.md`);
   if (!existsSync(f)) return null;
   const text = readFileSync(f, "utf8");
-  return { text, tasks: text.split(/\r?\n/).filter((l) => /^- \[( |x|!)\] TASK-F\d+-\d{3,4}\b/.test(l)).length };
+  return { text, tasks: text.split(/\r?\n/).filter((l) => TASK_LINE_RE.test(l)).length };
 }
+
+/** Task blocks of a task file: {line, text, paths (write-set), acceptance}. */
+export function taskBlocks(text) {
+  const blocks = [];
+  let cur = null, field = null;
+  String(text).split(/\r?\n/).forEach((l, i) => {
+    if (TASK_LINE_RE.test(l)) {
+      const after = l.includes(" | ") ? l.slice(l.lastIndexOf(" | ") + 3) : "";
+      cur = { line: i + 1, text: l, paths: [...after.matchAll(/`([^`]+)`/g)].map((m) => m[1]), acceptance: "" };
+      blocks.push(cur); field = null; return;
+    }
+    if (!cur) return;
+    if (l.trim() && !/^\s/.test(l)) { cur = null; return; }
+    cur.text += `\n${l}`;
+    const f = l.match(/^ {2}- \*\*([A-Za-z]+):\*\*/);
+    if (f) field = f[1].toLowerCase();
+    else if (/^ {2}- /.test(l)) field = null;
+    if (field === "acceptance") cur.acceptance += `\n${l}`;
+    if (field === "files") cur.paths.push(...[...l.matchAll(/`([^`]+)`/g)].map((m) => m[1]));
+  });
+  return blocks;
+}
+
+const PORTS_HEAD_RE = /^#{2,4}\s+(?:[\d.x{}]+\s+)?(?:Puertos con doble|Ports with (?:a )?double)\b/i;
+/** Rows of the `Puertos con doble` table of a PLAN-FASE file: [{name, line}]; null when the section is absent. */
+export function parsePorts(text) {
+  const lines = String(text).split(/\r?\n/);
+  const start = lines.findIndex((l) => PORTS_HEAD_RE.test(l));
+  if (start < 0) return null;
+  const ports = [];
+  for (let j = start + 1; j < lines.length; j++) {
+    if (/^#{1,4}\s/.test(lines[j])) break;
+    const m = lines[j].trim().match(/^\|(.*)\|$/);
+    if (!m) continue;
+    const name = m[1].split("|")[0].replace(/`/g, "").trim();
+    if (!name || /^:?-{3,}/.test(name) || /^(puerto|port)$/i.test(name) || /^[—-]+$/.test(name) || name.startsWith("{")) continue;
+    ports.push({ name, line: j + 1 });
+  }
+  return ports;
+}
+
+/** An acceptance (E2E) path: an e2e/, acceptance/ or system/ directory, or a `.e2e`/`.journey` file (x.e2e.ts,
+ *  x.journey.spec.ts, x.e2e.test.js) wherever it sits. */
+const E2E_PATH_RE = /(^|\/)(e2e|acceptance|system)\/|\.(e2e|journey)(\.(spec|test))?\.[a-z]+$/i;
+/** The project has an acceptance (E2E) suite: stack-profile.md §7. */
+function hasAcceptanceSuite(root) {
+  const prof = stackProfile(root);
+  if (prof.acceptance && prof.acceptance !== "none") return true;
+  for (const base of new Set([root, path.resolve(root, prof.app_dir || ".")])) {
+    if (existsSync(path.join(base, "e2e")) || existsSync(path.join(base, "test", "system"))) return true;
+    const acc = path.join(base, "acceptance");
+    if (existsSync(acc) && readdirSync(acc).some((f) => /^playwright\.config\./.test(f))) return true;
+  }
+  return false;
+}
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Lint a vertical plan. Returns {style, fases, errors, warnings, notes}. */
 export function lintPlan(root, { dir = "plan", requirements } = {}) {
@@ -150,7 +213,11 @@ export function lintPlan(root, { dir = "plan", requirements } = {}) {
   if (!reqs) notes.push(`${rel(reqFile)} not found: REQ ids and V9 not checked`);
   const reqById = new Map((reqs || []).map((r) => [r.id, r]));
   const hasSpecTests = existsSync(path.join(root, "spec", "tests"));
-  const scenarioIds = new Set(loadScenarios(root).map((s) => s.id));
+  const scenarios = loadScenarios(root);
+  const scenarioIds = new Set(scenarios.map((s) => s.id));
+  const scenarioReqs = new Map();
+  for (const s of scenarios) scenarioReqs.set(s.id, [...(scenarioReqs.get(s.id) || []), ...s.tags.map((t) => t.req)]);
+  let suite = null;
   if (!hasSpecTests) notes.push("spec/tests/ not found: scenario ids not checked against BDD files");
 
   const checkScenario = (file, line, where, refs) => {
@@ -231,6 +298,30 @@ export function lintPlan(root, { dir = "plan", requirements } = {}) {
       const cited = new Set([...tf.text.matchAll(AC_RE)].map(canonAc));
       for (const id of escRefs.acs) if (!cited.has(id)) warn(tfile, 1, "V-20", `scenario ${id} (Escenarios of ${file}) is cited by no task`);
       for (const { req, ac } of escRefs.reqAcs) if (!new RegExp(`\\b${req}\\b`).test(tf.text)) warn(tfile, 1, "V-20", `${req} AC${ac} (Escenarios of ${file}) is cited by no task`);
+
+      // V-21: contract task per port, journey task per REQ-F scenario (warnings only)
+      const blocks = taskBlocks(tf.text);
+      const pfile = path.join(planDir, "fase-plans", `PLAN-FASE-${fz.fase}.md`);
+      const ports = existsSync(pfile) ? parsePorts(readFileSync(pfile, "utf8")) || [] : [];
+      summary.ports = ports.length;
+      for (const p of ports) {
+        const re = new RegExp(`CONTRACT-${escapeRe(p.name)}(?![A-Za-z0-9_-])`);
+        if (!blocks.some((b) => re.test(b.acceptance))) warn(tfile, 1, "V-21", `port ${p.name} (${rel(pfile)}:${p.line}) has no task whose Acceptance cites CONTRACT-${p.name}`);
+      }
+      const e2e = blocks.filter((b) => b.paths.some((q) => E2E_PATH_RE.test(q)));
+      if (suite === null) suite = hasAcceptanceSuite(root);
+      if (suite || e2e.length) {
+        const e2eText = e2e.map((b) => b.text).join("\n");
+        const citedE2e = new Set([...e2eText.matchAll(AC_RE)].map(canonAc));
+        for (const id of escRefs.acs) {
+          const fReqs = (scenarioReqs.get(id) || []).filter((r) => r.startsWith("REQ-F-"));
+          if (fReqs.length && !citedE2e.has(id)) warn(tfile, 1, "V-21", `scenario ${id} of ${fReqs.join(", ")} (Escenarios of ${file}) is cited by no task with an e2e path (journey task)`);
+        }
+        for (const { req, ac } of escRefs.reqAcs) {
+          if (!req.startsWith("REQ-F-")) continue;
+          if (!new RegExp(`\\b${req}\\s+AC${ac}\\b`).test(e2eText)) warn(tfile, 1, "V-21", `${req} AC${ac} (Escenarios of ${file}) is cited by no task with an e2e path (journey task)`);
+        }
+      }
     }
   }
 

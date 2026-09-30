@@ -13,7 +13,7 @@
 | W5 | **`Refs` once.** One `Refs` row in the header of each document holds all traceability ids (REQ, UC, WF, API, INV, RN, ADR, BDD, PROP). No trailing "Traceability" section; no separate "Business rules" / "Invariants" / "Related" lists. Ids are also cited inline exactly where they apply. |
 | W6 | **No narrative sections.** No "Description" longer than 2 sentences, no "Implementation notes", "UI/UX notes", "Notes", "Rationale", "Evolution", "Prevention", "Interface notes". Rationale is an ADR; a rule is an RN/INV. |
 | W7 | **Boilerplate once per file, not per item.** Auth, rate limit, version: once per contract. Actors: one header row per UC (no per-actor responsibility table). Standard errors: one table per contract with an "Operations" column, not one table per operation. Exceptions shared by every UC (global error handler, storage failure): specified once in the workflow or contract, cited by id in the UC. |
-| W8 | **Error rows cite the code.** UC/contract/BDD rows carry `E_CODE` + condition (+ HTTP status only with `Style: http`, exit code for a CLI); message text, class and description live only in the error catalog. Quote a literal message only where a REQ acceptance criterion quotes it. |
+| W8 | **Error rows cite the code; a Then keeps the visible literals.** UC/contract/BDD rows carry `E_CODE` + condition (+ HTTP status only with `Style: http`, exit code for a CLI); message text, class and description live only in the error catalog. A BDD `Then` copies verbatim every literal its REQ acceptance criterion shows the user — label, title, heading, typography, value, quoted message (`Then the user sees the heading "Proyectos personales"`); the literals, not the criterion's sentence (W2) — because the test asserts what the scenario says, and a Then that paraphrases "the heading is shown" lets a wrong or missing text pass. |
 | W9 | **Write each file once.** Plan ids, invariants and exception rows before writing; never patch an already-written file to add a cross-reference. |
 
 ---
@@ -105,6 +105,7 @@ interface XxxOutput { field: Type }
 | E3 | 4 | [dependency failure / timeout] | `E_CODE` | 503 | [retry / abort] | AC-NNN-NN |
 | E4 | 4 | [concurrent modification] | `E_CODE` | 409 | [resolution] | AC-NNN-NN |
 | E5 | 5 | [precondition no longer holds] | `E_CODE` | 409 | … | AC-NNN-NN |
+| E6 | 5 | replay: [same input sent again] | `—` or `E_CODE` | 200 / 409 | [what is kept: existing record returned, no duplicate] | AC-NNN-NN |
 
 ## Open questions
 - NC-NNN: … *(omit the section when there are none)*
@@ -448,7 +449,7 @@ Scenario: AC-NNN-04 — [edge case / invariant INV-XXX-NNN]
   Then [outcome]
 ````
 
-Rules: exactly one scenario per main flow, per extension, per exception row and per edge case; AC ids are defined **here** and cited by the UC. ≤ 6 lines per scenario; the `[REQ-X ACn]` tag marks which requirement acceptance criterion it satisfies. Assert error code + observable outcome (status only with `Style: http`, exit code for a CLI), not message text (W8). No separate "invariant enforcement" scenario when an exception row already covers that invariant.
+Rules: exactly one scenario per main flow, per extension, per exception row and per edge case; AC ids are defined **here** and cited by the UC. ≤ 6 lines per scenario; the `[REQ-X ACn]` tag marks which requirement acceptance criterion it satisfies. Assert error code + observable outcome (status only with `Style: http`, exit code for a CLI); message text only where the criterion quotes it, and every visible literal of the criterion verbatim (W8). No separate "invariant enforcement" scenario when an exception row already covers that invariant.
 
 ---
 

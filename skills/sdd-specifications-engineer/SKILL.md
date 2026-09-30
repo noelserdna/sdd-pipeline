@@ -61,17 +61,18 @@ Use when requirements are ready (after Mode 1, or the user says so).
 
    #### Step 6a: Error Flow Forcing Function
 
-   For every step of a UC's main flow answer five questions while planning the UC; each "yes" becomes one row of the `Exceptions & errors` table (Template 2):
+   For every step of a UC's main flow answer six questions while planning the UC; each "yes" becomes one row of the `Exceptions & errors` table (Template 2):
 
    | Question | If yes, create... |
    |---|---|
    | 1. What if this step fails (network, timeout, service down)? | Exception with a domain error code (+ HTTP status only with `Style: http`, exit code for a CLI) |
    | 2. What if the input is invalid or missing? | Exception with a validation code (e.g. `E_TITLE_EMPTY`) |
    | 3. What if authorization is denied? | Exception with an authorization code + the specific permission |
-   | 4. What if there is a concurrent conflict? | Exception with a conflict code + its resolution |
+   | 4. What if there is a concurrent conflict? For a consumable resource (stock, seat, quota, balance, one-time code): who consumes it, and who reads it while it is being consumed? | Exception with a conflict code + its resolution (who wins, what the other actor sees) |
    | 5. What if a precondition held when checked but became false during execution? | Exception with race-condition handling |
+   | 6. What if the same write runs again with the same input (retry, double click, re-sent message)? What is kept? | Row with condition `replay` and the outcome: the existing record returned unchanged, a domain code, or a second record by design |
 
-   A "no" produces no text: no N/A cells, no forcing-function matrix in the document.
+   A "no" produces no text: no N/A cells, no forcing-function matrix in the document. Question 6 is the exception: every step that writes state gets its `replay` row, even when the answer is "a second record, by design", because a retried write is the outcome clients hit most and nobody specifies, and `sdd-spec-auditor` and `sdd-test-planner` check each write operation for that row.
 
    **Contract style** (per module, recorded in the id ledger): `Style: operations` by default (Template 12b — domain codes and user-visible outcomes; routes, verbs, statuses and form mechanics go to `design/OPERATION-MAPPING.md`); `Style: http` (Template 12) only when a REQ demands an HTTP API for external clients — cite it.
 

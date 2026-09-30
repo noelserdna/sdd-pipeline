@@ -2,7 +2,7 @@
 
 Canonical template for all FASE files. A FASE is a vertical increment (`phase-assignment-rules.md`): one user journey the customer can watch in the Demo. FASE files are navigation indices: they point to specs by id and section and never copy spec content. Budget: ≤ 8 000 chars per FASE (a FASE with parallel Streams and a state machine may reach 10 000).
 
-Section headers and header labels stay in Spanish — other tools parse them: `sdd-task-generator` (Criterios de Éxito, Specs a Leer, Invariantes Aplicables, Contratos Resultantes, Alcance, Dependencias, Módulos y Conjuntos de Escritura, Escenarios), `sdd gate --fase N` (the REQ ids of `Requisitos:`), `sdd lint --plan` (Requisitos, Escenarios, Criterios de Éxito, Demo) and `sdd-task-implementer` Phase 9 (Demo). Descriptive text follows the user's language.
+Section headers and header labels stay in Spanish — other tools parse them: `sdd-task-generator` (Criterios de Éxito, Specs a Leer, Invariantes Aplicables, Contratos Resultantes, Alcance, Dependencias, Módulos y Conjuntos de Escritura, Escenarios), `sdd gate --fase N` (the REQ ids of `Requisitos:`, the WF ids of `Workflows:`), `sdd lint --plan` (Requisitos, Escenarios, Criterios de Éxito, Demo) and `sdd-task-implementer` Phase 9 (Demo). Descriptive text follows the user's language.
 
 ---
 
@@ -15,6 +15,7 @@ Section headers and header labels stay in Spanish — other tools parse them: `s
 > **Incremento:** {One line: the user journey that works at the end, in the customer's words}
 > **Requisitos:** REQ-F-001, REQ-F-002, REQ-NF-002
 > **Escenarios:** AC-001-01, AC-001-03, AC-002-01, REQ-NF-002 AC1
+> **Workflows:** WF-001
 > **Necesidades:** N-001, N-002
 > **Dependencias:** {Fase X, Fase Y | Ninguna (fase inicial)}
 
@@ -23,6 +24,7 @@ Section headers and header labels stay in Spanish — other tools parse them: `s
 
 - **Requisitos** — the requirements this FASE completes, whole (rule R5). `sdd gate --fase N` judges exactly these; list every id, no ranges.
 - **Escenarios** — every scenario the FASE makes pass: `AC-NNN-NN` from `spec/tests/BDD-UC-*.md`, or `REQ-X-NNN ACn` for a requirement without a BDD scenario (a measured NFR, or every requirement when the route skipped the specifications and there is no `spec/`). Each id individually (no `..` ranges): the task generator checks that every one is cited by a task, and the lint that it exists.
+- **Workflows** — the user-facing workflows (`WF-NNN` of `spec/workflows/`) the increment's journey walks through. The customer accepts what they can watch, so `sdd gate --fase N` asks for one video per id listed here, named with it; the journey task records them. Leave out background workflows (a scheduled job, a webhook) that have no screen of their own. Omit the line when the FASE has none (the route skipped the specifications, a hardening FASE): the gate then asks for the `WF-NNN` cited in `## Demo`, or for one video named `FASE-N`.
 - **Necesidades** — the customer needs (`requirements/CUSTOMER-NEEDS.md`) the increment serves.
 - FASE-0 is `FASE-0-SKELETON.md`; a measured-NFR FASE is `FASE-{N}-HARDENING.md`.
 

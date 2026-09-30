@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests de `sdd lint --plan` (scripts/lib/plan-lint.mjs, sin modelo): planes verticales de tests/fixtures/plan-vertical
-# (todo-app, todo-app planificado desde los requisitos sin spec/, y web) que pasan, una mutación por cada fallo (P-HEADER, P-AC, V8, V9, P-SIZE, V-20), plan horizontal
+# (todo-app, todo-app planificado desde los requisitos sin spec/, y web) que pasan, una mutación por cada fallo (P-HEADER, P-AC, V8, V9, P-SIZE, V-20, V-21 con tests/plan/fixtures/v21), plan horizontal
 # (legado) y mixto, más los contratos de las skills que leen la marca `Plan-Style: vertical` y la validez de
 # scripts/jev/feedback-route.json. Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere node ≥ 18.
 set -euo pipefail
@@ -119,6 +119,40 @@ fresh m18 web; sub "$P/plan/fases/FASE-0-SKELETON.md" 's/^> \*\*Incremento:.*\n/
 run lint --plan --repo "$P"; expect "sin Incremento/Necesidades: avisos, sale 0" "$rc" 0; expect "sin Incremento/Necesidades: 2 avisos P-HEADER" "$(lines 'P-HEADER warning')" 2
 run lint --plan --repo "$P" --bogus; expect "opción desconocida → 2" "$rc" 2
 
+# ---------------------------------------------------------------- 4b. V-21: tarea CONTRACT- por puerto y journey e2e (solo avisos)
+# v21 NAME → todo-reqonly + tests/plan/fixtures/v21 (Stack Profile con acceptance, PLAN-FASE-0 con un puerto, tareas compact)
+v21() { fresh "$1" todo-reqonly; cp -R "$ROOT/tests/plan/fixtures/v21/." "$P/"; }
+T0=task/TASK-FASE-0.md
+v21 p0
+run lint --plan --repo "$P"; expect "v21: puerto con CONTRACT- y journey completo → 0" "$rc" 0
+has "v21: sin errores ni avisos" "vertical, 3 FASE(s), 0 error(s), 0 warning(s)"
+run lint --plan --repo "$P" --json; expect "v21 --json: FASE-0 con 1 puerto" "$(js 'j.fases[0].ports')" 1
+run lint "$P/$T0"; expect "v21: la tarea CONTRACT- en compact pasa sdd lint" "$rc" 0
+v21 p1; sub "$P/$T0" 's/`CONTRACT-SyncClient REQ-F-006 AC1`/`SyncClient REQ-F-006 AC1`/'
+run lint --plan --repo "$P"; expect "puerto sin CONTRACT-: aviso, sale 0" "$rc" 0
+has "puerto sin CONTRACT-: V-21" "V-21 warning: port SyncClient (plan/fase-plans/PLAN-FASE-0.md:15) has no task whose Acceptance cites CONTRACT-SyncClient"
+v21 p2; sub "$P/$T0" 's/`CONTRACT-SyncClient REQ-F-006 AC1`/`SyncClient REQ-F-006 AC1`/; s/(Refs:\*\* FASE-0, REQ-F-006)\n\n## Verification/$1, CONTRACT-SyncClient\n\n## Verification/'
+run lint --plan --repo "$P"; expect "CONTRACT- solo en Refs no cuenta" "$(lines 'V-21 warning: port SyncClient')" 1
+v21 p3; sub "$P/$T0" 's/, REQ-F-006 AC2, REQ-F-006 AC3\n/\n/'
+run lint --plan --repo "$P"; expect "journey sin dos escenarios: aviso, sale 0" "$rc" 0
+expect "journey sin dos escenarios: 2 × V-21" "$(lines 'is cited by no task with an e2e path (journey task)')" 2
+has "journey: V-21 REQ-F-006 AC3" "V-21 warning: REQ-F-006 AC3 (Escenarios of plan/fases/FASE-0-SKELETON.md) is cited by no task with an e2e path"
+v21 p4; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.test.ts`/'
+run lint --plan --repo "$P"; expect "sin tarea e2e y con suite: un V-21 por escenario REQ-F (8)" "$(lines 'journey task')" 8
+has "REQ-NF no pide journey" "vertical, 3 FASE(s), 0 error(s), 8 warning(s)"
+v21 p4b; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.journey.spec.ts`/'
+run lint --plan --repo "$P"; expect "x.journey.spec.ts fuera de e2e/ es ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
+v21 p4c; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`src\/fase-0.e2e.test.js`/'
+run lint --plan --repo "$P"; expect "x.e2e.test.js es ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
+v21 p4d; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.spec.ts`/'
+run lint --plan --repo "$P"; expect "x.spec.ts sin .e2e/.journey no es ruta e2e (8)" "$(lines 'journey task')" 8
+rm "$P/CLAUDE.md"
+run lint --plan --repo "$P"; expect "sin suite de aceptación ni ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
+fresh p5 todo; printf '## SDD Stack Profile\n\n- acceptance: npx playwright test\n' > "$P/CLAUDE.md"
+run lint --plan --repo "$P"; expect "todo con suite: V-21 por los 8 AC de REQ-F de FASE-0 (etiquetas BDD)" "$(lines 'journey task')" 8
+has "todo con suite: AC-001-01 de REQ-F-001" "V-21 warning: scenario AC-001-01 of REQ-F-001 (Escenarios of plan/fases/FASE-0-SKELETON.md)"
+expect "todo con suite: rc 0" "$rc" 0
+
 # ---------------------------------------------------------------- 5. el alcance de sdd gate --fase coincide con Requisitos
 fresh gate todo
 out=$(cd "$P" && node -e 'import(process.argv[1]).then((m)=>console.log(JSON.stringify(m.faseScope(".",0))))' "$ROOT/scripts/lib/acceptance.mjs" 2>&1)
@@ -145,7 +179,7 @@ grepf skills/sdd-task-implementer/references/tdd-workflow.md "REQ-F-003 AC2 reje
 grepf skills/sdd-task-generator/SKILL.md "Plan-Style" "task-generator lee la marca"
 grepf skills/sdd-task-generator/SKILL.md "### UC-NNN" "task-generator: Slices por caso de uso"
 grepf skills/sdd-task-generator/SKILL.md "| V-20 |" "task-generator: V-20"
-grepf skills/sdd-task-implementer/SKILL.md "accept --fase {N} --report acceptance/ACCEPTANCE-REPORT.md" "implementer Phase 9: sdd accept --fase"
+grepf skills/sdd-task-implementer/SKILL.md "accept --junit-sha \"\$SHA\" --fase {N} --report acceptance/ACCEPTANCE-REPORT.md" "implementer Phase 9: sdd accept --junit-sha --fase"
 grepf skills/sdd-task-implementer/SKILL.md "Plan-Style" "implementer lee la marca"
 grepf skills/sdd-task-implementer/references/tdd-workflow.md "AC-001-03 rejects an empty title" "tdd-workflow: nombres con AC id"
 grepf skills/sdd-test-planner/SKILL.md "## Test Naming (scenario ids)" "test-planner: nomenclatura"

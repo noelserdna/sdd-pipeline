@@ -80,7 +80,8 @@ Templates: `references/output-templates.md`.
    alternatives, accepted trade-offs and references.
 2. `design/QUALITY-ATTRIBUTES.md` (§QUALITY-ATTRIBUTES), if not already written in Phase 2.
 3. `design/ADR-DRAFT-NNN-{slug}.md` (§ADR-DRAFT) only for decisions that deserve a formal record — typically
-   architecture style, primary database, auth model, deployment platform. Draft numbers are local to `design/`.
+   architecture style, primary database, auth model, deployment platform, config per environment (DIM-7-002/003)
+   and post-deploy verification (DIM-8-003). Draft numbers are local to `design/`.
 4. `design/OPERATION-MAPPING.md` (§OPERATION-MAPPING) when any contract declares `Style: operations` (optional for
    `http`): every `API-` operation mapped, seeded from the stack kit conventions
    (`templates/stacks/<kit>/conventions.md`, CLAUDE.md `## Stack Conventions` / `## SDD Stack Profile`).

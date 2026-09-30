@@ -84,6 +84,8 @@ jobs:
       - run: bash tests/jev/run.sh
       - run: bash tests/git/run.sh
       - run: bash tests/acceptance/run.sh
+      - run: bash tests/quotes/run.sh
+      - run: bash tests/seeded/run.sh
       - run: bash tests/plan/run.sh
       - run: bash tests/tracker/run.sh
       - run: bash tests/route/run.sh

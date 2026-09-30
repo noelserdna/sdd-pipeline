@@ -30,6 +30,46 @@ their INV/ADR ids.
 
 ---
 
+## The criterion's letter sits above its assert
+
+The letter of a criterion lives only in `requirements/REQUIREMENTS.md`; the BDD scenario, the FASE line and the task
+paraphrase it, and a paraphrase drops the literal the customer will look for. The test is the link that carries the
+letter to the code, so every test bound to a criterion quotes it:
+
+- Open the criterion by id at its source: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" req show
+  REQ-F-081 --ac 1` prints the statement and the criterion verbatim (without the CLI, read that requirement's section
+  of `REQUIREMENTS.md`). Never quote from the task, the FASE or the BDD summary.
+- Put the quote, in the criterion's own language, in a comment directly above the assert that checks it:
+  `// REQ-F-081 AC1: "…"`. A long criterion may elide its GIVEN/WHEN with `…`; a literal (a quoted label, title,
+  message, amount or date) is never elided.
+- Every literal of the quote appears in the assert, character for character. When the assert cannot hold it (the
+  criterion contradicts another, or the literal cannot be produced), implement the rest and record a `SPEC-DEVIATION`
+  (Art. 12) instead of asserting something close.
+
+```typescript example
+// requirements/REQUIREMENTS.md, REQ-F-081 AC1, written in Spanish with the customer:
+//   CUANDO el usuario abre la lista de proyectos ENTONCES el usuario ve el título 'Proyectos personales'
+//   y el proyecto de ejemplo 'Huerto 2026'
+test('E2E-WF-004-01 REQ-F-081 AC1 project list shows the personal section', async ({ page }) => {
+  await page.goto('/projects');
+  // REQ-F-081 AC1: "…ENTONCES el usuario ve el título 'Proyectos personales' y el proyecto de ejemplo 'Huerto 2026'"
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('Proyectos personales');
+  await expect(page.getByRole('list', { name: 'Proyectos personales' })).toContainText('Huerto 2026');
+});
+```
+
+An assert on `/proyectos/i` or on `toBeVisible()` of the list passes while the page reads 'Mis proyectos': the quote
+next to it makes that gap visible to the reviewer and to the adversarial round.
+
+`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --quotes [--fase N]` checks the convention in every test file that names a criterion (by
+`REQ-X-NNN ACn` or by a scenario id bound to it): Q-01 no quote (warning), Q-02 the quote is not the criterion's
+current text, Q-03 a literal of the criterion (text in quotes, or in backticks after THEN) is missing from the code
+outside comments. Under `literal_gate: enforce` (the default) the ledger holds a Must criterion with a Q-02 or Q-03
+back as `weakened`, so the requirement is not VERIFIED. A literal that a helper builds is not an exception you grant
+yourself: assert the built value against the literal, or leave it to a person (`accept record literal-exception`).
+
+---
+
 ## The RED-GREEN-REFACTOR Cycle
 
 For each task with testable behavior:
@@ -118,6 +158,20 @@ describe('{FeatureName} Integration', () => {
 });
 ```
 
+### Replay and race rows
+
+A `replay` or `race` row of `test/TEST-MATRIX-*` (or of the task's Acceptance) is an integration test against the real
+database, like Category 2.
+
+- **replay**: send the same write twice with the same input (same idempotency key when the contract has one) and
+  assert the effect exists once: one row, one charge, one email; the second answer is the one the contract states
+  (the same result, or its conflict error).
+- **race**: start both writes before awaiting either, `await Promise.allSettled([write(a), write(b)])`, then assert the
+  invariant (one winner, the other with the contract's error, the counter equal to the sum). Never order them with
+  `sleep`/`setTimeout`/`waitForTimeout`: a delay turns the race into a sequence and the test proves nothing. A race the
+  test harness cannot open (one shared connection that serialises every write) is an IF- entry naming the row, never a
+  silently skipped row.
+
 ### Category 3: Contract Tests
 
 **When:** API Endpoint tasks (validating request/response schemas)
@@ -152,6 +206,71 @@ describe('{API-NNN-NN} {operation} Contract', () => {
   });
 });
 ```
+
+### Category 3b: Port contract tests
+
+**When:** a `CONTRACT-<port>` task, one per row of the `§4.x Puertos con doble` table of `PLAN-FASE-{N}.md` (ports to
+external systems: an LLM, a payment provider, a mail service).
+
+The slice tests run against the double, so they stay green even when the real provider sends something else: a prompt
+without the instructions, a context part dropped, a model read from the wrong setting. The contract test runs the same
+cases against the double **and** the real adapter, and asserts on what each one would put on the wire.
+
+```
+Purpose: the double and the real provider honour the same port contract
+Dependencies: the double, and the real adapter with a fake transport injected (no network, no credentials)
+Location: {test_paths}/contract/<port>.contract.test.* (stack convention wins: e.g. test/contract/ in Rails)
+Name: CONTRACT-<port> REQ-F-NNN ACn … — the criterion id makes the result count in the acceptance ledger
+```
+
+```typescript example
+// tests/contract/llm-client.contract.test.ts
+const config = loadConfig({ LLM_MODEL: 'model-from-env' });
+const implementations = [
+  ['double', () => {
+    const client = new FakeLlmClient({ reply: 'ok', config });
+    return { client, sent: () => client.lastRequest };
+  }],
+  ['real', () => {
+    const requests: Array<{ url: string; body: string }> = [];
+    const transport = async (req: { url: string; body: string }) => {
+      requests.push(req);
+      return { status: 200, json: { content: [{ type: 'text', text: 'ok' }] } };
+    };
+    const client = new HttpLlmClient({ transport, config });
+    return {
+      client,
+      sent: () => {                       // the provider's wire format, mapped to the port's fields
+        const body = JSON.parse(requests.at(-1)!.body);
+        return { instructions: body.system, context: body.messages.map((m: { content: string }) => m.content), model: body.model };
+      },
+    };
+  }],
+] as const;
+
+describe.each(implementations)('CONTRACT-llm-client REQ-F-078 AC1 (%s)', (_name, make) => {
+  it('sends the instructions, every context part and the model from the config', async () => {
+    const { client, sent } = make();
+    const out = await client.complete({ instructions: 'Resume en 3 frases', context: ['nota A', 'nota B'] });
+    expect(out.text).toBe('ok');
+    expect(sent()).toEqual({ instructions: 'Resume en 3 frases', context: ['nota A', 'nota B'], model: 'model-from-env' });
+  });
+
+  it('rejects an empty context the same way', async () => {
+    const { client } = make();
+    await expect(client.complete({ instructions: 'x', context: [] })).rejects.toThrow(EmptyContextError);
+  });
+});
+```
+
+- Assert the request's shape: the prompt fields, the instructions, each part of the context and the source of every
+  setting (the `Observable del contrato` column). For a port, the request *is* the observable, so this is not the
+  implementation detail the Test Quality Checklist warns about.
+- A case the real adapter rejects runs against the double too; a double that accepts more than the provider hides
+  defects.
+- Never call the real service from this test, and never patch the network globally. An adapter without a transport
+  seam is a defect of the adapter's task: record an IF- entry (BLOCKER) naming it and mark the contract task `[!]`.
+- Minitest/RSpec: one shared module (or shared examples) with the cases, included in one test class per implementation.
 
 ### Category 4: BDD / Acceptance Tests
 
@@ -208,14 +327,13 @@ Fixtures: tests/e2e/fixtures/{fixture}.ts
 **Structure (Playwright):**
 
 ```typescript
-import { test, expect } from '@playwright/test';
-import { LoginPage } from './pages/login.page';
+import { test, expect, captureCriterion } from './fixtures/evidence';   // construction-protocol.md → Evidence helper
 
 // Auth fixture: reuse storageState for all tests except the login test itself
 test.use({ storageState: './tests/e2e/.auth/user.json' });
 
 test.describe('E2E-WF-001: User Registration Flow', () => {
-  test('Happy path: complete registration', async ({ page }) => {
+  test('E2E-WF-001-01 AC-001-01 AC-001-02 complete registration', async ({ page }, testInfo) => {
     // Step 1: Navigate
     await page.goto('/register');
     await expect(page).toHaveTitle(/Create Account/i);
@@ -230,21 +348,27 @@ test.describe('E2E-WF-001: User Registration Flow', () => {
     // Step 4: Submit
     await page.getByRole('button', { name: /register/i }).click();
 
-    // Step 5: Wait for result
-    await expect(page.getByText('Welcome')).toBeVisible();
+    // Step 5: Assert what the customer reads, then capture it
+    // REQ-F-001 AC1: "…THEN the user sees the greeting 'Welcome, test@example.com'"
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome, test@example.com');
+    await captureCriterion(page, testInfo, 'AC-001-01');
 
     // Step 6: Assert final state
+    // REQ-F-001 AC2: "…and lands on the dashboard with the section 'Your projects'"
     await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page.getByRole('region', { name: 'Your projects' })).toContainText('Your projects');
+    await captureCriterion(page, testInfo, 'AC-001-02');
   });
 
-  test('Error variation: duplicate email', async ({ page }) => {
+  test('E2E-WF-001-02 AC-001-03 duplicate email', async ({ page }, testInfo) => {
     await page.goto('/register');
     await page.getByLabel('Email').fill('existing@example.com');
     await page.getByLabel('Password').fill('SecurePass123!');
     await page.getByRole('button', { name: /register/i }).click();
 
-    // Assert error feedback
-    await expect(page.getByRole('alert')).toContainText('already in use');
+    // REQ-F-001 AC3: "…THEN the user sees 'This email is already in use'"
+    await expect(page.getByRole('alert')).toHaveText('This email is already in use');
+    await captureCriterion(page, testInfo, 'AC-001-03');
   });
 });
 ```
@@ -290,6 +414,11 @@ export class LoginPage {
 - Each test gets its own browser context (Playwright default — do NOT share `page` across tests)
 - Auth via `storageState`, not login-through-UI for every test
 - All assertions use locator-based `expect(locator)`, never `expect(await page.textContent(...))`
+- A criterion's THEN is asserted on its text (`toHaveText`/`toContainText` with the literal it quotes);
+  `toBeVisible()` alone proves an element exists, not what the customer reads
+- Every criterion of a REQ-F gets its capture right after its assert (`captureCriterion`), and the suite records one
+  video per test (config and helper: `references/construction-protocol.md`); without the image the acceptance ledger
+  reads the criterion as `unshown` and the requirement cannot be VERIFIED
 - Wait for stable state before interacting (no arbitrary `page.waitForTimeout()`)
 - E2E tests require a running server — prefer the suite's own `webServer`; otherwise the server helper of `references/stack-profile.md` §8 (`{server}`, log `.sdd/server.log`, stopped at the end of the block)
 - When an acceptance suite already exists (`acceptance` key, `acceptance/playwright.config.*`, `e2e/`, `test/system/`) write the scenario inside it and never scaffold a new one; the task is done when `{acceptance} --grep <E2E-ID>` passes
@@ -428,6 +557,12 @@ Before marking a test as complete:
 [ ] Test name carries the scenario id and describes behavior, not implementation
     WRONG: "should call validateToken function"
     RIGHT: "AC-002-03 returns 401 when token is expired"
+
+[ ] A test bound to a criterion quotes it above the assert, from requirements/REQUIREMENTS.md,
+    and every literal of the quote appears in the assert
+    WRONG: // should show the title       expect(title).toBeVisible()
+    RIGHT: // REQ-F-081 AC1: "…ENTONCES el usuario ve el título 'Proyectos personales'…"
+           await expect(title).toHaveText('Proyectos personales')
 
 [ ] Assertions are specific
     WRONG: expect(result).toBeTruthy()

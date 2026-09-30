@@ -125,8 +125,10 @@
 
 ## Phase 5: Verification
 
-**Purpose:** Cross-Stream suites, BDD/E2E journeys, end-to-end validation against FASE Criterios de Exito.
+**Purpose:** Cross-Stream suites, the FASE journey task (§ Journey task), end-to-end validation against FASE Criterios de Exito.
 **Checkpoint:** All FASE acceptance criteria verified.
+
+{Journey task of the FASE — § Journey task below}
 
 - [ ] TASK-F{N}-{LAST} Verify all FASE-{N} Criterios de Exito | `{acceptance suite or directory it verifies}`
   - **Commit:** `test({scope}): verify FASE-{N} acceptance criteria`
@@ -242,7 +244,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 ## Verification
 
-{task lines}
+{journey task (§ Journey task), then the other task lines}
 ```
 
 | Omitted in compact | Where it comes from |
@@ -266,6 +268,45 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 | Owns | Smallest globs covering the Stream's write-set and no file of another Stream; exact paths when a directory is shared |
 | Runs in | `worktree \`feat/fase-{N}-{stream lower-case}\`` for A…Z; `main checkout, …` for the rest |
 | Single Stream | Table still written (base + A + integración/verificación); `TASK-ORDER.md` says `Streams: serial` |
+
+---
+
+## Contract task (`CONTRACT-<port>`)
+
+One per row of PLAN-FASE §4 `Puertos con doble` (SKILL.md Phase 2). It sits after the slices it depends on, in the provider's Stream (`integración` when the double is written in another work Stream). Compact form (full adds `Revert: SAFE` and a Review block):
+
+```markdown
+- [ ] TASK-F{N}-{SEQ} Contract test {Port}: double and real provider agree | `{test_paths}/contract/{port contract test file}`
+  - blocked-by: {task writing the double}, {task writing the real provider}
+  - **Commit:** `test({scope}): contract test for the {Port} double and its real provider`
+  - **Acceptance:** Test first: `CONTRACT-{Port} REQ-F-{NNN} AC{n} …` runs the same assertions on the double and on the real provider driven through a fake transport that captures the request; observable: {Observable del contrato of the row}
+  - **Refs:** FASE-{N}, REQ-F-{NNN}, PLAN-FASE-{N} §4.{x}
+```
+
+`{test_paths}` is the Stack Profile directory that holds the tests; the file follows the stack's naming convention so the runner picks it up: `{port}.contract.test.ts` in JS/TS, `{port}_contract_test.rb` in Rails (the kit's testing rule names it).
+
+A double in §7.2 Setup without its row is written as a `[PLAN GAP]` task instead (`Gap: PLAN-FASE-{N} §4.{x} has no row for {double}`).
+
+---
+
+## Journey task (one per FASE with REQ-F scenarios)
+
+Verification phase, Stream `verificación` (SKILL.md Phase 2). The rule lives in Acceptance so it survives the compact format. Compact form:
+
+```markdown
+- [ ] TASK-F{N}-{SEQ} Journey FASE-{N} {WF-NNN …}: {Incremento} through the user's route | `{acceptance suite dir}/fase-{N}.journey.spec.{ext}`
+  - blocked-by: {last slice or integration task of the FASE}
+  - **Commit:** `test({scope}): FASE-{N} journey from the user's route with captures`
+  - **Acceptance:**
+    - Test first: named `{AC-NNN-NN | REQ-F-NNN ACn} …` for each REQ-F scenario of the FASE's Escenarios: {ids}
+    - The journey's title carries {WF-NNN of the FASE's `Workflows:` line (else of its `## Demo`) | FASE-{N} when it names none}, the id the video is named after and `sdd gate --fase N` looks for
+    - Enters through Demo step 1 ({URL, screen or command}), never an internal entry point
+    - Asserts each criterion's example text on the element that shows it (`toHaveText` / `toContainText`), not the container's visibility: {criterion → "text"}
+    - Saves `evidencias/FASE-{N}/{scenario id}.png` per criterion and one video per workflow with `{WF-NNN | FASE-{N}}` in its file name, attached to the test
+  - **Refs:** FASE-{N}, {REQ-F ids}, {WF ids}
+```
+
+With `visual_evidence: off` the last Acceptance bullet is dropped.
 
 ---
 

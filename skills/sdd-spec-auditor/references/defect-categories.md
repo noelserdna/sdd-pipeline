@@ -34,7 +34,7 @@ Signals: flows that "obviously" do something; unspecified validations; assumed o
 ## CAT-03 Dangerous silences (`SIL-`)
 
 A specific scenario that is not handled and would produce undefined behaviour.
-Signals: flows without error handling; states without exit transitions; unmentioned edge cases; undefined timeouts.
+Signals: flows without error handling; states without exit transitions; unmentioned edge cases; undefined timeouts; a write operation without a `replay` row (`detection-patterns.md` CAT-03).
 
 ```markdown
 ### SIL-001: Store write timeout has no defined outcome — P0 · CAT-03 · new

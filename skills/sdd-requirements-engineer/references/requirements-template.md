@@ -26,7 +26,7 @@
 - **Rationale:** {why this requirement exists}
 - **Acceptance criteria:**
   - GIVEN {context with concrete data} WHEN {action with concrete input} THEN {observable outcome with concrete values}
-  - GIVEN {…} WHEN {…} THEN {…}
+  - GIVEN {…} WHEN {…} THEN the user sees {literal text, label or value on the screen}
 - **Examples reviewed by:** {name (role)}, {YYYY-MM-DD}      ← omit when the header line covers it
 - **Dependencies:** {REQ-F-NNN, or "None"}
 
@@ -74,8 +74,12 @@
   | `test` for a constraint | a constraint code can check: dependency lists, import boundaries, runtime/engine versions, forbidden APIs | a static test per constraint, named `REQ-C-NNN AC1 …` (a constraint has one implicit criterion, AC1) |
   | `inspection` | process, legal and organisational constraints, documentation, or anything no test can observe | a recorded human review |
 
+  **Visual evidence for REQ-F.** Whatever its method, every criterion of a functional requirement is also shown with a screenshot, and every user-facing workflow with a video (one named after the FASE when the FASE names no workflow), stored under `evidencias/FASE-{N}/`; a `demo` record attaches the recording. A criterion that passes its test without an image stays `unshown` and its requirement is not VERIFIED, because the customer accepts what they can see. When a REQ-F has no screen of its own (a scheduled job, a webhook, an email), its criterion names the screen where the effect is seen, as a `the user sees` THEN: `THEN the user sees the invoice "F-2026-014" in the admin list with status "Sent"`. If no such place exists, that is a question for the customer now, not an exemption later. REQ-NF and REQ-C keep test, measurement or inspection only; a project without any interface (pure API or CLI) turns this off with `visual_evidence: off` in the SDD Stack Profile, a person's decision.
+
   A constraint whose compliance a test can read should say `test`: a static check runs on every commit and never goes stale, while an inspection is a human record that expires whenever the files it names change. Keep `inspection` for what only a person can judge.
 
 - **Acceptance criteria** carry real example data (names, amounts, IDs, exact messages, exit codes), not placeholders: "GIVEN a cart with 2 × 12.50 € WHEN …" instead of "GIVEN a cart with items". Customers can check a concrete example; they cannot check an abstraction. Cover the normal path, the main alternative and at least one error.
+- **Replay criterion:** a requirement that writes state (creates, changes, deletes, sends, charges) carries one criterion for the same write run again with the same input, stating what is kept: `GIVEN task 4 "Comprar leche" was just created WHEN the same form is submitted again THEN the list still has one "Comprar leche" (id 4)`, or a second record when that is what the customer wants. A retried or double-clicked write is the outcome nobody asks about and every user meets; when the adaptive route skips the specifications (decided after this gate), the criteria are the whole contract and this is the only place it gets written, and with specifications `sdd-specifications-engineer` derives its `replay` row from it.
+- **Visual criteria (`the user sees`):** a criterion whose outcome is something the user looks at starts its THEN with `the user sees` (in Spanish `el usuario ve`) followed by the literal text, label, title or value on the screen: `THEN the user sees the heading "Proyectos personales" and 3 rows`. The marker is decided with the customer, not guessed later from verbs like "shows" or "displays": `sdd-test-planner` turns every marked criterion into an E2E that enters through the user's route and asserts that exact text, so an unmarked visual criterion ends up tested below the screen, where a heading nobody wired still passes.
 - **Examples reviewed by:** who on the customer side read the examples and agreed, and when. Per requirement, or once in the header when a whole batch was reviewed together.
 - **Deprecated** requirements stay in place with `- **Status:** Deprecated (YYYY-MM-DD) — {reason}` (written by `sdd-req-change`); they are ignored by the coverage checks.

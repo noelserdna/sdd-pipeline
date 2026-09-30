@@ -3,8 +3,11 @@
 // Reads the JUnit dialects written by vitest, jest-junit, pytest (xunit1/xunit2), rspec_junit_formatter, playwright,
 // minitest-reporters and mocha-junit-reporter. It is a small tag scanner, not a validating XML parser: it only needs
 // <testsuite> (for a file attribute or a path-like name) and <testcase> with its <failure>/<error>/<skipped> children.
+// Attachments of a testcase (screenshots, videos, traces) come from `[[ATTACHMENT|path]]` lines in its <system-out> /
+// <system-err> and from `<property name="attachment" value="path">`; paths are kept as written (resolved by the ledger).
 //
-//   parseJUnit(xml, source?)  → [{ name, classname, file, time, status: pass|fail|error|skip, message, suite, source }]
+//   parseJUnit(xml, source?)  → [{ name, classname, file, time, status: pass|fail|error|skip, message, suite, source,
+//                                  attachments: [path] }]
 //   junitFiles(base, specs)   → absolute .xml paths for files, directories (recursive) and simple `*` globs
 //   readJUnit(base, specs)    → { files: [{ path, mtimeMs, cases }], cases: [...] }
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -35,6 +38,9 @@ function bodyText(s) {
   return decodeEntities(String(s).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "")).trim();
 }
 
+/** Playwright (and Jenkins JUnit attachments) write `[[ATTACHMENT|path]]` lines in a testcase's <system-out>. */
+const ATTACHMENT = /\[\[ATTACHMENT\|([^\]\r\n]+)\]\]/g;
+
 export function parseJUnit(xml, source = null) {
   const text = String(xml).replace(/^\uFEFF/, "");
   const cases = [];
@@ -63,11 +69,25 @@ export function parseJUnit(xml, source = null) {
       if (!file && suite.name && PATHLIKE.test(suite.name) && !/\s/.test(suite.name)) file = suite.name;
       cur = { name: a.name ?? "", classname: a.classname ?? null, file: file ? cleanPath(file) : null,
         time: a.time !== undefined && a.time !== "" ? Number(a.time) : null, status: "pass", message: null,
-        suite: suite.name ?? null, source };
+        suite: suite.name ?? null, source, attachments: [] };
       if (selfClose) { cases.push(cur); cur = null; }
       continue;
     }
     if (!cur || closing) continue;
+    if (tag === "property") {
+      const a = attrs(m[3]);
+      if (String(a.name || "").toLowerCase() === "attachment" && a.value) cur.attachments.push(a.value.trim());
+      continue;
+    }
+    if (tag === "system-out" || tag === "system-err") {
+      if (selfClose) continue;
+      const end = text.indexOf(`</${m[2]}`, re.lastIndex);
+      if (end < 0) continue;
+      const body = decodeEntities(text.slice(re.lastIndex, end).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"));
+      re.lastIndex = text.indexOf(">", end) + 1 || text.length;
+      for (const x of body.matchAll(ATTACHMENT)) cur.attachments.push(x[1].trim());
+      continue;
+    }
     if (tag === "failure" || tag === "error" || tag === "skipped") {
       const a = attrs(m[3]);
       let body = "";

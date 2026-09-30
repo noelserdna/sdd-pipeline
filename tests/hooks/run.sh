@@ -447,6 +447,7 @@ while IFS= read -r c; do
 done <<'EOF'
 node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" accept record waiver --req REQ-F-001 --by Ana --role PO --reason x --follow-up #12
 sdd accept record inspection --req REQ-C-001 --by Ana --role PO --note ok
+sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() builds it" --by Ana --role PO
 cd app && node ../scripts/sdd.mjs  accept  record demo --req REQ-F-002 --observed ok --pass true --by A --role QA
 git tag -a fase-2-accepted -m "FASE-2 accepted by Ana"
 git -C web tag -s requirements-v3 -m "approved"
@@ -539,6 +540,21 @@ blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" 'accept reco
 [ "$(guard "" "$repo" Edit "$repo/acceptance/ACCEPTANCE-REPORT.md")" = deny ] && pass "H2 deniega Edit en acceptance/ACCEPTANCE-REPORT.md" || bad "H2 permite Edit en ACCEPTANCE-REPORT.md"
 [ "$(guard "" "$repo" Write "$repo/acceptance/playwright.config.ts")" = allow ] && pass "H2 permite el resto de acceptance/ (suite Playwright)" || bad "H2 deniega acceptance/playwright.config.ts"
 contains "$(guard_out "" "$repo" Write "$repo/acceptance/decisions.jsonl")" "accept record" && pass "H2 motivo apunta a sdd accept record" || bad "H2 motivo de decisions.jsonl"
+# Ronda adversarial: challenges.jsonl solo lo escribe `sdd accept challenge add`; descartar uno es un registro humano
+[ "$(guard "" "$repo" Write "$repo/acceptance/challenges.jsonl")" = deny ] && pass "H2 deniega Write en acceptance/challenges.jsonl" || bad "H2 permite Write en challenges.jsonl"
+[ "$(guard "" "$repo" Edit "$repo/acceptance/challenges.jsonl")" = deny ] && pass "H2 deniega Edit en acceptance/challenges.jsonl" || bad "H2 permite Edit en challenges.jsonl"
+contains "$(guard_out "" "$repo" Write "$repo/acceptance/challenges.jsonl")" "accept challenge add" && pass "H2 motivo de challenges.jsonl apunta a sdd accept challenge add" || bad "H2 motivo de challenges.jsonl"
+[ "$(tg "" "$rroot" 'node "$SDD" accept record challenge-dismissal --challenge CH-001 --reason "admin-only by design" --by Ana --role PO')" = ask ] && pass "H12 pregunta ante accept record challenge-dismissal" || bad "H12 no pregunta ante challenge-dismissal"
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+node "$SDD" accept challenge add --req REQ-F-012 --ac 2 --category WEAKENED-ASSERT --quote "su título" --evidence src/cv/sections.ts:41 --verifier verifier-FASE-2 --counter confirmed
+node "$SDD" accept challenge add --req REQ-F-001 --ac 1 --category SPEC-QUESTION --quote "accept record" --evidence src/a.ts:1 --verifier v --counter inconclusive
+node "$SDD" accept challenge list --open --json
+node "$SDD" accept adversarial plan --fase 2 --json > .sdd/adversarial-plan.json
+EOF
+[ "$oka" = 1 ] && pass "H12 no pregunta ante accept challenge add/list ni adversarial plan" || bad "H12 pregunta ante un comando de la ronda adversarial"
 
 # H1 resume la aceptación de .sdd/acceptance.json (sin él, nada)
 acc="$tmp/accsum"; git init -q "$acc"
@@ -553,6 +569,38 @@ if [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1; then
   out=$(h1 "PATH=$bin" "$acc")
   contains "$out" "Acceptance: Must 2/3 verified" && pass "sin jq: H1 resume la aceptación (node)" || bad "sin jq: H1 aceptación: $out"
 fi
+# H1: --sign-off solo con el objetivo cumplido y nada pendiente (unshown, vídeos, challenges); gate 4 pide arreglar o
+# descartar el challenge. Mismo texto con jq y con node.
+acc_case() {  # acc_case NOMBRE JSON ESPERADO [PROHIBIDO]
+  printf '%s' "$2" > "$acc/.sdd/acceptance.json"
+  local envs label
+  for envs in "" "PATH=$bin"; do
+    label="$1"; [ -n "$envs" ] && { [ -d "$bin" ] && PATH="$bin" node --version >/dev/null 2>&1 || continue; label="sin jq: $1"; }
+    out=$(h1 "$envs" "$acc")
+    if contains "$out" "$3" && { [ -z "${4:-}" ] || ! contains "$out" "$4"; }; then pass "H1 $label"; else bad "H1 $label: $out"; fi
+  done
+}
+acc_case "objetivo cumplido y limpio sugiere --sign-off" \
+  '{"evaluated_sha":"abcdef1234567","summary":{"must_total":3,"must_verified":3,"goal":true,"unshown":0,"missing_videos":[],"must_challenged":0}}' \
+  "Acceptance: Must 3/3 verified (goal met: /sdd-acceptance --sign-off) @abcdef1"
+acc_case "unshown y vídeo pendiente: sin --sign-off" \
+  '{"evaluated_sha":"abcdef1234567","summary":{"must_total":3,"must_verified":3,"goal":true,"unshown":2,"missing_videos":["WF-003","WF-004"],"must_challenged":0}}' \
+  "Acceptance: Must 3/3 verified (goal met, not ready for sign-off), unshown 2, missing video WF-003,WF-004 @abcdef1" "--sign-off"
+acc_case "challenge en Must con warn: sin --sign-off" \
+  '{"evaluated_sha":"abcdef1234567","adversarial_gate":"warn","summary":{"must_total":3,"must_verified":3,"goal":true,"must_challenged":1}}' \
+  "(goal met, not ready for sign-off), Must challenged 1 @abcdef1" "--sign-off"
+acc_case "gate 4 (enforce + challenge en Must) pide arreglar o descartar" \
+  '{"evaluated_sha":"abcdef1234567","adversarial_gate":"enforce","summary":{"must_total":3,"must_verified":3,"goal":true,"must_challenged":1}}' \
+  "(gate 4: fix or dismiss the open challenge on a Must), Must challenged 1 @abcdef1" "--sign-off"
+acc_case "literal gaps (literal_gate warn): sin --sign-off" \
+  '{"evaluated_sha":"abcdef1234567","literal_gate":"warn","summary":{"must_total":3,"must_verified":3,"goal":true,"literal_gaps":2}}' \
+  "(goal met, not ready for sign-off), literal gaps 2 @abcdef1" "--sign-off"
+acc_case "weakened (literal_gate enforce): objetivo abierto" \
+  '{"evaluated_sha":"abcdef1234567","literal_gate":"enforce","summary":{"must_total":3,"must_verified":2,"goal":false,"literal_gaps":1,"weakened":1}}' \
+  "(open: /sdd-acceptance --loop), literal gaps 1 @abcdef1" "--sign-off"
+acc_case "objetivo abierto con vídeo pendiente sigue sugiriendo --loop" \
+  '{"evaluated_sha":"abcdef1234567","summary":{"must_total":3,"must_verified":2,"goal":false,"missing_videos":["FASE-1"]}}' \
+  "(open: /sdd-acceptance --loop), missing video FASE-1 @abcdef1" "--sign-off"
 
 # ---------------------------------------------------------------- 21. regresiones de la revisión (BUG-1..9)
 # BUG-1: H3 no crea pipeline-state.json en un repo sin SDD; el guard sigue permitiendo spec/**/*_spec.rb
