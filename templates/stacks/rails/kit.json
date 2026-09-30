@@ -33,6 +33,7 @@
     "visual_evidence": "required",
     "evidence_dir": "evidencias",
     "adversarial_gate": "warn",
+    "literal_gate": "enforce",
     "test_slots": "2",
     "staging_url": "none",
     "smoke": "none",
