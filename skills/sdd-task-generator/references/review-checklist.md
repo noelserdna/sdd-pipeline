@@ -111,7 +111,7 @@ The quote keeps the customer's words next to the check that claims to verify the
 - [ ] Enters through the user's route (Demo step 1: URL, screen or command), never an internal entry point
 - [ ] Asserts the example text of each criterion on the element that shows it (`toHaveText` / `toContainText`), not the visibility of a container
 - [ ] Saves a screenshot per REQ-F criterion and a video per workflow under evidencias/FASE-{N}/, attached to the test
-- [ ] Test names carry every REQ-F scenario id of the FASE's Escenarios
+- [ ] Test names carry every REQ-F scenario id of the FASE's Escenarios, and the journey's title the WF-NNN of the FASE's `Workflows:` line (else of its Demo; FASE-{N} when it names none), which names the video
 ```
 
 ### Contract Tasks (`CONTRACT-<port>`)
@@ -119,7 +119,7 @@ The quote keeps the customer's words next to the check that claims to verify the
 ```markdown
 - [ ] The same assertions run on the double and on the real provider (real one through a fake transport that captures the request)
 - [ ] Asserts the observable of the port's row in PLAN-FASE §4 Puertos con doble
-- [ ] Test name `CONTRACT-<port> REQ-F-NNN ACn …`
+- [ ] Test name `CONTRACT-<port> REQ-F-NNN ACn …`, in a file under `test_paths` `contract/` named by the stack's convention (`<port>.contract.test.ts`, `<port>_contract_test.rb`)
 ```
 
 ### PII / Encryption Tasks
