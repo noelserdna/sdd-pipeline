@@ -280,8 +280,9 @@ A FASE agent writes only its own `TASK-FASE-{N}.md`: never the global files, `pi
 | V-18 | Every `blocked-by` of a Stream task points to the same Stream, `base`, or an earlier FASE | WARN |
 | V-19 | Every task line matches the grammar; no `### TASK-` headings, no `**TASK-…**` ids | ERROR |
 | V-20 | *Vertical:* every scenario of the FASE's `Escenarios` header line is cited by some task (Acceptance or Refs) | ERROR |
+| V-21 | *Vertical:* every port of PLAN-FASE §4 `Puertos con doble` has a task whose Acceptance cites `CONTRACT-<port>`; with an acceptance suite, every REQ-F scenario of `Escenarios` is cited by a task with an e2e path (the journey task) | WARN |
 
-**Ownership.** The FASE agent (or the main thread in sequential mode) self-checks V-01..V-03, V-05..V-08, V-10, V-12..V-14 and reports them in `checks`. The main thread always computes V-04, V-09, V-11 and V-15..V-18 from the union of the returned JSONs (they span FASEs, and an agent should not grade its own homework). V-19 is mechanical: run `node "$SDD_CLI" lint --dir task` (it also re-checks V-05, V-06, V-09, V-16) and edit only the lines it reports. V-20 is mechanical too: `node "$SDD_CLI" lint --plan` prints a `V-20` line per uncited scenario once the task files exist. `--audit` runs everything read-only.
+**Ownership.** The FASE agent (or the main thread in sequential mode) self-checks V-01..V-03, V-05..V-08, V-10, V-12..V-14 and reports them in `checks`. The main thread always computes V-04, V-09, V-11 and V-15..V-18 from the union of the returned JSONs (they span FASEs, and an agent should not grade its own homework). V-19 is mechanical: run `node "$SDD_CLI" lint --dir task` (it also re-checks V-05, V-06, V-09, V-16) and edit only the lines it reports. V-20 is mechanical too: `node "$SDD_CLI" lint --plan` prints a `V-20` line per uncited scenario once the task files exist, and a `V-21` warning per port without its contract task or REQ-F scenario outside the journey. `--audit` runs everything read-only.
 
 ---
 

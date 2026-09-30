@@ -2,7 +2,7 @@
 # Tests de scripts/sdd-task-lint.mjs (sin modelo): gramática V-19 y formas legadas (negrita, encabezados), V-09/V-05/V-06/V-16,
 # formato compacto, ficheros [RETROACTIVE], índice derivado y estado por trailers Task: en un repo git temporal
 # (revert, revert de un revert, commit sin trailer, divergencias de checkbox, task_state del Stack Profile, --rev).
-# Fixtures en tests/fixtures/tasks. Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git y node ≥ 18.
+# Fixtures en tests/fixtures/tasks y tests/tasks/fixtures (tarea CONTRACT- y journey en compact). Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git y node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LINT="$ROOT/scripts/sdd-task-lint.mjs"
@@ -42,6 +42,11 @@ run bogus; expect "comando desconocido → 2" "$rc" 2
 # ---------------------------------------------------------------- 2. lint sobre fixtures
 run lint "$FIX/canonical.md"; expect "canonical: lint sale 0" "$rc" 0; has "canonical: 6 tasks sin errores" "6 task(s), 0 error(s), 0 warning(s)"
 run lint "$FIX/compact.md"; expect "compact: lint sale 0 (sin Review, Revert ausente = SAFE)" "$rc" 0; has "compact: 4 tasks" "4 task(s), 0 error(s)"
+CFIX="$ROOT/tests/tasks/fixtures/contract-compact.md"
+run lint "$CFIX"; expect "contract-compact: CONTRACT- y journey en compact pasan sdd lint" "$rc" 0; has "contract-compact: 4 tasks sin avisos" "4 task(s), 0 error(s), 0 warning(s)"
+run json "$CFIX"
+expect "contract-compact: CONTRACT- en el Stream del provider, Revert SAFE (ausente)" "$(js 'const t=j.tasks[2]; [t.stream,t.revert===null,t.blockedBy.join(",")].join(" ")')" "A true TASK-F4-001,TASK-F4-002"
+expect "contract-compact: journey en verificación" "$(js 'j.tasks[3].stream+" "+j.tasks[3].phase')" "verificación Verification"
 run lint "$FIX/bold.md"; expect "bold: lint sale 1" "$rc" 1; expect "bold: 3 × V-19 negrita" "$(lines 'V-19 bold task id')" 3
 run lint "$FIX/heading.md"; expect "heading: lint sale 1" "$rc" 1; expect "heading: 3 × V-19 encabezado" "$(lines 'V-19 heading task `###')" 3
 run lint "$FIX/retroactive.md"; expect "retroactive: lint sale 0" "$rc" 0; has "retroactive: se salta con warning" "V-19 warning: file marked [RETROACTIVE]: skipped"
