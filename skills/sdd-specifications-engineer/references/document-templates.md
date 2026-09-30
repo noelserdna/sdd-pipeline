@@ -105,6 +105,7 @@ interface XxxOutput { field: Type }
 | E3 | 4 | [dependency failure / timeout] | `E_CODE` | 503 | [retry / abort] | AC-NNN-NN |
 | E4 | 4 | [concurrent modification] | `E_CODE` | 409 | [resolution] | AC-NNN-NN |
 | E5 | 5 | [precondition no longer holds] | `E_CODE` | 409 | … | AC-NNN-NN |
+| E6 | 5 | replay: [same input sent again] | `—` or `E_CODE` | 200 / 409 | [what is kept: existing record returned, no duplicate] | AC-NNN-NN |
 
 ## Open questions
 - NC-NNN: … *(omit the section when there are none)*

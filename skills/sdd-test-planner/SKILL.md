@@ -111,6 +111,7 @@ Gates G0–G3 apply.
    - UCs with BDD but missing exception flows → `INCOMPLETE-BDD`
    - Invariants without property tests → `MISSING-PROPERTY-TEST`
    - Quantified NFRs without a scenario → `MISSING-NFR-TEST`
+   - Write operations whose replay (or, with shared records, race) outcome no scenario defines → `MISSING-REPLAY-SPEC` (Mode 2, technique e)
    - User-facing WFs without E2E scenarios, and REQ-F criteria without a capturing E2E scenario (§ Visual Evidence) → `MISSING-E2E` (addressed by Mode 5)
 
 4. **Define coverage targets by use case:**
@@ -151,7 +152,7 @@ A level that does not apply keeps its row with a one-line reason (e.g. "E2E — 
 
 ## 3. Design Decisions
 
-One row per decision the implementer needs (clock injection, I/O fault injection, isolation and determinism, platform skips, fixtures, error-precedence rules). No prose; ≤ 160 chars per decision.
+One row per decision the implementer needs (clock injection, I/O fault injection, isolation and determinism, platform skips, fixtures, error-precedence rules), and one per write operation exempted from the `replay` row (Mode 2, technique e) with its reason. No prose; ≤ 160 chars per decision.
 
 | ID | Decision | Applies to | Refs |
 |----|----------|------------|------|
@@ -168,6 +169,7 @@ One row per decision the implementer needs (clock injection, I/O fault injection
 | GAP-004 | MISSING-NFR-TEST | SPEC-PERF-{NNN} | No scenario for the p99 target | High |
 | GAP-005 | MISSING-E2E | WF-{NNN} | No E2E for user-facing workflow | High |
 | GAP-006 | MISSING-E2E | AC-{NNN}-{NN} | REQ-F-{NNN} AC{n}: no E2E asserting its text with a screenshot | High |
+| GAP-007 | MISSING-REPLAY-SPEC | API-{NNN}-{NN} | Replay of the same input has no defined outcome | High |
 
 ## 5. Targets by Use Case
 
@@ -248,7 +250,7 @@ only with `--sequential`, at ≤ 3 UCs, or without the `Agent` tool, and say why
    - test/TEST-PLAN.md §3 (conventions; never repeat them in the matrix)
    For each UC write test/TEST-MATRIX-UC-{NNN}.md following this template exactly:
    {template}
-   Rules: one row per case; every row's Refs cites the scenario id it verifies (AC-NNN-NN, or REQ-X-NNN ACn) — the implemented test is named with it; expected = domain error code + observable outcome, HTTP status only with `Style: http`, exit code for a CLI; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
+   Rules: one row per case; every row's Refs cites the scenario id it verifies (AC-NNN-NN, or REQ-X-NNN ACn) — the implemented test is named with it; every write operation has a replay row and, when records are shared, a race row — with no scenario defining the outcome, Refs `—`, Expected `undefined in spec` and a finding (never invent the semantics), unless TEST-PLAN §3 exempts the operation; expected = domain error code + observable outcome, HTTP status only with `Style: http`, exit code for a CLI; equivalence classes grouped with one representative; mechanical expansions written as `expand: …`; the Refs column is the traceability (no Traceability section); no UC description; budget ≤ 5 000 chars (≤ 8 000 with a state machine).
    Return only, per UC: file path, case count, chars (wc -c), gap ids found, findings for sdd-spec-auditor (id + one line). No file bodies.
    ```
 4. Main thread: continue with Mode 3 (and with Mode 5's Smoke tier and field-inventory cross-validation when Mode 5 is delegated) while the agents run; when all have reported, verify that every file exists and case ids are unique per file (`grep -c '^| T' test/TEST-MATRIX-UC-*.md`), fold gaps and findings into TEST-PLAN §4, and sum chars for `metrics.test_chars`.
@@ -269,13 +271,15 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 
    **d. State Transition:** for entities with state machines (`spec/domain/04-STATES.md`), one row per valid transition and one per invalid-transition class.
 
+   **e. Replay and race:** every operation with a write effect gets one `replay` row (the same write again with the same input: what is kept), and one `race` row when two actors can write the same record or consume the same resource (two concurrent calls on one fixture: who wins, what the other sees). They are ordinary `T0N` rows citing the scenario that defines the outcome: the UC's `replay` or conflict exception row and its AC, or `REQ-X-NNN ACn` in a requirement criterion. `sdd-specifications-engineer` owns that behaviour and this skill only derives tests from it, so when no scenario defines the outcome, write the row with `Refs: —` and Expected `undefined in spec`, add a finding for `sdd-spec-auditor` and a `MISSING-REPLAY-SPEC` gap, and never pick a semantics yourself (Art. 12). An operation that needs no replay row (a pure read, or an overwrite whose replay is trivially the same state) is exempted by one TEST-PLAN §3 row with its reason.
+
 4. **Write `test/TEST-MATRIX-UC-{NNN}.md`** — dense tables, no prose, no restated UC text, no trailing traceability section:
 
 ```markdown
 # Test Matrix: UC-{NNN} — {title}
 
 > Refs: UC-{NNN}, API-{NNN}-{NN}, BDD-UC-{NNN} (AC-{NNN}-01..{NN}), {INV/PROP/RN ids}{, SM-NNN}
-> Techniques: EP, BVA, decision table{, state transition} · Default level: {unit | integration | E2E} · Conventions: TEST-PLAN.md §3
+> Techniques: EP, BVA, decision table{, state transition}, replay{, race} · Default level: {unit | integration | E2E} · Conventions: TEST-PLAN.md §3
 
 ## Inputs
 
@@ -286,13 +290,16 @@ Subagents never write `pipeline-state.json`, never send handoff messages, never 
 
 ## Cases
 
-`Type`: happy · error · boundary · state · derived (no AC of its own — cite the rule in Refs). The test implementing a row is named with the row's scenario id (Test Naming).
+`Type`: happy · error · boundary · state · replay · race · derived (no AC of its own — cite the rule in Refs). The test implementing a row is named with the row's scenario id (Test Naming).
 
 | ID | Precondition / Input | Expected (status · output · state) | Type | Refs |
 |----|----------------------|-------------------------------------|------|------|
 | T01 | {C1=no} `{input}` · {store state} | `{E_CODE}` {+ exit (CLI) or HTTP status (Style http only)} · {message/stdout/body or —} · {store effect or unchanged} | error | AC-{NNN}-03, RN-{NNN} |
 | T02 | `{input}` · {store state} | {status} · {output} · {effect} | happy | AC-{NNN}-01 |
 | T03 | {rule} `expand: BVA(1,1000)` | {status} per point | boundary | AC-{NNN}-09 |
+| T04 | T02's input sent again · {store after T02} | {status} · {same output} · {no second record} | replay | AC-{NNN}-06 |
+| T05 | two concurrent calls on {one fixture} | one succeeds · the other `{E_CODE}` · {final state} | race | AC-{NNN}-05 |
+| T06 | {operation} sent twice | undefined in spec | replay | — |
 
 ## State Transitions (only if the UC drives a state machine)
 
@@ -464,7 +471,7 @@ After generating all output artifacts, update `pipeline-state.json`:
 3. Set `stages["test-planner"].lastRun` = current ISO-8601
 4. Set `stages["test-planner"].summary`:
    - `artifacts`: list of files created in `test/` with labels (e.g., `{"file": "test/TEST-PLAN.md", "label": "Test Strategy"}`)
-   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "matrix_cases": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "visual_criteria": N, "visual_criteria_covered": N, "smoke_deploy_scenarios": N, "invariants_mapped": N, "test_gaps": N, "test_chars": N, "mode": "fanout"|"sequential", "matrix_agents": N }` — `visual_criteria` counts the REQ-F criteria that need a screenshot (0 with `visual_evidence: off`) and `visual_criteria_covered` those with a capturing E2E scenario (§ Visual Evidence); `test_chars` is the total of `wc -c test/*.md` (Output Budget); `mode` records whether the matrices were generated in parallel subagents and `matrix_agents` how many were launched (0 in sequential mode). When `mode` is `sequential` above the threshold, the first `summary.highlights` entry states why
+   - `metrics`: `{ "bdd_scenarios": N, "test_matrices": N, "matrix_cases": N, "perf_scenarios": N, "e2e_scenarios": N, "e2e_fields_total": N, "e2e_fields_complete": N, "e2e_field_coverage_pct": N, "visual_criteria": N, "visual_criteria_covered": N, "smoke_deploy_scenarios": N, "replay_rows": N, "race_rows": N, "invariants_mapped": N, "test_gaps": N, "test_chars": N, "mode": "fanout"|"sequential", "matrix_agents": N }` — `replay_rows` / `race_rows` count the matrix rows of each type (Mode 2, technique e); `visual_criteria` counts the REQ-F criteria that need a screenshot (0 with `visual_evidence: off`) and `visual_criteria_covered` those with a capturing E2E scenario (§ Visual Evidence); `test_chars` is the total of `wc -c test/*.md` (Output Budget); `mode` records whether the matrices were generated in parallel subagents and `matrix_agents` how many were launched (0 in sequential mode). When `mode` is `sequential` above the threshold, the first `summary.highlights` entry states why
    - `highlights`: top 3-5 notable observations (e.g., "101 BDD scenarios cover 85% of requirements", "3 gaps in NFR testing", "TEST-MATRIX-UC-006 at 9 800 chars, over budget")
    - `nextStep`: `"Run /sdd-plan-architect"`
    - `generatedAt`: current ISO-8601
