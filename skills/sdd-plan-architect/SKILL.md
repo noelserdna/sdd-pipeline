@@ -269,6 +269,7 @@ Budget ≤ 12 000 chars: technical-context rows are `aspect · decision · ADR i
 - Do not restate the FASE file's Criterios de Éxito or Specs a Leer; §2 lists spec ids with one implementation note each (≤ 100 chars).
 - Data changes only when the FASE changes a schema; otherwise one line.
 - File paths in §4 match the FASE's Módulos y Conjuntos de Escritura table and the Stack Profile's `code_paths` / `test_paths`.
+- **Puertos con doble** (last §4 subsection, one row per port): every external integration of PLAN.md §2.3 that this FASE calls, and every mock, fake or stub of such a system named in the Setup column of §7.2, is a port with its interface, its double, its real provider and the observable both must produce. Tests that pass against a double say nothing about the real provider, so `sdd-task-generator` emits a `CONTRACT-<port>` task per row that runs the same assertions on both; a double without a row leaves that gap invisible. Only ports toward external systems (LLMs, payment, mail, third-party APIs) get a row; an in-memory repository standing in for the database does not, and its §7.2 Setup says `in-memory repository` rather than `mock`.
 
 ### Phase 6: Validation & Traceability
 
