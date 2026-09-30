@@ -469,6 +469,14 @@ Budget ≤ 9 000 chars. Signatures, not bodies; ids, not assertions. §7.4 Cover
 
 {same format}
 
+### 4.{x} Puertos con doble (last §4 subsection)
+
+{One line "No external ports in this FASE." when §2.3 of PLAN.md lists no integration this FASE touches and no §7.2 Setup names a mock/fake/stub. Otherwise one row per port:}
+
+| Puerto | Interfaz (fichero) | Doble | Provider real | Observable del contrato |
+|--------|--------------------|-------|---------------|-------------------------|
+| {PortName, e.g. `LlmClient`} | `{path of the interface}` | `{path of the mock/fake the tests inject}` | `{path of the adapter that calls the external system}` | {what both must produce for the same input, e.g. "request body carries the prompt fields, the system instructions and the model from config"; REQ/AC ids} |
+
 ## 5. API Implementation Notes
 
 Transport (idiom, route/action, verb, statuses, no-JS fallback) lives in `design/OPERATION-MAPPING.md` (`Style: operations`) or in the contract's Method/Path (`Style: http`); do not repeat it here.
