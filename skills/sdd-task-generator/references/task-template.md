@@ -125,8 +125,10 @@
 
 ## Phase 5: Verification
 
-**Purpose:** Cross-Stream suites, BDD/E2E journeys, end-to-end validation against FASE Criterios de Exito.
+**Purpose:** Cross-Stream suites, the FASE journey task (§ Journey task), end-to-end validation against FASE Criterios de Exito.
 **Checkpoint:** All FASE acceptance criteria verified.
+
+{Journey task of the FASE — § Journey task below}
 
 - [ ] TASK-F{N}-{LAST} Verify all FASE-{N} Criterios de Exito | `{acceptance suite or directory it verifies}`
   - **Commit:** `test({scope}): verify FASE-{N} acceptance criteria`
@@ -242,7 +244,7 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 ## Verification
 
-{task lines}
+{journey task (§ Journey task), then the other task lines}
 ```
 
 | Omitted in compact | Where it comes from |
@@ -282,6 +284,26 @@ One per row of PLAN-FASE §4 `Puertos con doble` (SKILL.md Phase 2). It sits aft
 ```
 
 A double in §7.2 Setup without its row is written as a `[PLAN GAP]` task instead (`Gap: PLAN-FASE-{N} §4.{x} has no row for {double}`).
+
+---
+
+## Journey task (one per FASE with REQ-F scenarios)
+
+Verification phase, Stream `verificación` (SKILL.md Phase 2). The rule lives in Acceptance so it survives the compact format. Compact form:
+
+```markdown
+- [ ] TASK-F{N}-{SEQ} Journey FASE-{N}: {Incremento} through the user's route | `{acceptance suite dir}/fase-{N}.journey.spec.{ext}`
+  - blocked-by: {last slice or integration task of the FASE}
+  - **Commit:** `test({scope}): FASE-{N} journey from the user's route with captures`
+  - **Acceptance:**
+    - Test first: named `{AC-NNN-NN | REQ-F-NNN ACn} …` for each REQ-F scenario of the FASE's Escenarios: {ids}
+    - Enters through Demo step 1 ({URL, screen or command}), never an internal entry point
+    - Asserts each criterion's example text on the element that shows it (`toHaveText` / `toContainText`), not the container's visibility: {criterion → "text"}
+    - Saves `evidencias/FASE-{N}/{scenario id}.png` per criterion and `evidencias/FASE-{N}/{WF-NNN | FASE-{N}}.webm` per workflow, attached to the test
+  - **Refs:** FASE-{N}, {REQ-F ids}, {WF ids}
+```
+
+With `visual_evidence: off` the last Acceptance bullet is dropped.
 
 ---
 
