@@ -269,6 +269,22 @@ With `--compact` or `task_format: compact`. Keeps only what the implementer and 
 
 ---
 
+## Contract task (`CONTRACT-<port>`)
+
+One per row of PLAN-FASE §4 `Puertos con doble` (SKILL.md Phase 2). It sits after the slices it depends on, in the provider's Stream (`integración` when the double is written in another work Stream). Compact form (full adds `Revert: SAFE` and a Review block):
+
+```markdown
+- [ ] TASK-F{N}-{SEQ} Contract test {Port}: double and real provider agree | `{test_path}/contract/{port}.contract.test.{ext}`
+  - blocked-by: {task writing the double}, {task writing the real provider}
+  - **Commit:** `test({scope}): contract test for the {Port} double and its real provider`
+  - **Acceptance:** Test first: `CONTRACT-{Port} REQ-F-{NNN} AC{n} …` runs the same assertions on the double and on the real provider driven through a fake transport that captures the request; observable: {Observable del contrato of the row}
+  - **Refs:** FASE-{N}, REQ-F-{NNN}, PLAN-FASE-{N} §4.{x}
+```
+
+A double in §7.2 Setup without its row is written as a `[PLAN GAP]` task instead (`Gap: PLAN-FASE-{N} §4.{x} has no row for {double}`).
+
+---
+
 ## Task Entry Format (Quick Reference)
 
 ```markdown
