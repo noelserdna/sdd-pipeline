@@ -173,7 +173,7 @@ grepf skills/sdd-task-implementer/references/tdd-workflow.md "REQ-F-003 AC2 reje
 grepf skills/sdd-task-generator/SKILL.md "Plan-Style" "task-generator lee la marca"
 grepf skills/sdd-task-generator/SKILL.md "### UC-NNN" "task-generator: Slices por caso de uso"
 grepf skills/sdd-task-generator/SKILL.md "| V-20 |" "task-generator: V-20"
-grepf skills/sdd-task-implementer/SKILL.md "accept --fase {N} --report acceptance/ACCEPTANCE-REPORT.md" "implementer Phase 9: sdd accept --fase"
+grepf skills/sdd-task-implementer/SKILL.md "accept --junit-sha \"\$SHA\" --fase {N} --report acceptance/ACCEPTANCE-REPORT.md" "implementer Phase 9: sdd accept --junit-sha --fase"
 grepf skills/sdd-task-implementer/SKILL.md "Plan-Style" "implementer lee la marca"
 grepf skills/sdd-task-implementer/references/tdd-workflow.md "AC-001-03 rejects an empty title" "tdd-workflow: nombres con AC id"
 grepf skills/sdd-test-planner/SKILL.md "## Test Naming (scenario ids)" "test-planner: nomenclatura"
