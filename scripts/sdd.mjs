@@ -36,6 +36,16 @@
 //       header has Requisitos (REQ ids) and Escenarios (AC ids), V8 criteria backed by REQ/AC ids and a `## Demo` of
 //       1-10 steps each citing a scenario, cited AC ids exist in spec/tests/BDD-*.md, V9 every Must REQ-F/REQ-NF is in
 //       some Requisitos line; warns above 3 use cases or 15 tasks per FASE. Exit 1 on errors (scripts/lib/plan-lint.mjs).
+//   sdd lint --quotes [--fase N] [--json] [--requirements FILE]
+//       Literal letter (scripts/lib/quotes.mjs): for each criterion of requirements/REQUIREMENTS.md and each source file
+//       under the Stack Profile's test_paths (default tests) whose code names it (`REQ-X-NNN ACn`, or a scenario id
+//       AC-NNN-NN bound by a BDD tag of spec/tests/BDD-*.md): Q-01 warn, no quote comment `REQ-X-NNN ACn: "…"` in the
+//       file · Q-02 error, the quote (whitespace and quote marks normalized, case kept, `…` elides) is not part of the
+//       criterion's current text · Q-03 error, a literal of the criterion is missing from the file's code (comments do
+//       not count). Literal: text between "…", '…', «…», “…” or ‘…’, and between backticks only after THEN/ENTONCES
+//       (a backtick span before it is the command or route the test drives). A literal-exception record turns a Q-03
+//       into `excepted`. Prints `file:line Q-0N REQ-X-NNN ACn message` and a summary; --json {findings[{code, severity,
+//       req, ac, file, line, literal?, quote?, exception?, message}], summary}. Exit 1 on any error not excepted.
 //   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
 //              [--report acceptance/ACCEPTANCE-REPORT.md] [--remeasure] [--json]
 //       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
@@ -50,16 +60,22 @@
 //       evidencias): a REQ-F criterion needs a screenshot — a JUnit `[[ATTACHMENT|…]]`, a record's --attach, or a file
 //       of the evidence dir named after its AC-NNN-NN or REQ-F-NNN-ACn — else it is `unshown` and the requirement
 //       MISSING ("no visual evidence"); warn only reports it. The ledger counts them in summary.unshown.
-//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal> --by NAME --role ROLE [fields]
+//       Literal letter (Stack Profile `literal_gate: off|warn|enforce`, default enforce): each criterion lists the
+//       `literal_gaps` of `sdd lint --quotes` (Q-02/Q-03 not excepted); under enforce a passing criterion of a Must with
+//       one is `weakened` and the requirement MISSING ("test does not carry the criterion's literal"); warn only lists
+//       them. summary.literal_gaps counts the criteria, summary.weakened the held-back ones.
+//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal|literal-exception> --by NAME --role ROLE [fields]
 //              [--attach FILE...] [--allow-dirty]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
 //       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
 //       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
 //       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID]
-//       · challenge-dismissal --challenge CH-NNN --reason TEXT (a person decides a finding does not hold).
-//       --attach stores files under evidence_dir with their sha256 (not on a waiver or a dismissal). Every type but
-//       waiver and challenge-dismissal exits 2 on uncommitted changes under its --paths (default the code paths,
+//       · challenge-dismissal --challenge CH-NNN --reason TEXT (a person decides a finding does not hold)
+//       · literal-exception --req ID --ac N --literal TEXT --reason TEXT (a literal of the criterion that a helper
+//       builds, so it is never verbatim in the test: its Q-03 is excepted while the requirement keeps its reqHash).
+//       --attach stores files under evidence_dir with their sha256 (not on a waiver, a dismissal or an exception). Every
+//       type but waiver, challenge-dismissal and literal-exception exits 2 on uncommitted changes under its --paths (default the code paths,
 //       untracked files included): commit first, or --allow-dirty to store the record with dirty: true.
 //   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
 //              --threshold NUM [--paths P...] [--allow-dirty] [--json]
@@ -107,7 +123,9 @@
 //       adversarial-finding when confirmed, needs-human when inconclusive. Under adversarial_gate enforce the stop
 //       `goal` also needs no open challenge on a Must. Each missing FASE video is a target {video: WF-NNN|FASE-N, fase,
 //       route_hint: capture-evidence} (under visual_evidence warn, in `others`); progress counts videos_missing, and a
-//       cycle that captures one is progress like a criterion that turns VERIFIED.
+//       cycle that captures one is progress like a criterion that turns VERIFIED. route_hint weakened-test: the test
+//       passes without the criterion's literal (a `weakened` criterion, with its literal_gaps); the fix is a test edit
+//       that a person approves (Art. 12).
 //   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
 //       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
 //       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
@@ -841,7 +859,7 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runPlanLint([...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
     }
-    if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && argv.includes("--needs"))) {
+    if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && (argv.includes("--needs") || argv.includes("--quotes")))) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runAcceptance(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--needs"), { prog });
     }

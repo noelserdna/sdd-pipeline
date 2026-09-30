@@ -86,6 +86,17 @@ recording of the demo included; `sdd gate --fase N` lists what lacks one as `mis
 `sha256` and size, so a replaced or deleted file shows up as absent. Playwright traces are never attached, because
 they hold cookies and storage.
 
+**Literal letter.** A green test bound by id can still assert something close to the criterion ('Proyectos' where the
+customer asked for 'Proyectos personales'). `sdd lint --quotes` reads each test file under `test_paths` that names a
+criterion and checks that it quotes the criterion's current text (`REQ-X-NNN ACn: "…"`, Q-02 when it does not) and
+asserts each of its literals outside comments (Q-03; a literal is text in quotes, or in backticks after THEN).
+`sdd accept` lists those gaps per criterion as `literal_gaps` (`summary.literal_gaps`). With `literal_gate: enforce`
+(Stack Profile, the default) a passing criterion of a Must with a gap reads **`weakened`** and the requirement stays
+MISSING with `reason: "test does not carry the criterion's literal"`; `warn` only lists it, `off` skips the check. When
+a helper builds the literal so it never appears verbatim, a person records
+`accept record literal-exception --req ID --ac N --literal TEXT --reason TEXT --by NAME --role ROLE`; it lapses when the
+requirement's text changes (a MODIFY), like every hash-bound decision.
+
 Evidence counts only while fresh: nothing under the Stack Profile's `code_paths` and `test_paths` (default `src`,
 `tests`) may have changed, committed or not, since the test results were captured, and each record stays valid while
 the files it names (those paths when it names none) are unchanged since its commit. Commits to docs, `feedback/`,
@@ -132,7 +143,7 @@ node "$SDD" accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [
 
 Pass `--junit-sha` whenever Step 1 captured at `$SHA` on a clean tree; the CLI checks the tree itself and exits 2
 when it is dirty. Without it the CLI falls back to file times and warns on stderr. Human records follow the same
-rule: every `accept record` except `waiver` and `challenge-dismissal` (which observe nothing in the code), and
+rule: every `accept record` except `waiver`, `challenge-dismissal` and `literal-exception` (which observe nothing in the code), and
 `accept measure`, exit 2 on dirty code, so commit first; `--allow-dirty` exists for a record that genuinely cannot wait, and is stored as
 `dirty: true` for every later reader to see.
 
@@ -144,7 +155,9 @@ The command writes `.sdd/acceptance.json` (git-ignored, read by `sdd-pipeline-st
 server) and the customer-readable report. Show its summary lines and the report path; for each Must that is not
 VERIFIED or WAIVED show one line: id, verdict, criteria passing, and the route the loop would take
 (`node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset` gives `route_hint` without touching the loop's
-own state). Show `summary.unshown` when it is not zero: those criteria pass but cannot yet be shown. Exit 2 means a
+own state). Show `summary.unshown` when it is not zero: those criteria pass but cannot yet be shown; and
+`summary.literal_gaps` with `node "$SDD" lint --quotes [--fase N]` for the list: those tests do not carry the
+criterion's letter. Exit 2 means a
 usage or git problem: show the message.
 
 ### Step 3: Chain integrity
@@ -196,7 +209,7 @@ bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set acceptan
 and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with `artifacts`
 (`acceptance/ACCEPTANCE-REPORT.md`), `metrics` (`must_total`, `must_verified`, `must_waived`, `failing`, `missing`,
 `stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, and
-`unshown` from the ledger's `summary.unshown`), `highlights` (≤ 5) and `nextStep`. The adversarial metrics describe
+`unshown` and `literal_gaps` from the ledger's summary), `highlights` (≤ 5) and `nextStep`. The adversarial metrics describe
 the last `--adversarial` run and are kept by later runs of other modes (patch only the keys a mode computes):
 `adversarial_findings` (findings the verifiers raised, including those from the clean sample),
 `adversarial_confirmed`, `adversarial_refuted` (counter-verification results; `inconclusive` is the remainder),
@@ -292,6 +305,7 @@ git diff --cached --quiet || git commit -m "docs(feedback): acceptance findings 
 | `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it; or an open challenge whose counter-verification was `inconclusive` | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…] [--attach F…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory). For an `inconclusive` challenge show its quote and evidence: the person either has it fixed (then it routes as `adversarial-finding`) or dismisses it (`accept record challenge-dismissal --challenge CH-NNN --reason TEXT --by NAME --role ROLE`) |
 | `adversarial-finding` | An open, confirmed challenge of the adversarial round (the target carries its `category`) | Feedback entry citing the `CH-NNN`, quote and evidence; one fix task per finding with `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}` (`/sdd-task-generator --fase N --incremental`, then the implementer with `--new-tasks-only`); `SPEC-QUESTION` goes to a person as a spec gap, and `WRONG-CAPTURE` fixes the journey test's capture (`references/adversarial-protocol.md` §7). Re-run `--adversarial --fase N` after the fix |
 | `capture-evidence` | A criterion passes but is `unshown`, or a workflow of the FASE has no video (one target per id of `missing_videos`, carrying the `WF-NNN` or `FASE-N`) | Re-run the FASE's journey with capture, with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported: the acceptance suite with `--grep` on the scenario ids, or for a video the journey whose title carries that id; then Step 1 again. No feedback entry and no code task. When the rerun still attaches nothing, the journey test does not capture that criterion or is not titled with that workflow id: a missing test, routed as `implement-or-test`. A stack whose runner records no video may instead have a person record the demo and save it under `evidence_dir` with the id in the file name |
+| `weakened-test` | A Must criterion passes, but its test file lacks the criterion's current quote or one of its literals (`literal_gaps` on the target: Q-02 or Q-03 with file and line) | The behaviour may be right and the assert too weak, or the code may show something else: open the criterion with `node "$SDD" req show ID --ac N`, fix the quote and assert the literal exactly (tdd-workflow.md, "The criterion's letter sits above its assert"); if the assert then fails, the code is wrong and routes as `fix-code`. This is a test edit, listed and approved by a person below. When a helper builds the literal, show the helper and let a person decide on a `literal-exception` record; a literal the code cannot produce is a spec gap |
 | `rerun-tests` | Evidence exists but is stale | Nothing to do beyond Step 1 of the next cycle |
 
 Cycles run sequentially in the main thread: each one needs the commits of the previous one. The implementer's own
@@ -312,7 +326,8 @@ the next cycle continues from `.sdd/acceptance-loop.json`, without `--reset`. `n
 A test changed during the loop could make a criterion pass without the behaviour. Before the final summary, list
 every test file that existed at the loop's first cycle and was modified since:
 `git diff --name-status <cycle-1 evaluated_sha>..HEAD -- <test_paths>` (the SHA is `cycles[0].evaluated_sha` in
-`.sdd/acceptance-loop.json`), keeping `M` and `R` entries. Show each diff to the human and ask whether to approve it.
+`.sdd/acceptance-loop.json`), keeping `M` and `R` entries (the `weakened-test` edits are among them). Show each diff
+to the human and ask whether to approve it.
 A rejected edit is reverted with a new commit (`git revert` of that commit, or a `fix` task restoring the assertion)
 and its criterion returns to the loop. Record the approved ones in `highlights` and `metrics.test_edits`, and in the
 PR body of `--publish`.

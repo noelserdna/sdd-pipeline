@@ -447,6 +447,7 @@ while IFS= read -r c; do
 done <<'EOF'
 node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" accept record waiver --req REQ-F-001 --by Ana --role PO --reason x --follow-up #12
 sdd accept record inspection --req REQ-C-001 --by Ana --role PO --note ok
+sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() builds it" --by Ana --role PO
 cd app && node ../scripts/sdd.mjs  accept  record demo --req REQ-F-002 --observed ok --pass true --by A --role QA
 git tag -a fase-2-accepted -m "FASE-2 accepted by Ana"
 git -C web tag -s requirements-v3 -m "approved"
@@ -591,6 +592,12 @@ acc_case "challenge en Must con warn: sin --sign-off" \
 acc_case "gate 4 (enforce + challenge en Must) pide arreglar o descartar" \
   '{"evaluated_sha":"abcdef1234567","adversarial_gate":"enforce","summary":{"must_total":3,"must_verified":3,"goal":true,"must_challenged":1}}' \
   "(gate 4: fix or dismiss the open challenge on a Must), Must challenged 1 @abcdef1" "--sign-off"
+acc_case "literal gaps (literal_gate warn): sin --sign-off" \
+  '{"evaluated_sha":"abcdef1234567","literal_gate":"warn","summary":{"must_total":3,"must_verified":3,"goal":true,"literal_gaps":2}}' \
+  "(goal met, not ready for sign-off), literal gaps 2 @abcdef1" "--sign-off"
+acc_case "weakened (literal_gate enforce): objetivo abierto" \
+  '{"evaluated_sha":"abcdef1234567","literal_gate":"enforce","summary":{"must_total":3,"must_verified":2,"goal":false,"literal_gaps":1,"weakened":1}}' \
+  "(open: /sdd-acceptance --loop), literal gaps 1 @abcdef1" "--sign-off"
 acc_case "objetivo abierto con vídeo pendiente sigue sugiriendo --loop" \
   '{"evaluated_sha":"abcdef1234567","summary":{"must_total":3,"must_verified":2,"goal":false,"missing_videos":["FASE-1"]}}' \
   "(open: /sdd-acceptance --loop), missing video FASE-1 @abcdef1" "--sign-off"

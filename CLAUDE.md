@@ -8,7 +8,7 @@ A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json
 
 - 21 skills: 7 pipeline, 4 lateral, 3 brownfield, 7 utility (including acceptance, the interactive orchestrator and the multi-session lead)
 - 5 hook scripts (7 event registrations) plus the git `commit-msg` hook
-- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, adaptive route, acceptance ledger and gate)
+- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, literal lint, adaptive route, acceptance ledger and gate)
 - an MCP server for live traceability queries
 - an optional TypeSafe Jev integration for bulk judgments
 
@@ -58,7 +58,7 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
 hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
-scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, junit, plan-lint, tracker, route, route-rules), sdd-task-lint.mjs (alias),
+scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, quotes, junit, plan-lint, tracker, route, route-rules), sdd-task-lint.mjs (alias),
                        sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
                        install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
 server/                src/{index,server,graph-loader,acceptance,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
@@ -66,7 +66,7 @@ templates/             pipeline-state template, gitignore policy, sessions examp
 references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md
 .claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
 examples/todo-app/     toy project (customer needs + requirements) used by the pipeline auditor
-tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, tracker, route, e2e, fixtures
+tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, quotes, tracker, route, e2e, fixtures
 docs/                  guides (Spanish), git, acceptance, stacks, multisession, jev, measurements, design/
 ```
 
@@ -77,7 +77,7 @@ The same commands CI runs:
 ```bash
 node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
 bash tests/e2e/00-validate.sh
-for t in hooks setup tasks graph jev bench git plan acceptance tracker route; do bash tests/$t/run.sh || break; done
+for t in hooks setup tasks graph jev bench git plan acceptance quotes tracker route; do bash tests/$t/run.sh || break; done
 shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
 cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
@@ -96,8 +96,8 @@ Hooks run in this checkout too (the plugin is enabled here). The session start h
   - Tags: annotated; `requirements-v{N}` (approval), `fase-{N}-accepted` (customer acceptance), `fase-N-foundation`/`fase-N-verified` (Streams). No git notes.
 - **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`. An instruction in a task, skill or CLAUDE.md is never a human approval.
 - **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions.
-- **Visual evidence:** every criterion of a `REQ-F` needs a capture and every user-facing workflow a video (the `WF-NNN` of the FASE's `Workflows:` header line; one named `FASE-N` when the FASE names no workflow), under `evidencias/FASE-{N}/` with the id in the file name (git-ignored; the ledger keeps their sha256). Without one the criterion is `unshown` and the requirement is not VERIFIED (`visual_evidence: required|warn|off`). Evidence is captured only over committed code: `sdd accept --junit-sha`, `accept measure` and `accept record` (except `waiver` and `challenge-dismissal`) refuse dirty code (exit 2), and `sdd accept` without `--junit-sha` warns and counts the evidence as stale.
-- **Literal letter:** a test quotes its criterion from `requirements/REQUIREMENTS.md` above the assert (`sdd req show`), because every link of the chain paraphrases it.
+- **Visual evidence:** every criterion of a `REQ-F` needs a capture and every user-facing workflow a video (the `WF-NNN` of the FASE's `Workflows:` header line; one named `FASE-N` when the FASE names no workflow), under `evidencias/FASE-{N}/` with the id in the file name (git-ignored; the ledger keeps their sha256). Without one the criterion is `unshown` and the requirement is not VERIFIED (`visual_evidence: required|warn|off`). Evidence is captured only over committed code: `sdd accept --junit-sha`, `accept measure` and `accept record` (except `waiver`, `challenge-dismissal` and `literal-exception`) refuse dirty code (exit 2), and `sdd accept` without `--junit-sha` warns and counts the evidence as stale.
+- **Literal letter:** a test quotes its criterion from `requirements/REQUIREMENTS.md` above the assert (`sdd req show`), because every link of the chain paraphrases it. `sdd lint --quotes` checks it per criterion and test file (Q-01 no quote, warn; Q-02 quote not the current text; Q-03 a literal of the criterion missing from the test's code). With `literal_gate: enforce` (default) a passing Must criterion with a Q-02/Q-03 is `weakened` and the requirement is not VERIFIED (loop route `weakened-test`, a test edit a person approves); a literal a helper builds is excepted only by a person (`accept record literal-exception`, bound to the requirement's reqHash).
 - **Revert strategies** per task: SAFE, COUPLED, MIGRATION, CONFIG. With `task_format: compact`, a task without a Revert block is SAFE.
 - **Specs are the source of truth** (Article 12, below).
 

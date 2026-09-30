@@ -41,6 +41,7 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 - visual_evidence: required
 - evidence_dir: evidencias
 - adversarial_gate: warn
+- literal_gate: enforce
 - test_slots: 2
 - staging_url: none
 - smoke: none
@@ -78,6 +79,7 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `visual_evidence` | `required` (por defecto): un criterio de un REQ-F que pasa sin captura queda `unshown` y el requisito no es VERIFIED; `warn` solo lo informa; `off`, solo para proyectos sin interfaz (API pura, CLI) y por decisión de una persona |
 | `evidence_dir` | Carpeta de capturas y vídeos, `<dir>/FASE-N/`, fuera de git; por defecto `evidencias` |
 | `adversarial_gate` | Cómo trata `sdd gate` un hallazgo abierto de la ronda adversarial en un Must: `off`, `warn` (por defecto; lo imprime) o `enforce` (sale con 4) |
+| `literal_gate` | Cómo trata `sdd accept` un test que nombra un criterio sin llevar su letra (`sdd lint --quotes`: Q-02 cita desactualizada, Q-03 literal ausente): `enforce` (por defecto) deja un criterio de un Must en `weakened` y el requisito no es VERIFIED; `warn` solo lo informa; `off` no lo comprueba |
 | `test_slots` | Procesos de test que pueden correr a la vez en la máquina (por defecto `2`; `1` con base de datos en memoria o compartida, navegadores o contenedores). Ver [Recursos de la máquina](multisesion.md#recursos-de-la-máquina) |
 | `staging_url` | URL del entorno de staging para las plantillas de smoke, o `none` |
 | `smoke` | Comando del smoke post-deploy contra `staging_url`: ejecuta los tests etiquetados `@smoke-deploy` (`@smoke` es el tier de PR), p. ej. `npx playwright test --grep @smoke-deploy --reporter=junit`; o `none` |

@@ -167,6 +167,32 @@ test("evidencia visual: un criterio unshown sale como hueco UNSHOWN y el motivo 
   assert.equal(cov.open[0].reason, "no visual evidence");
 });
 
+test("letra literal: un criterio weakened sale como hueco WEAKENED con el literal que falta", () => {
+  const dir = proyecto(false);
+  mkdirSync(path.join(dir, ".sdd"));
+  const gap = { code: "Q-03", file: "tests/cv.test.ts", line: 12, literal: "Proyectos personales" };
+  const ledger = {
+    $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
+    visual_evidence: "off", literal_gate: "enforce", videos: null,
+    requirements: [{
+      id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "MISSING",
+      reason: "test does not carry the criterion's literal", criteria_total: 2, criteria_passing: 1, waiver: null, stale_evidence: false,
+      criteria: [
+        { n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", literal_gaps: [], evidence: [{ kind: "test", status: "pass", fresh: true }] },
+        { n: 2, text: "b", scenarios: ["AC-001-02"], state: "weakened", literal_gaps: [gap], evidence: [{ kind: "test", status: "pass", fresh: true }] },
+      ],
+    }],
+    summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 0, FAILING: 0, MISSING: 1, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
+      must_total: 1, must_verified: 0, must_waived: 0, goal: false, waived_musts: [], stale_evidence: 0, literal_gaps: 1, weakened: 1 },
+  };
+  writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
+  const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
+  assert.equal(ctx.acceptance.reason, "test does not carry the criterion's literal");
+  assert.deepEqual(ctx.acceptance.perCriterion[1].literal_gaps, [gap]);
+  assert.ok(ctx.gaps.some((g: string) => g.startsWith("WEAKENED_AC2") && g.includes('"Proyectos personales" missing in tests/cv.test.ts')), "el criterio sin literal es un hueco");
+  assert.ok(!ctx.gaps.some((g: string) => g.includes("AC1")), "el criterio con su literal no lo es");
+});
+
 test("ronda adversarial: un challenge abierto es un hueco CHALLENGED aunque el veredicto sea VERIFIED", () => {
   const dir = proyecto(false);
   mkdirSync(path.join(dir, ".sdd"));

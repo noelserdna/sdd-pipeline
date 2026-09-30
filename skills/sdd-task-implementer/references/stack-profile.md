@@ -40,6 +40,7 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - visual_evidence: required|warn|off
 - evidence_dir: <dir>        # default evidencias
 - adversarial_gate: off|warn|enforce
+- literal_gate: off|warn|enforce
 - test_slots: <n>
 - staging_url: <url|none>
 - smoke: <cmd|none>
@@ -79,6 +80,7 @@ detected/kit/legacy value (§3), then the default below.
 | `visual_evidence` | `sdd accept`: with `required`, a criterion of a REQ-F that passes without an image attached reads `unshown` and its requirement stays MISSING; `warn` only reports it; `off` (no UI at all: a pure API or CLI, decided by a person) ignores it. Read by the test planner and the E2E steps (construction-protocol.md) | `required` |
 | `evidence_dir` | where the acceptance suite writes captures and videos, `<dir>/FASE-{N}/` (git-ignored; `sdd accept pack` bundles it) | `evidencias` |
 | `adversarial_gate` | how `sdd gate` treats an open challenge of the adversarial round on a Must (`off` · `warn` prints it · `enforce` exits 4) | `warn` |
+| `literal_gate` | how `sdd accept` treats a test that names a criterion without carrying its letter (`sdd lint --quotes` Q-02 stale quote, Q-03 missing literal): `enforce` holds a passing Must criterion back as `weakened` (requirement not VERIFIED, loop route `weakened-test`) · `warn` lists the gap · `off` skips the check | `enforce` |
 | `test_slots` | how many test processes may run at once on this machine: `[P]` subagents that run tests (SKILL.md → Multi-Agent Strategy), Phase 9-S, one Playwright worker with `1` (§2), the lead's second implementation station, the adversarial verifiers. `1` when tests use an in-memory or shared database, browsers or containers | `2` |
 | `staging_url` | base URL of the deployed staging environment for the smoke templates and the test planner's smoke tier | `none` |
 | `smoke` | command that runs the post-deploy smoke tier (tests tagged `@smoke-deploy`; `@smoke` is the PR tier) against `staging_url`, e.g. `PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit` | `none` |
@@ -226,6 +228,7 @@ Rendered by the kit installer (`templates/stacks/<kit>/kit.json` is the source o
 - visual_evidence: required
 - evidence_dir: evidencias
 - adversarial_gate: warn
+- literal_gate: enforce
 - test_slots: 2
 - staging_url: none
 - smoke: none
@@ -272,6 +275,7 @@ server and the acceptance suite use, after a migration.
 - visual_evidence: required
 - evidence_dir: evidencias
 - adversarial_gate: warn
+- literal_gate: enforce
 - test_slots: 2
 - staging_url: none
 - smoke: none

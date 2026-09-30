@@ -1,4 +1,4 @@
-// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd accept pack`,
+// acceptance-cli.mjs — `sdd lint --needs`, `sdd lint --quotes`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd accept pack`,
 // `sdd accept challenge add|list`, `sdd accept adversarial plan`, `sdd gate`, `sdd loop next`.
 // Node >= 18, no dependencies. Called from scripts/sdd.mjs; returns an exit code (never calls process.exit).
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, readdirSync, statSync, mkdtempSync, rmSync } from "node:fs";
@@ -14,6 +14,7 @@ import {
   validateChallenge, challengeStates, nextChallengeId, adversarialGate, effectivePriority,
 } from "./acceptance.mjs";
 import { parseRequirements, parseNeeds, checkNeedCoverage } from "../sdd-jev.mjs";
+import { lintQuotes, testPathsOf } from "./quotes.mjs";
 
 class Exit extends Error { constructor(code) { super(`exit ${code}`); this.code = code; } }
 let PROG = "sdd";
@@ -25,9 +26,9 @@ const die = (msg) => { console.error(`${PROG}: ${msg}`); throw new Exit(2); };
 const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "mode", "ledger", "state", "max-cycles",
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
   "result", "channel", "demo", "requirements", "decisions", "command", "extract", "attach",
-  "category", "quote", "evidence", "verifier", "counter", "challenge", "challenges"]);
+  "category", "quote", "evidence", "verifier", "counter", "challenge", "challenges", "literal"]);
 const MULTI = new Set(["junit", "paths", "attach", "evidence"]);
-const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure", "allow-dirty", "open"]);
+const FLAGS = new Set(["json", "md", "needs", "quotes", "reset", "no-out", "help", "remeasure", "allow-dirty", "open"]);
 
 function parse(argv) {
   const o = { _: [], junit: [], paths: [], attach: [], evidence: [] };
@@ -81,6 +82,29 @@ function cmdLintNeeds(o) {
     out(`lint --needs: ${r.needs} needs (${r.outOfScope} out-of-scope), ${r.requirements} requirements, ${r.errors.length} error(s), ${r.warnings.length} warning(s), Must ${Math.round(r.mustRatio * 100)} %`);
   }
   return r.errors.length ? 1 : 0;
+}
+
+// ------------------------------------------------------------------ lint --quotes
+// The literal lint (scripts/lib/quotes.mjs): per (criterion, test file that names it) Q-01 no quote comment (warn),
+// Q-02 quote not the criterion's current text (error), Q-03 a literal of the criterion missing from the code (error;
+// a person's literal-exception record turns it into `excepted`). Exit 1 on any error.
+function cmdLintQuotes(o) {
+  if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  const root = rootOf(o);
+  const reqs = readReqs(root, o);
+  const scope = scopeFor(root, reqs, o.fase);
+  const testPaths = testPathsOf(root);
+  const r = lintQuotes({ root, reqs, scenarios: loadScenarios(root), records: readDecisions(decisionsPath(root, o)).records,
+    scope: scope ? scope.set : null, testPaths });
+  const summary = { ...r.summary, test_paths: testPaths, ...(scope ? { fase: o.fase } : {}) };
+  if (o.json) {
+    out(JSON.stringify({ findings: r.findings.map(({ message, ...f }) => ({ ...f, message })), summary }, null, 2));
+    return summary.errors ? 1 : 0;
+  }
+  for (const f of r.findings) out(`${f.file}:${f.line} ${f.code} ${f.req} AC${f.ac} ${f.severity === "excepted" ? "(excepted) " : ""}${f.message}`);
+  if (!r.summary.test_files) out(`note: no test source files under ${testPaths.join(", ")} (Stack Profile test_paths)`);
+  out(`lint --quotes: ${summary.pairs} criterion-file pair(s) in ${summary.files} test file(s), ${summary.criteria} criteria · ${summary.errors} error(s) · ${summary.warnings} warning(s) · ${summary.excepted} excepted${scope ? ` · FASE ${o.fase}` : ""}`);
+  return summary.errors ? 1 : 0;
 }
 
 // ------------------------------------------------------------------ ledger
@@ -156,6 +180,12 @@ function printLedger(ledger) {
         out(`${ledger.visual_evidence === "required" ? "unshown" : "warning: no screenshot"} ${r.id} AC${c.n}: passes without a screenshot in ${ledger.evidence_dir}/ (${ROUTES.capture})`);
     for (const id of ledger.videos?.missing || []) out(`missing video ${id}: no video named with ${id} (${ROUTES.capture})`);
   }
+  if (ledger.literal_gate && ledger.literal_gate !== "off") {
+    for (const r of ledger.requirements.filter((x) => x.in_scope && !["WAIVED", "DEPRECATED"].includes(x.verdict)))
+      for (const c of (r.criteria || []).filter((x) => (x.literal_gaps || []).length))
+        for (const g of c.literal_gaps)
+          out(`${c.state === "weakened" ? "weakened" : "warning: literal gap"} ${r.id} AC${c.n}: ${g.code === "Q-02" ? "the quote is not the criterion's current text" : `literal "${g.literal}" not in the test`} (${g.file}:${g.line}, ${ROUTES.weakened})`);
+  }
   for (const r of ledger.requirements.filter((x) => x.in_scope))
     for (const c of (r.challenges || []).filter((x) => x.state === "open"))
       out(`challenge ${c.id} open ${r.id} AC${c.ac} ${c.category} (${c.counter}): "${c.quote}" (${ROUTES.adversarial})`);
@@ -212,6 +242,7 @@ function cmdRecord(o) {
     Object.assign(rec, { challenge: o.challenge ? String(o.challenge).toUpperCase() : undefined, reason: o.reason, ...(ch ? { req: ch.req, ac: ch.ac } : {}) });
   } else {
     rec.req = o.req;
+    if (type === "literal-exception") Object.assign(rec, { literal: o.literal, reason: o.reason });
     const req = reqs.find((r) => r.id === o.req);
     if (req) rec.reqHash = reqHash(req);
     if (o.ac !== undefined) { const n = acNumber(o.ac); rec.ac = Number.isNaN(n) ? o.ac : n; }
@@ -224,7 +255,7 @@ function cmdRecord(o) {
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs, { challenges: readChallenges(challengesPath(root, o)).challenges, records: readDecisions(decisionsPath(root, o)).records });
   if (o.attach.length) {
-    if (type === "waiver" || type === "challenge-dismissal") errors.push("a waiver records no observation: --attach is for demo, inspection, measurement and fase-acceptance");
+    if (type === "waiver" || type === "challenge-dismissal" || type === "literal-exception") errors.push(`a ${type} records no observation: --attach is for demo, inspection, measurement and fase-acceptance`);
     else {
       const att = attachFiles(root, o.attach);
       errors.push(...att.errors);
@@ -232,9 +263,9 @@ function cmdRecord(o) {
     }
   }
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
-  // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver or a dismissal
-  // observes nothing).
-  if (type !== "waiver" && type !== "challenge-dismissal") {
+  // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver, a dismissal or
+  // a literal exception observes nothing: the last one is bound to the requirement's text by reqHash).
+  if (type !== "waiver" && type !== "challenge-dismissal" && type !== "literal-exception") {
     const d = uncommitted(root, g, rec.paths);
     if (d) {
       if (!o["allow-dirty"]) { console.error(`${PROG}: accept record ${type}: ${d}: commit first, or pass --allow-dirty to record it with dirty: true`); return 2; }
@@ -243,7 +274,7 @@ function cmdRecord(o) {
   }
   const { file, n } = appendRecord(root, o, rec);
   if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
-  else out(`recorded ${type} ${rec.challenge ? `${rec.challenge} (${rec.req} AC${rec.ac})` : rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
+  else out(`recorded ${type} ${rec.challenge ? `${rec.challenge} (${rec.req} AC${rec.ac})` : rec.literal !== undefined ? `${rec.req} AC${rec.ac} "${rec.literal}"` : rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
   return 0;
 }
 
@@ -617,6 +648,7 @@ function cmdGate(o) {
   const missingVideos = s.missing_videos || [];
   if (o.json) out(JSON.stringify({ code, mode, label: labels[code], evaluated_sha: ledger.evaluated_sha, scope: ledger.scope, summary: s,
     visual_evidence: ledger.visual_evidence ?? null, unshown: s.unshown ?? 0, missing_videos: missingVideos,
+    literal_gate: ledger.literal_gate ?? null, literal_gaps: s.literal_gaps ?? 0, weakened: s.weakened ?? 0,
     adversarial_gate: adversarial, must_challenged: mustCh, challenged_musts: s.challenged_musts || [], open_challenges: openCh,
     requirements: ledger.requirements.filter((r) => r.in_scope && r.verdict !== "DEPRECATED").map((r) => ({ id: r.id, priority: r.priority, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}), criteria: `${r.criteria_passing}/${r.criteria_total}`, stale_evidence: r.stale_evidence })) }, null, 2));
   else if (o.md) process.stdout.write(renderPrBlock(ledger, code));
@@ -624,6 +656,7 @@ function cmdGate(o) {
     for (const r of ledger.requirements.filter((x) => x.in_scope && x.priority === "Must" && !["VERIFIED", "DEPRECATED"].includes(x.verdict)))
       out(`${r.id}  ${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}  ${r.criteria_passing}/${r.criteria_total}`);
     for (const id of missingVideos) out(`missing video ${id}  (${ROUTES.capture})`);
+    if (s.literal_gaps && ledger.literal_gate === "warn") out(`gate: ${s.literal_gaps} criteria whose test lacks the criterion's literal — literal_gate warn keeps the verdicts (enforce would hold the Musts back)  (${ROUTES.weakened})`);
     if (adversarial !== "off") {
       for (const c of openCh) out(`challenge ${c.id} open on ${c.req} AC${c.ac} (${c.priority || "-"}) ${c.category} (${c.counter})  (${ROUTES.adversarial})`);
       if (mustCh && adversarial === "warn") out(`gate: ${mustCh} Must requirement(s) with an open challenge — adversarial_gate warn keeps the exit code (enforce would exit 4)`);
@@ -663,7 +696,8 @@ function cmdLoop(o) {
   const prev = state.cycles[state.cycles.length - 1] || null;
   const cycle = state.cycles.length + 1;
   const target = (r) => ({ req: r.id, priority: r.priority, verdict: r.verdict, verification: r.verification,
-    criteria: r.criteria.filter((c) => c.state !== "pass").map((c) => ({ n: c.n, state: c.state, scenarios: c.scenarios, route_hint: criterionHint(r, c) })),
+    criteria: r.criteria.filter((c) => c.state !== "pass").map((c) => ({ n: c.n, state: c.state, scenarios: c.scenarios, route_hint: criterionHint(r, c),
+      ...(c.state === "weakened" ? { literal_gaps: c.literal_gaps } : {}) })),
     route_hint: routeHint(r) });
   const open = (r) => ["FAILING", "MISSING"].includes(r.verdict);
   // Open challenges of the adversarial round, one target each whatever the verdict: confirmed ones route to
@@ -695,7 +729,7 @@ function cmdLoop(o) {
   else if (cycle > max) stop = "max-cycles";
   const result = { cycle, max_cycles: max, stop, evaluated_sha: ledger.evaluated_sha, progress,
     previous: prev ? { cycle: prev.cycle, progress: prev.progress } : null, regressed, targets, others,
-    stale_evidence: ledger.summary.stale_evidence, unshown: ledger.summary.unshown ?? 0,
+    stale_evidence: ledger.summary.stale_evidence, unshown: ledger.summary.unshown ?? 0, literal_gaps: ledger.summary.literal_gaps ?? 0,
     adversarial_gate: adversarial, must_challenged: progress.challenged,
     missing_videos: (ledger.summary.missing_videos || []).map((id) => ({ video: id, route_hint: ROUTES.capture })) };
   if (capped) result.note = `--max-cycles capped at ${HARD_CAP}`;
@@ -712,7 +746,7 @@ export function runAcceptance(cmd, argv, { prog = "sdd" } = {}) {
   PROG = prog;
   try {
     const o = parse(argv);
-    if (cmd === "lint") return cmdLintNeeds(o);
+    if (cmd === "lint") return o.quotes ? cmdLintQuotes(o) : cmdLintNeeds(o);
     if (cmd === "accept") return cmdAccept(o);
     if (cmd === "gate") return cmdGate(o);
     if (cmd === "loop") return cmdLoop(o);
