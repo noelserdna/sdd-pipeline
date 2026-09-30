@@ -443,6 +443,9 @@ await page.route('**/api.stripe.com/**', route =>
 // Internal API calls hit the real backend — do NOT mock these
 ```
 
+A double that replaces an external port in unit and slice tests needs its `CONTRACT-<port>` test against the real
+adapter (`references/tdd-workflow.md` → Category 3b); without it the double can drift from the provider unnoticed.
+
 **Anti-patterns:**
 - Mocking internal APIs in E2E (defeats the purpose)
 - Using `page.waitForTimeout()` instead of auto-retrying assertions

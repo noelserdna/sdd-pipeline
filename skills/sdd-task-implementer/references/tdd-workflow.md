@@ -186,6 +186,71 @@ describe('{API-NNN-NN} {operation} Contract', () => {
 });
 ```
 
+### Category 3b: Port contract tests
+
+**When:** a `CONTRACT-<port>` task, one per row of the `§4.x Puertos con doble` table of `PLAN-FASE-{N}.md` (ports to
+external systems: an LLM, a payment provider, a mail service).
+
+The slice tests run against the double, so they stay green even when the real provider sends something else: a prompt
+without the instructions, a context part dropped, a model read from the wrong setting. The contract test runs the same
+cases against the double **and** the real adapter, and asserts on what each one would put on the wire.
+
+```
+Purpose: the double and the real provider honour the same port contract
+Dependencies: the double, and the real adapter with a fake transport injected (no network, no credentials)
+Location: {test_paths}/contract/<port>.contract.test.* (stack convention wins: e.g. test/contract/ in Rails)
+Name: CONTRACT-<port> REQ-F-NNN ACn … — the criterion id makes the result count in the acceptance ledger
+```
+
+```typescript example
+// tests/contract/llm-client.contract.test.ts
+const config = loadConfig({ LLM_MODEL: 'model-from-env' });
+const implementations = [
+  ['double', () => {
+    const client = new FakeLlmClient({ reply: 'ok', config });
+    return { client, sent: () => client.lastRequest };
+  }],
+  ['real', () => {
+    const requests: Array<{ url: string; body: string }> = [];
+    const transport = async (req: { url: string; body: string }) => {
+      requests.push(req);
+      return { status: 200, json: { content: [{ type: 'text', text: 'ok' }] } };
+    };
+    const client = new HttpLlmClient({ transport, config });
+    return {
+      client,
+      sent: () => {                       // the provider's wire format, mapped to the port's fields
+        const body = JSON.parse(requests.at(-1)!.body);
+        return { instructions: body.system, context: body.messages.map((m: { content: string }) => m.content), model: body.model };
+      },
+    };
+  }],
+] as const;
+
+describe.each(implementations)('CONTRACT-llm-client REQ-F-078 AC1 (%s)', (_name, make) => {
+  it('sends the instructions, every context part and the model from the config', async () => {
+    const { client, sent } = make();
+    const out = await client.complete({ instructions: 'Resume en 3 frases', context: ['nota A', 'nota B'] });
+    expect(out.text).toBe('ok');
+    expect(sent()).toEqual({ instructions: 'Resume en 3 frases', context: ['nota A', 'nota B'], model: 'model-from-env' });
+  });
+
+  it('rejects an empty context the same way', async () => {
+    const { client } = make();
+    await expect(client.complete({ instructions: 'x', context: [] })).rejects.toThrow(EmptyContextError);
+  });
+});
+```
+
+- Assert the request's shape: the prompt fields, the instructions, each part of the context and the source of every
+  setting (the `Observable del contrato` column). For a port, the request *is* the observable, so this is not the
+  implementation detail the Test Quality Checklist warns about.
+- A case the real adapter rejects runs against the double too; a double that accepts more than the provider hides
+  defects.
+- Never call the real service from this test, and never patch the network globally. An adapter without a transport
+  seam is a defect of the adapter's task: record an IF- entry (BLOCKER) naming it and mark the contract task `[!]`.
+- Minitest/RSpec: one shared module (or shared examples) with the cases, included in one test class per implementation.
+
 ### Category 4: BDD / Acceptance Tests
 
 **When:** Verification tasks, end-to-end scenario tasks
