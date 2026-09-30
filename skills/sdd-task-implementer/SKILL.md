@@ -196,7 +196,7 @@ git commit -m "feat(auth): add JWT authentication middleware" \
 Main checkout only. The tag is placed last, and only when everything passes, so `fase-{N}-verified` always means verified.
 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
-2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
+2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once with `SDD_FASE={N}` exported (the suite writes the captures and videos under `{evidence_dir}/FASE-{N}/`, `references/construction-protocol.md`) and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
 4. **Demo and acceptance** (vertical plans; skip with a horizontal plan). After steps 1-3 pass:
    - Run the FASE's `## Demo` steps in order from a clean state (seed data as the steps say; server via the helper of `references/stack-profile.md`). Per step record what was observed, verbatim and short, and pass/fail against its expected result.

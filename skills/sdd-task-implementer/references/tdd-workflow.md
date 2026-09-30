@@ -151,6 +151,20 @@ describe('{FeatureName} Integration', () => {
 });
 ```
 
+### Replay and race rows
+
+A `replay` or `race` row of `test/TEST-MATRIX-*` (or of the task's Acceptance) is an integration test against the real
+database, like Category 2.
+
+- **replay**: send the same write twice with the same input (same idempotency key when the contract has one) and
+  assert the effect exists once: one row, one charge, one email; the second answer is the one the contract states
+  (the same result, or its conflict error).
+- **race**: start both writes before awaiting either, `await Promise.allSettled([write(a), write(b)])`, then assert the
+  invariant (one winner, the other with the contract's error, the counter equal to the sum). Never order them with
+  `sleep`/`setTimeout`/`waitForTimeout`: a delay turns the race into a sequence and the test proves nothing. A race the
+  test harness cannot open (one shared connection that serialises every write) is an IF- entry naming the row, never a
+  silently skipped row.
+
 ### Category 3: Contract Tests
 
 **When:** API Endpoint tasks (validating request/response schemas)
@@ -306,14 +320,13 @@ Fixtures: tests/e2e/fixtures/{fixture}.ts
 **Structure (Playwright):**
 
 ```typescript
-import { test, expect } from '@playwright/test';
-import { LoginPage } from './pages/login.page';
+import { test, expect, captureCriterion } from './fixtures/evidence';   // construction-protocol.md → Evidence helper
 
 // Auth fixture: reuse storageState for all tests except the login test itself
 test.use({ storageState: './tests/e2e/.auth/user.json' });
 
 test.describe('E2E-WF-001: User Registration Flow', () => {
-  test('Happy path: complete registration', async ({ page }) => {
+  test('E2E-WF-001-01 AC-001-01 AC-001-02 complete registration', async ({ page }, testInfo) => {
     // Step 1: Navigate
     await page.goto('/register');
     await expect(page).toHaveTitle(/Create Account/i);
@@ -328,21 +341,27 @@ test.describe('E2E-WF-001: User Registration Flow', () => {
     // Step 4: Submit
     await page.getByRole('button', { name: /register/i }).click();
 
-    // Step 5: Wait for result
-    await expect(page.getByText('Welcome')).toBeVisible();
+    // Step 5: Assert what the customer reads, then capture it
+    // REQ-F-001 AC1: "…THEN the user sees the greeting 'Welcome, test@example.com'"
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome, test@example.com');
+    await captureCriterion(page, testInfo, 'AC-001-01');
 
     // Step 6: Assert final state
+    // REQ-F-001 AC2: "…and lands on the dashboard with the section 'Your projects'"
     await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page.getByRole('region', { name: 'Your projects' })).toContainText('Your projects');
+    await captureCriterion(page, testInfo, 'AC-001-02');
   });
 
-  test('Error variation: duplicate email', async ({ page }) => {
+  test('E2E-WF-001-02 AC-001-03 duplicate email', async ({ page }, testInfo) => {
     await page.goto('/register');
     await page.getByLabel('Email').fill('existing@example.com');
     await page.getByLabel('Password').fill('SecurePass123!');
     await page.getByRole('button', { name: /register/i }).click();
 
-    // Assert error feedback
-    await expect(page.getByRole('alert')).toContainText('already in use');
+    // REQ-F-001 AC3: "…THEN the user sees 'This email is already in use'"
+    await expect(page.getByRole('alert')).toHaveText('This email is already in use');
+    await captureCriterion(page, testInfo, 'AC-001-03');
   });
 });
 ```
@@ -388,6 +407,11 @@ export class LoginPage {
 - Each test gets its own browser context (Playwright default — do NOT share `page` across tests)
 - Auth via `storageState`, not login-through-UI for every test
 - All assertions use locator-based `expect(locator)`, never `expect(await page.textContent(...))`
+- A criterion's THEN is asserted on its text (`toHaveText`/`toContainText` with the literal it quotes);
+  `toBeVisible()` alone proves an element exists, not what the customer reads
+- Every criterion of a REQ-F gets its capture right after its assert (`captureCriterion`), and the suite records one
+  video per test (config and helper: `references/construction-protocol.md`); without the image the acceptance ledger
+  reads the criterion as `unshown` and the requirement cannot be VERIFIED
 - Wait for stable state before interacting (no arbitrary `page.waitForTimeout()`)
 - E2E tests require a running server — prefer the suite's own `webServer`; otherwise the server helper of `references/stack-profile.md` §8 (`{server}`, log `.sdd/server.log`, stopped at the end of the block)
 - When an acceptance suite already exists (`acceptance` key, `acceptance/playwright.config.*`, `e2e/`, `test/system/`) write the scenario inside it and never scaffold a new one; the task is done when `{acceptance} --grep <E2E-ID>` passes
