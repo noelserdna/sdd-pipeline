@@ -5,7 +5,8 @@
 # remote), auth failure (exit 2), open idempotency (label sdd + hidden marker), update rewriting only the
 # sdd:begin/sdd:end region (human text byte for byte, CRLF included), close refused without fase-N-accepted,
 # read as data, pr-body `Refs #N` for a FASE and `Closes #N` for a change, GitLab variants (MR !N), dry-run without
-# write calls, and the CI / tracker templates. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git ≥ 2.32 and node ≥ 18.
+# write calls, the CI / tracker templates and the post-deploy smoke templates (GitLab job script run with sh).
+# bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git ≥ 2.32 and node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SDD="$ROOT/scripts/sdd.mjs"
@@ -342,6 +343,49 @@ done
 for k in 'GIT_DEPTH: "0"' 'verify --range "${CI_MERGE_REQUEST_DIFF_BASE_SHA}..HEAD"' ".claude/sdd/sdd.mjs lint --plan" "gate --mode warn" "merge_request_event"; do
   grep -qF -- "$k" "$GLY" && pass "gitlab ci: $k" || bad "gitlab ci: $k"
 done
+# post-deploy smoke templates: separate from the PR check, base URL from CI variables, secrets never literal
+SGH="$ROOT/templates/ci/github/sdd-smoke.yml"; SGL="$ROOT/templates/ci/gitlab/sdd-smoke.gitlab-ci.yml"
+for y in "$SGH" "$SGL"; do
+  if yaml_ok "$y" >/dev/null 2>&1; then pass "yaml parses: ${y#$ROOT/}"; else bad "yaml parse: ${y#$ROOT/}"; fi
+  for k in SMOKE_BASE_URL SMOKE_REPORT_PATH smoke_report_path staging_url 'prof smoke)'; do
+    grep -qF -- "$k" "$y" && pass "smoke ${y##*/}: $k" || bad "smoke ${y##*/}: $k"
+  done
+  # no literal credential outside comments: token prefixes, user:pass@ URLs, password/token keys with a plain value
+  if grep -nEi "(ghp_|github_pat_|glpat-|AKIA[0-9A-Z]{12}|://[^/ ]+:[^/ @]+@|(password|passwd|token|secret)[a-z_]*:[[:space:]]*[\"']?[A-Za-z0-9+/]{6})" "$y" \
+    | grep -vE '^[0-9]+:[[:space:]]*#' | grep -vF '${{ secrets.' >/dev/null; then
+    bad "smoke ${y##*/}: literal secret"
+  else pass "smoke ${y##*/}: no literal secret"; fi
+done
+for k in "workflow_call:" "workflow_run:" 'SMOKE_USER: ${{ secrets.SMOKE_USER }}' 'SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}' "vars.SMOKE_BASE_URL" "actions/upload-artifact@v4" "if: always()" 'bash -c "$SMOKE_CMD"'; do
+  grep -qF -- "$k" "$SGH" && pass "github smoke: $k" || bad "github smoke: $k"
+done
+for k in "smoke:staging:" "job: deploy:staging" "optional: true" "when: always" "junit: sdd-smoke-report/" 'exit "$rc"'; do
+  grep -qF -- "$k" "$SGL" && pass "gitlab smoke: $k" || bad "gitlab smoke: $k"
+done
+if grep -qE '^[[:space:]]*(pull_request|merge_request_event)' "$SGH" "$SGL"; then bad "smoke templates are not PR checks"; else pass "smoke templates are not PR checks"; fi
+if grep -qiE '^[^#]*rollback' "$SGH" "$SGL"; then bad "smoke templates do no rollback"; else pass "smoke templates do no rollback"; fi
+# the GitLab job script, run with sh: profile values pass through and the job fails when the smoke fails
+sm="$tmp/smoke"; mkdir -p "$sm"
+# the `- |` block of the job script, dedented (structural extraction: no YAML library needed)
+awk '/^    - \|$/ { f = 1; next } /^  [a-z]/ { f = 0 } f { sub(/^      /, ""); print }' "$SGL" > "$sm/job.sh"
+if grep -qF 'SMOKE_CMD="$(prof smoke)"' "$sm/job.sh"; then
+  prof_smoke() {
+    printf '# p\n\n## SDD Stack Profile\n- staging_url: https://staging.example.test\n- smoke_report_path: out/smoke\n- smoke: `mkdir -p out/smoke && echo "<testsuite/>" > out/smoke/s.xml && echo "at $SMOKE_BASE_URL" && exit %s`\n' "$1" > "$sm/CLAUDE.md"
+  }
+  prof_smoke 0; rc=0; out=$(cd "$sm" && CI_COMMIT_SHA=abc sh job.sh 2>&1) || rc=$?
+  expect "gitlab smoke job: passing smoke → exit 0" "$rc" 0
+  has "gitlab smoke job: base URL from the profile's staging_url" "at https://staging.example.test"
+  [ -f "$sm/sdd-smoke-report/s.xml" ] && pass "gitlab smoke job: JUnit copied from smoke_report_path" || bad "gitlab smoke job: JUnit copy"
+  rc=0; out=$(cd "$sm" && SMOKE_BASE_URL=https://ci-var.example.test sh job.sh 2>&1) || rc=$?
+  has "gitlab smoke job: CI variable SMOKE_BASE_URL wins" "at https://ci-var.example.test"
+  prof_smoke 3; rc=0; out=$(cd "$sm" && sh job.sh 2>&1) || rc=$?
+  expect "gitlab smoke job: failing smoke → job fails with its code" "$rc" 3
+  printf '# p\n\n## SDD Stack Profile\n- staging_url: https://staging.example.test\n- smoke: none\n' > "$sm/CLAUDE.md"
+  rc=0; out=$(cd "$sm" && sh job.sh 2>&1) || rc=$?
+  expect "gitlab smoke job: smoke none → exit 1" "$rc" 1
+else
+  bad "gitlab smoke job: script block not found"
+fi
 for f in github/pull_request_template.md github/ISSUE_TEMPLATE/change-request.md gitlab/merge_request_templates/Default.md gitlab/issue_templates/Change-request.md; do
   [ -s "$ROOT/templates/tracker/$f" ] && pass "template exists: $f" || bad "template missing: $f"
 done
