@@ -662,15 +662,25 @@ XML
 run gate --fase 1 --json
 expect "E2E-WF-003-01.webm attached by the journey test → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
 # A `Workflows:` header line wins over ## Demo; a manual demo recording under evidencias/ counts by its name.
-node -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace(/^(> \*\*Requisitos:\*\*.*)$/m,"$1\n> **Workflows:** WF-003, WF-004"))' "$repo/plan/fases/FASE-1-core.md"
+node -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace(/^(> \*\*Requisitos:\*\*.*)$/m,"$1\n> **Workflows:** WF-003, WF-004, WF-005"))' "$repo/plan/fases/FASE-1-core.md"
 commit "docs(plan): Workflows header"
 run gate --fase 1 --json
-expect "Workflows: WF-003, WF-004 header → WF-004 missing → 1" "$rc/$(js 'j.missing_videos.join()')" 1/WF-004
+expect "Workflows: WF-003, WF-004, WF-005 header → WF-004, WF-005 missing → 1" "$rc/$(js 'j.missing_videos.join()')" 1/WF-004,WF-005
 run accept --fase 1 --json --no-out
-expect "ledger videos.required comes from the header (not Demo's WF-003 alone, not WF-008/WF-009)" "$(js 'j.videos.required.join()')" WF-003,WF-004
+expect "ledger videos.required comes from the header (not Demo's WF-003 alone, not WF-008/WF-009)" "$(js 'j.videos.required.join()')" WF-003,WF-004,WF-005
+# Loop with every Must VERIFIED and only videos pending: one capture target per video; a captured one is progress.
+run loop next --fase 1 --reset --state .sdd/loop-x.json
+expect "loop: one capture-evidence target per missing video, only those" "$(loopq 'j.targets.map(t=>t.video+"/"+t.fase+"/"+t.route_hint).join() + "|" + j.stop + "|" + j.progress.videos_missing')" "WF-004/1/capture-evidence,WF-005/1/capture-evidence|null|2"
 printf 'vid' > "$repo/evidencias/FASE-1/demo-manual-WF-004.mp4"
 run gate --fase 1 --json
-expect "manual recording demo-manual-WF-004.mp4 under evidencias/ → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
+expect "manual recording demo-manual-WF-004.mp4 under evidencias/ counts, WF-005 still missing → 1" "$rc/$(js 'j.missing_videos.join()')" 1/WF-005
+run loop next --fase 1 --state .sdd/loop-x.json
+expect "loop: a captured video is progress, not no-progress" "$(loopq 'j.cycle + "/" + j.stop + "/" + j.targets.map(t=>t.video).join()')" 2/null/WF-005
+run loop next --fase 1 --state .sdd/loop-x.json
+expect "loop: nothing captured since → no-progress" "$(loopq 'j.cycle + "/" + j.stop')" 3/no-progress
+printf 'vid' > "$repo/evidencias/FASE-1/WF-005.webm"
+run gate --fase 1 --json
+expect "every workflow video present → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
 # warn: reported, the verdicts do not change.
 printf '# p\n\n## SDD Stack Profile\n- visual_evidence: warn\n' > "$repo/CLAUDE.md"
 rm -rf "$repo/evidencias" "$repo/test-results" "$repo/.sdd/junit/e2e.xml"
@@ -681,7 +691,9 @@ expect "warn: summary.unshown still counts them (F-001 ×2, F-002 ×2, F-006 dem
 run accept --no-out
 has "warn: accept prints a warning per criterion" "warning: no screenshot REQ-F-001 AC1"
 run gate --fase 1 --json
-expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003,WF-004
+expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003,WF-004,WF-005
+run loop next --fase 1 --reset --state .sdd/loop-y.json
+expect "warn: video targets go to others, not targets" "$(loopq 'j.targets.filter(t=>t.video).length + "/" + j.others.filter(t=>t.video).map(t=>t.video).join()')" 0/WF-003,WF-004,WF-005
 # off: nothing.
 printf '# p\n\n## SDD Stack Profile\n- visual_evidence: off\n' > "$repo/CLAUDE.md"
 run accept --fase 1 --json --no-out

@@ -105,7 +105,9 @@
 //       baseline; hard cap 5). route_hint capture-evidence: run the journey again with capture (no code task).
 //       Open challenges are targets of their own {req, challenge, ac, category, counter, quote, evidence, route_hint}:
 //       adversarial-finding when confirmed, needs-human when inconclusive. Under adversarial_gate enforce the stop
-//       `goal` also needs no open challenge on a Must.
+//       `goal` also needs no open challenge on a Must. Each missing FASE video is a target {video: WF-NNN|FASE-N, fase,
+//       route_hint: capture-evidence} (under visual_evidence warn, in `others`); progress counts videos_missing, and a
+//       cycle that captures one is progress like a criterion that turns VERIFIED.
 //   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
 //       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
 //       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
