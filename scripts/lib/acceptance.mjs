@@ -35,6 +35,11 @@
 //   - waivers, inspections, demos, measurements and fase acceptances carry `reqHash` (sha256 of the requirement's
 //     statement + criteria). A different hash means the text changed (a MODIFY): the record is stale, reported and
 //     not applied.
+// Literal letter (Stack Profile `literal_gate: off|warn|enforce`, default enforce; scripts/lib/quotes.mjs): the test
+// files that name a criterion must carry its current quote and its literals (Q-02/Q-03 of `sdd lint --quotes`). Each
+// criterion lists its `literal_gaps`; under enforce a passing criterion of a Must with a gap not excepted by a person
+// (`literal-exception` record, bound to reqHash) is `weakened` and the requirement MISSING with reason "test does not
+// carry the criterion's literal"; warn only lists the gaps. The ledger counts them in summary.literal_gaps.
 // Adversarial challenges (acceptance/challenges.jsonl, written only by `sdd accept challenge add`): a finding of an
 // independent verifier on one criterion, with its category, the literal quote and `path:line` evidence in production
 // or test code. Each sits next to the verdict in `requirements[].challenges[]` and never changes it: `open`, `stale`
@@ -47,10 +52,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { git, isRepo, stackProfile } from "./git-log.mjs";
 import { VERIFICATION_METHODS } from "../sdd-jev.mjs";
+import { lintQuotes, literalGate, literalGapsByCriterion, isCriterionLiteral } from "./quotes.mjs";
 
 export const SCHEMA = "sdd-acceptance-v1";
 export const VERDICTS = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
-export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal"];
+export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal", "literal-exception"];
 export const OPS = { lt: (a, b) => a < b, le: (a, b) => a <= b, gt: (a, b) => a > b, ge: (a, b) => a >= b, eq: (a, b) => a === b };
 export const FASE_RESULTS = ["accepted", "rejected", "observations"];
 export const DECISIONS_FILE = "acceptance/decisions.jsonl";
@@ -63,6 +69,7 @@ export const ROUTES = {
   remeasure: "remeasure",
   capture: "capture-evidence", // run the journey again with capture; no code task
   adversarial: "adversarial-finding", // an open, confirmed challenge of the adversarial round
+  weakened: "weakened-test", // the test passes without the criterion's literal: a test edit a person approves (Art. 12)
 };
 /** Symbol-keyed flag on each requirement of a ledger (JSON output ignores it): false when the project has no
  *  spec/tests, i.e. the route skipped the specifications and the requirement criteria are the contract. */
@@ -124,6 +131,25 @@ export function loadScenarios(root) {
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter((f) => /^BDD-.*\.md$/i.test(f)).sort();
   return files.flatMap((f) => parseScenarios(readFileSync(path.join(dir, f), "utf8"), `spec/tests/${f}`));
+}
+
+/** Scenario index from the BDD tags: byCriterion `REQ#n` → Set of scenario ids; byScenario id → [{ req, n }]
+ *  (n 0 = a tag on the whole requirement). The ledger and `sdd lint --quotes` bind test names through it. */
+export function scenarioIndex(scenarios) {
+  const byScenario = new Map(), byCriterion = new Map();
+  for (const s of scenarios) {
+    for (const t of s.tags) {
+      const acs = t.acs.length ? t.acs : [0];
+      for (const n of acs) {
+        const k = `${t.req}#${n}`;
+        if (!byCriterion.has(k)) byCriterion.set(k, new Set());
+        byCriterion.get(k).add(s.id);
+        if (!byScenario.has(s.id)) byScenario.set(s.id, []);
+        byScenario.get(s.id).push({ req: t.req, n });
+      }
+    }
+  }
+  return { byScenario, byCriterion };
 }
 
 // ------------------------------------------------------------------ test names
@@ -208,6 +234,13 @@ export function validateRecord(rec, reqs, ctx = {}) {
     if (!Number.isFinite(Number(rec.threshold)) || rec.threshold === "") e.push("--threshold must be a number");
   } else if (rec.type === "inspection") {
     if (!rec.note) e.push("--note is required (what was reviewed and found)");
+  } else if (rec.type === "literal-exception") {
+    if (n === null) e.push("--ac N is required (the criterion whose literal a helper builds)");
+    if (!rec.reason) e.push("--reason is required (why the literal is not verbatim in the test, e.g. the helper that builds it)");
+    if (!String(rec.literal ?? "").trim()) e.push("--literal is required (the literal as the criterion writes it)");
+    else if (Number.isInteger(n) && n >= 1 && req.criteria[n - 1] && !isCriterionLiteral(req.criteria[n - 1], rec.literal))
+      e.push(`"${rec.literal}" is not a literal of ${rec.req} AC${n} (sdd req show ${rec.req} --ac ${n})`);
+    return e;
   }
   if (rec.type !== "waiver" && req.verification && req.verification !== rec.type && VERIFICATION_METHODS.includes(req.verification))
     e.push(`${rec.req} is verified by ${req.verification}, not ${rec.type}`);
@@ -575,6 +608,11 @@ export function evaluate(opts) {
   const recAtt = (r) => ({ attachments: recordAttachments(root, r.attachments, files), ...(r.dirty ? { dirty: true } : {}) });
   const settings = opts.visual ? { visual: opts.visual, dir: opts.evidenceDir || DEFAULT_EVIDENCE_DIR } : evidenceSettings(root);
   const visual = settings.visual;
+  // Literal check (sdd lint --quotes): Q-02/Q-03 errors of the test files that name a criterion, unless a person
+  // excepted the literal. Under enforce a passing criterion of a Must with a gap is `weakened`.
+  const literal = opts.literal || literalGate(root);
+  const literalGaps = literal === "off" ? new Map()
+    : literalGapsByCriterion(lintQuotes({ root, reqs, scenarios, records: decisions.records }));
   const evFiles = visual === "off" ? [] : scanEvidence(root, settings.dir);
   // A file of the evidence dir bound by its name counts like a JUnit report read without --junit-sha: captured on a
   // clean tree, after the last commit that changed the code paths.
@@ -614,20 +652,7 @@ export function evaluate(opts) {
   }
   const rel = (p) => path.relative(root, p) || p;
 
-  // Scenario index: (req, n) → scenario ids; scenario id → [(req, n)].
-  const byScenario = new Map(), byCriterion = new Map(), unknownScenarioTags = [];
-  for (const s of scenarios) {
-    for (const t of s.tags) {
-      const acs = t.acs.length ? t.acs : [0]; // 0 = whole requirement
-      for (const n of acs) {
-        const k = `${t.req}#${n}`;
-        if (!byCriterion.has(k)) byCriterion.set(k, new Set());
-        byCriterion.get(k).add(s.id);
-        if (!byScenario.has(s.id)) byScenario.set(s.id, []);
-        byScenario.get(s.id).push({ req: t.req, n });
-      }
-    }
-  }
+  const { byScenario, byCriterion } = scenarioIndex(scenarios);
 
   // Tests bound to (req, n).
   const testsByCriterion = new Map(), unboundTests = [], unknownScenarios = new Set();
@@ -717,6 +742,10 @@ export function evaluate(opts) {
         if (inspection) c.records.push(inspection.line);
       }
       if (req.type === "F" && visual !== "off") c.evidence.push(...captures(req.id, i, c.scenarios));
+      if (literal !== "off") {
+        c.literal_gaps = literalGaps.get(`${req.id}#${i}`) || [];
+        if (literal === "enforce" && priority === "Must" && method === "test" && c.state === "pass" && c.literal_gaps.length) c.state = "weakened";
+      }
       criteria.push(c);
     }
     // Visual evidence (REQ-F): a criterion is shown to the customer only with a screenshot. `required` holds a passing
@@ -743,8 +772,10 @@ export function evaluate(opts) {
     else if (!method || passing < criteria.length) verdict = "MISSING";
     else verdict = "VERIFIED";
     const evidence = criteria.flatMap((c) => c.evidence.map((e) => ({ ac: c.n, ...e })));
-    const unshownOnly = verdict === "MISSING" && criteria.some((c) => c.state === "unshown") && criteria.every((c) => c.state === "pass" || c.state === "unshown");
-    requirements.push({ ...base, verdict, reason: unshownOnly ? "no visual evidence" : null, criteria, criteria_total: criteria.length, criteria_passing: passing, evidence, waiver,
+    const heldBack = verdict === "MISSING" && criteria.every((c) => ["pass", "unshown", "weakened"].includes(c.state));
+    const reason = !heldBack ? null : criteria.some((c) => c.state === "weakened") ? "test does not carry the criterion's literal"
+      : criteria.some((c) => c.state === "unshown") ? "no visual evidence" : null;
+    requirements.push({ ...base, verdict, reason, criteria, criteria_total: criteria.length, criteria_passing: passing, evidence, waiver,
       stale_evidence: verdict === "MISSING" && criteria.some((c) => c.state === "stale") });
   }
 
@@ -795,7 +826,7 @@ export function evaluate(opts) {
     junit: (junit?.files || []).map((f) => ({ path: rel(f.path), cases: f.cases.length, fresh: junitFresh.get(f.path).ok, stale_reason: junitFresh.get(f.path).why })),
     junit_sha: junitSha,
     spec_tests: specTests,
-    visual_evidence: visual, evidence_dir: settings.dir, videos,
+    visual_evidence: visual, evidence_dir: settings.dir, videos, literal_gate: literal,
     requirements, summary,
     fase_acceptances: faseAcceptances,
     stale_decisions: staleDecisions,
@@ -836,6 +867,11 @@ export function summarize(list) {
     // REQ-F criteria whose tests pass without a screenshot (state unshown under `required`, still pass under `warn`).
     unshown: list.filter((r) => r.verdict !== "DEPRECATED" && r.verdict !== "WAIVED")
       .flatMap((r) => r.criteria || []).filter((c) => c.visual === "missing" && (c.state === "pass" || c.state === "unshown")).length,
+    // Criteria whose test file lacks the criterion's letter (Q-02/Q-03 of sdd lint --quotes, not excepted), and those
+    // held back as `weakened` under literal_gate enforce (Musts).
+    literal_gaps: list.filter((r) => r.verdict !== "DEPRECATED" && r.verdict !== "WAIVED")
+      .flatMap((r) => r.criteria || []).filter((c) => (c.literal_gaps || []).length).length,
+    weakened: list.flatMap((r) => r.criteria || []).filter((c) => c.state === "weakened").length,
   };
 }
 
@@ -854,6 +890,7 @@ export function routeHint(r, ctx) {
   if (r.verdict === "FAILING") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
   const open = r.criteria.filter((c) => c.state !== "pass");
+  if (open.length && open.every((c) => c.state === "weakened" || c.state === "unshown") && open.some((c) => c.state === "weakened")) return ROUTES.weakened;
   if (open.length && open.every((c) => c.state === "unshown")) return ROUTES.capture;
   if (r.verification === "measurement" && open.length && open.every(remeasurable)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
@@ -865,6 +902,7 @@ export function criterionHint(r, c, ctx) {
   if (c.state === "pass") return null;
   if (c.state === "fail") return ROUTES.fix;
   if (c.state === "unshown") return ROUTES.capture;
+  if (c.state === "weakened") return ROUTES.weakened;
   if (!r.verification) return ROUTES.specGap;
   if (r.verification === "measurement" && remeasurable(c)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
@@ -911,6 +949,7 @@ function evidenceCell(r) {
       else parts.push(`AC${c.n} demo — ${e.ref} (${mark})`);
     }
     if (c.visual) { const img = screenshotOf(c); parts.push(img ? `AC${c.n} screenshot ${img}` : `AC${c.n} no screenshot`); }
+    for (const gap of c.literal_gaps || []) parts.push(`AC${c.n} ${gapText(gap)}`);
   }
   return parts.length ? parts.join("; ") : "—";
 }
@@ -931,6 +970,16 @@ function adversarialLine(ledger) {
   if (!open.length) return null;
   const musts = ledger.summary.must_challenged || 0;
   return `Adversarial (\`adversarial_gate: ${ledger.adversarial_gate || "warn"}\`): ${open.length} open challenge${open.length === 1 ? "" : "s"}${musts ? `, ${musts} on Must requirement${musts === 1 ? "" : "s"}` : ""} (${open.slice(0, 6).join(", ")}${open.length > 6 ? ", …" : ""}) — route adversarial-finding; the verdicts do not change.`;
+}
+const gapText = (g) => g.code === "Q-02" ? `quote not current (Q-02 ${g.file}:${g.line})` : `literal "${clip(g.literal, 40)}" not in the test (Q-03 ${g.file}:${g.line})`;
+/** One line on literal gaps (sdd lint --quotes) for the PR block and the report, or null when there is none. */
+function literalLine(ledger) {
+  const mode = ledger.literal_gate;
+  if (!mode || mode === "off") return null;
+  const crit = ledger.requirements.filter((r) => r.in_scope && r.verdict !== "WAIVED" && r.verdict !== "DEPRECATED")
+    .flatMap((r) => (r.criteria || []).filter((c) => (c.literal_gaps || []).length).map((c) => `${r.id} AC${c.n}${c.state === "weakened" ? " weakened" : ""}`));
+  if (!crit.length) return null;
+  return `Literal letter (\`literal_gate: ${mode}\`): ${crit.length} criteri${crit.length === 1 ? "on" : "a"} whose test lacks the criterion's quote or literal (${crit.slice(0, 8).join(", ")}${crit.length > 8 ? ", …" : ""}) — route weakened-test (a test edit a person approves); \`sdd lint --quotes\` lists them.`;
 }
 /** One line on visual evidence for the PR block and the report, or null when the rule is off or nothing is missing. */
 function visualLine(ledger) {
@@ -975,6 +1024,13 @@ export function renderReport(ledger) {
     if (rows.length) o.push("| Requirement | Criterion | State | Screenshot |", "|---|---|---|---|", ...rows, "");
     if (ledger.videos) o.push(`Videos for FASE ${ledger.scope?.fase ?? "?"}: ${ledger.videos.required.map((id) => `${id} ${ledger.videos.missing.includes(id) ? "missing" : "present"}`).join(" · ")}.`);
   }
+  if (literalLine(ledger)) {
+    o.push("", "## Literal letter", "", `Tests that name a criterion must quote it and assert each of its literals (\`sdd lint --quotes\`). ${literalLine(ledger)}`, "",
+      "| Requirement | Criterion | State | Gap |", "|---|---|---|---|");
+    for (const r of ledger.requirements.filter((x) => x.in_scope && x.verdict !== "WAIVED" && x.verdict !== "DEPRECATED"))
+      for (const c of (r.criteria || []).filter((x) => (x.literal_gaps || []).length))
+        o.push(`| ${r.id} | AC${c.n} | ${c.state} | ${cell(c.literal_gaps.map(gapText).join("; "))} |`);
+  }
   const challenged = ledger.requirements.filter((r) => r.in_scope && (r.challenges || []).length);
   if (challenged.length) {
     o.push("", "## Adversarial challenges", "",
@@ -1010,6 +1066,7 @@ export function renderPrBlock(ledger, code) {
   const o = [`### Acceptance${ledger.scope ? ` — FASE ${ledger.scope.fase}` : ""} (evaluated at \`${sha}\`, gate exit ${code})`, "",
     `Goal: **${s.goal ? (s.must_waived ? "met with waivers" : "met") : "not met"}** — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}.`, "",
     ...(visualLine(ledger) ? [visualLine(ledger), ""] : []),
+    ...(literalLine(ledger) ? [literalLine(ledger), ""] : []),
     ...(adversarialLine(ledger) ? [adversarialLine(ledger), ""] : []),
     "| Requirement | Priority | Verification | Verdict | Criteria | Evidence |", "|---|---|---|---|---|---|"];
   for (const r of rows) o.push(`| ${r.id} ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.verification || "—")} | ${verdictCell(r).replace(" (stale evidence)", "")} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
