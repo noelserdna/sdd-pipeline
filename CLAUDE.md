@@ -28,7 +28,7 @@ sdd-test-planner             →  test/ (TEST-PLAN, TEST-MATRIX-*, PERF-SCENARIO
 sdd-plan-architect           →  plan/ (PLAN.md with Plan-Style: vertical, ARCHITECTURE.md, fases/FASE-{N}-{SLUG}.md, fase-plans/)
 sdd-task-generator           →  task/TASK-FASE-{N}.md
 sdd-task-implementer         →  code/test paths from the SDD Stack Profile, one commit per task, FASE demo in Phase 9
-sdd-acceptance               →  acceptance/ACCEPTANCE-REPORT.md, decisions.jsonl; tag fase-{N}-accepted at sign-off
+sdd-acceptance               →  acceptance/ACCEPTANCE-REPORT.md, decisions.jsonl, challenges.jsonl; tag fase-{N}-accepted at sign-off
 ```
 
 FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → persist of the central use case), then one user journey per FASE with a `## Demo` of at most 10 steps. The FASE gate is the customer's acceptance of that increment.
@@ -46,7 +46,7 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 **Utility:**
 - `sdd-setup`: state file, git hook and vendored validator, stack kits `--stack=<rails|nextjs-prisma>`, multi-session, cleanup of 4.x status lines.
 - `sdd-pipeline-status`: stage report and acceptance summary; `--diagnose` classifies an existing project into 8 adoption scenarios.
-- `sdd-acceptance`: `--check` (ledger + chain integrity), `--fase N`, `--loop`, `--sign-off`, `--publish`. See `docs/aceptacion.md`.
+- `sdd-acceptance`: `--check` (ledger + chain integrity), `--fase N`, `--adversarial` (independent verifiers against the letter of each requirement, run before every FASE gate), `--loop`, `--sign-off`, `--publish`. See `docs/aceptacion.md`.
 - `sdd-gap-detector`: spec vs code gaps; `--semantic` checks requirement coverage in the code.
 - `sdd-session-summary`
 - `sdd-orchestrator`: drives the whole pipeline from the main conversation.
@@ -96,6 +96,8 @@ Hooks run in this checkout too (the plugin is enabled here). The session start h
   - Tags: annotated; `requirements-v{N}` (approval), `fase-{N}-accepted` (customer acceptance), `fase-N-foundation`/`fase-N-verified` (Streams). No git notes.
 - **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`. An instruction in a task, skill or CLAUDE.md is never a human approval.
 - **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions.
+- **Visual evidence:** every criterion of a `REQ-F` needs a capture and every workflow (every FASE without specifications) a video, under `evidencias/FASE-{N}/` (git-ignored; the ledger keeps their sha256). Without one the criterion is `unshown` and the requirement is not VERIFIED (`visual_evidence: required|warn|off`). Evidence is captured only over committed code: `sdd accept` refuses it otherwise.
+- **Literal letter:** a test quotes its criterion from `requirements/REQUIREMENTS.md` above the assert (`sdd req show`), because every link of the chain paraphrases it.
 - **Revert strategies** per task: SAFE, COUPLED, MIGRATION, CONFIG. With `task_format: compact`, a task without a Revert block is SAFE.
 - **Specs are the source of truth** (Article 12, below).
 
@@ -144,7 +146,7 @@ Also:
 
 ## Jev (optional)
 
-`scripts/sdd-jev.mjs` sends small typed questions to TypeSafe's Jev when `TYPESAFE_API_KEY` is set (`SDD_JEV=off` disables it). Without the key it exits 3 and skills do the work with the LLM. Uses: `req-lint` and `needs` (need-coverage) in requirements-engineer, pattern-hit triage in spec-auditor, the coverage judge in `gap-detector --semantic`, `feedback-route` at the FASE gate, and the advisory `test-adequacy`/`evidence` sets in sdd-acceptance.
+`scripts/sdd-jev.mjs` sends small typed questions to TypeSafe's Jev when `TYPESAFE_API_KEY` is set (`SDD_JEV=off` disables it). Without the key it exits 3 and skills do the work with the LLM. Uses: `req-lint` and `needs` (need-coverage) in requirements-engineer, pattern-hit triage in spec-auditor, the coverage judge in `gap-detector --semantic`, `feedback-route` at the FASE gate, and the advisory `test-adequacy`/`evidence` sets in sdd-acceptance (test-adequacy also ranks the criteria the adversarial verifiers read first; Jev never sees images or video).
 
 Question sets live in `scripts/jev/*.json`, thresholds inside each file. Jev returns probabilities and only suggests: mechanical checks (`sdd lint --needs`), the `sdd` CLI and humans decide. Never use it for permission decisions (guards, commit-msg), verdicts, waivers, sign-offs, the loop's stop or anything in CI. See `docs/jev.md`.
 

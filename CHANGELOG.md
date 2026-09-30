@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 5.1: evidencia visual, ronda adversarial y verificación del entorno desplegado
+
+Motivación: la retro de la feature «CV enriquecido» (Campus CodeCrypto, issue #27). El pipeline 5.0.0 entregó 35/35 requisitos trazados y 344 tests en verde, y tres rondas de verificación independiente encontraron aun así 12 huecos reales. Todos seguían cinco patrones: el mock sustituye al provider real, piezas construidas sin cablear, la letra del requisito se diluye en la cadena, los cruces (replay, carreras) no tienen dueño, y local ≠ desplegado. Propuesta en `docs/MEJORAS-SDD-5.1.md`, verificación y diseño en `docs/MEJORAS-SDD-5.1-ANALISIS.md`, reparto en `docs/design/plan-5.1.md`.
+
+#### Changed (incompatible)
+- **Evidencia visual obligatoria en los requisitos funcionales.** Un criterio de un `REQ-F` con su test en verde pero sin captura queda `unshown`, y el requisito no es VERIFIED. Cada workflow (cada FASE en la ruta sin especificaciones) necesita además su vídeo para `sdd gate --fase N`. Las evidencias viven en `evidencias/FASE-{N}/`, fuera de git; el ledger guarda su sha256. Clave del Stack Profile `visual_evidence: required|warn|off` (por defecto `required`).
+  - **Migración:** en un proyecto 5.0, los REQ-F que eran VERIFIED pasan a `unshown` hasta que se vuelva a ejecutar su journey con captura. Un proyecto sin interfaz declara `visual_evidence: off`.
+- **La CLI de aceptación rechaza evidencia sobre código sin commitear.** `sdd accept --junit-sha` y `sdd accept record demo|inspection|measurement|fase-acceptance` / `accept measure` salen con 2 («commit first») si hay cambios sin commitear en el código, salvo `--allow-dirty`, que queda grabado como `dirty: true`. Sin `--junit-sha`, un árbol sucio imprime un aviso.
+
+#### Added
+- **Ronda adversarial**, `sdd-acceptance --adversarial [--fase N]` (`references/adversarial-protocol.md`): un verificador independiente por FASE lee la letra de cada requisito contra el código de producción y los tests, sin poder citar `spec/`, `acceptance/` ni `feedback/` como evidencia; un segundo agente intenta refutar cada hallazgo y una muestra de veredictos limpios. Los hallazgos confirmados van a `acceptance/challenges.jsonl` (`sdd accept challenge add|list`, `sdd accept adversarial plan` como crítico de cobertura) y al loop por la ruta `adversarial-finding`; descartar uno es un registro humano (`challenge-dismissal`). El veredicto no cambia; `adversarial_gate: off|warn|enforce` (por defecto `warn`) decide si un hallazgo abierto en un Must hace salir a `sdd gate` con 4. El orquestador y el lead la ejecutan antes de cada puerta de FASE. Jev solo prioriza qué criterios se revisan primero.
+- **Adjuntos en el ledger:** `[[ATTACHMENT|…]]` del JUnit (Playwright), imágenes nombradas con el id del criterio bajo `evidencias/` (Minitest) y `accept record … --attach`. `sdd accept pack --fase N` empaqueta las evidencias de la FASE con su manifiesto de hashes para entregarlas al cliente; la página de estado las muestra.
+- **`sdd req show <REQ-ID> [--ac N]`**: el texto literal de un requisito, para citarlo en el test.
+- **Letra literal en el test:** el test cita el criterio de `requirements/REQUIREMENTS.md` encima de su assert; el implementer lee la fuente y no la paráfrasis de la tarea. W8 de specifications-engineer conserva los literales visibles en los Then.
+- **Marcador «el usuario ve» / «the user sees»** en los criterios visuales; test-planner planifica un E2E que entra por la ruta del usuario, asserta el texto y captura (gap `MISSING-E2E`); task-generator añade una tarea de journey por FASE.
+- **Replay y carrera:** pregunta 6 de specifications-engineer (segunda ejecución idéntica), técnica «Replay and race» en las matrices (gap `MISSING-REPLAY-SPEC`), criterio de replay en todo requisito que escribe estado y hallazgo CAT-03 en spec-auditor.
+- **Tests de contrato de puertos:** tabla «Puertos con doble» en PLAN-FASE §4, tarea hermana `CONTRACT-<port>` que corre los mismos casos contra el doble y el provider real, y aviso V-21 en `sdd lint --plan`.
+- **Smoke post-deploy:** plantillas `templates/ci/github/sdd-smoke.yml` y `templates/ci/gitlab/sdd-smoke.gitlab-ci.yml`, ofrecidas por `sdd-setup --tracker`; tier `smoke-deploy` en test-planner; preguntas de configuración por entorno y verificación tras el deploy en tech-designer.
+- **Claves del Stack Profile:** `visual_evidence`, `evidence_dir`, `adversarial_gate`, `test_slots`, `staging_url`, `smoke`, `smoke_report_path`, `env_required`, `deploy` (kits v1.2.0; `validate-plugin` las comprueba).
+- **Recursos de la máquina:** `test_slots` limita los procesos de test concurrentes; los subagentes ejecutan tests de uno en uno.
+- Phase 9 del implementer ancla la evidencia a un commit limpio (paso 4.0, CHECK-C13).
+
+#### Fixed
+- Los ficheros sin versionar bajo `code_paths` + `test_paths` no marcaban el árbol como sucio, y el ledger podía dar VERIFIED sobre un commit donde no existían.
+- El Mode 6 del implementer (`--new-tasks-only`) solo ejecutaba tareas `Source: CASCADE-*`: las fix-tasks del loop de aceptación y de la puerta de FASE se quedaban sin implementar.
+
 ## [5.0.0] - 2026-09-28
 
 
