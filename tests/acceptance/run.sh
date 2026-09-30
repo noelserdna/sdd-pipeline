@@ -642,10 +642,15 @@ run accept --fase 1 --report acceptance/F1.md --no-out
 grep -q '^## Visual evidence' "$repo/acceptance/F1.md" && pass "report: Visual evidence section" || bad "report: no Visual evidence section"
 grep -q '^| REQ-F-001 | AC2 | pass | evidencias/FASE-1/REQ-F-001-AC2.png |' "$repo/acceptance/F1.md" && pass "report: screenshot per criterion" || bad "report: screenshot row"
 grep -q '^Videos for FASE 1: FASE-1 present' "$repo/acceptance/F1.md" && pass "report: videos of the FASE" || bad "report: videos line"
-# A FASE that cites workflows asks for one video per WF-NNN (E2E-WF-NNN-NN names), here through a JUnit attachment.
-printf '\n## Workflows\n\nWF-003 alta y listado.\n' >> "$repo/plan/fases/FASE-1-core.md"; commit "docs(plan): cite WF-003"
+# Workflows cited as reading material (Specs a Leer) ask for no video: still FASE-1, already present.
+printf '\n## Specs a Leer\n\n- spec/workflows/WF-009-export.md\n' >> "$repo/plan/fases/FASE-1-core.md"; commit "docs(plan): specs to read"
 run gate --fase 1 --json
-expect "FASE citing WF-003 without its video → 1, missing WF-003" "$rc/$(js 'j.missing_videos.join()')" 1/WF-003
+expect "WF-009 under Specs a Leer asks for no video → 0" "$rc/$(js 'j.missing_videos.length')" 0/0
+# Without a Workflows: header line, the WF-NNN cited inside ## Demo ask for one video each (E2E-WF-NNN-NN names),
+# here through a JUnit attachment.
+printf '\n## Demo\n\n1. Alta y listado (WF-003).\n\n## Notas\n\nWF-008 queda para otra FASE.\n' >> "$repo/plan/fases/FASE-1-core.md"; commit "docs(plan): demo cites WF-003"
+run gate --fase 1 --json
+expect "Demo citing WF-003 without its video → 1, missing WF-003 (not WF-008 of Notas)" "$rc/$(js 'j.missing_videos.join()')" 1/WF-003
 mkdir -p "$repo/test-results"; printf 'vid' > "$repo/test-results/E2E-WF-003-01.webm"
 cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
 <testsuites><testsuite name="e2e/add.spec.ts">
@@ -656,6 +661,16 @@ cat > "$repo/.sdd/junit/e2e.xml" <<'XML'
 XML
 run gate --fase 1 --json
 expect "E2E-WF-003-01.webm attached by the journey test → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
+# A `Workflows:` header line wins over ## Demo; a manual demo recording under evidencias/ counts by its name.
+node -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace(/^(> \*\*Requisitos:\*\*.*)$/m,"$1\n> **Workflows:** WF-003, WF-004"))' "$repo/plan/fases/FASE-1-core.md"
+commit "docs(plan): Workflows header"
+run gate --fase 1 --json
+expect "Workflows: WF-003, WF-004 header → WF-004 missing → 1" "$rc/$(js 'j.missing_videos.join()')" 1/WF-004
+run accept --fase 1 --json --no-out
+expect "ledger videos.required comes from the header (not Demo's WF-003 alone, not WF-008/WF-009)" "$(js 'j.videos.required.join()')" WF-003,WF-004
+printf 'vid' > "$repo/evidencias/FASE-1/demo-manual-WF-004.mp4"
+run gate --fase 1 --json
+expect "manual recording demo-manual-WF-004.mp4 under evidencias/ → gate 0" "$rc/$(js 'j.missing_videos.length')" 0/0
 # warn: reported, the verdicts do not change.
 printf '# p\n\n## SDD Stack Profile\n- visual_evidence: warn\n' > "$repo/CLAUDE.md"
 rm -rf "$repo/evidencias" "$repo/test-results" "$repo/.sdd/junit/e2e.xml"
@@ -666,7 +681,7 @@ expect "warn: summary.unshown still counts them (F-001 ×2, F-002 ×2, F-006 dem
 run accept --no-out
 has "warn: accept prints a warning per criterion" "warning: no screenshot REQ-F-001 AC1"
 run gate --fase 1 --json
-expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003
+expect "warn: missing video listed, gate unchanged → 0" "$rc/$(js 'j.missing_videos.join()')" 0/WF-003,WF-004
 # off: nothing.
 printf '# p\n\n## SDD Stack Profile\n- visual_evidence: off\n' > "$repo/CLAUDE.md"
 run accept --fase 1 --json --no-out

@@ -95,8 +95,10 @@
 //       `adversarial_gate: enforce` (default warn: printed, exit unchanged; off: ignored). Precedence
 //       2 > 1 > 4 > 3 > 0. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate,
 //       else enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
-//       required, asks for a video whose name carries each WF-NNN the FASE file cites (else FASE-N): a missing one is
-//       goal not met (`missing_videos`). --md prints a PR-body block (with a visual-evidence line when one is missing).
+//       required, asks for a video whose name carries each WF-NNN of the FASE file's `Workflows:` header line (without
+//       that line, each WF-NNN cited inside `## Demo`; with none, FASE-N). Any video under evidence_dir counts (manual
+//       demo recordings too), as do JUnit attachments and record --attach files: a missing one is goal not met
+//       (`missing_videos`). --md prints a PR-body block (with a visual-evidence line when one is missing).
 //   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
 //       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}],
 //       missing_videos}; stop is null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the
