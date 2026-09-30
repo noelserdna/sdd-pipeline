@@ -140,6 +140,12 @@ has "journey: V-21 REQ-F-006 AC3" "V-21 warning: REQ-F-006 AC3 (Escenarios of pl
 v21 p4; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.test.ts`/'
 run lint --plan --repo "$P"; expect "sin tarea e2e y con suite: un V-21 por escenario REQ-F (8)" "$(lines 'journey task')" 8
 has "REQ-NF no pide journey" "vertical, 3 FASE(s), 0 error(s), 8 warning(s)"
+v21 p4b; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.journey.spec.ts`/'
+run lint --plan --repo "$P"; expect "x.journey.spec.ts fuera de e2e/ es ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
+v21 p4c; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`src\/fase-0.e2e.test.js`/'
+run lint --plan --repo "$P"; expect "x.e2e.test.js es ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
+v21 p4d; sub "$P/$T0" 's/`e2e\/fase-0\.journey\.spec\.ts`/`tests\/fase-0.spec.ts`/'
+run lint --plan --repo "$P"; expect "x.spec.ts sin .e2e/.journey no es ruta e2e (8)" "$(lines 'journey task')" 8
 rm "$P/CLAUDE.md"
 run lint --plan --repo "$P"; expect "sin suite de aceptación ni ruta e2e: sin avisos de journey" "$(lines 'journey task')" 0
 fresh p5 todo; printf '## SDD Stack Profile\n\n- acceptance: npx playwright test\n' > "$P/CLAUDE.md"
