@@ -29,7 +29,7 @@ Por eso los tests llevan en el nombre el ID de su escenario (lo exigen `sdd-test
 | DEPRECATED | Requisito deprecado: se lista aparte y nunca bloquea |
 | WAIVED | Exención humana vigente para el texto actual del requisito. Un Must exento exige motivo, rol e issue de seguimiento, y hace que la puerta salga con 3 |
 | FAILING | Alguna evidencia fresca falla |
-| MISSING | Algún criterio sin evidencia fresca (no implementado, sin test, o el test no lleva el ID del escenario), o un criterio de un `REQ-F` que pasa sin captura (`unshown`, ver [Evidencia visual](#evidencia-visual)) |
+| MISSING | Algún criterio sin evidencia fresca (no implementado, sin test, o el test no lleva el ID del escenario), un criterio de un `REQ-F` que pasa sin captura (`unshown`, ver [Evidencia visual](#evidencia-visual)) o un criterio de un Must cuyo test no lleva su letra (`weakened`, ver [Letra literal](#letra-literal)) |
 | VERIFIED | Cada criterio tiene evidencia válida de su método. El informe dice cuántos ("3/5") y de qué tipo |
 
 **Frescura.** La evidencia vieja no cuenta:
@@ -58,6 +58,29 @@ Un requisito funcional está hecho cuando se le puede **enseñar** al cliente. P
 - Tras aceptar una FASE, `sdd accept pack --fase N` empaqueta `evidencias/FASE-N/` y un `manifest.json` (ruta, sha256, bytes, criterio, `evaluated_sha`) en `.sdd/entregas/FASE-N-evidencias.tar.gz`. El equipo decide dónde entregarlo o guardarlo.
 - La presencia la comprueba la CLI. Que la captura muestre de verdad el literal del criterio lo comprueban los verificadores de la [ronda adversarial](#ronda-adversarial) y, al final, el cliente en la puerta de FASE, que ve el vídeo y las capturas. Jev no ve imágenes.
 
+## Letra literal
+
+El caso que la motivó: el requisito pedía «Proyectos personales», el test asertaba «Proyectos» y la trazabilidad por id lo dio por VERIFIED. Cada eslabón (BDD, FASE, tarea) parafrasea el criterio; el test es el que lleva la letra al código, con la cita encima del assert (`// REQ-F-081 AC1: "…"`, sacada de `sdd req show`). `sdd lint --quotes` lo comprueba sin modelo:
+
+- **Pares.** Un fichero fuente bajo `test_paths` (por defecto `tests`) nombra un criterio cuando su código, sin comentarios, lleva `REQ-X-NNN ACn` o un id de escenario `AC-NNN-NN` que una etiqueta BDD de `spec/tests/BDD-*.md` liga a `[REQ-X-NNN ACn]`. Cada par (criterio, fichero) se comprueba.
+- **Q-01 (aviso):** el fichero no tiene la cita `REQ-X-NNN ACn: "…"` en un comentario.
+- **Q-02 (error):** la cita no es el texto actual del criterio. Se normalizan espacios y tipos de comilla (`' " « » “ ” ‘ ’` y el acento grave); las mayúsculas no. `…` elide: cada trozo entre elipsis debe estar en el criterio, en orden. Así se ve una cita inventada o una que un MODIFY dejó atrás.
+- **Q-03 (error):** un literal del criterio no aparece en el código del test fuera de los comentarios (la cita no cuenta), con la misma normalización.
+- **Qué es un literal:** el texto entre `"…"`, `'…'`, `«…»`, `“…”` o `‘…’` en cualquier parte del criterio (un apóstrofo como en *user's* no abre comilla), y el texto entre acentos graves **solo a partir del THEN/ENTONCES**, donde es una salida o un mensaje esperado (`` `No tasks` ``). Un fragmento entre acentos graves antes del THEN es el comando o la ruta que el test ejecuta (`` `todo add "Buy milk"` ``, `` `/projects` ``); lo construye un helper, así que no se exige literal, y tampoco las comillas que lleva dentro. Los literales vacíos (`""`) se ignoran.
+- Salida `fichero:línea Q-0N REQ-X-NNN ACn mensaje` y un resumen; `--json` da `{findings: [{code, severity, req, ac, file, line, literal?, quote?, exception?, message}], summary}`. Sale con 1 si hay algún error no exceptuado. `--fase N` limita a los requisitos de la FASE.
+
+**En el libro.** `sdd accept` añade por criterio `literal_gaps` (los Q-02/Q-03 no exceptuados, con fichero y línea) y los cuenta en `summary.literal_gaps`. La clave del Stack Profile `literal_gate` decide qué pasa:
+
+| `literal_gate` | Efecto |
+|---|---|
+| `enforce` (por defecto) | Un criterio de un **Must** que pasa con un hueco queda **`weakened`**; el requisito no es VERIFIED (`MISSING`, `reason: "test does not carry the criterion's literal"`) y `sdd gate` da 1. `sdd loop next` lo enruta como **`weakened-test`**, con los huecos en el target |
+| `warn` | Se informa en `sdd accept`, `sdd gate` y el informe; el estado no cambia |
+| `off` | No se comprueba |
+
+La ruta `weakened-test` es una edición de test: arreglar la cita y asertar el literal exacto. Si entonces el test falla, el defecto está en el código (`fix-code`). Como toda edición de test dentro del bucle, la aprueba una persona (Art. 12).
+
+**Excepción humana.** Cuando un helper construye el literal y nunca aparece tal cual en el test, una persona lo registra: `sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() lo toma de i18n/es.json" --by … --role …`. El literal tiene que ser uno del criterio. El Q-03 pasa a `excepted` mientras el texto del requisito conserve su `reqHash`; tras un MODIFY la excepción caduca y sale en «Decisiones a reconfirmar». El tool guard pregunta antes de cualquier `accept record`.
+
 ## Orden de captura
 
 La evidencia describe un commit, así que el orden es siempre **commit → evidencia → libro → commit `docs(acceptance)`**:
@@ -70,7 +93,7 @@ La evidencia describe un commit, así que el orden es siempre **commit → evide
 La CLI no pregunta: rechaza.
 
 - `sdd accept --junit-sha SHA` con código sucio → exit 2 («commit first»). Sin `--junit-sha` y con el árbol sucio, avisa por stderr y la evidencia cuenta como obsoleta.
-- `sdd accept record …` (salvo `waiver` y `challenge-dismissal`, que no observan nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
+- `sdd accept record …` (salvo `waiver`, `challenge-dismissal` y `literal-exception`, que no observan nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
 - Un FAIL arreglado después de capturar es código nuevo: commit y volver al paso 1.
 
 ## Ronda adversarial
@@ -128,6 +151,8 @@ node "$SDD" accept --remeasure [--fase N]     # vuelve a ejecutar las mediciones
 node "$SDD" accept record fase-acceptance --fase 1 --result accepted|observations|rejected --channel "demo 2026-09-27" --by … --role …
 node "$SDD" accept pack --fase 1              # evidencias/FASE-1/ + manifest.json → .sdd/entregas/FASE-1-evidencias.tar.gz
 node "$SDD" req show REQ-F-004 [--ac 2] [--json]   # enunciado y criterios literales
+node "$SDD" lint --quotes [--fase N] [--json]       # cita y literales de cada criterio en sus tests (Q-01..Q-03)
+node "$SDD" accept record literal-exception --req REQ-F-004 --ac 2 --literal "…" --reason "…" --by … --role …
 node "$SDD" accept adversarial plan [--fase N] [--json]
 node "$SDD" accept challenge add --req REQ-F-004 --ac 2 --category WEAKENED-ASSERT --quote "…" --evidence src/x.ts:41 --verifier … --counter confirmed
 node "$SDD" accept challenge list [--open] [--json]
@@ -171,7 +196,7 @@ Si se cumplen varias condiciones sale la más grave: 2 > 1 > 4 > 3 > 0 (un chall
 
 Sobre la rama por defecto, `--loop` y `--sign-off` empiezan con `sdd branch start acceptance`, que crea (o retoma) `acceptance/{YYYY-MM-DD}` para sus commits; en cualquier otra rama se quedan en ella.
 
-Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; también un criterio sin test en un proyecto sin `spec/tests`, porque la ruta saltó las specs y el criterio es el contrato), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma), `capture-evidence` (un criterio `unshown`, o un vídeo que falta, con un target por vídeo: se vuelve a ejecutar el journey con captura, exportando `SDD_FASE` y `SDD_EVIDENCE_DIR`, sin tarea de código), `adversarial-finding` (un challenge confirmado: tarea con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
+Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; también un criterio sin test en un proyecto sin `spec/tests`, porque la ruta saltó las specs y el criterio es el contrato), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma), `capture-evidence` (un criterio `unshown`, o un vídeo que falta, con un target por vídeo: se vuelve a ejecutar el journey con captura, exportando `SDD_FASE` y `SDD_EVIDENCE_DIR`, sin tarea de código), `weakened-test` (el test pasa sin la letra del criterio: se corrige la cita y el assert, y lo aprueba una persona), `adversarial-finding` (un challenge confirmado: tarea con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
 
 **`--sign-off`** pasa la puerta en modo `enforce`, enseña el informe al aprobador y pregunta de forma explícita. Solo cuenta su respuesta: una instrucción en una tarea, una skill o `CLAUDE.md` nunca es la confirmación. Aceptar exige la puerta cumplida (exit 0, o 3 con las exenciones a la vista); un rechazo se registra aunque no lo esté. En la puerta de FASE, antes de preguntar, el cliente confirma la evidencia de los requisitos por demo, medición o inspección (`accept record demo|measurement|inspection`), que el implementador dejó pendientes. Para una FASE registra `fase-acceptance`, hace commit del informe (`docs(acceptance): accept FASE-N`) y, si el resultado es aceptado o con observaciones, crea el tag anotado `fase-{N}-accepted` con aprobador, rol, canal, demo y SHA. Las observaciones no bloquean: cada una pasa a feedback o a `sdd-req-change`. Un rechazo no crea tag y su feedback se enruta como defecto, petición de cambio o pregunta. Una entrega (`--release`) usa el tag o la release que el proyecto ya tenga, con el bloque de `sdd gate --md` en su mensaje.
 

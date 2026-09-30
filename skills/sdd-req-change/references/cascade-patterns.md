@@ -341,7 +341,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |
 | `tech-designer` | `dimensions_analyzed`, `quality_attributes`, `adr_drafts`, `trade_offs_evaluated` |
 | `ux-designer` | `dimensions_analyzed`, `wireframes`, `components_specified`, `wcag_level`, `design_tokens`, `frontend_security_items` |
-| `acceptance` | `must_total`, `must_verified`, `must_waived`, `failing`, `missing`, `stale_evidence`, `goal` (`met` \| `met-with-waivers` \| `not-met`), `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, `unshown`; from the last adversarial round `adversarial_findings`, `adversarial_confirmed`, `adversarial_refuted`, `adversarial_open`, `adversarial_agents`, `coverage_gaps` |
+| `acceptance` | `must_total`, `must_verified`, `must_waived`, `failing`, `missing`, `stale_evidence`, `goal` (`met` \| `met-with-waivers` \| `not-met`), `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, `unshown`, `literal_gaps` (criteria whose test lacks the criterion's quote or literal, `sdd lint --quotes`); from the last adversarial round `adversarial_findings`, `adversarial_confirmed`, `adversarial_refuted`, `adversarial_open`, `adversarial_agents`, `coverage_gaps` |
 | `gap-detector` | `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`, `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`, `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` \| `llm`) |
 
 Each skill's own Persist section is authoritative; this table mirrors them.

@@ -61,6 +61,13 @@ test('E2E-WF-004-01 REQ-F-081 AC1 project list shows the personal section', asyn
 An assert on `/proyectos/i` or on `toBeVisible()` of the list passes while the page reads 'Mis proyectos': the quote
 next to it makes that gap visible to the reviewer and to the adversarial round.
 
+`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" lint --quotes [--fase N]` checks the convention in every test file that names a criterion (by
+`REQ-X-NNN ACn` or by a scenario id bound to it): Q-01 no quote (warning), Q-02 the quote is not the criterion's
+current text, Q-03 a literal of the criterion (text in quotes, or in backticks after THEN) is missing from the code
+outside comments. Under `literal_gate: enforce` (the default) the ledger holds a Must criterion with a Q-02 or Q-03
+back as `weakened`, so the requirement is not VERIFIED. A literal that a helper builds is not an exception you grant
+yourself: assert the built value against the literal, or leave it to a person (`accept record literal-exception`).
+
 ---
 
 ## The RED-GREEN-REFACTOR Cycle
