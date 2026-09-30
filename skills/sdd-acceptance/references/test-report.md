@@ -20,8 +20,9 @@ Rules that make the results usable as evidence:
 - **Names carry the scenario id.** Each test starts its name with the `AC-NNN-NN` of the scenario it verifies
   (`it("AC-001-02 rejects an empty title")`, `test "AC-001-02 rejects an empty title"`); one test may name several.
   `REQ-F-001 AC2` also binds, for criteria without a scenario file. Nothing else binds a test to a criterion.
-- **Whole suite, current commit.** Run the full suite at `HEAD` on a clean tree and pass `--junit-sha HEAD` to
-  `sdd accept`; a partial run leaves criteria MISSING, and old XML is reported as stale evidence.
+- **Whole suite, current commit.** Run the full suite at `HEAD` on a clean tree (untracked files included) and pass
+  `--junit-sha HEAD` to `sdd accept`, which refuses a dirty tree; a partial run leaves criteria MISSING, and old XML
+  is reported as stale evidence.
 - **Captures ride on the JUnit.** A test of a `REQ-F` criterion saves its capture as
   `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` and attaches it (`testInfo.attach(name, { path })` in
   Playwright), so the XML carries `[[ATTACHMENT|path]]` in `<system-out>` and the ledger binds the image to the

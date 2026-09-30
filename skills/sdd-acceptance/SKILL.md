@@ -104,11 +104,15 @@ through `sdd-req-change` reopens the requirement automatically ("Decisions to re
 
 ### Step 1: Capture test results
 
-The ledger reads JUnit XML, so the tests must have written it for the current commit.
+The ledger reads JUnit XML, so the tests must have written it for the current commit. The order is always
+**commit → evidence → ledger → `docs(acceptance)` commit**: results captured over uncommitted code describe a tree no
+commit holds, so the CLI refuses them rather than asking.
 
-1. `git status --porcelain --untracked-files=no -- <code_paths> <test_paths>` must be empty: results from a dirty
-   tree are not evidence of any commit. When it is not, say which files are modified and ask whether to commit them
-   first or to continue knowing that test evidence will count as stale.
+1. `git status --porcelain --untracked-files=all -- <code_paths> <test_paths>` must be empty. Untracked files count:
+   a new file nobody added may be what the tests depend on, and it is not in `HEAD` (the ledger lists them as
+   `untracked_paths`). When the tree is dirty, say which files and stop this step until they are committed (by the
+   implementer, or by the user for their own changes); `sdd accept --junit-sha` on a dirty tree exits 2 ("commit
+   first"), and without `--junit-sha` the CLI only warns and the evidence counts as stale.
 2. `SHA=$(git rev-parse HEAD)`, then run the profile's `test_report` from `app_dir`:
    `(cd "$APP_DIR" && <test_report>)`. Failing tests are expected and are evidence too; the command must produce the
    XML (look under `test_report_path`, else `.sdd/junit/`). No XML newer than the start of the run → report the
@@ -123,8 +127,13 @@ The ledger reads JUnit XML, so the tests must have written it for the current co
 node "$SDD" accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [--fase N]
 ```
 
-Pass `--junit-sha` only when Step 1 ran on a clean tree at `$SHA`; otherwise omit it and the CLI falls back to file
-times. When a requirement's route is `remeasure` (a stale measurement first recorded by `accept measure`), run the
+Pass `--junit-sha` whenever Step 1 captured at `$SHA` on a clean tree; the CLI checks the tree itself and exits 2
+when it is dirty. Without it the CLI falls back to file times and warns on stderr. Human records follow the same
+rule: every `accept record` except `waiver` (which asserts nothing about the code), and `accept measure`, exit 2 on
+dirty code, so commit first; `--allow-dirty` exists for a record that genuinely cannot wait, and is stored as
+`dirty: true` for every later reader to see.
+
+When a requirement's route is `remeasure` (a stale measurement first recorded by `accept measure`), run the
 same command once more with `--remeasure`: the CLI re-runs that measurement's command, appends the new value and
 prints a `remeasured …` line for each, which you show; no person is asked for an objective metric.
 
