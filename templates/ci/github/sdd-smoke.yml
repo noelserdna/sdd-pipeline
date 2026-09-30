@@ -1,0 +1,124 @@
+# SDD post-deploy smoke (sdd-pipeline) — installed by `/sdd-setup --tracker` as .github/workflows/sdd-smoke.yml when
+# the SDD Stack Profile sets `staging_url` and `smoke`. It is separate from the PR check (sdd.yml): it runs the
+# profile's `smoke` command against the deployed staging environment, uploads its JUnit report and fails the run when
+# the smoke fails. It only verifies the deployed increment; monitoring, scheduled checks and rollback stay with the
+# project's operations (out of the plugin's scope).
+#
+# Inputs it reads:
+#   SMOKE_BASE_URL   GitHub environment variable (Settings → Environments → staging → Variables), or the `base_url`
+#                    input; falls back to the profile's `staging_url`.
+#   SMOKE_USER       secret of the smoke user (environment or repository secret); never write it in this file.
+#   SMOKE_PASSWORD   secret of the smoke user.
+#   smoke            profile command; it must write JUnit XML under SMOKE_REPORT_PATH.
+#   smoke_report_path  profile key, default .sdd/junit/smoke; exported as SMOKE_REPORT_PATH.
+#
+# Hook it into the deploy workflow (setup never edits that workflow; add this job there by hand):
+#
+#   smoke-staging:
+#     needs: deploy-staging            # the job that deploys to staging
+#     uses: ./.github/workflows/sdd-smoke.yml
+#     with:
+#       ref: ${{ github.sha }}         # the commit that was deployed
+#     secrets: inherit
+#
+# Alternative that leaves the deploy workflow untouched: replace the `on:` block below with
+#
+#   on:
+#     workflow_run:
+#       workflows: ["Deploy staging"]  # the `name:` of the deploy workflow
+#       types: [completed]
+#
+# and add `if: github.event.workflow_run.conclusion == 'success'` to the job; the deployed commit is then
+# `github.event.workflow_run.head_sha` (use it for `ref`). Secrets come from the environment directly in that case.
+name: sdd-smoke
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: "Base URL of the deployed environment (default: the SMOKE_BASE_URL variable of the environment)"
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Commit that was deployed (default: the calling commit)"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "GitHub environment holding SMOKE_BASE_URL and the smoke user secrets"
+        required: false
+        type: string
+        default: staging
+    secrets:
+      SMOKE_USER:
+        required: false
+      SMOKE_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      SMOKE_USER: ${{ secrets.SMOKE_USER }}
+      SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+      SMOKE_SHA: ${{ inputs.ref || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}   # test the code that was deployed, not a later commit
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Install what the smoke command needs before it runs. Example for a Playwright suite:
+      # - run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Read the SDD Stack Profile
+        env:
+          CI_BASE_URL: ${{ inputs.base_url || vars.SMOKE_BASE_URL }}
+        run: |
+          prof() {
+            awk -v k="$1" '
+              /^##?[[:space:]]/ { inside = (tolower($0) ~ /^##[[:space:]]+sdd stack profile[[:space:]]*$/); next }
+              inside && match($0, "^[[:space:]]*[-*][[:space:]]+" k ":[[:space:]]*") {
+                v = substr($0, RLENGTH + 1); sub(/[[:space:]]+$/, "", v)
+                if (v ~ /^`.*`$/) v = substr(v, 2, length(v) - 2)
+                found = v
+              }
+              END { print found }' CLAUDE.md 2>/dev/null
+          }
+          url="$CI_BASE_URL"
+          staging="$(prof staging_url)"
+          if [ -z "$url" ] && [ "$staging" != none ]; then url="$staging"; fi
+          report="$(prof smoke_report_path)"
+          {
+            echo "SMOKE_BASE_URL=$url"
+            echo "SMOKE_CMD=$(prof smoke)"
+            echo "SMOKE_REPORT_PATH=${report:-.sdd/junit/smoke}"
+          } >> "$GITHUB_ENV"
+
+      - name: Smoke against the deployed environment
+        run: |
+          if [ -z "$SMOKE_CMD" ] || [ "$SMOKE_CMD" = none ]; then
+            echo "::error::sdd-smoke: the SDD Stack Profile in CLAUDE.md has no \`smoke\` command"; exit 1
+          fi
+          if [ -z "$SMOKE_BASE_URL" ]; then
+            echo "::error::sdd-smoke: set the SMOKE_BASE_URL variable on the environment (or the profile's staging_url)"; exit 1
+          fi
+          mkdir -p "$SMOKE_REPORT_PATH"
+          echo "sdd-smoke: ${SMOKE_SHA} against ${SMOKE_BASE_URL}"
+          bash -c "$SMOKE_CMD"
+
+      - name: Upload the smoke JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdd-smoke-junit
+          path: ${{ env.SMOKE_REPORT_PATH || '.sdd/junit/smoke' }}
+          if-no-files-found: warn

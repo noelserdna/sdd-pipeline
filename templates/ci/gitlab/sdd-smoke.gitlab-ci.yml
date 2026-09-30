@@ -1,0 +1,66 @@
+# SDD post-deploy smoke (sdd-pipeline) — installed by `/sdd-setup --tracker` as .gitlab/sdd-smoke.gitlab-ci.yml when
+# the SDD Stack Profile sets `staging_url` and `smoke`. It is separate from the MR check (sdd.gitlab-ci.yml): it runs
+# the profile's `smoke` command against the deployed staging environment right after `deploy:staging`, publishes its
+# JUnit report and fails the pipeline when the smoke fails. It only verifies the deployed increment; monitoring,
+# scheduled checks and rollback stay with the project's operations (out of the plugin's scope).
+#
+# Include it from .gitlab-ci.yml (setup never edits the deploy job; add this line by hand):
+#   include:
+#     - local: .gitlab/sdd-smoke.gitlab-ci.yml
+# The deploy job must be named `deploy:staging`, or change `needs` below. Copy that job's `rules` here so the smoke
+# runs in the same pipelines as the deploy.
+#
+# Inputs it reads (Settings → CI/CD → Variables, scoped to the `staging` environment):
+#   SMOKE_BASE_URL   base URL of the deployed environment; falls back to the profile's `staging_url`.
+#   SMOKE_USER       smoke user, masked and protected; never write it in this file.
+#   SMOKE_PASSWORD   smoke user password, masked and protected.
+#   smoke            profile command; it must write JUnit XML under SMOKE_REPORT_PATH.
+#   smoke_report_path  profile key, default .sdd/junit/smoke; exported as SMOKE_REPORT_PATH.
+
+smoke:staging:
+  stage: .post                    # `needs` starts it as soon as deploy:staging ends
+  image: node:20
+  environment:
+    name: staging
+    action: verify                # reads the environment's variables without recording a new deployment
+  needs:
+    - job: deploy:staging
+      optional: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    # Install what the smoke command needs first. Example for a Playwright suite:
+    # - npm ci && npx playwright install --with-deps chromium
+    - |
+      prof() {
+        awk -v k="$1" '
+          /^##?[[:space:]]/ { inside = (tolower($0) ~ /^##[[:space:]]+sdd stack profile[[:space:]]*$/); next }
+          inside && match($0, "^[[:space:]]*[-*][[:space:]]+" k ":[[:space:]]*") {
+            v = substr($0, RLENGTH + 1); sub(/[[:space:]]+$/, "", v)
+            if (v ~ /^`.*`$/) v = substr(v, 2, length(v) - 2)
+            found = v
+          }
+          END { print found }' CLAUDE.md 2>/dev/null
+      }
+      SMOKE_CMD="$(prof smoke)"
+      staging="$(prof staging_url)"
+      if [ -z "$SMOKE_BASE_URL" ] && [ "$staging" != none ]; then SMOKE_BASE_URL="$staging"; fi
+      report="$(prof smoke_report_path)"
+      export SMOKE_BASE_URL SMOKE_REPORT_PATH="${report:-.sdd/junit/smoke}" SMOKE_SHA="$CI_COMMIT_SHA"
+      if [ -z "$SMOKE_CMD" ] || [ "$SMOKE_CMD" = none ]; then
+        echo "sdd-smoke - the SDD Stack Profile in CLAUDE.md has no smoke command"; exit 1
+      fi
+      if [ -z "$SMOKE_BASE_URL" ]; then
+        echo "sdd-smoke - set the SMOKE_BASE_URL variable for the staging environment (or the profile's staging_url)"; exit 1
+      fi
+      mkdir -p "$SMOKE_REPORT_PATH" sdd-smoke-report
+      echo "sdd-smoke - ${SMOKE_SHA} against ${SMOKE_BASE_URL}"
+      rc=0; sh -c "$SMOKE_CMD" || rc=$?
+      cp -R "$SMOKE_REPORT_PATH/." sdd-smoke-report/ 2>/dev/null || true
+      exit "$rc"
+  artifacts:
+    when: always
+    paths:
+      - sdd-smoke-report/
+    reports:
+      junit: sdd-smoke-report/**/*.xml
