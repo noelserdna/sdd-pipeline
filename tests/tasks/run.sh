@@ -2,7 +2,8 @@
 # Tests de scripts/sdd-task-lint.mjs (sin modelo): gramática V-19 y formas legadas (negrita, encabezados), V-09/V-05/V-06/V-16,
 # formato compacto, ficheros [RETROACTIVE], índice derivado y estado por trailers Task: en un repo git temporal
 # (revert, revert de un revert, commit sin trailer, divergencias de checkbox, task_state del Stack Profile, --rev).
-# Fixtures en tests/fixtures/tasks y tests/tasks/fixtures (tarea CONTRACT- y journey en compact). Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git y node ≥ 18.
+# Fixtures en tests/fixtures/tasks y tests/tasks/fixtures (tarea CONTRACT- y journey en compact); contratos 5.1 de
+# sdd-task-generator y sdd-plan-architect (CONTRACT-, journey, cita literal, Source adversarial, Puertos con doble). Compatible con bash 3.2 (macOS) y bash 5 (Ubuntu CI). Requiere git y node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LINT="$ROOT/scripts/sdd-task-lint.mjs"
@@ -37,6 +38,29 @@ for f in scripts/sdd-task-lint.mjs skills/sdd-task-generator/SKILL.md skills/sdd
   if grep -qF -- "$GRAMMAR" "$ROOT/$f"; then pass "gramática V-19 literal en $f"; else bad "gramática V-19 ausente o distinta en $f"; fi
 done
 run --help; expect "--help sale 0" "$rc" 0; has "--help documenta status" "--require-done"
+
+# ---------------------------------------------------------------- 1b. contratos 5.1 en los ficheros de las skills
+grepf() { if grep -qF -- "$2" "$ROOT/$1"; then pass "$3"; else bad "$3 ($1 no contiene: $2)"; fi; }
+TG=skills/sdd-task-generator
+grepf "$TG/SKILL.md" '**Contract task per port.**' "task-generator Phase 2: tarea CONTRACT- por puerto"
+grepf "$TG/SKILL.md" 'CONTRACT-<port> REQ-F-NNN ACn' "task-generator: nombre del test de contrato"
+grepf "$TG/SKILL.md" '`[PLAN GAP]` (Handling Plan Gaps): without the row' "task-generator: doble sin fila de puerto → PLAN GAP"
+grepf "$TG/SKILL.md" '**Journey task per FASE.**' "task-generator Phase 2: tarea de journey por FASE"
+grepf "$TG/SKILL.md" 'evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png' "task-generator: captura por criterio"
+grepf "$TG/SKILL.md" 'Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}' "task-generator Mode 5: Source adversarial"
+grepf "$TG/SKILL.md" '| V-21 |' "task-generator: V-21"
+grepf "$TG/references/task-template.md" '## Contract task (`CONTRACT-<port>`)' "task-template: plantilla CONTRACT-"
+grepf "$TG/references/task-template.md" '## Journey task (one per FASE with REQ-F scenarios)' "task-template: plantilla de journey"
+grepf "$TG/references/task-template.md" 'Enters through Demo step 1' "task-template: journey entra por la ruta del usuario (en Acceptance)"
+grepf "$TG/references/review-checklist.md" 'opened from requirements/REQUIREMENTS.md' "review-checklist: cita literal sobre el assert"
+grepf "$TG/references/review-checklist.md" 'as written in requirements/REQUIREMENTS.md' "review-checklist: criterios desde REQUIREMENTS.md"
+grepf "$TG/references/review-checklist.md" 'Every `replay` and `race` row' "review-checklist: filas replay/race"
+grepf "$TG/references/review-checklist.md" 'not the visibility of a container' "review-checklist: texto, no contenedor"
+grepf "$TG/references/review-checklist.md" "has a caller on the user's route" "review-checklist: caller en la ruta del usuario"
+if grep -qF 'from FASE file' "$ROOT/$TG/references/review-checklist.md"; then bad "review-checklist aún dice 'from FASE file'"; else pass "review-checklist sin 'from FASE file'"; fi
+grepf skills/sdd-plan-architect/references/plan-templates.md '| Puerto | Interfaz (fichero) | Doble | Provider real | Observable del contrato |' "plan-templates: tabla Puertos con doble"
+grepf skills/sdd-plan-architect/SKILL.md '**Puertos con doble**' "plan-architect: regla de puertos"
+grepf scripts/lib/plan-lint.mjs 'CONTRACT-' "plan-lint: V-21 busca CONTRACT-"
 run bogus; expect "comando desconocido → 2" "$rc" 2
 
 # ---------------------------------------------------------------- 2. lint sobre fixtures
