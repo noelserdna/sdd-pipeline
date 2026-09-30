@@ -69,6 +69,11 @@ run --help; expect "--help exits 0" "$rc" 0
 has "--help documents accept" "sdd accept [--junit PATH...]"
 has "--help documents gate codes" "3 met with waived"
 has "--help documents loop" "sdd loop next"
+has "--help documents accept pack" "sdd accept pack --fase N"
+has "--help documents req show" "sdd req show <REQ-ID> [--ac N]"
+has "--help documents --attach and --allow-dirty" "[--attach FILE...] [--allow-dirty]"
+has "--help documents the visual rule" "visual_evidence: required|warn|off"
+has "--help documents capture-evidence" "route_hint capture-evidence"
 
 # ---------------------------------------------------------------- 2. JUnit dialects
 dialect() { node --input-type=module -e '
