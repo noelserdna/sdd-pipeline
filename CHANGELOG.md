@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-09-30
+
 ### 5.1: evidencia visual, ronda adversarial y verificación del entorno desplegado
 
 Motivación: la retro de la feature «CV enriquecido» (Campus CodeCrypto, issue #27). El pipeline 5.0.0 entregó 35/35 requisitos trazados y 344 tests en verde, y tres rondas de verificación independiente encontraron aun así 12 huecos reales. Todos seguían cinco patrones: el mock sustituye al provider real, piezas construidas sin cablear, la letra del requisito se diluye en la cadena, los cruces (replay, carreras) no tienen dueño, y local ≠ desplegado. Propuesta en `docs/MEJORAS-SDD-5.1.md`, verificación y diseño en `docs/MEJORAS-SDD-5.1-ANALISIS.md`, reparto en `docs/design/plan-5.1.md`.
