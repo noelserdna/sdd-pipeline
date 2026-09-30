@@ -8,7 +8,8 @@
 # feedback commit keeps evidence fresh), machine measurements (accept measure, accept --remeasure), summarised evidence
 # cells, untracked files under the code paths, commit before evidence (--junit-sha, --allow-dirty), attachments
 # (JUnit [[ATTACHMENT|…]], record --attach, name-bound captures), the visual rule (required, warn, off; video per
-# FASE), accept pack and req show. The fixture is a CLI app with `visual_evidence: off` in its CLAUDE.md; section 16
+# FASE), accept pack, req show and the adversarial round (challenges, gate exit 4, loop targets, adversarial plan).
+# The fixture is a CLI app with `visual_evidence: off` in its CLAUDE.md; section 16
 # removes it. bash 3.2 (macOS) and bash 5 (Ubuntu CI); needs git, node ≥ 18.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -713,6 +714,241 @@ run req show REQ-X-999; expect "req show of an unknown id → 1" "$rc" 1
 run req show; expect "req show without an id → 2" "$rc" 2
 run req list; expect "req with an unknown subcommand → 2" "$rc" 2
 run req show REQ-F-001 --requirements nope.md; expect "req show --requirements missing file → 2" "$rc" 2
+
+# ---------------------------------------------------------------- 19. adversarial round: challenges, gate 4, loop, plan
+# acceptance/challenges.jsonl is written only by `accept challenge add`; a challenge sits next to the verdict (never
+# changes it), goes stale when a cited file or the requirement text changes, and is dismissed only by a person.
+repo="$tmp/adv"
+cp -R "$FIX/todo" "$repo"
+git init -q "$repo"
+profile() { { echo "# adv"; echo; echo "## SDD Stack Profile"; echo "- visual_evidence: off"; for l in "$@"; do echo "- $l"; done; } > "$repo/CLAUDE.md"; }
+# commitT MSG TRAILER… → a dated commit with `git commit --trailer` (the FASE's Task: commits feed the candidate files)
+commitT() {
+  n=$((n + 1)); local d m="$1" t; local -a a=(); shift
+  for t in "$@"; do a+=(--trailer "$t"); done
+  d="2026-01-01T01:$(printf %02d "$n"):00"
+  ( cd "$repo" && git add -A && GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -qm "$m" "${a[@]}" )
+}
+chlines() { if [ -f "$repo/acceptance/challenges.jsonl" ]; then wc -l < "$repo/acceptance/challenges.jsonl" | tr -d ' '; else echo 0; fi; }
+lastch() { tail -1 "$repo/acceptance/challenges.jsonl" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);process.stdout.write(String(eval(process.argv[1])))})' "$1"; }
+profile
+mkdir -p "$repo/tests" "$repo/test/models"
+printf 'import { add } from "../src/api.js";\ntest("AC-001-01 adds", () => {\n  expect(add("Buy milk")).toBe("Buy milk");\n});\n' > "$repo/tests/todo.test.js"
+printf 'class TaskTest\n  def test_ac_001_01\n  end\nend\n' > "$repo/test/models/task_test.rb"
+printf '# Test plan\n' > "$repo/test/TEST-PLAN.md"
+commit "init"
+printf 'export const add = (t) => t;\nexport const list = (ts) => ts;\nexport const rm = (ts, id) => ts.filter((t) => t.id !== id);\n' > "$repo/src/api.js"
+commitT "feat(todo): list and rm" "Task: TASK-F1-001" "Refs: REQ-F-002"
+printf 'export const store = new Map();\n' > "$repo/src/store.js"
+commitT "feat(todo): store" "Task: TASK-F1-002" "Refs: REQ-F-001"
+printf 'export const csv = () => "";\n' > "$repo/src/other.js"
+commitT "feat(todo): export" "Task: TASK-F2-001"
+all_green() { junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=pass"; }
+all_green
+add_ok() {
+  run accept challenge add --req REQ-F-001 --ac 1 --category WEAKENED-ASSERT --quote 'task 1 "Buy milk" is pending' \
+    --evidence src/api.js:1 tests/todo.test.js:3 --verifier verifier-FASE-1 --counter confirmed "$@"
+}
+bad_ev() { run accept challenge add --req REQ-F-001 --ac 1 --category UNWIRED --quote q --evidence "$1" --verifier v --counter confirmed; }
+
+run gate --fase 1; expect "adv: gate --fase 1 → 0 before any challenge" "$rc" 0
+add_ok --json
+expect "challenge add → 0" "$rc" 0
+expect "challenge add: id CH-001, req, ac, category, counter" "$(js 'const c=j.challenge; [c.id,c.req,c.ac,c.category,c.counter].join("|")')" "CH-001|REQ-F-001|1|WEAKENED-ASSERT|confirmed"
+expect "challenge add: evidence path:line and cited paths" "$(js 'j.challenge.evidence.map(e=>e.path+":"+e.line).join()+"|"+j.challenge.paths.join()')" "src/api.js:1,tests/todo.test.js:3|src/api.js,tests/todo.test.js"
+expect "challenge add: stamps HEAD" "$(js 'j.challenge.head')" "$(cd "$repo" && git rev-parse HEAD)"
+expect "challenge add: stamps the requirement's reqHash" "$(js 'j.challenge.reqHash')" "$(cd "$repo" && node "$SDD" req show REQ-F-001 --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).reqHash))')"
+expect "challenge add: one line in acceptance/challenges.jsonl" "$(chlines)" 1
+before=$(chlines)
+bad_ev spec/tests/BDD-UC-001.md:5
+expect "evidence under spec/ → 2" "$rc" 2; has "names the forbidden folder" "spec/ is never evidence"
+for p in acceptance/x.md feedback/x.md requirements/REQUIREMENTS.md plan/fases/FASE-1-core.md task/T.md audits/A.md changes/C.md; do
+  mkdir -p "$repo/$(dirname "$p")"; [ -f "$repo/$p" ] || echo x > "$repo/$p"
+  bad_ev "$p:1"
+  expect "evidence under ${p%%/*}/ → 2" "$rc" 2
+done
+rm -rf "$repo/acceptance/x.md" "$repo/feedback" "$repo/task" "$repo/audits" "$repo/changes"
+bad_ev test/models/task_test.rb:2
+expect "test/ outside test_paths → 2" "$rc" 2; has "test/: says why" "not a test path of the Stack Profile"
+bad_ev .sdd/junit/unit.xml:1
+expect "evidence under .sdd/ → 2" "$rc" 2
+run accept challenge add --req REQ-F-001 --ac 1 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v --counter refuted
+expect "--counter refuted → 2" "$rc" 2; has "refuted: goes to the summary" "a refuted finding is not recorded"
+run accept challenge add --req REQ-F-001 --ac 1 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v
+expect "no --counter → 2" "$rc" 2
+run accept challenge add --req REQ-F-099 --ac 1 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v --counter confirmed
+expect "unknown requirement → 2" "$rc" 2
+run accept challenge add --req REQ-F-001 --ac 3 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v --counter confirmed
+expect "criterion that does not exist → 2" "$rc" 2; has "says how many criteria" "has 2 criteria"
+run accept challenge add --req REQ-F-001 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v --counter confirmed
+expect "no --ac → 2" "$rc" 2
+run accept challenge add --req REQ-F-004 --ac 1 --category WEAKENED-ASSERT --quote q --evidence src/api.js:1 --verifier v --counter confirmed
+expect "deprecated requirement → 2" "$rc" 2
+run accept challenge add --req REQ-F-001 --ac 1 --category WRONG --quote q --evidence src/api.js:1 --verifier v --counter confirmed
+expect "unknown category → 2" "$rc" 2; has "lists the categories" "WRONG-CAPTURE"
+run accept challenge add --req REQ-F-001 --ac 1 --category UNWIRED --quote "  " --evidence src/api.js:1 --verifier v --counter confirmed
+expect "empty --quote → 2" "$rc" 2
+run accept challenge add --req REQ-F-001 --ac 1 --category UNWIRED --quote q --evidence src/api.js:1 --counter confirmed
+expect "no --verifier → 2" "$rc" 2
+run accept challenge add --req REQ-F-001 --ac 1 --category UNWIRED --quote q --verifier v --counter confirmed
+expect "no --evidence → 2" "$rc" 2
+bad_ev src/nope.js:1
+expect "missing evidence file → 2" "$rc" 2; has "missing file named" "no such file"
+bad_ev src/api.js:99
+expect "line beyond the file → 2" "$rc" 2; has "says how many lines" "has 3 lines"
+bad_ev src/api.js
+expect "code evidence without a line → 2" "$rc" 2
+bad_ev ../outside.js:1
+expect "evidence outside the repo → 2" "$rc" 2
+echo 'export const x = 1;' > "$repo/src/new.js"
+bad_ev src/new.js:1
+expect "uncommitted (untracked) evidence file → 2" "$rc" 2; has "commit first" "commit first"
+rm -f "$repo/src/new.js"
+echo '// wip' >> "$repo/src/store.js"
+bad_ev src/store.js:1
+expect "evidence file with uncommitted changes → 2" "$rc" 2
+( cd "$repo" && git checkout -q -- src/store.js )
+expect "refused challenges append nothing" "$(chlines)" "$before"
+run accept challenge add --req REQ-F-001 --ac 2 --category BYPASS-PATH --quote "not literal" --evidence src/api.js:2 --verifier v --counter inconclusive
+expect "inconclusive is recorded → 0" "$rc" 0; has "warns when the quote is not literal" "--quote is not a literal part of REQ-F-001 AC2"
+expect "second challenge is CH-002" "$(lastch 'r.id + "|" + r.counter')" "CH-002|inconclusive"
+
+# test/ inside test_paths (Rails Minitest) is evidence; top-level test/*.md never is.
+profile "test_paths: test" "code_paths: src"
+commit "profile: test_paths test"
+run accept challenge add --req REQ-F-002 --ac 1 --category MOCK-ONLY --quote "two lines are printed in id order" --evidence test/models/task_test.rb:2 --verifier v --counter confirmed
+expect "test/ inside test_paths → 0" "$rc" 0
+bad_ev test/TEST-PLAN.md:1
+expect "top-level test/*.md stays forbidden → 2" "$rc" 2
+profile
+commit "profile: back to default"
+
+# list
+run accept challenge list --json
+expect "list --json: counts" "$(js 'j.total + "/" + j.open + "/" + j.stale + "/" + j.dismissed')" "3/3/0/0"
+expect "list --json: Musts with an open challenge" "$(js 'j.must_open.join()')" "REQ-F-001,REQ-F-002"
+run accept challenge list
+has "list: one line per challenge" "CH-001  open"
+has "list: summary line" "challenges: 3 · open 3"
+
+# ledger: the verdict does not change; challenges[] and summary.must_challenged
+all_green
+run accept --fase 1 --report acceptance/ACCEPTANCE-REPORT.md
+expect "accept with challenges → 0" "$rc" 0
+expect "verdict unchanged: F-001 VERIFIED" "$(ledger 'v("REQ-F-001")')" VERIFIED
+expect "ledger: challenges[] per requirement with state" "$(ledger 'R("REQ-F-001").challenges.map(c=>c.id+":"+c.state).join()')" "CH-001:open,CH-002:open"
+expect "ledger: summary.must_challenged" "$(ledger 'L.summary.must_challenged')" 2
+expect "ledger: adversarial_gate default warn" "$(ledger 'L.adversarial_gate')" warn
+has "accept: prints the open challenges" "challenge CH-001 open REQ-F-001 AC1 WEAKENED-ASSERT"
+grep -q '^## Adversarial challenges' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: Adversarial challenges section" || bad "report: no Adversarial challenges section"
+grep -q '^| CH-001 | REQ-F-001 | AC1 | WEAKENED-ASSERT | confirmed | open |' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: one row per challenge" || bad "report: challenge row"
+grep -q '| VERIFIED · challenged CH-001, CH-002 |' "$repo/acceptance/ACCEPTANCE-REPORT.md" && pass "report: the verdict cell names its challenges" || bad "report: verdict cell"
+
+# gate: warn (default) keeps the code; enforce → 4; off ignores; precedence 2 > 1 > 4 > 3 > 0
+run gate --fase 1; expect "gate warn: open Must challenge keeps exit 0" "$rc" 0
+has "gate warn: prints the challenge" "challenge CH-001 open on REQ-F-001 AC1"; has "gate warn: says enforce would exit 4" "enforce would exit 4"
+run gate --fase 1 --md; has "gate --md: adversarial line" "Adversarial (\`adversarial_gate: warn\`): 3 open challenges"
+profile "adversarial_gate: off"; commit "profile: off"
+all_green
+run gate --fase 1; expect "gate off: exit 0" "$rc" 0
+if contains "$out" "challenge CH-001"; then bad "gate off: challenges not printed"; else pass "gate off: challenges not printed"; fi
+profile "adversarial_gate: enforce"; commit "profile: enforce"
+all_green
+run gate --fase 1; expect "gate enforce: open challenge on a Must → 4" "$rc" 4; has "gate: label 4" "open adversarial challenge on a Must"
+run gate --fase 1 --json; expect "gate --json: code 4 and the challenges" "$(js 'j.code + "|" + j.adversarial_gate + "|" + j.must_challenged + "|" + j.open_challenges.map(c=>c.id).join()')" "4|enforce|2|CH-001,CH-002,CH-003"
+run gate --fase 1 --md; has "gate --md: exit 4 in the header" "gate exit 4"
+run gate --fase 1 --mode warn; expect "acceptance_gate warn over enforce → 0" "$rc" 0; has "warn: would exit 4" "would exit 4"
+run gate; expect "precedence: goal not met (1) over an open challenge (4)" "$rc" 1
+junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=fail" "AC-002-01 order=pass" "AC-002-02 empty list=pass"
+run gate --fase 1; expect "precedence: failing (1) over 4" "$rc" 1
+all_green
+echo '// wip' >> "$repo/tests/todo.test.js"
+run gate --fase 1; expect "precedence: stale evidence (2) over 4" "$rc" 2
+( cd "$repo" && git checkout -q -- tests/todo.test.js )
+
+# loop next: challenges are targets; under enforce the goal is not reached while one is open on a Must
+run loop next --reset --fase 1
+expect "loop: no goal stop while a Must challenge is open (enforce)" "$(js 'String(j.stop)')" null
+expect "loop: challenge targets with route and category" "$(js 'j.targets.filter(t=>t.challenge).map(t=>t.challenge+":"+t.route_hint+":"+t.category).join()')" "CH-001:adversarial-finding:WEAKENED-ASSERT,CH-002:needs-human:BYPASS-PATH,CH-003:adversarial-finding:MOCK-ONLY"
+expect "loop: progress counts challenged Musts" "$(js 'j.progress.challenged')" 2
+
+# dismissal: a person's record in decisions.jsonl
+run accept record challenge-dismissal --challenge CH-002 --reason "the other route is admin-only by design" --by "Laura" --role "product owner"
+expect "record challenge-dismissal → 0" "$rc" 0
+expect "dismissal: record carries challenge, req, ac" "$(lastrec 'r.type + "|" + r.challenge + "|" + r.req + "|" + r.ac + "|" + r.by')" "challenge-dismissal|CH-002|REQ-F-001|2|Laura"
+run accept record challenge-dismissal --challenge CH-002 --reason again --by Laura --role "product owner"
+expect "dismissing twice → 2" "$rc" 2; has "already dismissed" "already dismissed"
+run accept record challenge-dismissal --challenge CH-042 --reason r --by Laura --role "product owner"
+expect "unknown challenge → 2" "$rc" 2
+run accept record challenge-dismissal --challenge CH-001 --by Laura --role "product owner"
+expect "dismissal without --reason → 2" "$rc" 2
+run accept record challenge-dismissal --challenge CH-001 --reason r
+expect "dismissal without --by/--role → 2" "$rc" 2
+run accept challenge list --json
+expect "list: CH-002 dismissed with who and why" "$(js 'const c=j.challenges.find(x=>x.id==="CH-002"); c.state + "|" + c.dismissal.by')" "dismissed|Laura"
+
+# stale: the cited code changed since the challenge's HEAD
+printf 'export const add = (t) => ({ title: t, pending: true });\nexport const list = (ts) => ts;\nexport const rm = (ts, id) => ts.filter((t) => t.id !== id);\n' > "$repo/src/api.js"
+commitT "fix(todo): add returns a pending task" "Task: TASK-F1-003" "Refs: REQ-F-001"
+run accept challenge list --json
+expect "CH-001 stale once src/api.js changed" "$(js 'const c=j.challenges.find(x=>x.id==="CH-001"); c.state + "|" + /src\/api\.js/.test(c.stale_reason)')" "stale|true"
+expect "CH-003 still open (test/models untouched)" "$(js 'j.challenges.find(x=>x.id==="CH-003").state')" open
+run accept challenge list --open --json
+expect "list --open: only the open ones" "$(js 'j.challenges.map(c=>c.id).join()')" CH-003
+all_green
+run gate --fase 1; expect "enforce: still 4 while CH-003 is open on REQ-F-002" "$rc" 4
+run accept record challenge-dismissal --challenge CH-003 --reason "the real provider is the one tested" --by Laura --role "product owner"
+run gate --fase 1; expect "enforce: 0 once no Must challenge is open" "$rc" 0
+run loop next --fase 1; expect "loop: goal once no Must challenge is open" "$(js 'j.stop')" goal
+# waived Must (3) vs an open challenge (4): the challenge outranks the waiver
+run accept record waiver --req REQ-F-002 --reason "deferred" --follow-up "#7" --by Laura --role "product owner"
+run gate --fase 1; expect "waived Must, no open challenge → 3" "$rc" 3
+add_ok
+run gate --fase 1; expect "precedence: open challenge (4) over waivers (3)" "$rc" 4
+run accept record challenge-dismissal --challenge CH-004 --reason r --by Laura --role "product owner"
+
+# stale by the requirement text (MODIFY) and by a changed capture
+add_ok
+sed -i.bak 's/THEN task 1 "Buy milk" is pending/THEN task 1 "Buy milk" is pending and listed/' "$repo/requirements/REQUIREMENTS.md"; rm -f "$repo/requirements/REQUIREMENTS.md.bak"
+run accept challenge list --json
+expect "stale when the requirement text changed" "$(js 'j.challenges.find(x=>x.id==="CH-005").stale_reason')" "requirement text changed since the challenge (MODIFY)"
+( cd "$repo" && git checkout -q -- requirements/REQUIREMENTS.md )
+mkdir -p "$repo/evidencias/FASE-1"; printf 'png' > "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept challenge add --req REQ-F-001 --ac 1 --category WRONG-CAPTURE --quote 'Buy milk' --evidence evidencias/FASE-1/AC-001-01.png --verifier v --counter confirmed --json
+expect "a capture of the evidence dir without a line → 0, pinned by sha256" "$(js 'const e=j.challenge.evidence[0]; e.path + "|" + e.line + "|" + /^sha256:/.test(e.sha256)')" "evidencias/FASE-1/AC-001-01.png|null|true"
+printf 'png2' > "$repo/evidencias/FASE-1/AC-001-01.png"
+run accept challenge list --json
+expect "stale when the cited capture changed" "$(js 'j.challenges.find(x=>x.id==="CH-006").stale_reason')" "capture evidencias/FASE-1/AC-001-01.png changed"
+rm -rf "$repo/evidencias"
+
+# adversarial plan: the mechanical coverage critic
+printf '# FASE 2: Export\n\nNo header here.\n\n## Objetivo\n\nExport.\n' > "$repo/plan/fases/FASE-2-export.md"
+commit "plan: FASE-2 without header"
+all_green
+run accept adversarial plan --json
+expect "plan: exit 0" "$rc" 0
+expect "plan: FASEs listed" "$(js 'j.fases.map(f=>f.fase + ":" + f.header).join()')" "1:true,2:false"
+expect "plan: FASE 1 requirements" "$(js 'j.fases[0].requirements.map(r=>r.id).join()')" "REQ-F-001,REQ-F-002"
+expect "plan: literal statement" "$(js 'j.fases[0].requirements[0].statement')" 'WHEN the user runs `todo add <title>` THE system SHALL create a pending task with the next id.'
+expect "plan: criteria with their literal text" "$(js 'j.fases[0].requirements[0].criteria[1].text')" 'GIVEN any state WHEN the user runs `todo add ""` THEN the command exits 2 with `title must not be empty`'
+expect "plan: bound tests with their file" "$(js 'j.fases[0].requirements[0].criteria[0].tests.map(t=>t.name+"@"+t.file).join()')" "AC-001-01 adds@tests/todo.test.ts"
+expect "plan: candidate files of the FASE (Task: TASK-F1-…, under code_paths)" "$(js 'j.fases[0].candidate_files.join()')" "src/api.js,src/store.js"
+expect "plan: candidate files per requirement (commits naming it)" "$(js 'j.fases[0].requirements[0].candidate_files.join()')" "src/api.js,src/store.js"
+expect "plan: tasks of the FASE" "$(js 'j.fases[0].tasks.join()')" "TASK-F1-001,TASK-F1-002,TASK-F1-003"
+expect "plan: uncovered (active, in no FASE)" "$(js 'j.uncovered.map(r=>r.id).join()')" "REQ-F-003,REQ-F-005,REQ-F-006,REQ-NF-001,REQ-NF-002,REQ-C-001"
+expect "plan: fases_without_header" "$(js 'j.fases_without_header.map(f=>f.fase+":"+f.file).join()')" "2:plan/fases/FASE-2-export.md"
+expect "plan: criteria_without_test" "$(js 'j.criteria_without_test.map(c=>c.req+" AC"+c.ac).join()')" "REQ-F-003 AC1,REQ-F-005 AC1,REQ-F-005 AC2"
+expect "plan: coverage_gaps = uncovered + without header" "$(js 'j.coverage_gaps')" 7
+run accept adversarial plan --fase 1 --json
+expect "plan --fase 1: one FASE" "$(js 'j.fases.map(f=>f.fase).join()')" 1
+expect "plan --fase 1: criteria without test scoped to the FASE" "$(js 'j.criteria_without_test.length')" 0
+expect "plan --fase 1: uncovered stays project-wide" "$(js 'j.uncovered.length')" 6
+run accept adversarial plan
+has "plan: text summary" "adversarial plan: 2 FASE(s) · 6 uncovered · 1 without header"
+run accept adversarial plan --fase 9; expect "plan of a FASE that does not exist → 2" "$rc" 2
+run accept adversarial; expect "accept adversarial without plan → 2" "$rc" 2
+run accept challenge; expect "accept challenge without add|list → 2" "$rc" 2
+run --help; has "--help documents challenge add" "sdd accept challenge add --req ID"; has "--help documents gate exit 4" "4 met, but a Must"; has "--help documents adversarial plan" "sdd accept adversarial plan"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"
