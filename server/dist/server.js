@@ -30453,7 +30453,7 @@ function acceptanceView(r) {
 }
 function challengeGaps(r) {
   if (r.verdict === "DEPRECATED") return [];
-  return (r.challenges ?? []).filter((c) => c.state === "open").map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) \u2014 "${c.quote}" at ${c.evidence.map((e) => e.line ? `${e.path}:${e.line}` : e.path).join(", ")} (adversarial-finding)`);
+  return (r.challenges ?? []).filter((c) => c.state === "open").map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) \u2014 "${c.quote}" at ${c.evidence.map((e) => e.line ? `${e.path}:${e.line}` : e.path).join(", ")} (${c.counter === "inconclusive" ? "needs-human" : "adversarial-finding"})`);
 }
 function acceptanceGaps(r) {
   if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return challengeGaps(r);

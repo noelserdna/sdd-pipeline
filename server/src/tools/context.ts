@@ -38,11 +38,12 @@ function acceptanceView(r: AcceptanceRequirement) {
   };
 }
 
-/** Open adversarial challenges are gaps whatever the verdict: they question a criterion a green test counts as met. */
+/** Open adversarial challenges are gaps whatever the verdict: they question a criterion a green test counts as met.
+ *  A confirmed one routes to adversarial-finding (a fix); an inconclusive one to a person (needs-human), as in sdd loop. */
 function challengeGaps(r: AcceptanceRequirement): string[] {
   if (r.verdict === "DEPRECATED") return [];
   return (r.challenges ?? []).filter((c) => c.state === "open")
-    .map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) — "${c.quote}" at ${c.evidence.map((e) => (e.line ? `${e.path}:${e.line}` : e.path)).join(", ")} (adversarial-finding)`);
+    .map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) — "${c.quote}" at ${c.evidence.map((e) => (e.line ? `${e.path}:${e.line}` : e.path)).join(", ")} (${c.counter === "inconclusive" ? "needs-human" : "adversarial-finding"})`);
 }
 
 function acceptanceGaps(r: AcceptanceRequirement): string[] {

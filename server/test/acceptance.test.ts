@@ -170,7 +170,7 @@ test("evidencia visual: un criterio unshown sale como hueco UNSHOWN y el motivo 
 test("ronda adversarial: un challenge abierto es un hueco CHALLENGED aunque el veredicto sea VERIFIED", () => {
   const dir = proyecto(false);
   mkdirSync(path.join(dir, ".sdd"));
-  const ch = (id: string, state: string) => ({ id, ac: 1, category: "WEAKENED-ASSERT", counter: "confirmed", quote: "Proyectos personales",
+  const ch = (id: string, state: string, counter = "confirmed") => ({ id, ac: 1, category: "WEAKENED-ASSERT", counter, quote: "Proyectos personales",
     evidence: [{ path: "src/cv.ts", line: 41 }], verifier: "verifier-FASE-1", head: "abc", at: null, state });
   const ledger = {
     $schema: "sdd-acceptance-v1", evaluated_sha: "abc", dirty: false, untracked_paths: [], generatedAt: "2026-09-30T00:00:00Z", scope: null,
@@ -179,7 +179,7 @@ test("ronda adversarial: un challenge abierto es un hueco CHALLENGED aunque el v
       id: "REQ-F-001", type: "F", title: "Create", priority: "Must", needs: [], verification: "test", verdict: "VERIFIED",
       reason: null, criteria_total: 1, criteria_passing: 1, waiver: null, stale_evidence: false,
       criteria: [{ n: 1, text: "a", scenarios: ["AC-001-01"], state: "pass", evidence: [] }],
-      challenges: [ch("CH-001", "open"), ch("CH-002", "stale")],
+      challenges: [ch("CH-001", "open"), ch("CH-002", "stale"), ch("CH-003", "open", "inconclusive")],
     }],
     summary: { active: 1, deprecated: 0, by_verdict: { VERIFIED: 1, FAILING: 0, MISSING: 0, WAIVED: 0, DEPRECATED: 0 }, by_priority: {},
       must_total: 1, must_verified: 1, must_waived: 0, goal: true, waived_musts: [], stale_evidence: 0,
@@ -188,10 +188,11 @@ test("ronda adversarial: un challenge abierto es un hueco CHALLENGED aunque el v
   writeFileSync(path.join(dir, ".sdd", "acceptance.json"), JSON.stringify(ledger));
   const ctx = parsear(executeContext({ artifact_id: "REQ-F-001" }, emptyGraph(), indiceVacio(), dir));
   assert.equal(ctx.coverageStatus, "VERIFIED", "el veredicto no cambia");
-  assert.equal(ctx.acceptance.challenges.length, 2);
+  assert.equal(ctx.acceptance.challenges.length, 3);
   assert.deepEqual(ctx.gaps.filter((g: string) => g.startsWith("CHALLENGED_")), [
     'CHALLENGED_AC1: CH-001 WEAKENED-ASSERT (confirmed) — "Proyectos personales" at src/cv.ts:41 (adversarial-finding)',
-  ], "solo el abierto es un hueco");
+    'CHALLENGED_AC1: CH-003 WEAKENED-ASSERT (inconclusive) — "Proyectos personales" at src/cv.ts:41 (needs-human)',
+  ], "solo los abiertos son huecos; el inconclusive va a una persona");
 });
 
 test("la pista de sdd_trace apunta a sdd-acceptance, no a traceability-check", () => {
