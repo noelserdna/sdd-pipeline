@@ -16,6 +16,8 @@ bad()  { echo "FAIL $1"; fail=1; }
 contains() { case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
 # run ARGS… → output (stdout+stderr) in $out, exit code in $rc; runs inside the temp repo
 run() { rc=0; out=$(cd "$repo" && node "$SDD" "$@" 2>&1) || rc=$?; }
+# runo ARGS… → like run, but $out holds stdout only and $err stderr (JSON output next to a stderr warning)
+runo() { rc=0; out=$(cd "$repo" && node "$SDD" "$@" 2>"$tmp/stderr") || rc=$?; err=$(cat "$tmp/stderr"); }
 # js EXPR → EXPR evaluated with j = JSON.parse($out)
 js() { printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(eval(process.argv[1])))})' "$1"; }
 # ledger EXPR → EXPR over .sdd/acceptance.json (L), with v(id) = verdict of a requirement
@@ -225,7 +227,7 @@ run accept --json --no-out
 expect "an uncommitted docs change does not make JUnit stale" "$(js 'j.junit[0].fresh + "/" + j.dirty')" true/true
 ( cd "$repo" && git checkout -q -- NOTES.md )
 printf 'export const add = (t) => t.toUpperCase();\n' > "$repo/src/api.js"
-run accept --json --no-out
+runo accept --json --no-out
 expect "an uncommitted src/ change makes JUnit stale" "$(js 'j.junit[0].fresh')" false
 expect "an uncommitted src/ change makes a demo without paths stale" "$(js 'j.requirements.find(r=>r.id==="REQ-F-006").verdict')" MISSING
 ( cd "$repo" && git checkout -q -- src/api.js )
@@ -449,7 +451,7 @@ all_green
 run accept --json --no-out
 expect "baseline: clean tree, F-001 and F-006 VERIFIED, no untracked paths" "$(js '["REQ-F-001","REQ-F-006"].map(id=>j.requirements.find(r=>r.id===id).verdict).join() + "/" + j.untracked_paths.length')" VERIFIED,VERIFIED/0
 printf 'export const helper = 1;\n' > "$repo/src/helper.js"
-run accept --json --no-out
+runo accept --json --no-out
 expect "untracked file under src/: JUnit stale" "$(js 'j.junit[0].fresh')" false
 expect "untracked file under src/: listed in untracked_paths" "$(js 'j.untracked_paths.join()')" src/helper.js
 expect "untracked file under src/: ledger dirty" "$(js 'j.dirty')" true
@@ -462,6 +464,50 @@ all_green
 run accept --json --no-out
 expect "untracked file outside the code paths: JUnit fresh, not listed" "$(js 'j.junit[0].fresh + "/" + j.untracked_paths.length')" true/0
 rm -f "$repo/scratch.txt"
+
+# ---------------------------------------------------------------- 14. commit before evidence (M7.1, bug 3)
+# Evidence and human observations are anchored to a commit: on uncommitted code they would be stale from birth.
+printf 'export const add = (t) => t;\n' > "$repo/src/api.js"
+run accept --junit-sha HEAD --no-out
+expect "--junit-sha with uncommitted code → 2" "$rc" 2; has "--junit-sha: says commit first" "commit first"
+run gate --junit-sha HEAD
+expect "gate --junit-sha with uncommitted code → 2" "$rc" 2
+runo accept --no-out --json
+expect "accept without --junit-sha on uncommitted code still exits 0" "$rc" 0
+contains "$err" "warning: uncommitted changes under the code paths (src/api.js)" && pass "…with a warning: line on stderr" || bad "dirty warning ($err)"
+expect "…and stdout stays JSON" "$(js 'j.$schema')" sdd-acceptance-v1
+before=$(dlines)
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "record demo on uncommitted code → 2" "$rc" 2; has "record: names the path and says commit first" "uncommitted changes in src/api.js: commit first"
+run accept record inspection --req REQ-C-001 --note ok --by Ana --role "tech lead"
+expect "record inspection without paths on uncommitted code → 2" "$rc" 2
+run accept record measurement --req REQ-NF-002 --metric statements --observed 95 --op ge --threshold 90 --by Ana --role "tech lead"
+expect "record measurement on uncommitted code → 2" "$rc" 2
+run accept record fase-acceptance --fase 1 --result accepted --channel call --by Laura --role "product owner"
+expect "record fase-acceptance on uncommitted code → 2" "$rc" 2
+printf 'Statements   : 93.4%% ( 120/128 )\n' > "$repo/cov.txt"
+run accept measure "${M[@]}"
+expect "accept measure on uncommitted code → 2" "$rc" 2; has "measure: says commit first" "commit first"
+expect "refused records append nothing" "$(dlines)" "$before"
+run accept record waiver --req REQ-F-005 --reason "customer defers delete" --by Laura --role "product owner" --follow-up "#42"
+expect "a waiver is exempt (observes nothing) → 0" "$rc" 0
+expect "…and carries no dirty flag" "$(lastrec 'r.dirty === undefined')" true
+run accept record inspection --req REQ-C-001 --note "no deps" --paths package.json --by Ana --role "tech lead"
+expect "a record whose own paths are clean is accepted → 0" "$rc" 0
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner" --allow-dirty
+expect "record demo --allow-dirty → 0" "$rc" 0
+expect "…recorded with dirty: true" "$(lastrec 'r.dirty')" true
+run accept measure "${M[@]}" --allow-dirty
+expect "accept measure --allow-dirty → 0" "$rc" 0
+expect "…recorded with dirty: true" "$(lastrec 'r.dirty')" true
+( cd "$repo" && git checkout -q -- src/api.js )
+printf 'export const extra = 1;\n' > "$repo/src/extra.js"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "an untracked file under src/ also refuses a record → 2" "$rc" 2
+rm -f "$repo/src/extra.js" "$repo/cov.txt"
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --by Laura --role "product owner"
+expect "clean tree: record demo → 0, no dirty flag" "$rc/$(lastrec 'r.dirty === undefined')" 0/true
+( cd "$repo" && git checkout -q -- acceptance/decisions.jsonl )
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

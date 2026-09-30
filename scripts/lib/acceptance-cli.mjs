@@ -9,7 +9,7 @@ import { readJUnit } from "./junit.mjs";
 import {
   SCHEMA, RECORD_TYPES, DECISIONS_FILE, ROUTES, evaluate, gitContext, loadScenarios, readDecisions,
   validateRecord, reqHash, faseScope, renderReport, renderPrBlock, routeHint, criterionHint, unchangedSince, acNumber,
-  compareMeasurement,
+  compareMeasurement, dirtyUnder,
 } from "./acceptance.mjs";
 import { parseRequirements, parseNeeds, checkNeedCoverage } from "../sdd-jev.mjs";
 
@@ -24,7 +24,7 @@ const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
   "result", "channel", "demo", "requirements", "decisions", "command", "extract"]);
 const MULTI = new Set(["junit", "paths"]);
-const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure"]);
+const FLAGS = new Set(["json", "md", "needs", "reset", "no-out", "help", "remeasure", "allow-dirty"]);
 
 function parse(argv) {
   const o = { _: [], junit: [], paths: [] };
@@ -103,6 +103,9 @@ export function buildLedger(o) {
   try { junit = specs.length ? readJUnit(root, specs) : null; } catch (e) { die(e.message); }
   const exclude = [...(junit?.files || []).map((f) => path.relative(root, f.path)), o.out, o.report].filter(Boolean);
   const g = gitContext(root, { exclude });
+  // A report asserted to come from a commit cannot come from a worktree that differs from it on the code paths.
+  if (o["junit-sha"] && g.repo && g.codeDirty)
+    die(`--junit-sha: uncommitted changes under the code paths (${g.codeDirtyPaths.slice(0, 3).join(", ")}): commit first, then run the tests and capture again`);
   const junitSha = o["junit-sha"] ? (g.repo ? resolveSha(root, o["junit-sha"]) : o["junit-sha"]) : null;
   const decisions = readDecisions(path.resolve(root, o.decisions || DECISIONS_FILE));
   const scope = scopeFor(root, reqs, o.fase);
@@ -110,7 +113,13 @@ export function buildLedger(o) {
     scope: scope ? scope.set : null, fase: o.fase ?? null });
   if (scope) { ledger.scope.file = scope.file; ledger.scope.from_header = scope.fromHeader; }
   ledger.junit_searched = specs;
-  return { root, ledger };
+  return { root, ledger, git: g };
+}
+/** stderr warning: evidence read from a dirty tree without --junit-sha (the JUnit then counts as stale). */
+function warnDirty(o, g) {
+  if (o["junit-sha"] || !g?.repo || !g.codeDirty) return;
+  const list = `${g.codeDirtyPaths.slice(0, 3).join(", ")}${g.codeDirtyPaths.length > 3 ? ", …" : ""}`;
+  console.error(`warning: uncommitted changes under the code paths (${list}): test evidence counts as stale. Commit first, run the tests, then capture with --junit-sha <HEAD>`);
 }
 function resolveSha(root, rev) {
   const r = git(root, ["rev-parse", "-q", "--verify", `${rev}^{commit}`]);
@@ -148,7 +157,8 @@ function cmdAccept(o) {
   if (o._[0] === "measure") { o._.shift(); return cmdMeasure(o); }
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
   const failed = o.remeasure ? remeasure(o) : 0;
-  const { root, ledger } = buildLedger(o);
+  const { root, ledger, git: g } = buildLedger(o);
+  warnDirty(o, g);
   const outFile = o["no-out"] ? null : (o.out || ".sdd/acceptance.json");
   if (outFile && outFile !== "-") writeJson(root, outFile, ledger);
   if (o.report) writeText(root, o.report, renderReport(ledger));
@@ -192,10 +202,25 @@ function cmdRecord(o) {
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
+  // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver observes nothing).
+  if (type !== "waiver") {
+    const d = uncommitted(root, g, rec.paths);
+    if (d) {
+      if (!o["allow-dirty"]) { console.error(`${PROG}: accept record ${type}: ${d}: commit first, or pass --allow-dirty to record it with dirty: true`); return 2; }
+      rec.dirty = true;
+    }
+  }
   const { file, n } = appendRecord(root, o, rec);
   if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
   else out(`recorded ${type} ${rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
   return 0;
+}
+
+/** null, or a message naming the uncommitted paths under `paths` (default: the code paths) a record would describe. */
+function uncommitted(root, g, paths) {
+  if (!g.repo) return null;
+  const d = dirtyUnder(root, paths?.length ? paths : g.codePaths);
+  return d.length ? `uncommitted changes in ${d.slice(0, 3).join(", ")}${d.length > 3 ? ", …" : ""}` : null;
 }
 
 function decisionsPath(root, o) { return path.resolve(root, o.decisions || DECISIONS_FILE); }
@@ -214,12 +239,15 @@ function appendRecord(root, o, rec) {
 // it when the code paths change. A measurement a person must confirm stays `accept record measurement`.
 const MEASURE_OUTPUT_MAX = 64 * 1024 * 1024;
 
-/** Run spec.command, extract the number, build and validate the record. Returns { rec, note } or { error, code }. */
-function machineMeasurement(root, reqs, spec) {
+/** Run spec.command, extract the number, build and validate the record. Returns { rec, note } or { error, code }.
+ *  Uncommitted changes under the record's paths (default: the code paths) refuse it unless allowDirty (dirty: true). */
+function machineMeasurement(root, reqs, spec, { allowDirty = false } = {}) {
   let re;
   try { re = new RegExp(spec.extract, "m"); } catch (e) { return { error: `--extract is not a valid regular expression: ${e.message}`, code: 2 }; }
   if (new RegExp(`${spec.extract}|`).exec("").length !== 2) return { error: "--extract needs exactly one capture group, e.g. 'All files[^|]*\\|\\s*([0-9.]+)'", code: 2 };
   const g = gitContext(root);
+  const dirt = uncommitted(root, g, spec.paths);
+  if (dirt && !allowDirty) return { error: `${dirt}: commit first, or pass --allow-dirty to record it with dirty: true`, code: 2 };
   const r = spawnSync(spec.command, { cwd: root, shell: true, encoding: "utf8", maxBuffer: MEASURE_OUTPUT_MAX });
   if (r.error) return { error: `could not run the command: ${r.error.message}`, code: 1 };
   const text = `${r.stdout || ""}\n${r.stderr || ""}`;
@@ -237,10 +265,11 @@ function machineMeasurement(root, reqs, spec) {
   Object.assign(rec, { metric: spec.metric, observed, op: spec.op, threshold: spec.threshold === undefined ? "" : Number(spec.threshold),
     command: spec.command, extract: spec.extract });
   if (r.status !== 0) rec.exitCode = r.status;
+  if (dirt) rec.dirty = true;
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs);
   if (errors.length) return { error: errors.join("; "), code: 2 };
-  const note = g.codeDirty ? `note: uncommitted changes in ${g.codeDirtyPaths.slice(0, 3).join(", ")}: the value reflects the worktree, and the record goes stale once they are committed` : null;
+  const note = dirt ? `note: ${dirt}: recorded with dirty: true; the value reflects the worktree and goes stale once they are committed` : null;
   return { rec, note };
 }
 
@@ -250,7 +279,7 @@ function cmdMeasure(o) {
   for (const k of ["req", "metric", "command", "extract", "op", "threshold"]) if (o[k] === undefined || o[k] === "") usage(`accept measure needs --${k}`);
   const root = rootOf(o);
   const reqs = readReqs(root, o);
-  const res = machineMeasurement(root, reqs, { req: o.req, ac: o.ac, paths: o.paths, metric: o.metric, op: o.op, threshold: o.threshold, command: o.command, extract: o.extract });
+  const res = machineMeasurement(root, reqs, { req: o.req, ac: o.ac, paths: o.paths, metric: o.metric, op: o.op, threshold: o.threshold, command: o.command, extract: o.extract }, { allowDirty: Boolean(o["allow-dirty"]) });
   if (res.error) { console.error(`${PROG}: accept measure: ${res.error}`); return res.code; }
   const { file, n } = appendRecord(root, o, res.rec);
   const r = res.rec;
@@ -275,7 +304,7 @@ function remeasure(o) {
   for (const l of [...lines].sort((a, b) => a - b)) {
     const prev = records.find((x) => x.line === l);
     if (!prev || !prev.command || !prev.extract) continue;
-    const res = machineMeasurement(root, reqs, prev);
+    const res = machineMeasurement(root, reqs, prev, { allowDirty: Boolean(o["allow-dirty"]) });
     if (res.error) { failed++; console.error(`${PROG}: remeasure ${prev.req} (${DECISIONS_FILE}:${l}): ${res.error}`); continue; }
     const { file, n } = appendRecord(root, o, res.rec);
     if (!o.json) out(`remeasured ${prev.req}${res.rec.ac ? ` AC${res.rec.ac}` : ""} ${res.rec.metric} = ${res.rec.observed} (was ${prev.observed}) at ${file}:${n}`);
@@ -312,7 +341,9 @@ function cmdGate(o) {
     }
     if (o.fase !== undefined && (!ledger.scope || ledger.scope.fase !== o.fase)) die(`${o.ledger} was not evaluated for FASE ${o.fase}; run sdd gate --fase ${o.fase} without --ledger`);
   } else {
-    ({ ledger } = buildLedger(o));
+    let g;
+    ({ ledger, git: g } = buildLedger(o));
+    warnDirty(o, g);
     if (o.out) writeJson(root, o.out, ledger);
   }
   code = gateCode(ledger);
@@ -347,7 +378,8 @@ function cmdLoop(o) {
     try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch { die(`${o.state || ".sdd/acceptance-loop.json"} is not JSON (use --reset)`); }
     if (!Array.isArray(state.cycles)) state.cycles = [];
   }
-  const { ledger } = buildLedger(o);
+  const { ledger, git: g } = buildLedger(o);
+  warnDirty(o, g);
   if (!o["no-out"]) writeJson(root, o.out || ".sdd/acceptance.json", ledger);
   const goalSet = ledger.requirements.filter((r) => r.in_scope && r.priority === "Must" && r.verdict !== "DEPRECATED");
   const count = (v) => goalSet.filter((r) => r.verdict === v).length;
