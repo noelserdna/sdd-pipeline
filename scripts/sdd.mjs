@@ -50,16 +50,17 @@
 //       evidencias): a REQ-F criterion needs a screenshot — a JUnit `[[ATTACHMENT|…]]`, a record's --attach, or a file
 //       of the evidence dir named after its AC-NNN-NN or REQ-F-NNN-ACn — else it is `unshown` and the requirement
 //       MISSING ("no visual evidence"); warn only reports it. The ledger counts them in summary.unshown.
-//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance> --by NAME --role ROLE [fields]
+//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal> --by NAME --role ROLE [fields]
 //              [--attach FILE...] [--allow-dirty]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
 //       --pass true|false [--paths P...] · measurement --req ID [--ac N] --metric NAME --observed NUM
 //       --op lt|le|gt|ge|eq --threshold NUM [--paths P...] · inspection --req ID --note TEXT [--paths P...] [--pass false]
-//       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID].
-//       --attach stores files under evidence_dir with their sha256 (not on a waiver). Every type but waiver exits 2 on
-//       uncommitted changes under its --paths (default the code paths, untracked files included): commit first, or
-//       --allow-dirty to store the record with dirty: true.
+//       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID]
+//       · challenge-dismissal --challenge CH-NNN --reason TEXT (a person decides a finding does not hold).
+//       --attach stores files under evidence_dir with their sha256 (not on a waiver or a dismissal). Every type but
+//       waiver and challenge-dismissal exits 2 on uncommitted changes under its --paths (default the code paths,
+//       untracked files included): commit first, or --allow-dirty to store the record with dirty: true.
 //   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
 //              --threshold NUM [--paths P...] [--allow-dirty] [--json]
 //       Machine measurement: runs CMD from the repo root, takes the first capture group of REGEX in its output as the
@@ -70,16 +71,39 @@
 //   sdd accept pack --fase N [--out .sdd/entregas/FASE-N-evidencias.tar.gz] [--json]
 //       Bundle {evidence_dir}/FASE-N/ with a manifest.json (path, sha256, bytes, kind, criterion, criteria from the
 //       ledger, evaluated_sha) into a tar.gz, for the customer after the sign-off. Exit 1 when the FASE has no evidence.
+//   sdd accept challenge add --req ID --ac N --category CAT --quote TEXT --evidence path:line... --verifier NAME
+//              --counter confirmed|inconclusive [--json]
+//       Append one finding of the adversarial round to acceptance/challenges.jsonl (written only by this command) with
+//       id CH-NNN, HEAD, the requirement's reqHash and the cited paths. CAT: WEAKENED-ASSERT, MOCK-ONLY, UNWIRED,
+//       BYPASS-PATH, CROSSING, NOT-IMPLEMENTED, SPEC-QUESTION, WRONG-CAPTURE. Evidence: committed production or test
+//       code with an existing line; a capture under evidence_dir may be cited without a line (pinned by sha256).
+//       Never under acceptance/, feedback/, spec/, requirements/, plan/, task/, audits/, changes/, .sdd/, nor test/
+//       unless inside the Stack Profile's test_paths (Rails Minitest). --counter refuted is not recorded. Exit 2 on
+//       any invalid field.
+//   sdd accept challenge list [--open] [--fase N] [--json]
+//       Challenges with their state: open · stale (a cited file changed since the challenge's HEAD, or the requirement
+//       text changed) · dismissed (a challenge-dismissal record). JSON: counts, must_open, challenges[].
+//   sdd accept adversarial plan [--fase N] [--json]
+//       Mechanical coverage critic for the adversarial round: per FASE, requirements with their literal statement and
+//       criteria, the tests bound to each criterion (with file), captures and candidate files (files under code_paths
+//       of the commits whose Task: is TASK-F{N}-…); plus uncovered (active requirements in no FASE's Requisitos:),
+//       fases_without_header, criteria_without_test and coverage_gaps. Challenges never change a verdict: the ledger
+//       lists them in requirements[].challenges[] and summary.must_challenged.
 //   sdd gate [--mode off|warn|enforce] [--fase N] [--ledger FILE] [--md] [--json] [accept options]
 //       Exit 0 goal met (every Must VERIFIED or WAIVED) · 1 not met · 2 stale evidence or usage · 3 met with waived
-//       Musts. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate, else
-//       enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
+//       Musts · 4 met, but a Must (not waived) has an open adversarial challenge and the Stack Profile says
+//       `adversarial_gate: enforce` (default warn: printed, exit unchanged; off: ignored). Precedence
+//       2 > 1 > 4 > 3 > 0. warn prints and exits 0; off exits 0 silently. Mode default: Stack Profile acceptance_gate,
+//       else enforce. --fase N scopes to the `Requisitos:` line of plan/fases/FASE-N-*.md and, under visual_evidence
 //       required, asks for a video whose name carries each WF-NNN the FASE file cites (else FASE-N): a missing one is
 //       goal not met (`missing_videos`). --md prints a PR-body block (with a visual-evidence line when one is missing).
 //   sdd loop next [--state .sdd/acceptance-loop.json] [--max-cycles 3] [--reset] [accept options]
 //       One acceptance-loop step as JSON {cycle, stop, progress, targets[{req, verdict, criteria, route_hint}],
 //       missing_videos}; stop is null | goal | regression | needs-human | no-progress | max-cycles (cycle 1 is the
 //       baseline; hard cap 5). route_hint capture-evidence: run the journey again with capture (no code task).
+//       Open challenges are targets of their own {req, challenge, ac, category, counter, quote, evidence, route_hint}:
+//       adversarial-finding when confirmed, needs-human when inconclusive. Under adversarial_gate enforce the stop
+//       `goal` also needs no open challenge on a Must.
 //   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
 //       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
 //       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
