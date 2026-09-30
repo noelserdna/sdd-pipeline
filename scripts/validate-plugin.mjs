@@ -115,7 +115,10 @@ if (claimH && Number(claimH[1]) !== hookScripts.size) errors.push(`plugin.json d
 // 7. Stack kits (templates/stacks/<kit>): contrato de docs/stacks.md
 const PROFILE_KEYS = ["stack", "app_dir", "code_paths", "test_paths", "install", "test", "test_file", "test_name",
   "typecheck", "lint_files", "lint", "build", "coverage", "db_reset_safe", "server", "port", "acceptance",
-  "e2e_scaffold", "task_state", "task_format", "test_report", "acceptance_gate", "tracker"];
+  "e2e_scaffold", "task_state", "task_format", "test_report", "acceptance_gate", "tracker",
+  // 5.1: visual evidence, adversarial round, machine resources and post-deploy smoke (docs/design/plan-5.1.md §2.1).
+  "visual_evidence", "evidence_dir", "adversarial_gate", "test_slots", "staging_url", "smoke", "smoke_report_path",
+  "env_required", "deploy"];
 // Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md;
 // test_report_path: where test_report writes JUnit when it is not .sdd/junit/, project-specific).
 const OPTIONAL_PROFILE_KEYS = ["default_branch", "test_report_path"];
@@ -206,6 +209,10 @@ if (existsSync(stacksDir)) {
       expect("task_format", (v) => ["full", "compact"].includes(v), "debe ser full o compact");
       expect("acceptance_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
       expect("tracker", (v) => ["github", "gitlab", "off"].includes(v), "debe ser github, gitlab u off");
+      expect("visual_evidence", (v) => ["required", "warn", "off"].includes(v), "debe ser required, warn u off");
+      expect("adversarial_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
+      expect("test_slots", (v) => /^[1-9]\d*$/.test(v), "debe ser un entero >= 1");
+      expect("staging_url", (v) => v === "none" || /^https?:\/\//.test(v), "debe ser una URL http(s) o none");
       expect("test_report", (v) => v === "none" || /\.sdd\/junit\//.test(v), "debe escribir JUnit en .sdd/junit/ (o ser none)");
       for (const k of ["code_paths", "test_paths"]) expect(k, (v) => v.split(",").every((p) => p.trim().startsWith("{app_dir}/")), ": cada ruta debe empezar por {app_dir}/");
       if (defaults) for (const k of PROFILE_KEYS) {
