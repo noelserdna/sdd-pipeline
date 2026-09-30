@@ -441,5 +441,27 @@ contains "$md" "AC1: 1 test pass — " && pass "evidence: singular" || bad "evid
 size=$(printf '%s' "$md" | sed '/@@REPORT@@/q' | wc -c | tr -d ' ')
 [ "$size" -lt 2500 ] && pass "PR block stays small with 48 bound tests ($size bytes)" || bad "PR block size $size"
 
+# ---------------------------------------------------------------- 13. untracked files under the code paths (bug 1)
+# A new file under src/ that nobody added does not exist at evaluated_sha: the evidence would describe another tree.
+run accept record demo --req REQ-F-006 --observed "aligned" --pass true --paths src --by Laura --role "product owner"
+commit "record demo again"
+all_green
+run accept --json --no-out
+expect "baseline: clean tree, F-001 and F-006 VERIFIED, no untracked paths" "$(js '["REQ-F-001","REQ-F-006"].map(id=>j.requirements.find(r=>r.id===id).verdict).join() + "/" + j.untracked_paths.length')" VERIFIED,VERIFIED/0
+printf 'export const helper = 1;\n' > "$repo/src/helper.js"
+run accept --json --no-out
+expect "untracked file under src/: JUnit stale" "$(js 'j.junit[0].fresh')" false
+expect "untracked file under src/: listed in untracked_paths" "$(js 'j.untracked_paths.join()')" src/helper.js
+expect "untracked file under src/: ledger dirty" "$(js 'j.dirty')" true
+expect "untracked file under src/: F-001 MISSING with stale evidence" "$(js 'const r=j.requirements.find(r=>r.id==="REQ-F-001"); r.verdict + "/" + r.stale_evidence')" MISSING/true
+expect "untracked file under a demo record's paths: F-006 stale" "$(js 'j.requirements.find(r=>r.id==="REQ-F-006").verdict')" MISSING
+contains "$(js 'j.junit[0].stale_reason')" "src/helper.js" && pass "stale reason names the untracked file" || bad "stale reason ($(js 'j.junit[0].stale_reason'))"
+rm -f "$repo/src/helper.js"
+printf 'scratch\n' > "$repo/scratch.txt"
+all_green
+run accept --json --no-out
+expect "untracked file outside the code paths: JUnit fresh, not listed" "$(js 'j.junit[0].fresh + "/" + j.untracked_paths.length')" true/0
+rm -f "$repo/scratch.txt"
+
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
 exit "$fail"

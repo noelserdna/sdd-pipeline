@@ -15,12 +15,13 @@
 // Build and test configuration outside those paths (package.json, vitest.config.*) is not watched: list it in
 // `code_paths` when a change there should invalidate evidence.
 //   - JUnit: with `junitSha`, fresh when the worktree equals that commit on the code paths; otherwise fresh when the
-//     XML file's mtime is >= the time of the last commit that changed the code paths. Either way tracked files under
-//     the code paths must be clean (untracked files are ignored). The mtime rule is a heuristic: a report written after
+//     XML file's mtime is >= the time of the last commit that changed the code paths. Either way the code paths must be
+//     clean: no tracked change and no untracked file under them (`untracked_paths` in the ledger; a new file the tests
+//     depend on does not exist at evaluated_sha). The mtime rule is a heuristic: a report written after
 //     the last code commit on a clean tree was produced from that tree, unless someone ran the tests on another
 //     checkout and copied the XML; CI passes --junit-sha to assert it.
 //   - demo / measurement / inspection records: fresh when `git diff --quiet <record.head> -- <paths>` holds (worktree
-//     vs the record's commit); a record without paths uses the code paths.
+//     vs the record's commit) and no untracked file sits under those paths; a record without paths uses the code paths.
 //   - a measurement record with a `command` (from `sdd accept measure`) is re-run by `sdd accept --remeasure` when it
 //     is stale; the new record becomes the latest.
 //   - waivers, inspections, demos, measurements and fase acceptances carry `reqHash` (sha256 of the requirement's
@@ -203,8 +204,22 @@ export function evidencePaths(root) {
 
 const under = (p, dirs) => dirs.some((d) => p === d || p.startsWith(d + "/"));
 
+/** Paths of `git status --porcelain` output minus acceptance/**, .sdd/ and `skip` (files or directories). */
+function statusPaths(stdout, skip) {
+  const all = ["acceptance/", ".sdd/", ...skip];
+  return stdout.split("\n").filter(Boolean)
+    .map((l) => ({ untracked: l.startsWith("??"), p: l.slice(3).replace(/^"|"$/g, "").split(" -> ").pop() }))
+    .filter(({ p }) => !all.some((s) => p === s || p.startsWith(s.endsWith("/") ? s : s + "/") || p === s.replace(/\/$/, "")));
+}
+
+/**
+ * Git state of the worktree. Tracked changes are read over the whole tree; untracked files only under the code paths
+ * (`--untracked-files=all` limited to them): a new file the tests depend on makes the evidence describe a tree that
+ * evaluated_sha does not contain. Without code paths (the whole-tree fallback) untracked files are not read.
+ * dirtyPaths and codeDirtyPaths include those untracked paths, also listed apart in untrackedPaths.
+ */
 export function gitContext(root, { exclude = [] } = {}) {
-  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [], codePaths: null, codeTime: null, codeDirty: null, codeDirtyPaths: [] };
+  if (!isRepo(root)) return { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [], codePaths: null, codeTime: null, codeDirty: null, codeDirtyPaths: [], untrackedPaths: [] };
   const h = git(root, ["rev-parse", "-q", "--verify", "HEAD"]);
   const head = h.status === 0 ? h.stdout.trim() : null;
   const codePaths = evidencePaths(root);
@@ -217,13 +232,24 @@ export function gitContext(root, { exclude = [] } = {}) {
     const c = codePaths ? git(root, ["log", "-1", "--format=%ct", "HEAD", "--", ...codePaths]).stdout.trim() : t;
     codeTime = c ? Number(c) : headOnly();
   }
-  const st = git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout;
-  const skip = ["acceptance/", ".sdd/", ...exclude];
-  const dirtyPaths = st.split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "").split(" -> ").pop())
-    .filter((p) => !skip.some((s) => p === s || p.startsWith(s.endsWith("/") ? s : s + "/") || p === s.replace(/\/$/, "")));
+  const tracked = statusPaths(git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout, exclude).map((x) => x.p);
+  const untrackedPaths = codePaths
+    ? statusPaths(git(root, ["status", "--porcelain", "--untracked-files=all", "--", ...codePaths]).stdout, exclude)
+      .filter((x) => x.untracked).map((x) => x.p)
+    : [];
+  const dirtyPaths = [...tracked, ...untrackedPaths];
   const codeDirtyPaths = codePaths ? dirtyPaths.filter((p) => under(p, codePaths)) : dirtyPaths;
   return { repo: true, head, headTime, dirty: dirtyPaths.length > 0, dirtyPaths,
-    codePaths, codeTime, codeDirty: codeDirtyPaths.length > 0, codeDirtyPaths };
+    codePaths, codeTime, codeDirty: codeDirtyPaths.length > 0, codeDirtyPaths, untrackedPaths };
+}
+
+/** Uncommitted paths (tracked changes and untracked files) under `paths`; with no paths, tracked changes over the whole
+ *  tree. acceptance/** and .sdd/ never count. What `accept record` / `accept measure` check before anchoring to HEAD. */
+export function dirtyUnder(root, paths) {
+  if (!isRepo(root)) return [];
+  const list = (paths || []).map((p) => String(p).replace(/^\.\//, "").replace(/\/+$/, "")).filter(Boolean);
+  const args = list.length ? ["status", "--porcelain", "--untracked-files=all", "--", ...list] : ["status", "--porcelain", "--untracked-files=no"];
+  return statusPaths(git(root, args).stdout, []).map((x) => x.p);
 }
 
 /** True when the worktree equals `sha` on `paths` (all paths outside acceptance/** when empty). */
@@ -270,14 +296,22 @@ export function evaluate(opts) {
   const codeDirtyPaths = g.codeDirtyPaths || g.dirtyPaths || [];
   const where = codePaths.length ? ` in ${codePaths.join(", ")}` : "";
   const cache = new Map();
-  const fresh = (sha, paths) => (!g.repo ? true : sha ? unchangedSince(root, sha, paths?.length ? paths : codePaths, cache) : false);
+  const untracked = g.untrackedPaths || [];
+  // A record is fresh when the worktree equals its commit on its paths and no untracked file sits under them.
+  const fresh = (sha, paths) => {
+    if (!g.repo) return true;
+    if (!sha) return false;
+    const on = (paths?.length ? paths : codePaths).map((p) => String(p).replace(/^\.\//, "").replace(/\/+$/, ""));
+    if (untracked.some((p) => !on.length || under(p, on))) return false;
+    return unchangedSince(root, sha, on, cache);
+  };
 
   // JUnit freshness per file.
   const junitFresh = new Map();
   for (const f of junit?.files || []) {
     let ok = true, why = null;
     if (g.repo && g.head) {
-      if (codeDirty) { ok = false; why = `tracked files changed since HEAD: ${codeDirtyPaths.slice(0, 3).join(", ")}`; }
+      if (codeDirty) { ok = false; why = `uncommitted changes${where}: ${codeDirtyPaths.slice(0, 3).join(", ")}${untracked.length ? ` (untracked: ${untracked.slice(0, 3).join(", ")})` : ""}`; }
       else if (junitSha) { ok = fresh(junitSha); if (!ok) why = `code changed since ${junitSha.slice(0, 7)}${where}`; }
       else if (f.mtimeMs < codeTime * 1000) { ok = false; why = `report older than the last code commit${where}`; }
     }
@@ -424,7 +458,7 @@ export function evaluate(opts) {
   summary.junit_files = (junit?.files || []).length;
   summary.junit_stale_files = [...junitFresh.values()].filter((x) => !x.ok).length;
   const ledger = {
-    $schema: SCHEMA, evaluated_sha: g.head, dirty: g.dirty, generatedAt: (opts.now || new Date()).toISOString(),
+    $schema: SCHEMA, evaluated_sha: g.head, dirty: g.dirty, untracked_paths: untracked, generatedAt: (opts.now || new Date()).toISOString(),
     scope: scope ? { fase, requirements: [...scope] } : null,
     junit: (junit?.files || []).map((f) => ({ path: rel(f.path), cases: f.cases.length, fresh: junitFresh.get(f.path).ok, stale_reason: junitFresh.get(f.path).why })),
     junit_sha: junitSha,
