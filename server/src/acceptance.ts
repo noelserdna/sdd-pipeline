@@ -20,14 +20,27 @@ export interface AcceptanceAttachment {
   changed?: boolean;
 }
 
+/** A gap of `sdd lint --quotes` on one criterion: the test file that names it carries a quote that is not the
+ *  criterion's current text (Q-02) or lacks one of its literals (Q-03). Excepted literals are not listed. */
+export interface LiteralGap {
+  code: "Q-02" | "Q-03";
+  file: string;
+  line: number;
+  literal?: string;
+  quote?: string;
+}
+
 export interface AcceptanceCriterion {
   n: number;
   text: string | null;
   scenarios: string[];
-  /** `unshown`: a REQ-F criterion that passes without a screenshot under `visual_evidence: required`. */
-  state: "pass" | "fail" | "missing" | "stale" | "unshown";
+  /** `unshown`: a REQ-F criterion that passes without a screenshot under `visual_evidence: required`.
+   *  `weakened`: a Must criterion whose test passes without the criterion's literal under `literal_gate: enforce`. */
+  state: "pass" | "fail" | "missing" | "stale" | "unshown" | "weakened";
   /** REQ-F only, when the visual rule is not off: whether a present screenshot shows the criterion. */
   visual?: "shown" | "missing";
+  /** Present when `literal_gate` is not off (5.1 ledgers). */
+  literal_gaps?: LiteralGap[];
   evidence: Array<Record<string, unknown> & { attachments?: AcceptanceAttachment[] }>;
 }
 
@@ -91,6 +104,9 @@ export interface AcceptanceSummary {
   /** Must requirements (not waived) with at least one open challenge: `sdd gate` exits 4 on them under enforce. */
   must_challenged?: number;
   challenged_musts?: string[];
+  /** Criteria whose test lacks the criterion's quote or literal (not excepted), and those held back as weakened. */
+  literal_gaps?: number;
+  weakened?: number;
 }
 
 export interface AcceptanceLedger {
@@ -110,6 +126,8 @@ export interface AcceptanceLedger {
   videos?: { required: string[]; found: string[]; missing: string[] } | null;
   /** Stack Profile `adversarial_gate` at evaluation time. */
   adversarial_gate?: "off" | "warn" | "enforce";
+  /** Stack Profile `literal_gate` at evaluation time. */
+  literal_gate?: "off" | "warn" | "enforce";
 }
 
 export const ACCEPTANCE_SCHEMA = "sdd-acceptance-v1";

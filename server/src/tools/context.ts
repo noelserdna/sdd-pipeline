@@ -33,7 +33,7 @@ function acceptanceView(r: AcceptanceRequirement) {
     criteria: criteriaLabel(r),
     stale_evidence: r.stale_evidence,
     waiver: r.waiver,
-    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...(c.visual ? { visual: c.visual } : {}), scenarios: c.scenarios, evidence: c.evidence })),
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...(c.visual ? { visual: c.visual } : {}), ...(c.literal_gaps?.length ? { literal_gaps: c.literal_gaps } : {}), scenarios: c.scenarios, evidence: c.evidence })),
     ...(r.challenges?.length ? { challenges: r.challenges } : {}),
   };
 }
@@ -54,6 +54,7 @@ function acceptanceGaps(r: AcceptanceRequirement): string[] {
     if (c.state === "fail") gaps.push(`FAILING_AC${c.n}: evidence fails${c.text ? ` — ${c.text}` : ""}`);
     else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code — re-run the tests or re-record`);
     else if (c.state === "unshown") gaps.push(`UNSHOWN_AC${c.n}: passes without a screenshot — run the journey again with capture (capture-evidence)`);
+    else if (c.state === "weakened") gaps.push(`WEAKENED_AC${c.n}: the test passes without the criterion's literal (${(c.literal_gaps ?? []).map((g) => (g.code === "Q-02" ? `stale quote at ${g.file}:${g.line}` : `"${g.literal}" missing in ${g.file}`)).join("; ")}) — weakened-test`);
     else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
     else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
   }
