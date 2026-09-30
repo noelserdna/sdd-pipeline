@@ -14,7 +14,9 @@
 #   SMOKE_BASE_URL   base URL of the deployed environment; falls back to the profile's `staging_url`.
 #   SMOKE_USER       smoke user, masked and protected; never write it in this file.
 #   SMOKE_PASSWORD   smoke user password, masked and protected.
-#   smoke            profile command; it must write JUnit XML under SMOKE_REPORT_PATH.
+#   smoke            profile command running the tests tagged @smoke-deploy (the post-deploy tier of the test plan;
+#                    @smoke is the PR tier); it must write JUnit XML under SMOKE_REPORT_PATH, e.g.
+#                    PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit
 #   smoke_report_path  profile key, default .sdd/junit/smoke; exported as SMOKE_REPORT_PATH.
 
 smoke:staging:

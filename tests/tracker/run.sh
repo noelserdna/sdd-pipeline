@@ -347,7 +347,7 @@ done
 SGH="$ROOT/templates/ci/github/sdd-smoke.yml"; SGL="$ROOT/templates/ci/gitlab/sdd-smoke.gitlab-ci.yml"
 for y in "$SGH" "$SGL"; do
   if yaml_ok "$y" >/dev/null 2>&1; then pass "yaml parses: ${y#$ROOT/}"; else bad "yaml parse: ${y#$ROOT/}"; fi
-  for k in SMOKE_BASE_URL SMOKE_REPORT_PATH smoke_report_path staging_url 'prof smoke)'; do
+  for k in SMOKE_BASE_URL SMOKE_REPORT_PATH smoke_report_path staging_url 'prof smoke)' '@smoke-deploy'; do
     grep -qF -- "$k" "$y" && pass "smoke ${y##*/}: $k" || bad "smoke ${y##*/}: $k"
   done
   # no literal credential outside comments: token prefixes, user:pass@ URLs, password/token keys with a plain value

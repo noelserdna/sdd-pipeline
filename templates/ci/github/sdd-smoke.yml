@@ -9,7 +9,9 @@
 #                    input; falls back to the profile's `staging_url`.
 #   SMOKE_USER       secret of the smoke user (environment or repository secret); never write it in this file.
 #   SMOKE_PASSWORD   secret of the smoke user.
-#   smoke            profile command; it must write JUnit XML under SMOKE_REPORT_PATH.
+#   smoke            profile command running the tests tagged @smoke-deploy (the post-deploy tier of the test plan;
+#                    @smoke is the PR tier); it must write JUnit XML under SMOKE_REPORT_PATH, e.g.
+#                    PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit
 #   smoke_report_path  profile key, default .sdd/junit/smoke; exported as SMOKE_REPORT_PATH.
 #
 # Hook it into the deploy workflow (setup never edits that workflow; add this job there by hand):
