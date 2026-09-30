@@ -65,11 +65,24 @@ Evidence by method (the `Verification:` line written at requirements time):
 - `test` — a passing JUnit test case whose name contains the scenario id `AC-NNN-NN` of `spec/tests/BDD-*.md` (or
   `REQ-X-NNN ACn`). File-level `Refs:` never count: they bind a whole file to a requirement and produce false
   VERIFIED verdicts.
-- `demo` — observed output a human confirmed, recorded with `sdd accept record demo`.
+- `demo` — observed output a human confirmed, recorded with `sdd accept record demo` (with `--attach` for the
+  recording or captures, which a `REQ-F` needs, below).
 - `measurement` — an observation the CLI compares with its threshold: produced by a command for objective metrics
   (`sdd accept measure --command CMD --extract REGEX`, re-run by `sdd accept --remeasure` when stale), or confirmed
   by a person (`sdd accept record measurement`).
 - `inspection` — a recorded human review (`sdd accept record inspection`).
+
+**Visual evidence (REQ-F).** A functional requirement is done only when it can be shown to the customer, so with
+`visual_evidence: required` (Stack Profile, the default) each criterion of a `REQ-F` also needs an image attached to
+its passing evidence: the acceptance suite's capture `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` (the test
+attaches it and the JUnit carries it), or the `--attach` of a human record. Without one the criterion reads
+**`unshown`** and the requirement stays MISSING with `reason: "no visual evidence"` (`summary.unshown`); `warn` only
+reports it, `off` (no UI at all, decided by a person) ignores it. A result without a screen of its own is captured
+where the customer sees it (the admin list, the email received). Each FASE also needs a video per `WF-NNN` its file
+cites (or one named `FASE-N` when it cites none); `sdd gate --fase N` lists what lacks one as `missing_videos` and
+exits 1. `evidencias/` (the profile's `evidence_dir`) stays out of git: the ledger keeps each attachment's path,
+`sha256` and size, so a replaced or deleted file shows up as absent. Playwright traces are never attached, because
+they hold cookies and storage.
 
 Evidence counts only while fresh: nothing under the Stack Profile's `code_paths` and `test_paths` (default `src`,
 `tests`) may have changed, committed or not, since the test results were captured, and each record stays valid while
@@ -119,7 +132,8 @@ The command writes `.sdd/acceptance.json` (git-ignored, read by `sdd-pipeline-st
 server) and the customer-readable report. Show its summary lines and the report path; for each Must that is not
 VERIFIED or WAIVED show one line: id, verdict, criteria passing, and the route the loop would take
 (`node "$SDD" loop next --no-out --state .sdd/acceptance-check.json --reset` gives `route_hint` without touching the loop's
-own state). Exit 2 means a usage or git problem: show the message.
+own state). Show `summary.unshown` when it is not zero: those criteria pass but cannot yet be shown. Exit 2 means a
+usage or git problem: show the message.
 
 ### Step 3: Chain integrity
 
@@ -155,6 +169,7 @@ Must {v}/{t} verified · {w} waived · FAILING {f} · MISSING {m} · stale evide
 Open Musts: {id (verdict, criteria n/m, route)} …
 Chain: {b} broken references · {o} orphan definitions · {u} requirements without scenarios
 Orphan code: {d} decided · {o} without decision        (only with GAP-ANALYSIS-REVIEW.md)
+Unshown: {u} criteria without capture · missing videos: {mv}   (unless visual_evidence is off)
 Test adequacy (advisory): {k} flagged                  (only when Step 5 ran)
 Report: acceptance/ACCEPTANCE-REPORT.md
 Next: {/sdd-acceptance --loop | /sdd-acceptance --sign-off | …}
@@ -254,8 +269,9 @@ git diff --cached --quiet || git commit -m "docs(feedback): acceptance findings 
 | `fix-code (Art. 12)` | A bound test fails | The code is wrong, not the test: feedback entry with the failure, incremental task, implementer. Never weaken, skip or rewrite the assertion to make it pass. If you believe the test or the criterion itself is wrong, that is a spec gap |
 | `spec-gap (human, req-change)` | A criterion without any scenario (when `spec/tests` exists), a requirement without `Verification:`, or a spec that looks wrong | `SPEC-DEVIATION` entry (Spec, Deviation, Impact, Recommendation, `Status: PENDING-REVIEW`) and ask the human: keep the spec (then the missing scenario goes to `sdd-test-planner`/the spec owner) or amend it through `/sdd-req-change`. The loop does not edit specs |
 | `remeasure` | A measurement recorded by `accept measure` is stale (its code paths changed) | `node "$SDD" accept --remeasure [--fase N]` re-runs its command and appends the new value; nobody is asked. A value that now fails its threshold turns the requirement FAILING and routes as `fix-code` |
-| `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory) |
+| `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…] [--attach F…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory) |
 | `adversarial-finding` | An open, confirmed challenge of the adversarial round (the target carries its `category`) | Feedback entry citing the `CH-NNN`, quote and evidence; one fix task per finding with `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}` (`/sdd-task-generator --fase N --incremental`, then the implementer with `--new-tasks-only`); `SPEC-QUESTION` goes to a person as a spec gap, and `WRONG-CAPTURE` fixes the journey test's capture (`references/adversarial-protocol.md` §7). Re-run `--adversarial --fase N` after the fix |
+| `capture-evidence` | A criterion passes but is `unshown`, or a workflow of the FASE has no video (`missing_videos`) | Re-run the FASE's journey with capture (the acceptance suite with `--grep` on the scenario ids, or the FASE's whole journey for a video), then Step 1 again. No feedback entry and no code task. When the rerun still attaches nothing, the journey test does not capture that criterion: a missing test, routed as `implement-or-test` |
 | `rerun-tests` | Evidence exists but is stale | Nothing to do beyond Step 1 of the next cycle |
 
 Cycles run sequentially in the main thread: each one needs the commits of the previous one. The implementer's own
@@ -302,7 +318,7 @@ it has the confirmation question, the record command and the tag message.
 2. `node "$SDD" gate --mode enforce [--fase N]`. Exit 0 → goal met. Exit 3 → met with waived Musts: show each with its
    reason and follow-up issue. Exit 2 → stale evidence: re-capture (Step 1) and retry once. Exit 1 → not met: say so
    with the open Musts and offer `/sdd-acceptance --loop` (or, for demo/measurement/inspection evidence, the human
-   evidence step of the FASE gate). Acceptance needs the gate met (exit 0, or 3 with the waivers stated), so with
+   evidence step of the FASE gate; `missing_videos` routes as `capture-evidence`). Acceptance needs the gate met (exit 0, or 3 with the waivers stated), so with
    exit 1 or 2 only a rejection can be recorded: continue to step 3 offering only **Reject**, because a rejection needs
    no passing gate and its reasons are what the next cycle works on.
 3. Present the report to the approver and ask explicitly (their name, role and channel if unknown). Only an explicit
@@ -318,7 +334,11 @@ it has the confirmation question, the record command and the tag message.
    platform release the project already uses, created only after the approver's explicit confirmation, with the
    approver lines and the `sdd gate --md` block in its annotated message or release notes. There is no
    `accepted-*` tag.
-7. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
+7. For a FASE accepted (with or without observations), bundle its visual evidence, which git does not keep:
+   `node "$SDD" accept pack --fase N` writes `.sdd/entregas/FASE-N-evidencias.tar.gz` with `evidencias/FASE-N/` and a
+   `manifest.json` of hashes and criteria (`references/sign-off.md` §4). Where it is delivered or stored is the team's
+   decision; say where it is.
+8. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
    `node "$SDD" issue close fase N` (it refuses without the `fase-{N}-accepted` tag); after a rejection, `node "$SDD" issue update
    fase N` keeps the issue's checklist and verdicts current.
 

@@ -12,7 +12,7 @@ root's `.sdd/junit/` (git-ignored) so the default reader finds it, or declare `t
 | Minitest (Rails) | `MINITEST_REPORTER=JUnitReporter MINITEST_REPORTERS_REPORTS_DIR="$(git rev-parse --show-toplevel)/.sdd/junit/minitest" bin/rails test` | Gem `minitest-reporters` and `Minitest::Reporters.use! if ENV["MINITEST_REPORTER"]` in `test/test_helper.rb` (kit `rails`). The reporter empties its directory, hence the subdirectory |
 | pytest | `pytest --junitxml="$(git rev-parse --show-toplevel)/.sdd/junit/pytest.xml"` | Built in |
 | RSpec | `bundle exec rspec --format progress --format RspecJunitFormatter --out "$(git rev-parse --show-toplevel)/.sdd/junit/rspec.xml"` | Gem `rspec_junit_formatter` |
-| Playwright | `PLAYWRIGHT_JUNIT_OUTPUT_NAME="$(git rev-parse --show-toplevel)/.sdd/junit/e2e.xml" npx playwright test --reporter=junit` | Chain it after the unit suite with `;` when the project has an acceptance suite, so one failing suite does not skip the other |
+| Playwright | `PLAYWRIGHT_JUNIT_OUTPUT_NAME="$(git rev-parse --show-toplevel)/.sdd/junit/e2e.xml" npx playwright test --reporter=junit` | Chain it after the unit suite with `;` when the project has an acceptance suite, so one failing suite does not skip the other. The acceptance suite runs with `screenshot: 'on'` and `video: 'on'`, and each test attaches its final capture (below) |
 | Go | `go test -v ./... 2>&1 \| go-junit-report > "$(git rev-parse --show-toplevel)/.sdd/junit/go.xml"` | Tool `go-junit-report` |
 
 Rules that make the results usable as evidence:
@@ -22,4 +22,10 @@ Rules that make the results usable as evidence:
   `REQ-F-001 AC2` also binds, for criteria without a scenario file. Nothing else binds a test to a criterion.
 - **Whole suite, current commit.** Run the full suite at `HEAD` on a clean tree and pass `--junit-sha HEAD` to
   `sdd accept`; a partial run leaves criteria MISSING, and old XML is reported as stale evidence.
+- **Captures ride on the JUnit.** A test of a `REQ-F` criterion saves its capture as
+  `evidencias/FASE-{N}/{AC-NNN-NN | REQ-F-NNN-ACn}.png` and attaches it (`testInfo.attach(name, { path })` in
+  Playwright), so the XML carries `[[ATTACHMENT|path]]` in `<system-out>` and the ledger binds the image to the
+  criteria the test names. The journey's video goes to `evidencias/FASE-{N}/{WF-NNN | FASE-N}.webm` (`.mp4` and
+  `.jpg` are read too). Without the attachment the criterion reads `unshown` even when the file exists. Traces are
+  never attached.
 - **Failures are evidence.** A non-zero exit from the runner is expected when tests fail; the XML is what matters.
