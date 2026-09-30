@@ -28,7 +28,7 @@ Signals and one example finding per category: [references/defect-categories.md](
 |---|---|---|---|
 | CAT-01 | `AMB-` | Ambiguity: vague qualifiers, missing quantifiers, unclear referents | — |
 | CAT-02 | `IMP-` | Implicit rule: behaviour assumed but stated nowhere | — |
-| CAT-03 | `SIL-` | Dangerous silence: a specific scenario not handled (error, timeout, edge case, dead state) | — |
+| CAT-03 | `SIL-` | Dangerous silence: a specific scenario not handled (error, timeout, edge case, dead state, replay of a write) | — |
 | CAT-04 | `SEM-` | Semantic ambiguity: synonyms, same term with different meanings | naming/format ≤ P3 |
 | CAT-05 | `CON-` | Contradiction between documents | — |
 | CAT-06 | `INC-` | Incomplete: empty section, TBD, broken reference, open `[NEEDS CLARIFICATION]` | — |
