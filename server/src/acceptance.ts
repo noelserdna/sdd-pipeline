@@ -31,6 +31,25 @@ export interface AcceptanceCriterion {
   evidence: Array<Record<string, unknown> & { attachments?: AcceptanceAttachment[] }>;
 }
 
+/** A finding of the adversarial round (acceptance/challenges.jsonl, `sdd accept challenge add`). It sits next to the
+ *  verdict and never changes it: `open` until a cited file or the requirement text changes (`stale`) or a person
+ *  dismisses it (`dismissed`, a challenge-dismissal record in decisions.jsonl). */
+export interface AcceptanceChallenge {
+  id: string;
+  ac: number;
+  category: "WEAKENED-ASSERT" | "MOCK-ONLY" | "UNWIRED" | "BYPASS-PATH" | "CROSSING" | "NOT-IMPLEMENTED" | "SPEC-QUESTION" | "WRONG-CAPTURE" | string;
+  counter: "confirmed" | "inconclusive";
+  quote: string;
+  /** `line` is null for a capture of the evidence dir, pinned by its sha256. */
+  evidence: Array<{ path: string; line: number | null; sha256?: string }>;
+  verifier: string;
+  head: string;
+  at: string | null;
+  state: "open" | "stale" | "dismissed";
+  stale_reason?: string;
+  dismissal?: { line: number; by: string; role: string; reason: string; at: string | null };
+}
+
 export interface AcceptanceRequirement {
   id: string;
   type: string;
@@ -47,6 +66,8 @@ export interface AcceptanceRequirement {
   waiver: { line: number; reason: string | null; by: string | null; role: string | null; followUp: string | null; valid: boolean } | null;
   stale_evidence: boolean;
   in_scope?: boolean;
+  /** Adversarial challenges on this requirement (absent in ledgers written before 5.1). */
+  challenges?: AcceptanceChallenge[];
 }
 
 export interface AcceptanceSummary {
@@ -65,6 +86,11 @@ export interface AcceptanceSummary {
   unshown?: number;
   /** With a FASE scope: WF-NNN (or FASE-N) ids without a video. */
   missing_videos?: string[];
+  /** Open adversarial challenges in scope, any priority. */
+  challenges_open?: number;
+  /** Must requirements (not waived) with at least one open challenge: `sdd gate` exits 4 on them under enforce. */
+  must_challenged?: number;
+  challenged_musts?: string[];
 }
 
 export interface AcceptanceLedger {
@@ -82,6 +108,8 @@ export interface AcceptanceLedger {
   visual_evidence?: "required" | "warn" | "off";
   evidence_dir?: string;
   videos?: { required: string[]; found: string[]; missing: string[] } | null;
+  /** Stack Profile `adversarial_gate` at evaluation time. */
+  adversarial_gate?: "off" | "warn" | "enforce";
 }
 
 export const ACCEPTANCE_SCHEMA = "sdd-acceptance-v1";
