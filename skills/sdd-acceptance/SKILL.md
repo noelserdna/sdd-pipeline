@@ -192,8 +192,14 @@ bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set acceptan
 
 and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with `artifacts`
 (`acceptance/ACCEPTANCE-REPORT.md`), `metrics` (`must_total`, `must_verified`, `must_waived`, `failing`, `missing`,
-`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`),
-`highlights` (≤ 5) and `nextStep`. Then commit what this run wrote under `acceptance/` (the report and any records
+`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, and
+`unshown` from the ledger's `summary.unshown`), `highlights` (≤ 5) and `nextStep`. The adversarial metrics describe
+the last `--adversarial` run and are kept by later runs of other modes (patch only the keys a mode computes):
+`adversarial_findings` (findings the verifiers raised, including those from the clean sample),
+`adversarial_confirmed`, `adversarial_refuted` (counter-verification results; `inconclusive` is the remainder),
+`adversarial_open` (`node "$SDD" accept challenge list --open --json`, after recording), `adversarial_agents` (verifiers,
+counter-verifiers and critics launched) and `coverage_gaps` (requirements in no FASE, FASEs without header and the
+LLM critic's gaps). Then commit what this run wrote under `acceptance/` (the report and any records
 appended by `--remeasure`), as every stage commits its outputs (plugin-root `references/git-conventions.md`,
 § Stage outputs are committed). The report names the SHA it evaluated, so a later reader can tell whether it is
 current, and the commit touches no code path, so it does not age the evidence:
@@ -231,7 +237,7 @@ Verifiers never write code, specs, tests or `acceptance/`; only this skill's mai
 a person dismisses a challenge (`accept record challenge-dismissal`). The Stack Profile's `adversarial_gate` (`off` ·
 `warn`, the default · `enforce`) decides whether an open challenge on a Must makes `sdd gate` exit 4.
 
-Summary line, added to Step 6's block: `Adversarial: {f} findings · {c} confirmed · {r} refuted · {o} open challenges · {g} coverage gaps · {a} agents`.
+Then Step 6 (summary and persist, with the adversarial metrics); its block gains `Adversarial: {f} findings · {c} confirmed · {r} refuted · {o} open challenges · {g} coverage gaps · {a} agents`.
 
 ## `--loop`
 

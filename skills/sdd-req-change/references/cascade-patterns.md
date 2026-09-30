@@ -333,7 +333,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `requirements-engineer` | `total_requirements`, `functional`, `nonfunctional`, `constraints` |
 | `specifications-engineer` | `use_cases`, `workflows`, `api_contracts`, `bdd_scenarios`, `invariants`, `adrs`, `spec_chars`, `spec_budget_chars`, `mode`, `spec_agents` |
 | `spec-auditor` | `total_findings`, `critical`, `high`, `medium`, `low`, `batched_findings`, `gate_result`, `audit_cycle`, `topFindingCategories`, `report_chars`, `mode` |
-| `test-planner` | `bdd_scenarios`, `test_matrices`, `matrix_cases`, `perf_scenarios`, `e2e_scenarios`, `e2e_fields_total`, `e2e_fields_complete`, `e2e_field_coverage_pct`, `invariants_mapped`, `test_gaps`, `test_chars`, `mode`, `matrix_agents` |
+| `test-planner` | `bdd_scenarios`, `test_matrices`, `matrix_cases`, `perf_scenarios`, `e2e_scenarios`, `e2e_fields_total`, `e2e_fields_complete`, `e2e_field_coverage_pct`, `visual_criteria`, `visual_criteria_covered`, `smoke_deploy_scenarios`, `replay_rows`, `race_rows`, `invariants_mapped`, `test_gaps`, `test_chars`, `mode`, `matrix_agents` |
 | `plan-architect` | `total_fases`, `components`, `adrs_created`, `clarify_questions`, `research_items`, `plan_chars`, `plan_budget_chars`, `operation_mapping` (`existing` \| `written` \| `appended` \| `n/a`) |
 | `task-generator` | `total_tasks`, `parallelizable_pct`, `safe_revert`, `coupled_revert`, `migration_revert`, `config_revert`, `streamsPerFase`, `mode`, `task_agents`, `format` |
 | `task-implementer` | `tasks_completed`, `tasks_remaining`, `commits`, `tests_passed`, `tests_failed`, `mode`, `task_agents`, `pauses`, `stack`, `profile_source`, `inline_p_tasks`; `--integrate` adds `streamsIntegrated`, `mergeConflicts` |
@@ -341,7 +341,7 @@ Each skill persists a structured summary in `pipeline-state.json` upon completio
 | `req-change` | `change_requests`, `applied`, `skipped`, `documents_modified`, `invalidated_stages` |
 | `tech-designer` | `dimensions_analyzed`, `quality_attributes`, `adr_drafts`, `trade_offs_evaluated` |
 | `ux-designer` | `dimensions_analyzed`, `wireframes`, `components_specified`, `wcag_level`, `design_tokens`, `frontend_security_items` |
-| `acceptance` | `must_total`, `must_verified`, `must_waived`, `failing`, `missing`, `stale_evidence`, `goal` (`met` \| `met-with-waivers` \| `not-met`), `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode` |
+| `acceptance` | `must_total`, `must_verified`, `must_waived`, `failing`, `missing`, `stale_evidence`, `goal` (`met` \| `met-with-waivers` \| `not-met`), `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, `unshown`; from the last adversarial round `adversarial_findings`, `adversarial_confirmed`, `adversarial_refuted`, `adversarial_open`, `adversarial_agents`, `coverage_gaps` |
 | `gap-detector` | `total_spec_endpoints`, `implemented`, `missing`, `orphan_routes`, `mismatches`, `endpoint_coverage_pct`, `bdd_coverage_pct`; with `--semantic` also `semantic_targets`, `semantic_covered`, `semantic_partial`, `semantic_likely_missing`, `semantic_judge` (`jev` \| `llm`) |
 
 Each skill's own Persist section is authoritative; this table mirrors them.
