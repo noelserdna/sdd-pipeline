@@ -48,3 +48,27 @@ historial de git del banco).
 - `evidencias/` está en el `.gitignore` raíz del plugin: sus ficheros del banco se añaden con `git add -f`.
 - Las capturas y el vídeo son rellenos pequeños (PNG 16×12 y una cabecera WebM); el ledger solo mira nombre,
   existencia y sha256.
+
+## Resultado medido (2026-09-30, 5.1 en `feat/v5.1-evidence-adversarial`)
+
+Capas mecánicas (`tests/seeded/run.sh`): D1 y D2 por `lint --quotes` (Q-03; Q-02 y Q-03) con el criterio `weakened`,
+D4 por V-21, D6 por `unshown`, D7 por `missing_videos`. D3 y D5 salen VERIFIED, como se esperaba. Controles limpios.
+
+Ronda adversarial a ciegas: un verificador para los 10 criterios de la FASE-1, sobre una copia con un solo commit y
+sin esta clave. Protocolo de `skills/sdd-acceptance/references/adversarial-protocol.md` §3-4, sin cambios.
+
+| Criterio | Verificador | Contraverificador | Defecto |
+|----------|-------------|-------------------|---------|
+| REQ-F-001 AC1 | clean | clean (muestra) | C1 |
+| REQ-F-002 AC1 | WEAKENED-ASSERT | confirmed | D1 |
+| REQ-F-003 AC1 | WEAKENED-ASSERT | confirmed | D2 |
+| REQ-F-004 AC1 | UNWIRED | confirmed | D3 |
+| REQ-F-005 AC1 | MOCK-ONLY | confirmed | D4 |
+| REQ-F-006 AC1 | clean | — | — |
+| REQ-F-006 AC2 | CROSSING | confirmed | D5 |
+| REQ-F-007 AC1 | clean (captura ausente: no es su hallazgo) | — | D6, del ledger |
+| REQ-F-008 AC1-2 | clean | clean (muestra) | C2 |
+
+Cinco de cinco defectos de su ámbito cazados y confirmados, ningún falso positivo. Juntas, las dos capas cazan los
+siete defectos. Es una sola ejecución sobre un banco pequeño con defectos plantados: mide que el protocolo funciona,
+no su tasa de acierto en un proyecto real.

@@ -66,7 +66,7 @@ templates/             pipeline-state template, gitignore policy, sessions examp
 references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md
 .claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
 examples/todo-app/     toy project (customer needs + requirements) used by the pipeline auditor
-tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, quotes, tracker, route, e2e, fixtures
+tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, quotes, seeded (seeded-defect bench), tracker, route, e2e, fixtures
 docs/                  guides (Spanish), git, acceptance, stacks, multisession, jev, measurements, design/
 ```
 
@@ -77,7 +77,7 @@ The same commands CI runs:
 ```bash
 node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
 bash tests/e2e/00-validate.sh
-for t in hooks setup tasks graph jev bench git plan acceptance quotes tracker route; do bash tests/$t/run.sh || break; done
+for t in hooks setup tasks graph jev bench git plan acceptance quotes seeded tracker route; do bash tests/$t/run.sh || break; done
 shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
 cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
