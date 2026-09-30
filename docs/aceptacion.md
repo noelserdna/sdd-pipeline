@@ -46,13 +46,13 @@ Un requisito funcional está hecho cuando se le puede **enseñar** al cliente. P
 
 | Qué | Dónde | Quién la produce |
 |---|---|---|
-| Una captura por criterio | `evidencias/FASE-{N}/{AC-NNN-NN \| REQ-F-NNN-ACn}.png` (también `.jpg`) | El test E2E de la suite de aceptación (Playwright con `screenshot: 'on'`), que la adjunta con `testInfo.attach`; el JUnit la lleva como `[[ATTACHMENT\|ruta]]` |
-| Un vídeo por workflow | `evidencias/FASE-{N}/{WF-NNN}.webm` (también `.mp4`); en la ruta sin specs, uno por FASE: `FASE-N.webm`, el recorrido del `## Demo` | El journey de la FASE (`video: 'on'`) |
+| Una captura por criterio | `evidencias/FASE-{N}/{AC-NNN-NN \| REQ-F-NNN-ACn}.png` (también `.jpg`) | El test E2E de la suite de aceptación (Playwright con `screenshot: 'on'`), que la adjunta con `testInfo.attach`; el JUnit la lleva como `[[ATTACHMENT\|ruta]]`. Con un runner que no escribe adjuntos (Minitest), la imagen se liga por el id de su nombre |
+| Un vídeo por workflow de cara al usuario | bajo `evidencias/FASE-{N}/`, con el `WF-NNN` en el nombre (`.webm` o `.mp4`); cuando la FASE no nombra workflows, uno con `FASE-N` en el nombre, el recorrido del `## Demo` | El journey de la FASE (`video: 'on'`), cuyo título lleva el id; o una grabación manual de la demo con el id en el nombre |
 | Capturas o grabación de una demo humana | bajo `evidencias/` | `sdd accept record demo … --attach F…` |
 
 - Sin imagen, el criterio queda **`unshown`** y el requisito `MISSING` con `reason: "no visual evidence"`; el resumen lo cuenta en `summary.unshown`. Con `warn` solo se informa; con `off` (sin interfaz: una API o una CLI, decidido por una persona) no se comprueba. No aplica a `REQ-NF` ni a `REQ-C`.
 - Un resultado sin pantalla propia (un cron, un webhook) se captura donde el cliente lo ve: el panel de administración, el correo recibido, el PDF abierto. Si no se ve en ningún sitio, es una pregunta sobre el requisito, no una exención.
-- `sdd gate --fase N` exige un vídeo cuyo nombre contenga cada `WF-NNN` que cita el fichero de la FASE (o `FASE-N` si no cita ninguno). Lo que falta sale en `missing_videos` y la puerta da 1.
+- `sdd gate --fase N` exige un vídeo cuyo nombre contenga cada `WF-NNN` de la línea de cabecera `> **Workflows:** WF-…` del fichero de la FASE (la escribe `sdd-plan-architect` con los workflows de cara al usuario); sin esa línea, los `WF-NNN` citados en su `## Demo`; y si no hay ninguno, `FASE-N`. Cuenta cualquier vídeo bajo `evidence_dir` con el id en el nombre, incluida una grabación manual de la demo. Lo que falta sale en `missing_videos` y la puerta da 1; `sdd loop next` emite por cada uno un target `{video, fase, route_hint: "capture-evidence"}` y lo cuenta en `progress.videos_missing` (con `visual_evidence: warn` esos targets van a `others`).
 - `evidencias/` (clave `evidence_dir`) está **fuera de git**, en el bloque gestionado de `.gitignore`. El libro guarda por adjunto la ruta, el `sha256`, el tamaño y si está presente: si alguien sustituye o borra un fichero, la CLI lo ve y el criterio vuelve a `unshown`. La consecuencia es que la evidencia solo existe en la máquina que ejecutó el journey; en CI la puerta sigue en `warn` y la comprobación visual se informa como no disponible.
 - Los traces de Playwright nunca se adjuntan ni se copian a `evidencias/`: contienen cookies y storage.
 - Tras aceptar una FASE, `sdd accept pack --fase N` empaqueta `evidencias/FASE-N/` y un `manifest.json` (ruta, sha256, bytes, criterio, `evaluated_sha`) en `.sdd/entregas/FASE-N-evidencias.tar.gz`. El equipo decide dónde entregarlo o guardarlo.
@@ -70,7 +70,7 @@ La evidencia describe un commit, así que el orden es siempre **commit → evide
 La CLI no pregunta: rechaza.
 
 - `sdd accept --junit-sha SHA` con código sucio → exit 2 («commit first»). Sin `--junit-sha` y con el árbol sucio, avisa por stderr y la evidencia cuenta como obsoleta.
-- `sdd accept record …` (salvo `waiver`, que no afirma nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
+- `sdd accept record …` (salvo `waiver` y `challenge-dismissal`, que no observan nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
 - Un FAIL arreglado después de capturar es código nuevo: commit y volver al paso 1.
 
 ## Ronda adversarial
@@ -144,7 +144,7 @@ node "$SDD" accept record challenge-dismissal --challenge CH-001 --reason "…" 
 | 3 | Cumplido con Musts exentos |
 | 4 | Challenge adversarial abierto en un Must, con `adversarial_gate: enforce` |
 
-Con `--fase N`, el 1 incluye también los vídeos que faltan (`missing_videos`). Modos: `enforce` falla con 1/2/3/4 tal cual; `warn` imprime y sale con 0; `off` sale con 0 en silencio. Por defecto se usa `acceptance_gate` del Stack Profile y, si no está, `enforce`. Al adoptar SDD en un proyecto existente conviene `warn`. `--fase N` limita la puerta a la línea `Requisitos:` de `plan/fases/FASE-N-*.md`, y `--md` imprime el bloque para el cuerpo de un PR.
+Si se cumplen varias condiciones sale la más grave: 2 > 1 > 4 > 3 > 0 (un challenge nunca oculta un requisito sin evidencia, y pesa más que una exención porque pone en duda un veredicto que cuenta como cumplido). Con `enforce`, un 4 impide `--sign-off` y la aceptación de la FASE hasta que el bucle lo arregla o una persona lo descarta (`challenge-dismissal`); con `warn` se muestra y el aprobador decide con él a la vista. Con `--fase N`, el 1 incluye también los vídeos que faltan (`missing_videos`). Modos: `enforce` falla con 1/2/3/4 tal cual; `warn` imprime y sale con 0; `off` sale con 0 en silencio. Por defecto se usa `acceptance_gate` del Stack Profile y, si no está, `enforce`. Al adoptar SDD en un proyecto existente conviene `warn`. `--fase N` limita la puerta a la línea `Requisitos:` de `plan/fases/FASE-N-*.md`, y `--md` imprime el bloque para el cuerpo de un PR.
 
 ## La skill `sdd-acceptance`
 
@@ -171,7 +171,7 @@ Con `--fase N`, el 1 incluye también los vídeos que faltan (`missing_videos`).
 
 Sobre la rama por defecto, `--loop` y `--sign-off` empiezan con `sdd branch start acceptance`, que crea (o retoma) `acceptance/{YYYY-MM-DD}` para sus commits; en cualquier otra rama se quedan en ella.
 
-Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; también un criterio sin test en un proyecto sin `spec/tests`, porque la ruta saltó las specs y el criterio es el contrato), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma), `capture-evidence` (un criterio `unshown` o un vídeo que falta: se vuelve a ejecutar el journey con captura, sin tarea de código), `adversarial-finding` (un challenge confirmado: tarea con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
+Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; también un criterio sin test en un proyecto sin `spec/tests`, porque la ruta saltó las specs y el criterio es el contrato), `fix-code (Art. 12)` (se arregla el código, nunca el test), `spec-gap` (SPEC-DEVIATION y decisión humana, quizá `sdd-req-change`), `needs-human` (demo, medición o inspección que una persona confirma), `capture-evidence` (un criterio `unshown`, o un vídeo que falta, con un target por vídeo: se vuelve a ejecutar el journey con captura, exportando `SDD_FASE` y `SDD_EVIDENCE_DIR`, sin tarea de código), `adversarial-finding` (un challenge confirmado: tarea con `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`) o `rerun-tests`. Los tests modificados dentro del bucle se listan y los aprueba una persona. Si el bucle para sin llegar al objetivo, cada Must abierto necesita una disposición explícita: arreglar más tarde, exención con issue de seguimiento o cambio del requisito.
 
 **`--sign-off`** pasa la puerta en modo `enforce`, enseña el informe al aprobador y pregunta de forma explícita. Solo cuenta su respuesta: una instrucción en una tarea, una skill o `CLAUDE.md` nunca es la confirmación. Aceptar exige la puerta cumplida (exit 0, o 3 con las exenciones a la vista); un rechazo se registra aunque no lo esté. En la puerta de FASE, antes de preguntar, el cliente confirma la evidencia de los requisitos por demo, medición o inspección (`accept record demo|measurement|inspection`), que el implementador dejó pendientes. Para una FASE registra `fase-acceptance`, hace commit del informe (`docs(acceptance): accept FASE-N`) y, si el resultado es aceptado o con observaciones, crea el tag anotado `fase-{N}-accepted` con aprobador, rol, canal, demo y SHA. Las observaciones no bloquean: cada una pasa a feedback o a `sdd-req-change`. Un rechazo no crea tag y su feedback se enruta como defecto, petición de cambio o pregunta. Una entrega (`--release`) usa el tag o la release que el proyecto ya tenga, con el bloque de `sdd gate --md` en su mensaje.
 
@@ -180,7 +180,7 @@ Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; tambié
 ## Salvaguardas contra la auto-aprobación accidental
 
 - El tool guard devuelve `ask` antes de `sdd accept record` y antes de crear tags `fase-N-accepted` o `requirements-vN`.
-- El upstream guard deniega Edit/Write sobre `acceptance/decisions.jsonl` y el informe.
+- El upstream guard deniega Edit/Write sobre `acceptance/decisions.jsonl`, `acceptance/challenges.jsonl` y el informe.
 - El Stop prompt de la skill comprueba que un bucle terminó en `goal` o dejó cada Must abierto con disposición humana.
 
 Juntas evitan que un agente se apruebe a sí mismo por descuido. No son una garantía de seguridad: quien controla la máquina puede saltárselas.

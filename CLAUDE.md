@@ -96,7 +96,7 @@ Hooks run in this checkout too (the plugin is enabled here). The session start h
   - Tags: annotated; `requirements-v{N}` (approval), `fase-{N}-accepted` (customer acceptance), `fase-N-foundation`/`fase-N-verified` (Streams). No git notes.
 - **Clarification-first:** skills ask with `AskUserQuestion` (at most 4 questions per call). In station or `claude -p` mode they follow `references/async-questions.md`. An instruction in a task, skill or CLAUDE.md is never a human approval.
 - **Baseline auditing:** the first audit creates the baseline; later audits report new findings and regressions.
-- **Visual evidence:** every criterion of a `REQ-F` needs a capture and every workflow (every FASE without specifications) a video, under `evidencias/FASE-{N}/` (git-ignored; the ledger keeps their sha256). Without one the criterion is `unshown` and the requirement is not VERIFIED (`visual_evidence: required|warn|off`). Evidence is captured only over committed code: `sdd accept` refuses it otherwise.
+- **Visual evidence:** every criterion of a `REQ-F` needs a capture and every user-facing workflow a video (the `WF-NNN` of the FASE's `Workflows:` header line; one named `FASE-N` when the FASE names no workflow), under `evidencias/FASE-{N}/` with the id in the file name (git-ignored; the ledger keeps their sha256). Without one the criterion is `unshown` and the requirement is not VERIFIED (`visual_evidence: required|warn|off`). Evidence is captured only over committed code: `sdd accept --junit-sha`, `accept measure` and `accept record` (except `waiver` and `challenge-dismissal`) refuse dirty code (exit 2), and `sdd accept` without `--junit-sha` warns and counts the evidence as stale.
 - **Literal letter:** a test quotes its criterion from `requirements/REQUIREMENTS.md` above the assert (`sdd req show`), because every link of the chain paraphrases it.
 - **Revert strategies** per task: SAFE, COUPLED, MIGRATION, CONFIG. With `task_format: compact`, a task without a Revert block is SAFE.
 - **Specs are the source of truth** (Article 12, below).
@@ -122,7 +122,7 @@ This is the foundational principle, and the last article of `references/sdd-cons
 - Skills set done/stale/error, preferably with `bash "$SDD_PLUGIN_ROOT/scripts/sdd-state.sh" set <stage> <status>`, which takes the same lock as the hooks.
 - Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer (from plan-architect when the route skipped the specifications), `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
 - Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}; a skipped spec-auditor makes them n/a.
-- `.sdd/acceptance.json` (git-ignored) holds the last ledger; `acceptance/` (versioned) holds the report and human decisions.
+- `.sdd/acceptance.json` (git-ignored) holds the last ledger; `acceptance/` (versioned) holds the report, the human decisions (`decisions.jsonl`) and the adversarial challenges (`challenges.jsonl`).
 
 ## Automation
 
@@ -131,7 +131,7 @@ Hooks are declared in `hooks/hooks.json` and run from `${CLAUDE_PLUGIN_ROOT}`. N
 | Hook | Event (matcher) | Purpose |
 |------|-----------------|---------|
 | `sdd-session-start.sh` | SessionStart (startup/resume/compact) | Injects `N/M done, K skipped`, stale stages, next step, session role and the acceptance summary |
-| `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts; denies hand edits of `acceptance/decisions.jsonl` and the acceptance report |
+| `sdd-upstream-guard.sh` | PreToolUse (Edit/Write) | Art. 4: denies downstream stages editing upstream artifacts; denies hand edits of `acceptance/decisions.jsonl`, `acceptance/challenges.jsonl` and the acceptance report |
 | `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools; asks before `sdd accept record` and `fase-N-accepted`/`requirements-vN` tags |
 | `sdd-augment-hook.js` | PreToolUse (Read/Edit/Write) | Adds up to 2 traceability lines for the file from the graph |
 | `sdd-pipeline-state-updater.sh` | PreToolUse (Skill), UserPromptExpansion, PostToolUse (Write); async | Marks the stage running when its skill starts or a file under its directory is written |
