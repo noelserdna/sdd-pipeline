@@ -30447,11 +30447,16 @@ function acceptanceView(r) {
     criteria: criteriaLabel(r),
     stale_evidence: r.stale_evidence,
     waiver: r.waiver,
-    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...c.visual ? { visual: c.visual } : {}, scenarios: c.scenarios, evidence: c.evidence }))
+    perCriterion: r.criteria.map((c) => ({ n: c.n, text: c.text, state: c.state, ...c.visual ? { visual: c.visual } : {}, scenarios: c.scenarios, evidence: c.evidence })),
+    ...r.challenges?.length ? { challenges: r.challenges } : {}
   };
 }
+function challengeGaps(r) {
+  if (r.verdict === "DEPRECATED") return [];
+  return (r.challenges ?? []).filter((c) => c.state === "open").map((c) => `CHALLENGED_AC${c.ac}: ${c.id} ${c.category} (${c.counter}) \u2014 "${c.quote}" at ${c.evidence.map((e) => e.line ? `${e.path}:${e.line}` : e.path).join(", ")} (adversarial-finding)`);
+}
 function acceptanceGaps(r) {
-  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return [];
+  if (r.verdict === "VERIFIED" || r.verdict === "WAIVED" || r.verdict === "DEPRECATED") return challengeGaps(r);
   const gaps = [];
   if (!r.verification) gaps.push("NO_VERIFICATION_METHOD: the requirement has no valid Verification line");
   for (const c of r.criteria) {
@@ -30461,7 +30466,7 @@ function acceptanceGaps(r) {
     else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
     else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
   }
-  return gaps;
+  return [...gaps, ...challengeGaps(r)];
 }
 function executeContext(args, graph, index, cwd) {
   const { artifact_id } = args;

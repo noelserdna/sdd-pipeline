@@ -34,6 +34,13 @@
 //   - waivers, inspections, demos, measurements and fase acceptances carry `reqHash` (sha256 of the requirement's
 //     statement + criteria). A different hash means the text changed (a MODIFY): the record is stale, reported and
 //     not applied.
+// Adversarial challenges (acceptance/challenges.jsonl, written only by `sdd accept challenge add`): a finding of an
+// independent verifier on one criterion, with its category, the literal quote and `path:line` evidence in production
+// or test code. Each sits next to the verdict in `requirements[].challenges[]` and never changes it: `open`, `stale`
+// once a cited file changed since the challenge's HEAD (a capture of the evidence dir: its sha256 changed) or the
+// requirement text changed (reqHash), `dismissed` by a person (`challenge-dismissal` record in decisions.jsonl).
+// `summary.must_challenged` counts the Musts with an open one; the Stack Profile's `adversarial_gate`
+// (off | warn | enforce, default warn) decides whether `sdd gate` exits 4 on them.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -42,7 +49,7 @@ import { VERIFICATION_METHODS } from "../sdd-jev.mjs";
 
 export const SCHEMA = "sdd-acceptance-v1";
 export const VERDICTS = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
-export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance"];
+export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal"];
 export const OPS = { lt: (a, b) => a < b, le: (a, b) => a <= b, gt: (a, b) => a > b, ge: (a, b) => a >= b, eq: (a, b) => a === b };
 export const FASE_RESULTS = ["accepted", "rejected", "observations"];
 export const DECISIONS_FILE = "acceptance/decisions.jsonl";
@@ -54,6 +61,7 @@ export const ROUTES = {
   rerun: "rerun-tests",
   remeasure: "remeasure",
   capture: "capture-evidence", // run the journey again with capture; no code task
+  adversarial: "adversarial-finding", // an open, confirmed challenge of the adversarial round
 };
 /** Symbol-keyed flag on each requirement of a ledger (JSON output ignores it): false when the project has no
  *  spec/tests, i.e. the route skipped the specifications and the requirement criteria are the contract. */
@@ -157,8 +165,9 @@ export function compareMeasurement(rec) {
 
 export const FOLLOW_UP_RE = /^(#\d+|![0-9]+|[A-Z][A-Z0-9]+-\d+|[\w.-]+\/[\w.-]+[#!]\d+|https?:\/\/\S+)$/;
 
-/** Validation for a record about to be appended (`sdd accept record`). Returns error strings. */
-export function validateRecord(rec, reqs) {
+/** Validation for a record about to be appended (`sdd accept record`). Returns error strings.
+ *  ctx.challenges: the challenges of acceptance/challenges.jsonl; ctx.records: decisions already recorded. */
+export function validateRecord(rec, reqs, ctx = {}) {
   const e = [];
   if (!RECORD_TYPES.includes(rec.type)) return [`type must be one of ${RECORD_TYPES.join(", ")}`];
   if (!rec.by) e.push("--by is required (who decided)");
@@ -168,6 +177,13 @@ export function validateRecord(rec, reqs) {
     if (!Number.isInteger(rec.fase)) e.push("--fase N is required");
     if (!FASE_RESULTS.includes(rec.result)) e.push(`--result must be ${FASE_RESULTS.join(" | ")}`);
     if (!rec.channel) e.push("--channel is required (where the customer accepted: meeting, email, issue…)");
+    return e;
+  }
+  if (rec.type === "challenge-dismissal") {
+    if (!rec.reason) e.push("--reason is required (why the finding does not hold)");
+    if (!rec.challenge) { e.push("--challenge CH-NNN is required"); return e; }
+    if (!(ctx.challenges || []).some((c) => c.id === rec.challenge)) e.push(`${rec.challenge} is not in ${CHALLENGES_FILE}`);
+    else if ((ctx.records || []).some((r) => r.type === "challenge-dismissal" && r.challenge === rec.challenge)) e.push(`${rec.challenge} is already dismissed`);
     return e;
   }
   const req = reqs.find((r) => r.id === rec.req);
@@ -355,6 +371,151 @@ export function scanEvidence(root, dir) {
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
+// ------------------------------------------------------------------ adversarial challenges
+export const CHALLENGES_FILE = "acceptance/challenges.jsonl";
+export const CHALLENGE_CATEGORIES = ["WEAKENED-ASSERT", "MOCK-ONLY", "UNWIRED", "BYPASS-PATH", "CROSSING", "NOT-IMPLEMENTED",
+  "SPEC-QUESTION", "WRONG-CAPTURE"];
+/** Counter-verification results; `refuted` findings are listed in the round's summary, never recorded. */
+export const COUNTERS = ["confirmed", "refuted", "inconclusive"];
+export const RECORDED_COUNTERS = ["confirmed", "inconclusive"];
+export const ADVERSARIAL_MODES = ["off", "warn", "enforce"];
+/** Top-level folders that are never evidence of compliance: they hold what the round checks (requirements, specs,
+ *  plans, tasks, the test plan, audits, changes, feedback) or what a green test already convinced (acceptance/, the
+ *  ledger in .sdd/). test/ is the exception when the Stack Profile declares it a test path (Rails Minitest). */
+export const FORBIDDEN_EVIDENCE = ["acceptance", "feedback", "spec", "requirements", "plan", "task", "test", "audits", "changes", ".sdd"];
+
+/** Stack Profile `adversarial_gate`: off | warn | enforce; default and any other value: warn. */
+export function adversarialGate(root) {
+  const v = String(stackProfile(root).adversarial_gate || "").trim().toLowerCase();
+  return ADVERSARIAL_MODES.includes(v) ? v : "warn";
+}
+
+export function readChallenges(file) {
+  const challenges = [], errors = [];
+  if (!existsSync(file)) return { challenges, errors };
+  readFileSync(file, "utf8").split(/\r?\n/).forEach((l, i) => {
+    if (!l.trim()) return;
+    let c;
+    try { c = JSON.parse(l); } catch { errors.push({ line: i + 1, msg: "not JSON" }); return; }
+    if (!c || typeof c !== "object" || !/^CH-\d{3,}$/.test(String(c.id)) || !c.req) { errors.push({ line: i + 1, msg: "not a challenge (id CH-NNN and req required)" }); return; }
+    challenges.push({ ...c, line: i + 1 });
+  });
+  return { challenges, errors };
+}
+
+/** Next free id: CH-001, CH-002… (max + 1). */
+export function nextChallengeId(challenges) {
+  const max = challenges.reduce((m, c) => Math.max(m, Number(String(c.id).slice(3)) || 0), 0);
+  return `CH-${String(max + 1).padStart(3, "0")}`;
+}
+
+/** `path:line` → { path, line }; a bare path → { path, line: null }. */
+export function parseEvidenceRef(raw) {
+  const s = String(raw || "").trim().replace(/^\.\//, "");
+  const m = s.match(/^(.+?):(\d+)$/);
+  return m ? { path: m[1], line: Number(m[2]) } : { path: s, line: null };
+}
+
+/** Why `rel` (posix, relative to the repo) cannot be cited as evidence, or null. */
+export function forbiddenEvidence(rel, testPaths = []) {
+  const top = rel.split("/")[0];
+  if (!FORBIDDEN_EVIDENCE.includes(top)) return null;
+  if (top === "test" && !/^test\/[^/]+\.md$/i.test(rel) && under(rel, testPaths)) return null;
+  const why = top === "test" ? " (not a test path of the Stack Profile: test/ holds the test plan)" : "";
+  return `${rel}: ${top}/ is never evidence${why}; cite production or test code`;
+}
+
+/**
+ * Validate a challenge about to be appended (`sdd accept challenge add`). Returns { errors, warnings, evidence } with
+ * evidence normalized to [{ path, line }] (a capture of the evidence dir: { path, line: null, sha256 }).
+ * Cited files must exist, be committed (tracked, no uncommitted change) and hold the cited line.
+ */
+export function validateChallenge(ch, reqs, { root, testPaths = [], evidenceDir = DEFAULT_EVIDENCE_DIR } = {}) {
+  const errors = [], warnings = [], evidence = [];
+  if (!ch.head) errors.push("no HEAD commit: record challenges in a git repository with at least one commit");
+  const req = ch.req ? reqs.find((r) => r.id === ch.req) : null;
+  if (!ch.req) errors.push("--req is required");
+  else if (!req) errors.push(`${ch.req} is not in requirements/REQUIREMENTS.md`);
+  else {
+    if (req.deprecated) errors.push(`${ch.req} is deprecated: it needs no acceptance`);
+    const n = acNumber(ch.ac);
+    if (n === null || Number.isNaN(n) || n < 1) errors.push("--ac N is required (the criterion the finding is about: 2 or AC2)");
+    else if (n > Math.max(1, req.criteria.length)) errors.push(`${ch.req} has ${req.criteria.length} criteria; AC${n} does not exist`);
+    else if (norm(ch.quote) && req.criteria[n - 1] && !norm(req.criteria[n - 1]).toLowerCase().includes(norm(ch.quote).toLowerCase()))
+      warnings.push(`--quote is not a literal part of ${ch.req} AC${n} (\`sdd req show ${ch.req} --ac ${n}\`)`);
+  }
+  if (!CHALLENGE_CATEGORIES.includes(ch.category)) errors.push(`--category must be one of ${CHALLENGE_CATEGORIES.join(", ")}`);
+  if (!norm(ch.quote)) errors.push("--quote is required: the literal words of the criterion that are not met");
+  if (!norm(ch.verifier)) errors.push("--verifier is required (the agent that raised the finding)");
+  if (ch.counter === "refuted") errors.push("--counter refuted: a refuted finding is not recorded; list it in the round's summary");
+  else if (!RECORDED_COUNTERS.includes(ch.counter)) errors.push(`--counter must be ${RECORDED_COUNTERS.join(" | ")} (the counter-verifier's result)`);
+  const refs = ch.evidence || [];
+  if (!refs.length) errors.push("--evidence path:line is required (production or test code)");
+  const repo = Boolean(root) && isRepo(root);
+  const evDir = String(evidenceDir).replace(/^\.\//, "").replace(/\/+$/, "");
+  for (const raw of refs) {
+    const ref = parseEvidenceRef(raw);
+    const abs = path.resolve(root, ref.path);
+    const rel = toPosix(path.relative(root, abs));
+    if (!ref.path || !rel || rel.startsWith("..") || path.isAbsolute(rel)) { errors.push(`--evidence ${raw}: not a path inside the repository`); continue; }
+    const bad = forbiddenEvidence(rel, testPaths);
+    if (bad) { errors.push(`--evidence ${bad}`); continue; }
+    let st = null;
+    try { st = statSync(abs); } catch { /* absent */ }
+    if (!st || !st.isFile()) { errors.push(`--evidence ${raw}: no such file`); continue; }
+    // A capture of the evidence dir (WRONG-CAPTURE) is not versioned and has no lines: it is pinned by its sha256.
+    if (under(rel, [evDir])) {
+      evidence.push({ path: rel, line: null, sha256: describeFile(root, abs).sha256 });
+      continue;
+    }
+    if (ref.line === null || ref.line < 1) { errors.push(`--evidence ${raw}: needs a line (path:line)`); continue; }
+    const lines = readFileSync(abs, "utf8").split(/\r?\n/);
+    const count = lines.length - (lines[lines.length - 1] === "" ? 1 : 0);
+    if (ref.line > count) { errors.push(`--evidence ${raw}: ${rel} has ${count} lines`); continue; }
+    if (repo) {
+      if (git(root, ["ls-files", "--error-unmatch", "--", rel]).status !== 0) { errors.push(`--evidence ${raw}: ${rel} is not committed: a finding is anchored to HEAD; commit first`); continue; }
+      if (git(root, ["diff", "--quiet", "HEAD", "--", rel]).status !== 0) { errors.push(`--evidence ${raw}: ${rel} has uncommitted changes: a finding is anchored to HEAD; commit first`); continue; }
+    }
+    evidence.push({ path: rel, line: ref.line });
+  }
+  return { errors, warnings, evidence };
+}
+
+/** State of one challenge: dismissed (a person's record) · stale (requirement text changed or deprecated, a cited
+ *  file changed since the challenge's HEAD, a cited capture changed) · open. */
+export function challengeState(root, ch, { req, dismissal, repo = true, cache = new Map(), files = new Map(), evidenceDir = DEFAULT_EVIDENCE_DIR } = {}) {
+  if (dismissal) return { state: "dismissed", dismissal: { line: dismissal.line, by: dismissal.by, role: dismissal.role, reason: dismissal.reason, at: dismissal.at || null } };
+  if (!req) return { state: "stale", stale_reason: `${ch.req} is not in requirements/REQUIREMENTS.md` };
+  if (req.deprecated) return { state: "stale", stale_reason: "requirement deprecated" };
+  if (ch.reqHash !== reqHash(req)) return { state: "stale", stale_reason: "requirement text changed since the challenge (MODIFY)" };
+  const evDir = String(evidenceDir).replace(/^\.\//, "").replace(/\/+$/, "");
+  const ev = Array.isArray(ch.evidence) ? ch.evidence : [];
+  for (const e of ev.filter((x) => x.sha256)) {
+    const now = describeFile(root, path.resolve(root, String(e.path)), files);
+    if (!now.present || now.sha256 !== e.sha256) return { state: "stale", stale_reason: `capture ${e.path} changed` };
+  }
+  if (repo) {
+    const paths = [...new Set((Array.isArray(ch.paths) && ch.paths.length ? ch.paths : ev.map((x) => x.path)).map(String))]
+      .filter((p) => !under(p, [evDir]));
+    const changed = paths.filter((p) => !unchangedSince(root, ch.head, [p], cache));
+    if (changed.length) return { state: "stale", stale_reason: `cited code changed since ${String(ch.head || "?").slice(0, 7)}: ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}` };
+  }
+  return { state: "open" };
+}
+
+/** Challenges with their state, for `challenge list` and the ledger. records: decisions (challenge-dismissal ones count). */
+export function challengeStates(root, challenges, reqs, records, opts = {}) {
+  const byId = new Map(reqs.map((r) => [r.id, r]));
+  const dis = new Map();
+  for (const d of records) if (d.type === "challenge-dismissal") dis.set(d.challenge, d);
+  return challenges.map((c) => ({ ...c, ...challengeState(root, c, { ...opts, req: byId.get(c.req), dismissal: dis.get(c.id) }) }));
+}
+
+/** The ledger's view of one challenge (requirements[].challenges[]). */
+export const challengeView = (c) => ({ id: c.id, ac: c.ac, category: c.category, counter: c.counter, quote: c.quote,
+  evidence: c.evidence, verifier: c.verifier, head: c.head, at: c.at || null, state: c.state,
+  ...(c.stale_reason ? { stale_reason: c.stale_reason } : {}), ...(c.dismissal ? { dismissal: c.dismissal } : {}) });
+
 /** Video ids a FASE gate asks for: each WF-NNN cited in plan/fases/FASE-N-*.md, else FASE-N (route without specs). */
 export function faseVideoIds(root, fase) {
   const { file } = faseScope(root, fase);
@@ -387,7 +548,8 @@ function latest(list) { return list.length ? list[list.length - 1] : null; }
  *         scope: Set | null, fase, now }
  */
 export function evaluate(opts) {
-  const { root, reqs, scenarios, junit, junitSha = null, decisions = { records: [], errors: [] }, scope = null, fase = null } = opts;
+  const { root, reqs, scenarios, junit, junitSha = null, decisions = { records: [], errors: [] }, scope = null, fase = null,
+    challenges = { challenges: [], errors: [] } } = opts;
   const g = opts.git || { repo: false, head: null, headTime: null, dirty: null, dirtyPaths: [] };
   // Code paths (profile code_paths + test_paths); a git context without them falls back to the whole tree.
   const codePaths = g.codePaths || [];
@@ -488,7 +650,7 @@ export function evaluate(opts) {
     const base = { id: req.id, type: req.type, title: req.title, priority, needs: req.needs || [], verification: method,
       verification_raw: method ? null : req.verification, reqHash: hash,
       in_scope: scope ? scope.has(req.id) : true, [SPEC_TESTS]: specTests };
-    const mine = recs.filter((r) => r.req === req.id);
+    const mine = recs.filter((r) => r.req === req.id && r.type !== "challenge-dismissal");
     if (req.deprecated) {
       requirements.push({ ...base, verdict: "DEPRECATED", reason: null, criteria: [], criteria_total: 0, criteria_passing: 0, evidence: [], waiver: null, stale_evidence: false });
       continue;
@@ -600,6 +762,12 @@ export function evaluate(opts) {
     videos = { required: wanted, found: all.filter((p) => wanted.some((id) => nameHasId(p, id))), missing: wanted.filter((id) => !all.some((p) => nameHasId(p, id))) };
   }
 
+  // Adversarial challenges: next to the verdict, never changing it.
+  const adversarial = opts.adversarial || adversarialGate(root);
+  const chStates = challengeStates(root, challenges.challenges || [], reqs, recs, { repo: Boolean(g.repo), cache, files, evidenceDir: settings.dir });
+  for (const r of requirements) r.challenges = chStates.filter((c) => c.req === r.id).map(challengeView);
+  const unknownChallenges = chStates.filter((c) => !requirements.some((r) => r.id === c.req)).map((c) => c.id);
+
   const summary = summarize(requirements.filter((r) => r.in_scope));
   if (videos) {
     summary.missing_videos = videos.missing;
@@ -619,6 +787,7 @@ export function evaluate(opts) {
     fase_acceptances: faseAcceptances,
     stale_decisions: staleDecisions,
     decision_errors: decisions.errors,
+    adversarial_gate: adversarial, challenge_errors: challenges.errors || [], unknown_challenges: unknownChallenges,
     unknown_scenarios: [...unknownScenarios].sort(),
     unbound_tests: unboundTests,
   };
@@ -639,12 +808,18 @@ export function summarize(list) {
   const musts = list.filter((r) => r.verdict !== "DEPRECATED" && r.priority === "Must");
   const must_verified = musts.filter((r) => r.verdict === "VERIFIED").length;
   const waived = musts.filter((r) => r.verdict === "WAIVED");
+  const challenged = musts.filter((r) => r.verdict !== "WAIVED" && (r.challenges || []).some((c) => c.state === "open"));
   return {
     active: list.filter((r) => r.verdict !== "DEPRECATED").length, deprecated: by_verdict.DEPRECATED,
     by_verdict, by_priority, must_total: musts.length, must_verified, must_waived: waived.length,
     goal: musts.every((r) => r.verdict === "VERIFIED" || r.verdict === "WAIVED"),
     waived_musts: waived.map((r) => r.id),
     stale_evidence: list.filter((r) => r.stale_evidence).length,
+    // Adversarial round: open challenges (any priority) and the Musts carrying at least one (the enforce gate's input).
+    // A waived Must is deferred by a person, so its challenges are shown but do not count here.
+    challenges_open: list.flatMap((r) => r.challenges || []).filter((c) => c.state === "open").length,
+    must_challenged: challenged.length,
+    challenged_musts: challenged.map((r) => r.id),
     // REQ-F criteria whose tests pass without a screenshot (state unshown under `required`, still pass under `warn`).
     unshown: list.filter((r) => r.verdict !== "DEPRECATED" && r.verdict !== "WAIVED")
       .flatMap((r) => r.criteria || []).filter((c) => c.visual === "missing" && (c.state === "pass" || c.state === "unshown")).length,
@@ -735,7 +910,15 @@ function screenshotOf(c) {
   }
   return null;
 }
-const verdictCell = (r) => `${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}`;
+const openOf = (r) => (r.challenges || []).filter((c) => c.state === "open");
+const verdictCell = (r) => `${r.verdict}${r.reason ? ` (${r.reason})` : ""}${r.stale_evidence ? " (stale evidence)" : ""}${openOf(r).length ? ` · challenged ${openOf(r).map((c) => c.id).join(", ")}` : ""}`;
+/** One line on open adversarial challenges for the PR block and the report, or null when there is none. */
+function adversarialLine(ledger) {
+  const open = ledger.requirements.filter((r) => r.in_scope).flatMap((r) => openOf(r).map((c) => `${c.id} ${r.id} AC${c.ac} ${c.category}`));
+  if (!open.length) return null;
+  const musts = ledger.summary.must_challenged || 0;
+  return `Adversarial (\`adversarial_gate: ${ledger.adversarial_gate || "warn"}\`): ${open.length} open challenge${open.length === 1 ? "" : "s"}${musts ? `, ${musts} on Must requirement${musts === 1 ? "" : "s"}` : ""} (${open.slice(0, 6).join(", ")}${open.length > 6 ? ", …" : ""}) — route adversarial-finding; the verdicts do not change.`;
+}
 /** One line on visual evidence for the PR block and the report, or null when the rule is off or nothing is missing. */
 function visualLine(ledger) {
   const mode = ledger.visual_evidence, s = ledger.summary;
@@ -779,6 +962,16 @@ export function renderReport(ledger) {
     if (rows.length) o.push("| Requirement | Criterion | State | Screenshot |", "|---|---|---|---|", ...rows, "");
     if (ledger.videos) o.push(`Videos for FASE ${ledger.scope?.fase ?? "?"}: ${ledger.videos.required.map((id) => `${id} ${ledger.videos.missing.includes(id) ? "missing" : "present"}`).join(" · ")}.`);
   }
+  const challenged = ledger.requirements.filter((r) => r.in_scope && (r.challenges || []).length);
+  if (challenged.length) {
+    o.push("", "## Adversarial challenges", "",
+      `Findings of the adversarial round (\`${CHALLENGES_FILE}\`) that sit next to the verdicts without changing them: \`open\` until the cited code or the requirement changes (\`stale\`) or a person dismisses it. Gate \`adversarial_gate: ${ledger.adversarial_gate || "warn"}\`. ${adversarialLine(ledger) || "No challenge is open."}`, "",
+      "| Challenge | Requirement | Criterion | Category | Counter | State | Quote | Evidence |", "|---|---|---|---|---|---|---|---|");
+    for (const r of challenged) for (const c of r.challenges) {
+      const state = c.state === "stale" ? `stale (${c.stale_reason})` : c.state === "dismissed" ? `dismissed by ${c.dismissal.by} (${c.dismissal.role}): ${c.dismissal.reason}` : "open";
+      o.push(`| ${c.id} | ${r.id} | AC${c.ac} | ${c.category} | ${c.counter} | ${cell(state)} | ${cell(`"${clip(c.quote)}"`)} | ${cell((c.evidence || []).map((e) => e.line ? `${e.path}:${e.line}` : e.path).join(", "))} |`);
+    }
+  }
   o.push("", "## Deprecated", "");
   const dep = ledger.requirements.filter((r) => r.in_scope && r.verdict === "DEPRECATED");
   if (!dep.length) o.push("None.");
@@ -804,6 +997,7 @@ export function renderPrBlock(ledger, code) {
   const o = [`### Acceptance${ledger.scope ? ` — FASE ${ledger.scope.fase}` : ""} (evaluated at \`${sha}\`, gate exit ${code})`, "",
     `Goal: **${s.goal ? (s.must_waived ? "met with waivers" : "met") : "not met"}** — Must ${s.must_verified}/${s.must_total} verified${s.must_waived ? `, ${s.must_waived} waived (${s.waived_musts.join(", ")})` : ""}.`, "",
     ...(visualLine(ledger) ? [visualLine(ledger), ""] : []),
+    ...(adversarialLine(ledger) ? [adversarialLine(ledger), ""] : []),
     "| Requirement | Priority | Verification | Verdict | Criteria | Evidence |", "|---|---|---|---|---|---|"];
   for (const r of rows) o.push(`| ${r.id} ${cell(r.title)} | ${cell(r.priority || "—")} | ${cell(r.verification || "—")} | ${verdictCell(r).replace(" (stale evidence)", "")} | ${r.criteria_passing}/${r.criteria_total} | ${cell(evidenceCell(r))} |`);
   o.push("", `Refs: ${rows.map((r) => r.id).join(", ") || "—"}`);

@@ -539,6 +539,21 @@ blk=$(md_block "$ROOT/skills/sdd-acceptance/references/sign-off.md" 'accept reco
 [ "$(guard "" "$repo" Edit "$repo/acceptance/ACCEPTANCE-REPORT.md")" = deny ] && pass "H2 deniega Edit en acceptance/ACCEPTANCE-REPORT.md" || bad "H2 permite Edit en ACCEPTANCE-REPORT.md"
 [ "$(guard "" "$repo" Write "$repo/acceptance/playwright.config.ts")" = allow ] && pass "H2 permite el resto de acceptance/ (suite Playwright)" || bad "H2 deniega acceptance/playwright.config.ts"
 contains "$(guard_out "" "$repo" Write "$repo/acceptance/decisions.jsonl")" "accept record" && pass "H2 motivo apunta a sdd accept record" || bad "H2 motivo de decisions.jsonl"
+# Ronda adversarial: challenges.jsonl solo lo escribe `sdd accept challenge add`; descartar uno es un registro humano
+[ "$(guard "" "$repo" Write "$repo/acceptance/challenges.jsonl")" = deny ] && pass "H2 deniega Write en acceptance/challenges.jsonl" || bad "H2 permite Write en challenges.jsonl"
+[ "$(guard "" "$repo" Edit "$repo/acceptance/challenges.jsonl")" = deny ] && pass "H2 deniega Edit en acceptance/challenges.jsonl" || bad "H2 permite Edit en challenges.jsonl"
+contains "$(guard_out "" "$repo" Write "$repo/acceptance/challenges.jsonl")" "accept challenge add" && pass "H2 motivo de challenges.jsonl apunta a sdd accept challenge add" || bad "H2 motivo de challenges.jsonl"
+[ "$(tg "" "$rroot" 'node "$SDD" accept record challenge-dismissal --challenge CH-001 --reason "admin-only by design" --by Ana --role PO')" = ask ] && pass "H12 pregunta ante accept record challenge-dismissal" || bad "H12 no pregunta ante challenge-dismissal"
+oka=1
+while IFS= read -r c; do
+  [ "$(tg "" "$rroot" "$c")" = allow ] || { oka=0; echo "     no permite: $c"; }
+done <<'EOF'
+node "$SDD" accept challenge add --req REQ-F-012 --ac 2 --category WEAKENED-ASSERT --quote "su título" --evidence src/cv/sections.ts:41 --verifier verifier-FASE-2 --counter confirmed
+node "$SDD" accept challenge add --req REQ-F-001 --ac 1 --category SPEC-QUESTION --quote "accept record" --evidence src/a.ts:1 --verifier v --counter inconclusive
+node "$SDD" accept challenge list --open --json
+node "$SDD" accept adversarial plan --fase 2 --json > .sdd/adversarial-plan.json
+EOF
+[ "$oka" = 1 ] && pass "H12 no pregunta ante accept challenge add/list ni adversarial plan" || bad "H12 pregunta ante un comando de la ronda adversarial"
 
 # H1 resume la aceptación de .sdd/acceptance.json (sin él, nada)
 acc="$tmp/accsum"; git init -q "$acc"
