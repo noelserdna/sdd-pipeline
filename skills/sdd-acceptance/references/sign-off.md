@@ -6,7 +6,9 @@ Acceptance must be checkable later (who accepted what, when, at which commit, th
 
 ## 1. Question
 
-Ask with `AskUserQuestion`, after showing the report path, the goal line and any waived Musts:
+Ask with `AskUserQuestion`, after showing the report path, the goal line, any waived Musts, the open challenges of
+the adversarial round (`node "$SDD" accept challenge list --open`, whatever `adversarial_gate` says) and, for a FASE,
+its video and captures (`evidencias/FASE-N/`):
 
 - Question: "Accept FASE {N} at commit {sha7}? Must {v}/{t} verified{, {w} waived}."
   (release: "Accept release {NAME} at commit {sha7}? …")
@@ -53,7 +55,19 @@ The tool guard asks before creating the tag. Never move or delete an existing ac
 at it; a re-acceptance after changes is a new decision on a later FASE or release. Push (`git push origin
 fase-N-accepted`) only when the user agrees.
 
-## 4. Release
+## 4. Evidence pack (FASE accepted)
+
+`evidencias/` is not versioned, so after the tag the FASE's captures and videos would live only on this machine:
+
+```bash
+node "$SDD" accept pack --fase N     # → .sdd/entregas/FASE-N-evidencias.tar.gz
+```
+
+The archive holds `evidencias/FASE-N/` and a `manifest.json` (path, `sha256`, bytes, criterion, `evaluated_sha`), so
+anyone can later check that a file is the one the ledger saw. Tell the team where it is; handing it to the customer
+or storing it elsewhere is their decision.
+
+## 5. Release
 
 A release has no tag kind of its own and no `fase-acceptance` record (that record is per FASE). Use the tag or
 platform release the project already uses (`v1.4.0`, a GitHub or GitLab release), created only after the approver's

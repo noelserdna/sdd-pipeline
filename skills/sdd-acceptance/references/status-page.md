@@ -17,10 +17,14 @@ customer needs; the increments and the verdicts appear as the plan and the tests
 | `acceptance/decisions.jsonl` via the report | FASE acceptances (who, when), demo records |
 | `requirements/CUSTOMER-NEEDS.md` | needs covered per increment |
 | `sdd issue` / `sdd pr-body` (when `tracker` is set) | links to the FASE and change issues and open PRs |
+| `evidencias/FASE-N/` (the profile's `evidence_dir`) with the attachments listed in the ledger (`present`, `sha256`) | the captures and the video of each increment |
 | `pipeline-state.json` stages (`lastRun`, `summary.highlights`, `summary.metrics`, `skipReason`), the `route` block and `git tag -l --format='%(refname:short) %(creatordate:iso)'` | the journey: one entry per stage or gate, in order, with time, duration, outcome and tags |
 
-The page shows titles, verdicts, dates and links. It never includes code, secrets, file contents, emails of third
-parties or anything from `.env`-like files.
+The page shows titles, verdicts, dates, links, and the screen captures and videos of `evidencias/`: those were made
+to be shown to the customer, and a requirement is done when it can be shown. It never includes code, secrets, the
+contents of other files, Playwright traces (they hold cookies and storage), emails of third parties or anything from
+`.env`-like files. Before the first publish with captures, look at them: a capture of a real account can show
+personal data, and then it stays off the page.
 
 ## Content
 
@@ -32,8 +36,10 @@ parties or anything from `.env`-like files.
    and who confirmed the route (`route.confirmedBy`), so a reader sees that a stage was decided out, not forgotten.
 3. Four tiles: Must verified · failing · missing · waived (waived Musts always visible, with their follow-up issue).
 4. Increments: one row per FASE — increment, status (planned / in progress / verified / accepted / rejected),
-   acceptance date and approver role, link to its issue.
-5. Requirements: id, title, priority, verdict, evidence kind, criteria k/n, customer needs.
+   acceptance date and approver role, link to its issue, and its video (one per workflow) with the captures of its
+   criteria below it, each labelled with its criterion id and text.
+5. Requirements: id, title, priority, verdict, evidence kind, criteria k/n, customer needs; `unshown` criteria and
+   open challenges of the adversarial round are marked as such.
 6. Open decisions: stale acceptances after a requirement changed, pending human dispositions from the last loop.
 
 ## Build and publish
@@ -46,7 +52,12 @@ parties or anything from `.env`-like files.
    in `.sdd/status-page.json` (`{"url": …, "publishedAt": …, "sha": …}`).
 4. Later publishes: pass that `url` so the same link is updated, and refresh the stored `sha`. If the stored URL is
    refused, publish a new one and say so.
-5. Report the link in one line. Pinning or sharing is the owner's decision.
+5. Captures and videos are the artifact's assets, not inlined data, since a page stays under 16 MB and videos do not
+   fit: load the `artifact-capabilities` skill and declare the `assets` capability; once the page has its URL, upload
+   the files of `evidencias/FASE-N/` whose ledger entry is `present` (Artifact `asset: true` with that `url`,
+   `file_paths`), reference each by the `url` the upload returns and republish. Upload only what changed since the
+   last publish (compare `sha256` with the `assets` map kept in `.sdd/status-page.json`).
+6. Report the link in one line. Pinning or sharing is the owner's decision.
 
 Updating the same URL and reading viewer comments are not yet verified end to end in this plugin; if an update fails,
 fall back to a new artifact and tell the user.
