@@ -545,7 +545,7 @@ expect "test evidence carries its attachments with kind" "$(js "$A.map(a=>a.kind
 expect "attachment paths relative to the repo root" "$(js "$A.map(a=>a.path).join()")" "evidencias/FASE-1/AC-001-01.png,evidencias/FASE-1/FASE-1.webm,test-results/add/trace.zip"
 expect "present: existing files yes, missing trace no" "$(js "$A.map(a=>a.present).join()")" true,true,false
 sha=$(node -e 'process.stdout.write("sha256:"+require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$repo/evidencias/FASE-1/AC-001-01.png")
-expect "attachment sha256 and bytes" "$(js "$A[0].sha256 + '/' + $A[0].bytes")" "$sha/11"
+expect "attachment sha256 and bytes" "$(js "${A}[0].sha256 + '/' + ${A}[0].bytes")" "$sha/11"
 expect "a test without attachments carries an empty list" "$(js 'j.requirements.find(r=>r.id==="REQ-F-002").criteria[0].evidence[0].attachments.length')" 0
 run accept record demo --req REQ-F-006 --observed "aligned" --pass true --attach evidencias/FASE-1/AC-001-01.png --by Laura --role "product owner"
 expect "record demo --attach → 0" "$rc" 0
