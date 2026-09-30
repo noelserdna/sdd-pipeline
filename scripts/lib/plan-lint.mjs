@@ -174,7 +174,9 @@ export function parsePorts(text) {
   return ports;
 }
 
-const E2E_PATH_RE = /(^|\/)(e2e|acceptance|system)\/|\.(e2e|journey)\.[a-z]+$/i;
+/** An acceptance (E2E) path: an e2e/, acceptance/ or system/ directory, or a `.e2e`/`.journey` file (x.e2e.ts,
+ *  x.journey.spec.ts, x.e2e.test.js) wherever it sits. */
+const E2E_PATH_RE = /(^|\/)(e2e|acceptance|system)\/|\.(e2e|journey)(\.(spec|test))?\.[a-z]+$/i;
 /** The project has an acceptance (E2E) suite: stack-profile.md §7. */
 function hasAcceptanceSuite(root) {
   const prof = stackProfile(root);

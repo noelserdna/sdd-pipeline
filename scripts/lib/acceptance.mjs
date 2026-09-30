@@ -13,8 +13,9 @@
 // default evidencias/): a REQ-F criterion is shown when a fresh passing test, a fresh record or a fresh file of the
 // evidence dir named after its scenario id (AC-NNN-NN) or `REQ-F-NNN-ACn` brings an image that is present. Under
 // `required` a passing criterion without one is `unshown` and the requirement MISSING with reason "no visual evidence";
-// `warn` only reports it. With a FASE scope, each WF-NNN cited by the FASE file (else FASE-N) needs a video whose name
-// carries it; a missing one makes the goal not met (`summary.missing_videos`). Attachments: [{path, sha256, bytes,
+// `warn` only reports it. With a FASE scope, each WF-NNN of the FASE file's `Workflows:` header line (without that line,
+// each one cited inside `## Demo`; with none, FASE-N) needs a video whose name carries it: any video file under the
+// evidence dir (manual demo recordings too), a JUnit attachment or a record's --attach; a missing one makes the goal not met (`summary.missing_videos`). Attachments: [{path, sha256, bytes,
 // kind: image|video|trace|other, present}] from JUnit `[[ATTACHMENT|…]]`, record `--attach` and name-bound files.
 // Freshness (evidence older than the code does not count). "Code" is the Stack Profile's `code_paths` + `test_paths`
 // (defaults `src`, `tests`; only those that exist): a docs, feedback or spec commit does not make evidence stale. When
@@ -516,11 +517,23 @@ export const challengeView = (c) => ({ id: c.id, ac: c.ac, category: c.category,
   evidence: c.evidence, verifier: c.verifier, head: c.head, at: c.at || null, state: c.state,
   ...(c.stale_reason ? { stale_reason: c.stale_reason } : {}), ...(c.dismissal ? { dismissal: c.dismissal } : {}) });
 
-/** Video ids a FASE gate asks for: each WF-NNN cited in plan/fases/FASE-N-*.md, else FASE-N (route without specs). */
+/** Video ids a FASE gate asks for, from plan/fases/FASE-N-*.md: the WF-NNN of the header's `Workflows:` line (the
+ *  user-facing workflows, written by plan-architect); without that line, the WF-NNN cited inside `## Demo`; else FASE-N.
+ *  Workflows cited elsewhere (Specs a Leer, notes) are reading material, not journeys to film. */
 export function faseVideoIds(root, fase) {
   const { file } = faseScope(root, fase);
-  const text = file ? readFileSync(path.join(root, file), "utf8") : "";
-  const wf = [...new Set((text.match(/\bWF-\d{3,}\b/g) || []).map((x) => x.toUpperCase()))].sort();
+  const lines = file ? readFileSync(path.join(root, file), "utf8").split(/\r?\n/) : [];
+  const wfIds = (text) => [...new Set((text.match(/\bWF-\d{3,}\b/gi) || []).map((x) => x.toUpperCase()))].sort();
+  const end = lines.findIndex((l, i) => i > 0 && /^##\s/.test(l));
+  const header = lines.slice(0, end < 0 ? 40 : end).find((l) => /\bWorkflows\b[*\s]*:/i.test(l));
+  let wf = header ? wfIds(header) : [];
+  if (!header) {
+    const start = lines.findIndex((l) => /^##\s+Demo\b/i.test(l));
+    if (start >= 0) {
+      const stop = lines.findIndex((l, i) => i > start && /^##?\s/.test(l));
+      wf = wfIds(lines.slice(start + 1, stop < 0 ? lines.length : stop).join("\n"));
+    }
+  }
   return wf.length ? wf : [`FASE-${fase}`];
 }
 
@@ -746,7 +759,7 @@ export function evaluate(opts) {
       demo: r.demo || null, line: r.line, stale: changed.length > 0, changed, ...recAtt(r) };
   });
 
-  // Video per FASE: each WF-NNN cited by the FASE file (or FASE-N) needs a present video whose name carries it, from a
+  // Video per FASE: each id of faseVideoIds (WF-NNN or FASE-N) needs a present video whose name carries it, from a
   // fresh JUnit attachment, a fresh file of the evidence dir or a decision record.
   let videos = null;
   if (fase !== null && fase !== undefined && visual !== "off") {

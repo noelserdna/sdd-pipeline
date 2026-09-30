@@ -138,24 +138,44 @@ if [ -f "$GRAPH_FILE" ]; then
   [ -n "$COVERAGE" ] && CONTEXT="$CONTEXT $COVERAGE"
 fi
 
-# Resumen de aceptación del último `sdd accept` / `sdd gate` / `sdd loop next` (.sdd/acceptance.json, ignorado por git)
+# Resumen de aceptación del último `sdd accept` / `sdd gate` / `sdd loop next` (.sdd/acceptance.json, ignorado por git).
+# Sugiere --sign-off solo con el objetivo cumplido y nada pendiente: criterios sin captura (unshown), vídeos de la FASE
+# que faltan o challenges abiertos en un Must. Con adversarial_gate enforce y un challenge abierto en un Must el gate
+# sale 4: pide arreglarlo o descartarlo.
 ACCEPT_FILE="$STATE_ROOT/.sdd/acceptance.json"
 if [ -f "$ACCEPT_FILE" ]; then
   acceptance_with_jq() {
     jq -r '.summary as $s | select($s != null)
+      | ($s.unshown // 0) as $un | ($s.missing_videos // []) as $mv | ($s.must_challenged // 0) as $ch
+      | ($s.goal and (.adversarial_gate // "warn") == "enforce" and $ch > 0) as $g4
       | "| Acceptance: Must " + ($s.must_verified | tostring) + "/" + ($s.must_total | tostring) + " verified"
         + (if ($s.must_waived // 0) > 0 then ", " + ($s.must_waived | tostring) + " waived" else "" end)
-        + (if $s.goal then " (goal met)" else " (open: /sdd-acceptance --loop)" end)
+        + (if $g4 then " (gate 4: fix or dismiss the open challenge on a Must)"
+           elif $s.goal and ($un > 0 or ($mv | length) > 0 or $ch > 0) then " (goal met, not ready for sign-off)"
+           elif $s.goal then " (goal met: /sdd-acceptance --sign-off)"
+           else " (open: /sdd-acceptance --loop)" end)
         + (if ($s.stale_evidence // 0) > 0 then ", stale evidence " + ($s.stale_evidence | tostring) else "" end)
+        + (if $un > 0 then ", unshown " + ($un | tostring) else "" end)
+        + (if ($mv | length) > 0 then ", missing video " + ($mv | join(",")) else "" end)
+        + (if $ch > 0 then ", Must challenged " + ($ch | tostring) else "" end)
         + " @" + ((.evaluated_sha // "no-git") | .[0:7])' "$ACCEPT_FILE" 2>/dev/null
   }
   acceptance_with_node() {
     SDD_ACCEPT_FILE="$ACCEPT_FILE" node -e "
       try {
         const l = JSON.parse(require('fs').readFileSync(process.env.SDD_ACCEPT_FILE, 'utf8')); const s = l.summary;
-        if (s) console.log('| Acceptance: Must ' + s.must_verified + '/' + s.must_total + ' verified'
-          + (s.must_waived ? ', ' + s.must_waived + ' waived' : '') + (s.goal ? ' (goal met)' : ' (open: /sdd-acceptance --loop)')
-          + (s.stale_evidence ? ', stale evidence ' + s.stale_evidence : '') + ' @' + String(l.evaluated_sha || 'no-git').slice(0, 7));
+        if (s) {
+          const un = s.unshown || 0, mv = s.missing_videos || [], ch = s.must_challenged || 0;
+          const g4 = s.goal && (l.adversarial_gate || 'warn') === 'enforce' && ch > 0;
+          const hint = g4 ? ' (gate 4: fix or dismiss the open challenge on a Must)'
+            : s.goal && (un || mv.length || ch) ? ' (goal met, not ready for sign-off)'
+            : s.goal ? ' (goal met: /sdd-acceptance --sign-off)' : ' (open: /sdd-acceptance --loop)';
+          console.log('| Acceptance: Must ' + s.must_verified + '/' + s.must_total + ' verified'
+            + (s.must_waived ? ', ' + s.must_waived + ' waived' : '') + hint
+            + (s.stale_evidence ? ', stale evidence ' + s.stale_evidence : '') + (un ? ', unshown ' + un : '')
+            + (mv.length ? ', missing video ' + mv.join(',') : '') + (ch ? ', Must challenged ' + ch : '')
+            + ' @' + String(l.evaluated_sha || 'no-git').slice(0, 7));
+        }
       } catch (e) {}
     " 2>/dev/null
   }

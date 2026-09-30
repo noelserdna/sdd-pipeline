@@ -658,7 +658,7 @@ function cmdLoop(o) {
   const count = (v) => goalSet.filter((r) => r.verdict === v).length;
   const adversarial = ledger.adversarial_gate || "warn";
   const progress = { verified: count("VERIFIED"), waived: count("WAIVED"), failing: count("FAILING"), missing: count("MISSING"),
-    challenged: ledger.summary.must_challenged || 0 };
+    challenged: ledger.summary.must_challenged || 0, videos_missing: (ledger.summary.missing_videos || []).length };
   const verdicts = Object.fromEntries(goalSet.map((r) => [r.id, r.verdict]));
   const prev = state.cycles[state.cycles.length - 1] || null;
   const cycle = state.cycles.length + 1;
@@ -673,9 +673,15 @@ function cmdLoop(o) {
     req: r.id, priority: r.priority, verdict: r.verdict, challenge: c.id, ac: c.ac, category: c.category, counter: c.counter, quote: c.quote,
     evidence: (c.evidence || []).map((e) => e.line ? `${e.path}:${e.line}` : e.path),
     route_hint: c.counter === "confirmed" ? ROUTES.adversarial : ROUTES.human }));
-  const targets = [...goalSet.filter(open).map(target), ...(adversarial === "off" ? [] : goalSet.flatMap(challengeTargets))];
+  // A missing FASE video (WF-NNN or FASE-N) is one capture target: run the journey again with video, no code task.
+  // Under visual_evidence required it blocks the goal, so it is loop work; under warn it is listed with the others.
+  const videoTargets = (ledger.summary.missing_videos || []).map((id) => ({ video: id, fase: ledger.scope?.fase ?? null, route_hint: ROUTES.capture }));
+  const videosBlock = ledger.visual_evidence === "required";
+  const targets = [...goalSet.filter(open).map(target), ...(adversarial === "off" ? [] : goalSet.flatMap(challengeTargets)),
+    ...(videosBlock ? videoTargets : [])];
   const others = [...ledger.requirements.filter((r) => r.in_scope && r.priority !== "Must" && open(r)).map(target),
-    ...(adversarial === "off" ? [] : ledger.requirements.filter((r) => r.in_scope && r.priority !== "Must").flatMap(challengeTargets))];
+    ...(adversarial === "off" ? [] : ledger.requirements.filter((r) => r.in_scope && r.priority !== "Must").flatMap(challengeTargets)),
+    ...(videosBlock ? [] : videoTargets)];
 
   const everVerified = new Set(state.cycles.flatMap((c) => Object.entries(c.verdicts || {}).filter(([, v]) => v === "VERIFIED").map(([k]) => k)));
   const regressed = goalSet.filter((r) => everVerified.has(r.id) && open(r)).map((r) => r.id);
@@ -685,7 +691,7 @@ function cmdLoop(o) {
   else if (regressed.length) stop = "regression";
   else if (targets.length && targets.every((t) => t.route_hint === ROUTES.human || t.route_hint === ROUTES.specGap)) stop = "needs-human";
   else if (prev && !(progress.verified > prev.progress.verified || progress.failing + progress.missing < prev.progress.failing + prev.progress.missing
-    || progress.challenged < (prev.progress.challenged ?? 0))) stop = "no-progress";
+    || progress.challenged < (prev.progress.challenged ?? 0) || progress.videos_missing < (prev.progress.videos_missing ?? 0))) stop = "no-progress";
   else if (cycle > max) stop = "max-cycles";
   const result = { cycle, max_cycles: max, stop, evaluated_sha: ledger.evaluated_sha, progress,
     previous: prev ? { cycle: prev.cycle, progress: prev.progress } : null, regressed, targets, others,
