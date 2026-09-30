@@ -125,11 +125,22 @@ resource naming.
 | ID | Question | Options |
 |----|----------|---------|
 | DIM-7-001 | Compute model | PaaS (Fly, Render, Railway, Heroku) · Containers (Docker/K8s) · Serverless functions · Edge runtime · VPS |
+| DIM-7-002 | Config per environment: shape of each credential and secret ({N} external integrations, service accounts) | Mounted file, variable holds its path (`GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcs.json`) · Single-line variable (tokens, API keys) · Secret manager injected at start |
+| DIM-7-003 | Auth in front of machine endpoints ({cron jobs, webhooks, health checks}) | Machine paths excluded from the proxy's human auth, the app checks its own secret (header or HMAC) · Internal route or port not published through the proxy · Proxy auth on everything, callers send the proxy credentials |
 
-Context: scale targets, budget, team ops expertise.
+Context: scale targets, budget, team ops expertise. For DIM-7-002 and DIM-7-003, list each variable and machine
+endpoint with its form locally and in staging: that table is where a difference between environments becomes
+visible before deploy. Variable names (never values) go to the profile key `env_required`.
+
+Applies to DIM-7-002 when the specs name an external integration, a service account or a scheduled job, and to
+DIM-7-003 when a cron, webhook or other non-human caller reaches the app through a reverse proxy or gateway.
+Both are ADR-DRAFT candidates: they fail only in the deployed environment, so the decision has to be written down
+where the implementer and the smoke tests can read it.
 
 Red flags: manual deployment without IaC; single region for global users; no disaster-recovery plan;
-over-provisioning for the expected load.
+over-provisioning for the expected load; a credential whose form differs between local and staging (a JSON
+document placed in a variable the library reads as a file path fails with `ENAMETOOLONG`); a machine endpoint
+behind the proxy's basic auth (the proxy answers 401 before the app ever checks its own secret).
 
 ## DIM-8 CI/CD Pipeline
 
@@ -141,11 +152,17 @@ over-provisioning for the expected load.
 |----|----------|---------|
 | DIM-8-001 | CI/CD platform | GitHub Actions · GitLab CI · CircleCI · Jenkins |
 | DIM-8-002 | Deployment strategy | Direct · Rolling · Blue-green · Canary |
+| DIM-8-003 | Post-deploy verification (staging: {yes/no}) | Smoke after each deploy to staging: profile keys `staging_url` and `smoke`, `/sdd-setup --tracker` installs the `sdd-smoke` job · Manual check after deploy (a risk) · None (a risk) |
 
 Context: code hosting, availability and rollback needs, infrastructure. The CI test step should run the Stack
-Profile `test` command when a profile exists.
+Profile `test` command when a profile exists. For DIM-8-003 the smoke covers two or three journeys with
+idempotent data (a real login, the central write, one path through each external integration), taken from the
+test plan's `smoke-deploy` tier when it exists. It verifies the deployed increment only; monitoring and runtime
+rollback stay with the project's operations. DIM-8-003 is an ADR-DRAFT candidate: choosing no smoke is a risk the
+user accepts in writing.
 
-Red flags: no automated tests in CI; manual production deploys; no rollback strategy; no staging.
+Red flags: no automated tests in CI; manual production deploys; no rollback strategy; no staging; staging without
+any verification after deploy (configuration that exists only there reaches users untested).
 
 ## DIM-9 Observability
 

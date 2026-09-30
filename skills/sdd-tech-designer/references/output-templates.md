@@ -120,6 +120,13 @@
 **IaC:** {Terraform/Pulumi/CDK/none}
 **Environments:** {dev, staging, prod}
 
+**Config per environment:**
+
+| Variable / endpoint | Kind | Local | Staging | Notes |
+|---------------------|------|-------|---------|-------|
+| {GOOGLE_APPLICATION_CREDENTIALS} | {credential} | {path to a local file} | {path to a mounted secret} | {the library reads a path, never inline JSON} |
+| {/cron/daily} | {machine endpoint} | {direct} | {excluded from proxy basic auth; `x-cron-secret`} | {caller: platform scheduler} |
+
 ---
 
 ## 10. CI/CD Pipeline (Dimension 8)
@@ -127,6 +134,7 @@
 **CI Platform:** {GitHub Actions/GitLab CI/etc.}
 **Deployment Strategy:** {blue-green/canary/rolling/direct}
 **Branch Strategy:** {trunk-based/gitflow/etc.}
+**Post-deploy verification:** {smoke after each staging deploy (`staging_url`, `smoke`) / none — accepted risk}
 
 ---
 
