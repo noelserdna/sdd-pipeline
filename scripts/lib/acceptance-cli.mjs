@@ -1,8 +1,9 @@
-// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd gate`,
-// `sdd loop next`.
+// acceptance-cli.mjs — `sdd lint --needs`, `sdd accept`, `sdd accept record`, `sdd accept measure`, `sdd accept pack`,
+// `sdd gate`, `sdd loop next`.
 // Node >= 18, no dependencies. Called from scripts/sdd.mjs; returns an exit code (never calls process.exit).
-import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, readdirSync, statSync, mkdtempSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { git, stackProfile } from "./git-log.mjs";
 import { readJUnit } from "./junit.mjs";
@@ -161,6 +162,7 @@ function printLedger(ledger) {
 function cmdAccept(o) {
   if (o._[0] === "record") { o._.shift(); return cmdRecord(o); }
   if (o._[0] === "measure") { o._.shift(); return cmdMeasure(o); }
+  if (o._[0] === "pack") { o._.shift(); return cmdPack(o); }
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
   const failed = o.remeasure ? remeasure(o) : 0;
   const { root, ledger, git: g } = buildLedger(o);
@@ -341,6 +343,57 @@ function remeasure(o) {
     if (!o.json) out(`remeasured ${prev.req}${res.rec.ac ? ` AC${res.rec.ac}` : ""} ${res.rec.metric} = ${res.rec.observed} (was ${prev.observed}) at ${file}:${n}`);
   }
   return failed;
+}
+
+// ------------------------------------------------------------------ pack (evidence bundle for the customer)
+// `sdd accept pack --fase N`: {evidence_dir}/FASE-N/ is not versioned, so after the sign-off it is bundled with a
+// manifest of hashes: .sdd/entregas/FASE-N-evidencias.tar.gz holding manifest.json + {evidence_dir}/FASE-N/…
+const ID_IN_NAME = /(?:^|[^A-Za-z0-9])(AC[-_]\d{3,}[-_]\d{2,}|REQ[-_][A-Z]+[-_]\d+[-_]AC\d+|WF[-_]\d{3,}|FASE[-_]\d+)(?!\d)/i;
+function filesUnder(dir) {
+  const acc = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) acc.push(...filesUnder(p)); else if (e.isFile()) acc.push(p);
+  }
+  return acc.sort();
+}
+function cmdPack(o) {
+  if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  if (o.fase === undefined) usage("accept pack needs --fase N");
+  const root = rootOf(o);
+  const { dir } = evidenceSettings(root);
+  const rel = `${dir}/FASE-${o.fase}`;
+  const abs = path.join(root, rel);
+  const list = existsSync(abs) && statSync(abs).isDirectory() ? filesUnder(abs) : [];
+  if (!list.length) { console.error(`${PROG}: accept pack: no evidence under ${rel}/ — run the FASE journey with capture first`); return 1; }
+  // Criteria each file shows, from the ledger when the requirements are there (attachments and name-bound captures).
+  const hasReqs = existsSync(path.resolve(root, o.requirements || "requirements/REQUIREMENTS.md"));
+  const ledger = hasReqs ? buildLedger({ ...o, out: undefined }).ledger : null;
+  const shows = new Map();
+  for (const r of ledger?.requirements || []) for (const c of r.criteria || []) for (const e of c.evidence || [])
+    for (const a of e.attachments || []) { if (!shows.has(a.path)) shows.set(a.path, new Set()); shows.get(a.path).add(`${r.id} AC${c.n}`); }
+  const files = list.map((p) => {
+    const d = describeFile(root, p);
+    const m = path.basename(p).match(ID_IN_NAME);
+    return { path: d.path, sha256: d.sha256, bytes: d.bytes, kind: d.kind, criterion: m ? m[1].replace(/_/g, "-").toUpperCase() : null,
+      criteria: [...(shows.get(d.path) || [])].sort() };
+  });
+  const g = gitContext(root);
+  const manifest = { $schema: "sdd-evidence-pack-v1", fase: o.fase, evaluated_sha: ledger?.evaluated_sha ?? g.head, dirty: ledger?.dirty ?? g.dirty,
+    generatedAt: new Date().toISOString(), evidence_dir: dir, files };
+  const archive = path.resolve(root, o.out || `.sdd/entregas/FASE-${o.fase}-evidencias.tar.gz`);
+  mkdirSync(path.dirname(archive), { recursive: true });
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "sdd-pack-"));
+  try {
+    writeFileSync(path.join(tmp, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+    const t = spawnSync("tar", ["-czf", archive, "-C", tmp, "manifest.json", "-C", root, rel],
+      { encoding: "utf8", env: { ...process.env, COPYFILE_DISABLE: "1" } }); // no macOS ._ resource files
+    if (t.error || t.status !== 0) die(`accept pack: tar failed: ${t.error ? t.error.message : (t.stderr || "").trim()}`);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+  const shown = path.relative(root, archive) || archive;
+  if (o.json) out(JSON.stringify({ archive: shown, files: files.length, manifest }, null, 2));
+  else out(`packed ${files.length} file(s) of ${rel}/ into ${shown} (manifest.json with sha256; evaluated at ${String(manifest.evaluated_sha || "no git").slice(0, 7)})`);
+  return 0;
 }
 
 // ------------------------------------------------------------------ gate

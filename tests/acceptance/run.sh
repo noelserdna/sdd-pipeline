@@ -667,6 +667,27 @@ run accept --fase 1 --json --no-out
 expect "off: no visual state, no count, no videos" "$(js "String(($C)('REQ-F-001',1).visual) + '/' + j.summary.unshown + '/' + j.videos")" undefined/0/null
 run gate --fase 1; expect "off: gate --fase 1 → 0" "$rc" 0
 rm -f "$repo/CLAUDE.md"
+
+# ---------------------------------------------------------------- 17. accept pack: evidencias/FASE-N/ + manifest
+mkdir -p "$repo/evidencias/FASE-1/sub"
+printf 'img' > "$repo/evidencias/FASE-1/AC-001-01.png"
+printf 'vid' > "$repo/evidencias/FASE-1/sub/FASE-1-crear.webm"
+green4
+run accept pack --fase 1
+expect "accept pack --fase 1 → 0" "$rc" 0
+has "pack prints the archive" ".sdd/entregas/FASE-1-evidencias.tar.gz"
+arch="$repo/.sdd/entregas/FASE-1-evidencias.tar.gz"
+listing=$(tar -tzf "$arch" | sort | tr '\n' ' ')
+expect "archive holds manifest.json and evidencias/FASE-1/…" "$listing" "evidencias/FASE-1/ evidencias/FASE-1/AC-001-01.png evidencias/FASE-1/sub/ evidencias/FASE-1/sub/FASE-1-crear.webm manifest.json "
+out=$(tar -xOzf "$arch" manifest.json)
+expect "manifest: evaluated_sha = HEAD, 2 files" "$(js 'j.evaluated_sha + "/" + j.files.length + "/" + j.fase')" "$(cd "$repo" && git rev-parse HEAD)/2/1"
+sha=$(node -e 'process.stdout.write("sha256:"+require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$repo/evidencias/FASE-1/AC-001-01.png")
+expect "manifest: path, sha256, bytes, kind, criterion per file" "$(js 'const f=j.files[0]; [f.path,f.sha256,f.bytes,f.kind,f.criterion].join("|")')" "evidencias/FASE-1/AC-001-01.png|$sha|3|image|AC-001-01"
+expect "manifest: criteria the capture shows (from the ledger)" "$(js 'j.files[0].criteria.join()')" "REQ-F-001 AC1"
+expect "manifest: the video named after its FASE" "$(js 'j.files[1].kind + "/" + j.files[1].criterion')" video/FASE-1
+run accept pack --fase 2; expect "accept pack of a FASE without evidence → 1" "$rc" 1; has "pack: says there is nothing" "no evidence under evidencias/FASE-2/"
+run accept pack; expect "accept pack without --fase → 2" "$rc" 2
+rm -rf "$repo/evidencias" "$repo/.sdd/entregas"
 repo="$saved_repo"
 
 [ "$fail" -eq 0 ] && echo "tests/acceptance: all passed" || echo "tests/acceptance: FAILURES"
