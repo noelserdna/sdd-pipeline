@@ -229,7 +229,7 @@ Commits: 12 atomic (abc1234..xyz9012)
 
 ### Phase 9-S: Stream Complete (`--stream X`, X ≠ base)
 
-1. `{test}` in the worktree (report the Stream's own test files separately). Failure → `PAUSE: Test regression`, no push.
+1. `{test}` in the worktree (report the Stream's own test files separately); with `test_slots: 1`, `{test_file}` over the Stream's test files one at a time instead, because other worktrees on the machine may be running theirs and the full suite runs after each merge of `--integrate` anyway. Failure → `PAUSE: Test regression`, no push.
 2. Report `Stream A complete: 2 tasks, commits 9f3c2a1..b71e0d4, branch feat/fase-1-a` with a `| Task | SHA | Message |` table (`git log fase-{N}-foundation..HEAD --format='%h %s'`) and `Next: /sdd-task-implementer --integrate --fase 1 (main checkout, once every Stream is complete)`.
 3. When a remote exists, ask before pushing: `git push -u origin feat/fase-{N}-{x}`.
 4. No Persist Summary (the hooks already recorded the stage as `running`).
@@ -259,6 +259,7 @@ Placed when every task of an internal phase is done, in the main checkout only:
 Non-trivial `[P]` batches go to parallel subagents by default; invoking the skill on a FASE with `[P]` tasks is the explicit request. A batch goes to subagents with **≥ 2 non-trivial `[P]` tasks** (write-set ≥ 2 files including the test, ≥ 3 acceptance criteria, not setup/config/scaffold); other `[P]` tasks run inline, because a subagent costs more than a trivial task. Run sequentially only with `--sequential`, below the threshold, or without the `Agent` tool; record the reason in `summary.highlights`, `metrics.mode` and `metrics.inline_p_tasks`. `--parallel` launches agents even below the threshold.
 
 - At most 4 agents per batch, launched in the foreground in one response; wait for all of them before ending the turn.
+- **Machine resources.** At most `test_slots` of them (Stack Profile, default 2) run tests. Every test process competes for the same CPU, memory, database file and ports, so more of them at once time out and flake instead of finishing sooner. With `test_slots: 1` the agents write in parallel with the prompt's "do not run tests" line, and the main agent runs each agent's `{test_file}` in sequence before its Phase 7; with a larger value, the agents beyond `test_slots` get that line too.
 - Each agent runs Phases 3-6 for one task, writes only its files (disjoint, guaranteed by `sdd-task-generator`), never commits, never nests. The main agent runs Phase 7 for each, sequentially. A failed agent does not stop the others; report it at the end.
 - Launch agents with `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`). Review, commit and Phase 9 stay with the main agent.
 - Inside a Stream worktree the same rule applies to the Stream's `[P]` tasks; subagents inherit the worktree cwd and never touch EXTERNAL tasks or files outside the Stream's `Owns` column.
@@ -275,7 +276,10 @@ of the quote appears in the assert ({plugin_root}/skills/sdd-task-implementer/re
 Task: {full task entry}
 Process: write failing tests for each acceptance criterion → implement → run the Review checklist → report (do not commit).
 Constraints: modify only the files of the task entry; implement only what the acceptance criteria require; run only
-{test_file}, {typecheck}, {lint_files} on your files; never set or export human-consent variables or flags
+{test_file}, {typecheck}, {lint_files} on your files, one test file at a time; never {test}, never {acceptance}
+without --grep, never {coverage} or a watch mode, never start a server or a database outside the test runner (the
+machine is shared with other agents); {only when this agent has no test slot: do not run tests at all, and report the
+{test_file} commands for the main agent;} never set or export human-consent variables or flags
 (e.g. PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION) — if a tool refuses, stop and report; report ambiguity or
 [DECISION PENDIENTE] instead of guessing; use the glossary's language.
 ```

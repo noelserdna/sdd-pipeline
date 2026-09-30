@@ -90,6 +90,8 @@ checkbox in sync. `checkbox` stays the default when the key is absent, for proje
 - Run: `(cd "<app_dir>" && <command>)`. `acceptance` runs from the repo root; to filter append ` --grep <ID>`
   (`--grep "E2E-WF-001-01|E2E-WF-002-03"` for several).
 - `lint_files` with an empty `{files}` (only non-code files changed) is skipped silently.
+- `test_slots: 1` and a Playwright `acceptance`: append ` --workers=1` as well (another runner: its own one-worker
+  flag), so one browser runs at a time on this machine; CI keeps the suite's own setting.
 - A key resolved to `none` skips the step and logs, once per session per key:
   `WARN <key>: n/a (stack profile)` — e.g. `WARN typecheck: n/a (stack profile)`. `none` is never a failure and never
   counts as a passed check in the Task Quality Report (`Typecheck: n/a`).
@@ -349,6 +351,6 @@ sdd_server_start "$PORT" && curl -s "http://127.0.0.1:$PORT/health"
 | Other internal checkpoints | `{test_file}` over the phase's test files |
 | `--integrate`, after each merge | `{test}` |
 | Phase 9 | `{test}`, `{typecheck}`, `{lint}`, `{build}`, `{coverage}`, then `{acceptance}` once, re-running only failures by `--grep` |
-| Phase 9-S (Stream complete) | `{test}` |
+| Phase 9-S (Stream complete) | `{test}` (`test_slots: 1`: `{test_file}` over the Stream's test files) |
 
 Not per task: `{build}`, full `{test}`, full `{acceptance}`, `{db_reset_safe}`, manual server start + `curl` + kill.

@@ -416,7 +416,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : undefined,                         // test_slots: 1 → write 1 here
   outputDir: path.join(evidenceDir, '.playwright'),                  // raw per-test artifacts, git-ignored
   reporter: [
     [process.env.CI ? 'html' : 'list'],
