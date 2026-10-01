@@ -7,6 +7,8 @@ description: "Requirements: capture customer needs verbatim, write EARS requirem
 
 Requirements engineering based on SWEBOK v4 Chapter 1. First stage of the SDD pipeline: its outputs, `requirements/CUSTOMER-NEEDS.md` and `requirements/REQUIREMENTS.md`, are the input of `sdd-specifications-engineer`.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage requirements-engineer --kind start --text "Vamos a escuchar lo que necesitas y anotarlo con tus palabras"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Modes of Operation
 
 Pick the mode from the user's intent.
@@ -99,7 +101,7 @@ After writing `requirements/REQUIREMENTS.md` (an audit-only Mode 2 run leaves th
    - `nextStep`: `"Run /sdd-specifications-engineer"` once approved, otherwise `"Approve requirements (gate 1)"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Commit what this run wrote, draft included, because specs and commits cite these REQ ids: `git add requirements/` and `docs(requirements): draft requirements v{Version}` with `Refs:` every REQ id, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). The approval gate later commits the `Approved` header and tags.
+6. Commit what this run wrote, draft included, because specs and commits cite these REQ ids: `git add requirements/` and `docs(requirements): draft requirements v{Version}` with `Refs:` every REQ id, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage requirements-engineer --kind done --text "Convertimos tus 8 peticiones en 14 requisitos con ejemplos, listos para que los revises"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3). The approval gate later commits the `Approved` header and tags.
 7. Display summary table to user (console output)
 8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 

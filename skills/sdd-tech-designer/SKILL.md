@@ -21,6 +21,8 @@ skill was not run and a contract declares `Style: operations`, plan-architect pr
 | `sdd-plan-architect` | Downstream consumer of `design/` |
 | `sdd-req-change` | Spec changes can invalidate design → re-run with `--update` |
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage tech-designer --kind start --text "Vamos a elegir la tecnología y la forma de montar el sistema"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Invocation
 
 | Command | Effect |
@@ -119,7 +121,7 @@ After writing the outputs, update `pipeline-state.json` at the project root. If 
   if an ADR was promoted — and `generatedAt`.
 
 Commit the files this run wrote (`git add design/`, plus promoted ADRs in `spec/adr/`), then `docs(design): …` with
-`Refs:` the REQ/ADR ids it addresses, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+`Refs:` the REQ/ADR ids it addresses, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage tech-designer --kind done --text "Elegimos la tecnología: una aplicación web con su propia base de datos"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3).
 
 Show the summary table to the user. Handoff: follow the plugin-root `references/handoff-protocol.md` (station
 mode only; never from a subagent).

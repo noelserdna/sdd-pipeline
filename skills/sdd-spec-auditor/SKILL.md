@@ -14,6 +14,8 @@ hooks:
 
 Finds defects in `spec/` by systematic, cross-document analysis and writes a compact finding index (`audits/AUDIT-BASELINE.md`) with exact location, the problem, and the spec-level correction or the question that unblocks it. Mode Fix (`--fix`) applies triaged corrections.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage spec-auditor --kind start --text "Vamos a revisar esa descripción en busca de huecos y contradicciones"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Core Principles
 
 - **No assumptions:** write "it is not specified what happens when…", never "it probably means…".
@@ -279,7 +281,7 @@ After generating all output artifacts (Mode Audit or Mode Fix), update `pipeline
    - `templateImprovements`: 1-3 recommendations for the spec engineer based on the most frequent finding categories (e.g., "UC template should require explicit error codes per step"). `sdd-specifications-engineer` reads them on its next run in this project (e.g. a re-run after a requirements change).
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Commit the files this run wrote: `git add audits/`, then `docs(audit): …` with `Refs:` the spec ids with P0/P1 findings (none → the audited REQ ids), skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Mode Fix already committed its corrections finding by finding; this commits the report and baseline.
+6. Commit the files this run wrote: `git add audits/`, then `docs(audit): …` with `Refs:` the spec ids with P0/P1 findings (none → the audited REQ ids), skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage spec-auditor --kind done --text "Revisamos la descripción: 3 puntos por aclarar, ninguno bloquea"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3). Mode Fix already committed its corrections finding by finding; this commits the report and baseline.
 7. Display summary table to user (console output)
 8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 

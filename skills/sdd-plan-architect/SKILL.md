@@ -10,6 +10,8 @@ description: "Generates implementation plans from specs: FASEs, architecture, pe
 
 Runs after `sdd-test-planner` (which runs after `sdd-spec-auditor`) and before `sdd-task-generator`. Reads `spec/`, `requirements/`, `audits/`, `test/`, and `design/` / `ux/` when present. Writes `plan/`, plus `design/OPERATION-MAPPING.md` only when it is missing and a contract needs it (Phase 4b). When the confirmed route skipped the specifications (`pipeline-state.json` → `stages["specifications-engineer"].status == "skipped"`, `docs/ruta.md`), it plans from `requirements/` alone: see Requirements-only mode under Phase 1.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage plan-architect --kind start --text "Vamos a dividir el trabajo en entregas que puedas ver y probar"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Principles
 
 1. **Ask only about genuine gaps.** Read ADRs, `CLAUDE.md` (incl. `## SDD Stack Profile`), `CLARIFICATIONS.md` and `design/` before asking; a question about something already decided wastes the user's time.
@@ -341,5 +343,5 @@ After writing the artifacts, update `pipeline-state.json` (create it with the de
    - `nextStep`: `"Run /sdd-task-generator"`
    - `generatedAt`: now
 3. Write the file and show the summary table.
-4. Commit the files this run wrote: `git add plan/` (plus `design/OPERATION-MAPPING.md` when written), then `docs(plan): …` with `Refs:` the FASE ids and the REQ ids they deliver, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+4. Commit the files this run wrote: `git add plan/` (plus `design/OPERATION-MAPPING.md` when written), then `docs(plan): …` with `Refs:` the FASE ids and the REQ ids they deliver, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage plan-architect --kind done --text "Planificamos 4 entregas; la primera te dejará crear y ver tareas"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3).
 5. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
