@@ -1027,6 +1027,7 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
   /* ---------- 4. Deliveries ---------- */
   function faseVisible(f) {
     if (state.feature === "all") return true;
+    if (f.feature) return f.feature === state.feature;
     var rs = arr(f.requirements);
     if (!rs.length) return true;
     return rs.some(function (id) { return REQS[id] && REQS[id].feature === state.feature; });
@@ -1290,7 +1291,6 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
     lang = D.project && DICT[D.project.lang] ? D.project.lang : "es";
     L = DICT[lang];
     document.documentElement.lang = lang;
-    if (D.project && D.project.name) document.title = D.project.name + " · " + L.pageEyebrow;
     lb.setAttribute("aria-label", L.lbLabel);
     document.getElementById("lb-close").textContent = L.lbClose;
     NEEDS = byId(D.needs); REQS = byId(D.requirements);

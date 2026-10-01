@@ -67,7 +67,7 @@ data.requirements.forEach((r, i) => {
   });
   r.videos.forEach((x, k) => file(`${p}.videos[${k}]`, x));
   r.warnings.forEach((x, k) => shape(`${p}.warnings[${k}]`, x, {
-    code: oneOf(["unshown", "weakened", "challenge", "missing_video", "stale", "failing"]), text: T.str, ac: T.intN }));
+    code: oneOf(["unshown", "weakened", "challenge", "stale", "failing"]), text: T.str, ac: T.intN }));
   if (r.waiver) shape(`${p}.waiver`, r.waiver, { reason: T.strN, by: T.strN, followUp: T.strN, at: T.isoN });
   shape(`${p}.links`, r.links, { commits: T.arr, issue: T.objN });
   r.links.commits.forEach((x, k) => shape(`${p}.links.commits[${k}]`, x, { sha: T.str, url: T.strN, subject: T.str }));

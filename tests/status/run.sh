@@ -160,12 +160,17 @@ cp "$SEED/requirements/REQUIREMENTS.md" "$m/requirements/"
 commit "docs(requirements): requirements v1"
 build
 expect "moment 2a: requirements written, not approved → agree" "$(jf "$D" 'j.where.phase+":"+j.where.needFromYou[0].anchor')" "agree:REQ-F-001"
-(cd "$m" && GIT_COMMITTER_DATE="2026-09-10T11:00:00" git tag -a requirements-v1 -m "Approved by Marta Ibáñez")
+(cd "$m" && GIT_COMMITTER_DATE="2026-09-10T11:00:00" git tag -a requirements-v1.0 -m "Approved by Marta Ibáñez")
 build; shape_ok "moment 2 (requirements approved)"
 expect "moment 2: approved → design (specs pending in the state)" "$(jf "$D" 'j.where.phase+":"+j.where.phases.map(p=>p.state).join()')" "design:done,done,current,pending,pending,pending,pending"
 expect "moment 2: every requirement pending, plain null without the line" "$(jf "$D" 'j.requirements.map(r=>r.status).join()+"|"+R("REQ-F-001").plain')" "pending,pending,pending,pending,pending,pending,pending,pending|null"
-expect "moment 2: approval in the journal, derived from the tag" "$(jf "$D" 'j.journal.map(e=>[e.kind,e.refs.join("+"),e.derived,e.by].join(":")).join()')" "gate:requirements-v1:true:Equipo CV"
-expect "moment 2: tag with date and no web link (no origin)" "$(jf "$D" 'j.technical.tags.map(t=>t.name+":"+t.date+":"+t.url).join()')" "requirements-v1:2026-09-10T11:00:00Z:null"
+expect "moment 2: approval in the journal, derived from the tag" "$(jf "$D" 'j.journal.map(e=>[e.kind,e.refs.join("+"),e.derived,e.by].join(":")).join()')" "decision:requirements-v1.0:true:Equipo CV"
+expect "moment 2: tag with date and no web link (no origin)" "$(jf "$D" 'j.technical.tags.map(t=>t.name+":"+t.date+":"+t.url).join()')" "requirements-v1.0:2026-09-10T11:00:00Z:null"
+# the approval written by the orchestrator as the gate answer replaces the derived decision (one fact, one line)
+(cd "$m" && node "$ROOT/scripts/sdd.mjs" journal add --stage orchestrator --kind gate --text "Aprobaste los requisitos." --refs requirements-v1.0 --at 2026-09-10T11:05:00Z >/dev/null)
+build
+expect "moment 2: a written gate line suppresses the derived approval decision" "$(jf "$D" 'j.journal.filter(e=>e.refs.includes("requirements-v1.0")).map(e=>e.kind+":"+e.derived).join()')" "gate:false"
+rm -f "$m/status/journal.jsonl"   # the test line was never committed: the later moments start without a written journal
 # a «Para el cliente» line reaches `plain`; `sdd lint --needs` warns when it is missing
 node -e '
 const fs = require("fs"), f = process.argv[1];
@@ -227,7 +232,7 @@ expect "fase-acceptance recorded" "$rc" 0
 build; shape_ok "moment 5 (signed)"
 expect "moment 5: accepted → done, every phase done" "$(jf "$D" 'j.where.phase+":"+F(1).status+":"+j.where.phases.filter(p=>p.state==="done").length+":"+j.where.next+":"+j.where.fase')" "done:accepted:6:null:null"
 expect "moment 5: who accepted, by which channel" "$(jf "$D" 'F(1).acceptance.by+"|"+F(1).acceptance.role+"|"+F(1).acceptance.channel')" "Marta Ibáñez|coordinación académica|reunión de demo"
-expect "moment 5: the acceptance is in the journal" "$(jf "$D" 'j.journal.filter(e=>e.kind==="gate"&&e.refs.includes("FASE-1")).map(e=>e.text+"|"+e.by).join()')" "Aceptaste la entrega 1.|Marta Ibáñez (coordinación académica)"
+expect "moment 5: the acceptance is in the journal" "$(jf "$D" 'j.journal.filter(e=>e.kind==="decision"&&e.refs.includes("FASE-1")).map(e=>e.text+"|"+e.by).join()')" "Aceptaste la entrega 1.|Marta Ibáñez (coordinación académica)"
 [ ! -e "$m/.sdd/acceptance.json" ] && pass "build never writes .sdd/acceptance.json" || bad "build wrote the ledger"
 
 # ---------------------------------------------------------------- 5. the full seeded bench: evidence, warnings, links, secrets

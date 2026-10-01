@@ -21,7 +21,7 @@ La plantilla contiene exactamente una vez:
 <script type="application/json" id="sdd-data"><!--SDD-DATA--></script>
 ```
 
-Quien construya la página sustituye `<!--SDD-DATA-->` por el JSON. Hay que escapar `<` como `<` en todo el
+Quien construya la página sustituye `<!--SDD-DATA-->` por el JSON. Hay que escapar `<` como `\u003c` en todo el
 JSON (`JSON.stringify(data).replace(/</g, "\\u003c")`): así ningún texto del proyecto puede cerrar el bloque con
 `</script>` ni abrir un comentario. Usa una función de reemplazo (`html.replace(marker, () => json)`) para que los
 `$` del JSON no se interpreten.
@@ -31,9 +31,9 @@ se puede leer, dice que hay que regenerarla.
 
 El fichero no lleva `<!doctype>`, `<html>`, `<head>` ni `<body>`: al publicarlo como Artifact se envuelve en ese
 esqueleto. Empieza por `<meta charset>`, `<meta viewport>` y `<title>`, de modo que también se abre bien desde disco.
-El `<title>` estático es «Estado del proyecto»; en el navegador el script lo cambia a «{proyecto} · Estado del
-proyecto». La CLI puede sustituir también el texto del `<title>` por el nombre del proyecto si quiere que la galería
-de Artifacts lo muestre.
+El `<title>` estático es «Estado del proyecto»; `sdd status build` lo sustituye por «Estado · {proyecto}» (o
+«Status · {project}»), de dos a cuatro palabras, que es lo que muestra la galería de Artifacts. El script no lo
+cambia en el navegador.
 
 ## Idioma y diccionario
 

@@ -6,7 +6,8 @@
 //   {"at":"2026-09-10T10:00:00Z","feature":"initial","stage":"requirements-engineer","kind":"done",
 //    "text":"Recogimos 4 necesidades.","refs":["N-001"],"by":"Marta Ibáñez (coordinación)"}
 // `text` is plain language in the customer's language (no jargon, one line). Written by `sdd journal add`, the skills
-// in their Persist step, `sdd route --write` (skip + decision) and the acceptance skill (evidence, feedback).
+// in their Persist step, `sdd route --write` (skip + decision), the orchestrator and the lead at each gate (gate,
+// decision, and the customer's feedback with --stage acceptance) and the acceptance skill (evidence).
 import { existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
 

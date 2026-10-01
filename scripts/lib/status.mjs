@@ -593,7 +593,8 @@ export function buildStatus(root, { taskProgress = () => null, now = new Date() 
   const journal = deriveJournal({ root, T, lang, written, tags, state, decisions, features: page?.features || [], reqs });
 
   // where
-  const reqTag = tags.some((t) => /^requirements-v\d+$/.test(t.name));
+  // approval tags are requirements-v{Version}, e.g. requirements-v1.0 (approval.md), or requirements-v1 in older projects
+  const reqTag = tags.some((t) => /^requirements-v\d+(?:\.\d+)*$/.test(t.name));
   const open = fases.find((f) => !["accepted", "observations"].includes(f.status)) || null;
   // design = the formal specs, their audit and the test plan, plus the technical and UX design when the route runs them
   const routeStages = state?.route?.stages || null;
@@ -682,9 +683,9 @@ function deriveJournal({ root, T, lang, written, tags, state, decisions, feature
   for (const t of tags) {
     if (!t.date) continue;
     let m;
-    if ((m = t.name.match(/^requirements-v(\d+)$/))) add({ at: t.date, stage: "requirements-engineer", kind: "gate", text: T.reqApproved(m[1]), refs: [t.name], by: t.by });
+    if ((m = t.name.match(/^requirements-v(\d+(?:\.\d+)*)$/))) add({ at: t.date, stage: "requirements-engineer", kind: "decision", text: T.reqApproved(m[1]), refs: [t.name], by: t.by });
     else if ((m = t.name.match(/^fase-(\d+)-verified$/))) add({ at: t.date, stage: "task-implementer", kind: "evidence", text: T.faseVerified(m[1]), refs: [`FASE-${m[1]}`, t.name] });
-    else if ((m = t.name.match(/^fase-(\d+)-accepted$/))) add({ at: t.date, stage: "acceptance", kind: "gate", text: T.faseAccepted(m[1]), refs: [`FASE-${m[1]}`, t.name], by: t.by });
+    else if ((m = t.name.match(/^fase-(\d+)-accepted$/))) add({ at: t.date, stage: "acceptance", kind: "decision", text: T.faseAccepted(m[1]), refs: [`FASE-${m[1]}`, t.name], by: t.by });
   }
   const route = state?.route;
   if (route && route.decidedAt && route.stages) {
@@ -696,7 +697,7 @@ function deriveJournal({ root, T, lang, written, tags, state, decisions, feature
   for (const r of decisions) {
     if (!r.at) continue;
     const by = r.by ? `${r.by}${r.role ? ` (${r.role})` : ""}` : undefined;
-    if (r.type === "fase-acceptance") add({ at: r.at, stage: "acceptance", kind: "gate", text: (T.faseResult[r.result] || T.faseResult.accepted)(r.fase), refs: [`FASE-${r.fase}`], by });
+    if (r.type === "fase-acceptance") add({ at: r.at, stage: "acceptance", kind: "decision", text: (T.faseResult[r.result] || T.faseResult.accepted)(r.fase), refs: [`FASE-${r.fase}`], by });
     else if (r.type === "waiver") add({ at: r.at, stage: "acceptance", kind: "decision", text: T.waiver(r.req, r.reason), refs: [r.req], by });
     else if (T.record[r.type]) add({ at: r.at, stage: "acceptance", kind: "evidence", text: T.record[r.type](r.req), refs: [r.req], by });
     else if (r.type === "challenge-dismissal") add({ at: r.at, stage: "acceptance", kind: "decision", text: T.dismissal(r.req || r.challenge), refs: [r.req, r.challenge].filter(Boolean), by });
@@ -720,7 +721,10 @@ function deriveJournal({ root, T, lang, written, tags, state, decisions, feature
     }
   }
   const DAY = 86400000;
-  const dup = (d) => written.some((e) => e.kind === d.kind && (
+  // A customer's approval or acceptance is a `decision` (approval.md, sign-off); an orchestrator or lead may have
+  // written it as the `gate` answer: both kinds are the same fact for deduplication.
+  const family = (k) => (k === "gate" ? "decision" : k);
+  const dup = (d) => written.some((e) => family(e.kind) === family(d.kind) && (
     (d.kind === "skip" || d.stage === "route") ? e.stage === d.stage
       : e.refs.some((r) => d.refs.includes(r)) && Math.abs(Date.parse(e.at) - Date.parse(d.at)) <= DAY));
   const seen = new Set();
