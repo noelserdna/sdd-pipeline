@@ -38,11 +38,22 @@ node "$SDD" journal add --stage <stage> --kind <kind> --text "<one plain sentenc
 | `start` | Every stage skill when its run begins: what it is about to do |
 | `done` | Every stage skill in its Persist step: what it left, with one number the customer can picture |
 | `gate` | The orchestrator or the lead after a gate question: what was asked and the answer |
-| `decision` | Whoever records a human decision (approval, route confirmation, waiver, acceptance), with `--by` |
+| `decision` | Whoever records a human decision (approval, waiver, acceptance), with `--by`; the route's comes from the CLI |
 | `change` | `sdd-req-change` for each approved change |
-| `skip` | `sdd route --write` for each stage left out (the CLI writes it); also a page not published (§4) |
+| `skip` | `sdd route --write` for each stage left out; also a page not published (§4) |
 | `evidence` | `sdd-acceptance` when captures, videos, measurements or recorded demos are added |
-| `feedback` | Whoever handles a customer comment or gate feedback: what was said and what will be done |
+| `feedback` | The orchestrator or the lead at a FASE gate or the sign-off, one per comment or piece of feedback routed (§6) |
+
+`sdd route --write` writes the route's lines itself (`--stage route`): one `skip` per stage left out, with its
+reason, and one `decision` with who confirmed the route. Nobody adds another line for the route.
+
+`--stage` names the writer, and the CLI refuses any other value: the pipeline stages (`requirements-engineer`,
+`specifications-engineer`, `spec-auditor`, `test-planner`, `plan-architect`, `task-generator`, `task-implementer`),
+`acceptance`, `req-change`, `gap-detector`, the laterals (`tech-designer`, `ux-designer`, `security-auditor`), the
+brownfield skills (`reverse-engineer`, `reconcile`, `import`), and `setup`, `route`, `status-page`, `orchestrator`,
+`lead`. The orchestrator writes its `gate` and `decision` lines with `--stage orchestrator` and the lead with
+`--stage lead`; the `feedback` lines of a gate use `--stage acceptance`, because they belong to the delivery's
+acceptance.
 
 How to write `--text`:
 
@@ -82,13 +93,15 @@ After every stage (Persist step) and every gate, when `status/page.json` has a `
 
 1. **Build.** `node "$SDD" status build --json` writes `.sdd/status-page/index.html` (the template with `data.json`
    embedded), `data.json` and `evidencias/…`, the captures and videos whose ledger entry is `present` with a matching
-   sha256. Its output lists each evidence file with its `sha256` and whether it is already published.
+   sha256. Its output lists each evidence file (`evidence.files[]`) with its `sha256`, `published` (the file is
+   copied to the page) and `inAssets` (its `sha256` is already in `status/page.json` `assets`, so it was published,
+   or withheld, before).
 2. **Check new captures** (§5) before they are published for the first time.
 3. **Publish** with the Artifact tool: `file_path` = `.sdd/status-page/index.html`, `url` = the one in
    `status/page.json`, and `files` mapping each new or changed evidence file to its relative path,
    `{"evidencias/FASE-1/REQ-F-001-AC1.png": ".sdd/status-page/evidencias/FASE-1/REQ-F-001-AC1.png", …}`. The page
-   references them by that relative path. Files left out of `files` stay as they were, so pass only those whose
-   `sha256` is not yet in the page's `assets`; more than 255 go in several publishes to the same `url`.
+   references them by that relative path. Files left out of `files` stay as they were, so pass only those with
+   `published: true` and `inAssets: false`; more than 255 go in several publishes to the same `url`.
 4. **Record** each file published: `node "$SDD" status page asset --sha256 <hash> --url <published path>`.
 5. **Commit** when `status/` changed: `git add status/ && git diff --cached --quiet || git commit -m "docs(status):
    update status page"`.

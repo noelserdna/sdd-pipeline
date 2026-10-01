@@ -364,14 +364,14 @@ the same page URL. Both are written only through the `sdd` CLI; nobody edits the
 **`status/journal.jsonl`**: one JSON object per line, append-only, in the order things happened.
 
 ```json
-{"at": "2026-03-04T15:30:00Z", "feature": "initial", "stage": "test-planner", "kind": "done", "text": "Preparamos 40 comprobaciones, al menos una por cada cosa que pediste", "refs": ["REQ-F-001"], "by": null}
+{"at": "2026-03-04T15:30:00Z", "feature": "initial", "stage": "test-planner", "kind": "done", "text": "Preparamos 40 comprobaciones, al menos una por cada cosa que pediste", "refs": ["REQ-F-001"]}
 ```
 
 | Field | Meaning |
 |---|---|
 | `at` | ISO-8601, set by the CLI |
 | `feature` | `initial` or the `CHG-…` id of a feature added later |
-| `stage` | the stage key of `stages` (`requirements-engineer`, …, `acceptance`, `req-change`), or `setup`, `route`, `status-page` |
+| `stage` | the writer: a stage key of `stages` (the pipeline stages, `acceptance`, `req-change`, `gap-detector`, the laterals and the brownfield skills `reverse-engineer`, `reconcile`, `import`), or `setup`, `route`, `status-page`, `orchestrator`, `lead`; the CLI refuses any other (list in `references/status-page.md` §1) |
 | `kind` | `start` · `done` · `gate` · `decision` · `change` · `skip` · `evidence` · `feedback` |
 | `text` | one fact in plain words, in the customer's language, without ids or jargon |
 | `refs` | ids the page links the line to (needs, requirements, FASEs, CHG, tags) |
@@ -380,11 +380,15 @@ the same page URL. Both are written only through the `sdd` CLI; nobody edits the
 | Writer | Kinds |
 |---|---|
 | Stage skills (Persist step; at the start of a run) | `start`, `done` |
-| `sdd-orchestrator`, `sdd-lead` | `gate`, `decision`, `feedback` |
+| `sdd-orchestrator`, `sdd-lead` (`--stage orchestrator` / `--stage lead`) | `gate`, `decision` |
+| `sdd-orchestrator`, `sdd-lead` at a FASE gate or the sign-off (`--stage acceptance`) | `feedback`, one per comment or piece of feedback routed |
 | Requirements approval (`approval.md` §6), `sdd-acceptance --sign-off` | `decision` |
 | `sdd-req-change` | `change` |
-| `sdd route --write` (the CLI itself) | `skip` |
-| `sdd-acceptance` | `done`, `evidence`, `decision` |
+| `sdd route --write` (the CLI itself, `--stage route`) | `skip` per stage left out, and one `decision` with who confirmed the route |
+| `sdd-acceptance` | `start`, `done`, `evidence`, `decision` |
+
+`sdd status build` also derives lines the writers may have missed: the requirements approval tag and each FASE
+acceptance become `decision` lines, deduplicated against the written ones by refs and day.
 
 **`status/page.json`**: `{url, createdAt, declined?, features: [{id, title, createdAt, chg?, summary?}], assets:
 {sha256: published path}}`, written by `sdd status page set | decline | feature add | asset`. It replaces the
