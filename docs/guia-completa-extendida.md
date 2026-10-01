@@ -1490,7 +1490,7 @@ usando el validador copiado en `.claude/sdd/sdd.mjs`).
 /sdd-acceptance --fase N                # lo mismo, limitado a los Requisitos de la FASE N
 /sdd-acceptance --loop [--max-cycles 3] # bucle hasta que todo Must este VERIFIED o WAIVED
 /sdd-acceptance --sign-off [--fase N | --release NAME]   # puerta + aceptacion humana + tag
-/sdd-acceptance --publish [--fase N]    # bloque para PR/issue y, opcional, pagina de estado
+/sdd-acceptance --publish [--fase N]    # bloque para PR/issue y pagina de estado al dia
 ```
 
 Los resultados de tests salen del comando `test_report` del Stack Profile, que escribe JUnit XML (por defecto en
@@ -1555,9 +1555,16 @@ Tags anotados (firmados si hay clave): `requirements-v{N}` (aprobacion de requis
 
 ### 13.5 Pagina de estado y grafo
 
-- `sdd-acceptance --publish` puede publicar una pagina de estado como Claude Artifact (pregunta antes, porque saca
-  titulos de requisitos de la maquina). Sin la herramienta Artifact (por ejemplo `claude -p`), la vista compartible es
-  `acceptance/ACCEPTANCE-REPORT.md`. Sustituye al antiguo dashboard HTML.
+- Cada proyecto tiene una pagina de estado para el cliente desde el principio: la crea `sdd-setup` (o el orquestador
+  o el lead al empezar) tras una sola pregunta, cuando la sesion tiene la herramienta Artifact, y la actualizan todas
+  las etapas y todas las puertas; `sdd-acceptance --publish` la pone al dia. Es una plantilla fija del plugin con los
+  datos de `sdd status build`: donde estamos, lo que pidio el cliente, cada requisito con su explicacion llana y su
+  evidencia (capturas, video, pruebas), las entregas y el diario del proyecto (`status/journal.jsonl`, una linea llana
+  por hecho). La URL vive en `status/page.json`, versionado. El cliente comenta en la pagina y esos comentarios se
+  leen en cada puerta de FASE. Sin la herramienta Artifact (por ejemplo `claude -p`) se construye en local
+  (`.sdd/status-page/index.html`) y la vista compartible es `acceptance/ACCEPTANCE-REPORT.md`. Sustituye al antiguo
+  dashboard HTML; procedimiento en `references/status-page.md`, detalle en
+  [aceptacion.md](aceptacion.md#página-de-estado).
 - `scripts/sdd-graph.py` sigue construyendo `dashboard/traceability-graph.json` para el servidor MCP y los hooks (sin
   pagina HTML).
 - La observacion en vivo (status lines, `sdd-watch`, log de actividad) ya no forma parte del plugin; ver
@@ -1823,7 +1830,7 @@ Score: 52/100 (C). 8 hallazgos, 2 criticos.
 # Bucle hasta que todo Must este VERIFIED o WAIVED
 /sdd-acceptance --loop
 
-# Bloque para el PR y pagina de estado opcional
+# Bloque para el PR y pagina de estado al dia
 /sdd-acceptance --publish
 
 # Ver estado final

@@ -1562,7 +1562,7 @@ Otros modos:
 /sdd-acceptance --fase 1       # solo los requisitos de la FASE 1
 /sdd-acceptance --loop         # bucle hasta que todos los Must estén VERIFIED o WAIVED
 /sdd-acceptance --sign-off     # puerta final + aceptación registrada + tag
-/sdd-acceptance --publish      # bloque para el PR/issue y, opcional, página de estado
+/sdd-acceptance --publish      # bloque para el PR/issue y página de estado al día
 ```
 
 La puerta de entrega, también en CI (solo necesita Node y git):
@@ -1573,10 +1573,14 @@ node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" gate --mode enforce
 # 1 no cumplido · 2 evidencia obsoleta · 3 cumplido con Must exentos
 ```
 
-`--publish` puede publicar una página de estado como Artifact de Claude cuando la sesión lo
-permite (siempre pregunta antes, porque saca títulos de requisitos de la máquina). Sin esa
-herramienta, por ejemplo con `claude -p`, la vista para compartir es
-`acceptance/ACCEPTANCE-REPORT.md`.
+El proyecto tiene una **página de estado** para el cliente desde el principio: la crea
+`/sdd-setup` (o el orquestador al empezar) tras una sola pregunta, cuando la sesión tiene la
+herramienta Artifact, y cada etapa y cada puerta la actualizan. Cuenta qué se está haciendo,
+qué se ha hecho y cada requisito con su evidencia, en lenguaje llano; el cliente puede comentar
+en ella y esos comentarios se leen en cada puerta. `--publish` la pone al día. Sin esa
+herramienta, por ejemplo con `claude -p`, se construye en local (`.sdd/status-page/index.html`)
+y la vista para compartir es `acceptance/ACCEPTANCE-REPORT.md`. Detalle en
+[aceptacion.md](aceptacion.md#página-de-estado).
 
 ### Trazabilidad con git
 
@@ -2065,12 +2069,14 @@ con `git commit --trailer`. `sdd trace req REQ-F-004` lista los commits de un re
 
 ### ¿Puedo ver el estado del pipeline en cualquier momento?
 
-Sí, de tres formas:
+Sí, de cuatro formas:
 
-1. `/sdd-pipeline-status` — Resumen en texto (incluye el resumen de aceptación)
-2. `acceptance/ACCEPTANCE-REPORT.md` — Veredicto por requisito, legible por el cliente
-   (`/sdd-acceptance --publish` puede publicarlo además como página de estado)
-3. `pipeline-state.json` — Archivo JSON (automáticamente actualizado)
+1. `/sdd-pipeline-status` — Resumen en texto (incluye el resumen de aceptación, el enlace a la
+   página de estado y la última línea del diario)
+2. La página de estado — Para el cliente: dónde estamos, lo que pidió, cada requisito con su
+   evidencia y el diario del proyecto (`status/journal.jsonl`)
+3. `acceptance/ACCEPTANCE-REPORT.md` — Veredicto por requisito, legible por el cliente
+4. `pipeline-state.json` — Archivo JSON (automáticamente actualizado)
 
 ---
 
