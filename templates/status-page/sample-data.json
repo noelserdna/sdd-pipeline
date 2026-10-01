@@ -4,290 +4,1183 @@
   "project": {
     "name": "Citas del Taller Ruiz",
     "lang": "es",
-    "repo": { "provider": "github", "web": "https://github.com/taller-ruiz/citas" }
+    "repo": {
+      "provider": "github",
+      "web": "https://github.com/taller-ruiz/citas"
+    }
   },
   "sha": "9c41e7a",
   "where": {
     "phase": "build",
     "phases": [
-      { "id": "understand", "state": "done" },
-      { "id": "agree", "state": "done" },
-      { "id": "design", "state": "skipped", "reason": "La aplicación es pequeña y los requisitos ya traen ejemplos claros, así que pasamos directamente a planificar las entregas. Lo confirmó Lucía Gómez el 4 de septiembre." },
-      { "id": "plan", "state": "done" },
-      { "id": "build", "state": "current" },
-      { "id": "verify", "state": "pending" },
-      { "id": "deliver", "state": "pending" }
+      {
+        "id": "understand",
+        "state": "done"
+      },
+      {
+        "id": "agree",
+        "state": "done"
+      },
+      {
+        "id": "design",
+        "state": "skipped",
+        "reason": "La aplicación es pequeña y los requisitos ya traen ejemplos claros, así que pasamos directamente a planificar las entregas. Lo confirmó Lucía Gómez el 4 de septiembre."
+      },
+      {
+        "id": "plan",
+        "state": "done"
+      },
+      {
+        "id": "build",
+        "state": "current"
+      },
+      {
+        "id": "verify",
+        "state": "pending"
+      },
+      {
+        "id": "deliver",
+        "state": "pending"
+      }
     ],
-    "fase": { "n": 2, "of": 3, "title": "Ver las citas del día siguiente" },
+    "fase": {
+      "n": 2,
+      "of": 3,
+      "title": "Ver las citas del día siguiente"
+    },
     "now": "Estamos terminando la pantalla con las citas de mañana y arreglando la cancelación de citas, que un revisor encontró que no libera la hora.",
     "next": "Cuando esté lista, te enseñaremos la entrega 2 en el taller para que la pruebes con tu propio móvil.",
     "needFromYou": [
-      { "text": "Decide si una cita cancelada con menos de 24 horas de antelación pierde la señal o se devuelve.", "anchor": "REQ-F-004" },
-      { "text": "Lee la explicación de la nueva función de bonos de revisión y dinos si es lo que querías.", "anchor": "REQ-F-005" },
-      { "text": "Mándanos una foto del cartel de horarios del taller para comprobar las horas de los sábados.", "anchor": "REQ-F-002" }
+      {
+        "text": "Decide si una cita cancelada con menos de 24 horas de antelación pierde la señal o se devuelve.",
+        "anchor": "REQ-F-004"
+      },
+      {
+        "text": "Lee la explicación de la nueva función de bonos de revisión y dinos si es lo que querías.",
+        "anchor": "REQ-F-005"
+      },
+      {
+        "text": "Mándanos una foto del cartel de horarios del taller para comprobar las horas de los sábados.",
+        "anchor": "REQ-F-002"
+      }
     ]
   },
   "features": [
-    { "id": "initial", "title": "Citas desde el móvil", "createdAt": "2026-09-01", "summary": "Que tus clientes pidan cita sin llamarte y que tú veas cada tarde el trabajo del día siguiente." },
-    { "id": "CHG-2026-09-20-001", "title": "Bonos de revisión", "createdAt": "2026-09-20", "summary": "Vender bonos de tres revisiones con descuento y descontarlos al pedir cita." }
+    {
+      "id": "initial",
+      "title": "Citas desde el móvil",
+      "createdAt": "2026-09-01",
+      "summary": "Que tus clientes pidan cita sin llamarte y que tú veas cada tarde el trabajo del día siguiente."
+    },
+    {
+      "id": "CHG-2026-09-20-001",
+      "title": "Bonos de revisión",
+      "createdAt": "2026-09-20",
+      "summary": "Vender bonos de tres revisiones con descuento y descontarlos al pedir cita."
+    }
   ],
   "needs": [
-    { "id": "N-001", "quote": "Quiero que mis clientes puedan pedirme cita desde el móvil sin tener que llamarme, que me paso el día con el teléfono en la mano.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-02", "status": "confirmed", "feature": "initial", "requirements": ["REQ-F-001", "REQ-F-002", "REQ-F-004", "REQ-NF-001"] },
-    { "id": "N-002", "quote": "Necesito ver de un vistazo las citas de mañana para organizar el taller antes de abrir.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-02", "status": "confirmed", "feature": "initial", "requirements": ["REQ-F-003"] },
-    { "id": "N-003", "quote": "Estaría genial que al cliente le llegue un aviso cuando su bici esté lista.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-02", "status": "confirmed", "feature": "initial", "requirements": ["REQ-F-006"] },
-    { "id": "N-004", "quote": "Los datos de mis clientes no pueden salir de Europa, me lo dijo mi gestor.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-03", "status": "confirmed", "feature": "initial", "requirements": ["REQ-C-001"] },
-    { "id": "N-005", "quote": "Y ya puestos, una tienda online para vender recambios.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-02", "status": "out-of-scope", "decision": "Acordamos dejar la tienda para más adelante: primero las citas. Lo decidimos juntos el 4 de septiembre.", "feature": "initial", "requirements": [] },
-    { "id": "N-006", "quote": "Quiero vender bonos de tres revisiones con descuento, como hace la peluquería de enfrente.", "who": "Marta Ruiz (dueña del taller)", "when": "2026-09-20", "status": "captured", "feature": "CHG-2026-09-20-001", "requirements": ["REQ-F-005"] }
+    {
+      "id": "N-001",
+      "quote": "Quiero que mis clientes puedan pedirme cita desde el móvil sin tener que llamarme, que me paso el día con el teléfono en la mano.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-02",
+      "status": "confirmed",
+      "feature": "initial",
+      "requirements": [
+        "REQ-F-001",
+        "REQ-F-002",
+        "REQ-F-004",
+        "REQ-NF-001"
+      ]
+    },
+    {
+      "id": "N-002",
+      "quote": "Necesito ver de un vistazo las citas de mañana para organizar el taller antes de abrir.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-02",
+      "status": "confirmed",
+      "feature": "initial",
+      "requirements": [
+        "REQ-F-003"
+      ]
+    },
+    {
+      "id": "N-003",
+      "quote": "Estaría genial que al cliente le llegue un aviso cuando su bici esté lista.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-02",
+      "status": "confirmed",
+      "feature": "initial",
+      "requirements": [
+        "REQ-F-006"
+      ]
+    },
+    {
+      "id": "N-004",
+      "quote": "Los datos de mis clientes no pueden salir de Europa, me lo dijo mi gestor.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-03",
+      "status": "confirmed",
+      "feature": "initial",
+      "requirements": [
+        "REQ-C-001"
+      ]
+    },
+    {
+      "id": "N-005",
+      "quote": "Y ya puestos, una tienda online para vender recambios.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-02",
+      "status": "out-of-scope",
+      "decision": "Acordamos dejar la tienda para más adelante: primero las citas. Lo decidimos juntos el 4 de septiembre.",
+      "feature": "initial",
+      "requirements": []
+    },
+    {
+      "id": "N-006",
+      "quote": "Quiero vender bonos de tres revisiones con descuento, como hace la peluquería de enfrente.",
+      "who": "Marta Ruiz (dueña del taller)",
+      "when": "2026-09-20",
+      "status": "captured",
+      "feature": "CHG-2026-09-20-001",
+      "requirements": [
+        "REQ-F-005"
+      ]
+    }
   ],
   "requirements": [
     {
-      "id": "REQ-F-001", "kind": "F", "title": "Pedir cita desde el móvil",
+      "id": "REQ-F-001",
+      "kind": "F",
+      "title": "Pedir cita desde el móvil",
       "plain": "Tu cliente abre un enlace en el móvil, elige el tipo de arreglo y deja su nombre y teléfono. La cita queda guardada y le aparece una confirmación en pantalla.",
       "statement": "WHEN a customer submits the booking form with a service, name and phone THE system SHALL store the booking and show a confirmation with its date and time.",
-      "priority": "Must", "feature": "initial", "needs": ["N-001"], "fase": 1, "status": "shown", "verification": "test",
-      "criteria": [
-        { "n": 1, "text": "GIVEN el taller abre el martes a las 10:00 WHEN Ana pide «Revisión completa» para el martes a las 10:00 THEN ve «Cita confirmada: martes 10:00»", "status": "pass",
-          "captures": [ { "path": "evidencias/FASE-1/REQ-F-001-AC1.png", "published": true } ],
-          "tests": { "pass": 2, "total": 2, "names": ["AC-001-01 reserva con datos completos", "AC-001-01 confirmación muestra fecha y hora"] },
-          "measurement": null, "record": null },
-        { "n": 2, "text": "GIVEN Ana no escribe su teléfono WHEN pulsa «Pedir cita» THEN ve «Falta el teléfono» y la cita no se guarda", "status": "pass",
-          "captures": [ { "path": "evidencias/FASE-1/REQ-F-001-AC2.png", "published": true } ],
-          "tests": { "pass": 2, "total": 2, "names": ["AC-001-02 teléfono obligatorio", "AC-001-02 no se guarda sin teléfono"] },
-          "measurement": null, "record": null }
+      "priority": "Must",
+      "feature": "initial",
+      "needs": [
+        "N-001"
       ],
-      "videos": [ { "path": "evidencias/FASE-1/WF-001.webm", "published": true } ],
-      "warnings": [], "waiver": null,
-      "links": { "commits": [
-        { "sha": "3f2a9d1", "url": "https://github.com/taller-ruiz/citas/commit/3f2a9d1", "subject": "feat(citas): formulario de reserva" },
-        { "sha": "a71c0e4", "url": "https://github.com/taller-ruiz/citas/commit/a71c0e4", "subject": "feat(citas): confirmación con fecha y hora" }
-      ], "issue": { "number": 3, "url": "https://github.com/taller-ruiz/citas/issues/3" } }
+      "fase": 1,
+      "status": "shown",
+      "verification": "test",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN el taller abre el martes a las 10:00 WHEN Ana pide «Revisión completa» para el martes a las 10:00 THEN ve «Cita confirmada: martes 10:00»",
+          "status": "pass",
+          "captures": [
+            {
+              "path": "evidencias/FASE-1/REQ-F-001-AC1.png",
+              "published": true
+            }
+          ],
+          "tests": {
+            "pass": 2,
+            "total": 2,
+            "names": [
+              "AC-001-01 reserva con datos completos",
+              "AC-001-01 confirmación muestra fecha y hora"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        },
+        {
+          "n": 2,
+          "text": "GIVEN Ana no escribe su teléfono WHEN pulsa «Pedir cita» THEN ve «Falta el teléfono» y la cita no se guarda",
+          "status": "pass",
+          "captures": [
+            {
+              "path": "evidencias/FASE-1/REQ-F-001-AC2.png",
+              "published": true
+            }
+          ],
+          "tests": {
+            "pass": 2,
+            "total": 2,
+            "names": [
+              "AC-001-02 teléfono obligatorio",
+              "AC-001-02 no se guarda sin teléfono"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        }
+      ],
+      "videos": [
+        {
+          "path": "evidencias/FASE-1/WF-001.webm",
+          "published": true
+        }
+      ],
+      "warnings": [],
+      "waiver": null,
+      "links": {
+        "commits": [
+          {
+            "sha": "3f2a9d1",
+            "url": "https://github.com/taller-ruiz/citas/commit/3f2a9d1",
+            "subject": "feat(citas): formulario de reserva"
+          },
+          {
+            "sha": "a71c0e4",
+            "url": "https://github.com/taller-ruiz/citas/commit/a71c0e4",
+            "subject": "feat(citas): confirmación con fecha y hora"
+          }
+        ],
+        "issue": {
+          "number": 3,
+          "url": "https://github.com/taller-ruiz/citas/issues/3"
+        }
+      }
     },
     {
-      "id": "REQ-F-002", "kind": "F", "title": "Elegir una hora libre",
+      "id": "REQ-F-002",
+      "kind": "F",
+      "title": "Elegir una hora libre",
       "plain": "Al pedir cita, tu cliente solo ve las horas en que el taller está abierto y queda sitio. Así nunca se juntan dos bicis a la misma hora.",
       "statement": "WHEN a customer opens the date picker THE system SHALL list only the free slots within opening hours.",
-      "priority": "Must", "feature": "initial", "needs": ["N-001"], "fase": 1, "status": "building", "verification": "test",
-      "criteria": [
-        { "n": 1, "text": "GIVEN el martes a las 10:00 ya está reservado WHEN Luis mira el martes THEN no aparece la hora 10:00", "status": "stale",
-          "captures": [ { "path": "evidencias/FASE-1/REQ-F-002-AC1.png", "published": true } ],
-          "tests": { "pass": 1, "total": 1, "names": ["AC-002-01 oculta horas ocupadas"] },
-          "measurement": null, "record": null },
-        { "n": 2, "text": "GIVEN el taller cierra los domingos WHEN Luis mira el domingo THEN ve «Cerrado» y ninguna hora", "status": "unshown",
-          "captures": [],
-          "tests": { "pass": 1, "total": 1, "names": ["AC-002-02 domingo cerrado"] },
-          "measurement": null, "record": null }
+      "priority": "Must",
+      "feature": "initial",
+      "needs": [
+        "N-001"
       ],
-      "videos": [ { "path": "evidencias/FASE-1/WF-001.webm", "published": true } ],
+      "fase": 1,
+      "status": "building",
+      "verification": "test",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN el martes a las 10:00 ya está reservado WHEN Luis mira el martes THEN no aparece la hora 10:00",
+          "status": "stale",
+          "captures": [
+            {
+              "path": "evidencias/FASE-1/REQ-F-002-AC1.png",
+              "published": true
+            }
+          ],
+          "tests": {
+            "pass": 1,
+            "total": 1,
+            "names": [
+              "AC-002-01 oculta horas ocupadas"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        },
+        {
+          "n": 2,
+          "text": "GIVEN el taller cierra los domingos WHEN Luis mira el domingo THEN ve «Cerrado» y ninguna hora",
+          "status": "unshown",
+          "captures": [],
+          "tests": {
+            "pass": 1,
+            "total": 1,
+            "names": [
+              "AC-002-02 domingo cerrado"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        }
+      ],
+      "videos": [
+        {
+          "path": "evidencias/FASE-1/WF-001.webm",
+          "published": true
+        }
+      ],
       "warnings": [
-        { "code": "unshown", "text": "AC2 sin captura en evidencias/FASE-1", "ac": 2 },
-        { "code": "stale", "text": "evidencia evaluada en 3f2a9d1, código cambiado en c88b210", "ac": 1 }
+        {
+          "code": "unshown",
+          "text": "AC2 sin captura en evidencias/FASE-1",
+          "ac": 2
+        },
+        {
+          "code": "stale",
+          "text": "evidencia evaluada en 3f2a9d1, código cambiado en c88b210",
+          "ac": 1
+        }
       ],
       "waiver": null,
-      "links": { "commits": [
-        { "sha": "c88b210", "url": "https://github.com/taller-ruiz/citas/commit/c88b210", "subject": "feat(citas): horas según el horario" }
-      ], "issue": { "number": 3, "url": "https://github.com/taller-ruiz/citas/issues/3" } }
+      "links": {
+        "commits": [
+          {
+            "sha": "c88b210",
+            "url": "https://github.com/taller-ruiz/citas/commit/c88b210",
+            "subject": "feat(citas): horas según el horario"
+          }
+        ],
+        "issue": {
+          "number": 3,
+          "url": "https://github.com/taller-ruiz/citas/issues/3"
+        }
+      }
     },
     {
-      "id": "REQ-F-003", "kind": "F", "title": "Ver las citas de mañana",
+      "id": "REQ-F-003",
+      "kind": "F",
+      "title": "Ver las citas de mañana",
       "plain": "Cada tarde puedes ver en una sola pantalla las citas del día siguiente, ordenadas por hora, con el arreglo que pidió cada cliente.",
       "statement": "WHEN the owner opens the agenda THE system SHALL list tomorrow's bookings ordered by time with the service of each one.",
-      "priority": "Must", "feature": "initial", "needs": ["N-002"], "fase": 2, "status": "building", "verification": "test",
+      "priority": "Must",
+      "feature": "initial",
+      "needs": [
+        "N-002"
+      ],
+      "fase": 2,
+      "status": "building",
+      "verification": "test",
       "criteria": [
-        { "n": 1, "text": "GIVEN mañana hay citas a las 9:00 y a las 12:00 WHEN Marta abre «Mañana» THEN ve «9:00 Cambio de cubierta» antes que «12:00 Revisión completa»", "status": "weakened",
-          "captures": [ { "path": "evidencias/FASE-2/REQ-F-003-AC1.png", "published": true } ],
-          "tests": { "pass": 1, "total": 1, "names": ["AC-003-01 agenda ordenada por hora"] },
-          "measurement": null, "record": null },
-        { "n": 2, "text": "GIVEN mañana no hay citas WHEN Marta abre «Mañana» THEN ve «Mañana no tienes citas»", "status": "pass",
-          "captures": [ { "path": "evidencias/FASE-2/REQ-F-003-AC2.png", "published": false } ],
-          "tests": { "pass": 1, "total": 1, "names": ["AC-003-02 agenda vacía"] },
-          "measurement": null, "record": null }
+        {
+          "n": 1,
+          "text": "GIVEN mañana hay citas a las 9:00 y a las 12:00 WHEN Marta abre «Mañana» THEN ve «9:00 Cambio de cubierta» antes que «12:00 Revisión completa»",
+          "status": "weakened",
+          "captures": [
+            {
+              "path": "evidencias/FASE-2/REQ-F-003-AC1.png",
+              "published": true
+            }
+          ],
+          "tests": {
+            "pass": 1,
+            "total": 1,
+            "names": [
+              "AC-003-01 agenda ordenada por hora"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        },
+        {
+          "n": 2,
+          "text": "GIVEN mañana no hay citas WHEN Marta abre «Mañana» THEN ve «Mañana no tienes citas»",
+          "status": "pass",
+          "captures": [
+            {
+              "path": "evidencias/FASE-2/REQ-F-003-AC2.png",
+              "published": false
+            }
+          ],
+          "tests": {
+            "pass": 1,
+            "total": 1,
+            "names": [
+              "AC-003-02 agenda vacía"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        }
       ],
       "videos": [],
       "warnings": [
-        { "code": "weakened", "text": "Q-03: el literal «Cambio de cubierta» no aparece en el test", "ac": 1 },
-        { "code": "missing_video", "text": "falta WF-002.webm en evidencias/FASE-2", "ac": null }
+        {
+          "code": "weakened",
+          "text": "Q-03: el literal «Cambio de cubierta» no aparece en el test",
+          "ac": 1
+        },
+        {
+          "code": "missing_video",
+          "text": "falta WF-002.webm en evidencias/FASE-2",
+          "ac": null
+        }
       ],
       "waiver": null,
-      "links": { "commits": [
-        { "sha": "e19d4b7", "url": "https://github.com/taller-ruiz/citas/commit/e19d4b7", "subject": "feat(agenda): lista de mañana" }
-      ], "issue": { "number": 4, "url": "https://github.com/taller-ruiz/citas/issues/4" } }
+      "links": {
+        "commits": [
+          {
+            "sha": "e19d4b7",
+            "url": "https://github.com/taller-ruiz/citas/commit/e19d4b7",
+            "subject": "feat(agenda): lista de mañana"
+          }
+        ],
+        "issue": {
+          "number": 4,
+          "url": "https://github.com/taller-ruiz/citas/issues/4"
+        }
+      }
     },
     {
-      "id": "REQ-F-004", "kind": "F", "title": "Cancelar una cita",
+      "id": "REQ-F-004",
+      "kind": "F",
+      "title": "Cancelar una cita",
       "plain": "Tu cliente puede cancelar su cita desde el mismo enlace. La hora vuelve a quedar libre para otra persona.",
       "statement": "WHEN a customer cancels a booking THE system SHALL mark it cancelled and free its slot.",
-      "priority": "Should", "feature": "initial", "needs": ["N-001"], "fase": 2, "status": "failing", "verification": "test",
+      "priority": "Should",
+      "feature": "initial",
+      "needs": [
+        "N-001"
+      ],
+      "fase": 2,
+      "status": "failing",
+      "verification": "test",
       "criteria": [
-        { "n": 1, "text": "GIVEN Ana tiene cita el martes a las 10:00 WHEN la cancela THEN ve «Cita cancelada» y las 10:00 vuelven a estar libres", "status": "fail",
-          "captures": [ { "path": "evidencias/FASE-2/REQ-F-004-AC1.png", "published": true } ],
-          "tests": { "pass": 2, "total": 3, "names": ["AC-004-01 cancelar muestra confirmación", "AC-004-01 estado cancelada", "AC-004-01 la hora vuelve a estar libre"] },
-          "measurement": null, "record": null }
+        {
+          "n": 1,
+          "text": "GIVEN Ana tiene cita el martes a las 10:00 WHEN la cancela THEN ve «Cita cancelada» y las 10:00 vuelven a estar libres",
+          "status": "fail",
+          "captures": [
+            {
+              "path": "evidencias/FASE-2/REQ-F-004-AC1.png",
+              "published": true
+            }
+          ],
+          "tests": {
+            "pass": 2,
+            "total": 3,
+            "names": [
+              "AC-004-01 cancelar muestra confirmación",
+              "AC-004-01 estado cancelada",
+              "AC-004-01 la hora vuelve a estar libre"
+            ]
+          },
+          "measurement": null,
+          "record": null
+        }
       ],
       "videos": [],
       "warnings": [
-        { "code": "challenge", "text": "CH-007: tras cancelar, la hora sigue ocupada en el selector (reproducido en 9c41e7a)", "ac": 1 },
-        { "code": "failing", "text": "AC-004-01 la hora vuelve a estar libre: expected 10:00 in free slots", "ac": 1 }
+        {
+          "code": "challenge",
+          "text": "CH-007: tras cancelar, la hora sigue ocupada en el selector (reproducido en 9c41e7a)",
+          "ac": 1
+        },
+        {
+          "code": "failing",
+          "text": "AC-004-01 la hora vuelve a estar libre: expected 10:00 in free slots",
+          "ac": 1
+        }
       ],
       "waiver": null,
-      "links": { "commits": [
-        { "sha": "b5d0f33", "url": "https://github.com/taller-ruiz/citas/commit/b5d0f33", "subject": "feat(citas): cancelar desde el enlace" }
-      ], "issue": { "number": 4, "url": "https://github.com/taller-ruiz/citas/issues/4" } }
+      "links": {
+        "commits": [
+          {
+            "sha": "b5d0f33",
+            "url": "https://github.com/taller-ruiz/citas/commit/b5d0f33",
+            "subject": "feat(citas): cancelar desde el enlace"
+          }
+        ],
+        "issue": {
+          "number": 4,
+          "url": "https://github.com/taller-ruiz/citas/issues/4"
+        }
+      }
     },
     {
-      "id": "REQ-F-005", "kind": "F", "title": "Comprar un bono de revisiones",
+      "id": "REQ-F-005",
+      "kind": "F",
+      "title": "Comprar un bono de revisiones",
       "plain": null,
       "statement": "WHEN a customer buys a three-service pass THE system SHALL record it with three remaining uses.",
-      "priority": "Could", "feature": "CHG-2026-09-20-001", "needs": ["N-006"], "fase": 3, "status": "pending", "verification": "demo",
-      "criteria": [
-        { "n": 1, "text": "GIVEN Ana compra un bono de 3 revisiones WHEN pide su primera cita THEN ve «Te quedan 2 revisiones»", "status": "pending",
-          "captures": [], "tests": { "pass": 0, "total": 0, "names": [] }, "measurement": null, "record": null }
+      "priority": "Could",
+      "feature": "CHG-2026-09-20-001",
+      "needs": [
+        "N-006"
       ],
-      "videos": [], "warnings": [], "waiver": null,
-      "links": { "commits": [], "issue": { "number": 9, "url": "https://github.com/taller-ruiz/citas/issues/9" } }
+      "fase": 3,
+      "status": "pending",
+      "verification": "demo",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN Ana compra un bono de 3 revisiones WHEN pide su primera cita THEN ve «Te quedan 2 revisiones»",
+          "status": "pending",
+          "captures": [],
+          "tests": {
+            "pass": 0,
+            "total": 0,
+            "names": []
+          },
+          "measurement": null,
+          "record": null
+        }
+      ],
+      "videos": [],
+      "warnings": [],
+      "waiver": null,
+      "links": {
+        "commits": [],
+        "issue": {
+          "number": 9,
+          "url": "https://github.com/taller-ruiz/citas/issues/9"
+        }
+      }
     },
     {
-      "id": "REQ-F-006", "kind": "F", "title": "Aviso de bici lista",
+      "id": "REQ-F-006",
+      "kind": "F",
+      "title": "Aviso de bici lista",
       "plain": "Cuando marcas una reparación como terminada, tu cliente recibe un mensaje para que pase a recogerla.",
       "statement": "WHEN the owner marks a repair as finished THE system SHALL send an SMS to the customer.",
-      "priority": "Should", "feature": "initial", "needs": ["N-003"], "fase": null, "status": "deferred", "verification": "demo",
-      "criteria": [
-        { "n": 1, "text": "GIVEN la bici de Ana está en el taller WHEN Marta pulsa «Terminada» THEN Ana recibe «Tu bici ya está lista en Taller Ruiz»", "status": "pending",
-          "captures": [], "tests": { "pass": 0, "total": 0, "names": [] }, "measurement": null, "record": null }
+      "priority": "Should",
+      "feature": "initial",
+      "needs": [
+        "N-003"
       ],
-      "videos": [], "warnings": [],
-      "waiver": { "reason": "Enviar SMS tiene un coste mensual que Marta quiere estudiar con calma. Lo retomamos después de la entrega 3.", "by": "Marta Ruiz (dueña del taller)", "followUp": "#12" },
-      "links": { "commits": [], "issue": { "number": 12, "url": "https://github.com/taller-ruiz/citas/issues/12" } }
+      "fase": null,
+      "status": "deferred",
+      "verification": "demo",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN la bici de Ana está en el taller WHEN Marta pulsa «Terminada» THEN Ana recibe «Tu bici ya está lista en Taller Ruiz»",
+          "status": "pending",
+          "captures": [],
+          "tests": {
+            "pass": 0,
+            "total": 0,
+            "names": []
+          },
+          "measurement": null,
+          "record": null
+        }
+      ],
+      "videos": [],
+      "warnings": [],
+      "waiver": {
+        "reason": "Enviar SMS tiene un coste mensual que Marta quiere estudiar con calma. Lo retomamos después de la entrega 3.",
+        "by": "Marta Ruiz (dueña del taller)",
+        "followUp": "#12",
+        "at": "2026-09-20T10:00:00Z"
+      },
+      "links": {
+        "commits": [],
+        "issue": {
+          "number": 12,
+          "url": "https://github.com/taller-ruiz/citas/issues/12"
+        }
+      }
     },
     {
-      "id": "REQ-F-007", "kind": "F", "title": "Pagar la señal con tarjeta",
+      "id": "REQ-F-007",
+      "kind": "F",
+      "title": "Pagar la señal con tarjeta",
       "plain": "Tu cliente iba a pagar 5 € de señal con tarjeta al reservar. Lo quitamos porque prefieres cobrar en el taller.",
       "statement": "WHEN a customer confirms a booking THE system SHALL charge a 5 EUR deposit by card.",
-      "priority": "Could", "feature": "initial", "needs": ["N-001"], "fase": null, "status": "deprecated", "verification": "test",
-      "criteria": [], "videos": [], "warnings": [], "waiver": null,
-      "links": { "commits": [], "issue": null }
+      "priority": "Could",
+      "feature": "initial",
+      "needs": [
+        "N-001"
+      ],
+      "fase": null,
+      "status": "deprecated",
+      "verification": "test",
+      "criteria": [],
+      "videos": [],
+      "warnings": [],
+      "waiver": null,
+      "links": {
+        "commits": [],
+        "issue": null
+      }
     },
     {
-      "id": "REQ-NF-001", "kind": "NF", "title": "La página de cita carga rápido",
+      "id": "REQ-NF-001",
+      "kind": "NF",
+      "title": "La página de cita carga rápido",
       "plain": "La página para pedir cita se abre en menos de 2 segundos en un móvil con datos normales, para que nadie se canse de esperar.",
       "statement": "WHEN a customer opens the booking page on a 4G connection THE system SHALL render it within 2 seconds at the 95th percentile.",
-      "priority": "Must", "feature": "initial", "needs": ["N-001"], "fase": 1, "status": "shown", "verification": "measurement",
-      "criteria": [
-        { "n": 1, "text": "GIVEN un móvil de gama media con 4G WHEN abre la página de cita 100 veces THEN el 95 % de las veces carga en 2 s o menos", "status": "pass",
-          "captures": [],
-          "tests": { "pass": 1, "total": 1, "names": ["PERF-001 carga p95 en 4G"] },
-          "measurement": { "metric": "Tiempo de carga p95 (segundos)", "observed": 1.4, "op": "le", "threshold": 2 },
-          "record": null }
+      "priority": "Must",
+      "feature": "initial",
+      "needs": [
+        "N-001"
       ],
-      "videos": [], "warnings": [], "waiver": null,
-      "links": { "commits": [
-        { "sha": "d02e6aa", "url": "https://github.com/taller-ruiz/citas/commit/d02e6aa", "subject": "perf(citas): imágenes comprimidas" }
-      ], "issue": null }
+      "fase": 1,
+      "status": "shown",
+      "verification": "measurement",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN un móvil de gama media con 4G WHEN abre la página de cita 100 veces THEN el 95 % de las veces carga en 2 s o menos",
+          "status": "pass",
+          "captures": [],
+          "tests": {
+            "pass": 1,
+            "total": 1,
+            "names": [
+              "PERF-001 carga p95 en 4G"
+            ]
+          },
+          "measurement": {
+            "metric": "Tiempo de carga p95 (segundos)",
+            "observed": 1.4,
+            "op": "le",
+            "threshold": 2
+          },
+          "record": null
+        }
+      ],
+      "videos": [],
+      "warnings": [],
+      "waiver": null,
+      "links": {
+        "commits": [
+          {
+            "sha": "d02e6aa",
+            "url": "https://github.com/taller-ruiz/citas/commit/d02e6aa",
+            "subject": "perf(citas): imágenes comprimidas"
+          }
+        ],
+        "issue": null
+      }
     },
     {
-      "id": "REQ-C-001", "kind": "C", "title": "Datos guardados en Europa",
+      "id": "REQ-C-001",
+      "kind": "C",
+      "title": "Datos guardados en Europa",
       "plain": "Los datos de tus clientes se guardan en servidores dentro de la Unión Europea y nunca se copian fuera.",
       "statement": "Customer data SHALL be stored only in EU data centres.",
-      "priority": "Must", "feature": "initial", "needs": ["N-004"], "fase": 1, "status": "shown", "verification": "inspection",
-      "criteria": [
-        { "n": 1, "text": "GIVEN la configuración de producción WHEN se revisa la región de la base de datos y de las copias THEN ambas están en eu-west-3 (París)", "status": "pass",
-          "captures": [], "tests": { "pass": 0, "total": 0, "names": [] }, "measurement": null,
-          "record": { "type": "inspection", "by": "Lucía Gómez (responsable técnica)", "at": "2026-09-14", "note": "Base de datos y copias de seguridad en París (eu-west-3)." } }
+      "priority": "Must",
+      "feature": "initial",
+      "needs": [
+        "N-004"
       ],
-      "videos": [], "warnings": [], "waiver": null,
-      "links": { "commits": [
-        { "sha": "77ab3c2", "url": "https://github.com/taller-ruiz/citas/commit/77ab3c2", "subject": "build(infra): región eu-west-3" }
-      ], "issue": null }
+      "fase": 1,
+      "status": "shown",
+      "verification": "inspection",
+      "criteria": [
+        {
+          "n": 1,
+          "text": "GIVEN la configuración de producción WHEN se revisa la región de la base de datos y de las copias THEN ambas están en eu-west-3 (París)",
+          "status": "pass",
+          "captures": [],
+          "tests": {
+            "pass": 0,
+            "total": 0,
+            "names": []
+          },
+          "measurement": null,
+          "record": {
+            "type": "inspection",
+            "by": "Lucía Gómez (responsable técnica)",
+            "at": "2026-09-14",
+            "note": "Base de datos y copias de seguridad en París (eu-west-3)."
+          }
+        }
+      ],
+      "videos": [],
+      "warnings": [],
+      "waiver": null,
+      "links": {
+        "commits": [
+          {
+            "sha": "77ab3c2",
+            "url": "https://github.com/taller-ruiz/citas/commit/77ab3c2",
+            "subject": "build(infra): región eu-west-3"
+          }
+        ],
+        "issue": null
+      }
     }
   ],
   "fases": [
     {
-      "n": 1, "title": "Pedir cita desde el móvil", "increment": "Tus clientes ya pueden pedir cita desde el móvil y ver la confirmación.",
-      "requirements": ["REQ-F-001", "REQ-F-002", "REQ-NF-001", "REQ-C-001"], "needs": ["N-001", "N-004"], "workflows": ["WF-001"],
-      "demo": [
-        { "step": 1, "action": "Abre el enlace del taller en tu móvil", "expected": "Ves los tipos de arreglo y sus precios" },
-        { "step": 2, "action": "Elige «Revisión completa» y el martes", "expected": "Solo aparecen las horas libres" },
-        { "step": 3, "action": "Escribe tu nombre y teléfono y pulsa «Pedir cita»", "expected": "Ves «Cita confirmada» con la fecha y la hora" }
+      "n": 1,
+      "title": "Pedir cita desde el móvil",
+      "increment": "Tus clientes ya pueden pedir cita desde el móvil y ver la confirmación.",
+      "requirements": [
+        "REQ-F-001",
+        "REQ-F-002",
+        "REQ-NF-001",
+        "REQ-C-001"
       ],
-      "videos": [ { "path": "evidencias/FASE-1/WF-001.webm", "published": true } ],
-      "tasks": { "done": 8, "total": 8 }, "status": "accepted",
-      "acceptance": { "by": "Marta Ruiz", "role": "dueña del taller", "at": "2026-09-15", "channel": "demostración en el taller" },
-      "issue": { "number": 3, "url": "https://github.com/taller-ruiz/citas/issues/3" },
-      "tags": [ { "name": "fase-1-accepted", "date": "2026-09-15", "url": "https://github.com/taller-ruiz/citas/releases/tag/fase-1-accepted" } ]
+      "needs": [
+        "N-001",
+        "N-004"
+      ],
+      "workflows": [
+        "WF-001"
+      ],
+      "demo": [
+        {
+          "step": 1,
+          "action": "Abre el enlace del taller en tu móvil",
+          "expected": "Ves los tipos de arreglo y sus precios"
+        },
+        {
+          "step": 2,
+          "action": "Elige «Revisión completa» y el martes",
+          "expected": "Solo aparecen las horas libres"
+        },
+        {
+          "step": 3,
+          "action": "Escribe tu nombre y teléfono y pulsa «Pedir cita»",
+          "expected": "Ves «Cita confirmada» con la fecha y la hora"
+        }
+      ],
+      "videos": [
+        {
+          "path": "evidencias/FASE-1/WF-001.webm",
+          "published": true
+        }
+      ],
+      "tasks": {
+        "done": 8,
+        "total": 8
+      },
+      "status": "accepted",
+      "acceptance": {
+        "by": "Marta Ruiz",
+        "role": "dueña del taller",
+        "at": "2026-09-15",
+        "channel": "demostración en el taller"
+      },
+      "issue": {
+        "number": 3,
+        "url": "https://github.com/taller-ruiz/citas/issues/3"
+      },
+      "tags": [
+        {
+          "name": "fase-1-accepted",
+          "date": "2026-09-15",
+          "url": "https://github.com/taller-ruiz/citas/releases/tag/fase-1-accepted"
+        }
+      ],
+      "feature": "initial"
     },
     {
-      "n": 2, "title": "Ver las citas del día siguiente", "increment": "Cada tarde ves en una pantalla las citas de mañana, y tus clientes pueden cancelar.",
-      "requirements": ["REQ-F-003", "REQ-F-004"], "needs": ["N-002", "N-001"], "workflows": ["WF-002"],
+      "n": 2,
+      "title": "Ver las citas del día siguiente",
+      "increment": "Cada tarde ves en una pantalla las citas de mañana, y tus clientes pueden cancelar.",
+      "requirements": [
+        "REQ-F-003",
+        "REQ-F-004"
+      ],
+      "needs": [
+        "N-002",
+        "N-001"
+      ],
+      "workflows": [
+        "WF-002"
+      ],
       "demo": [
-        { "step": 1, "action": "Entra como dueña y abre «Mañana»", "expected": "Ves las citas ordenadas por hora" },
-        { "step": 2, "action": "Desde el móvil de un cliente, cancela su cita", "expected": "Ves «Cita cancelada»" },
-        { "step": 3, "action": "Vuelve a «Mañana»", "expected": "La cita cancelada ya no aparece y su hora queda libre" }
+        {
+          "step": 1,
+          "action": "Entra como dueña y abre «Mañana»",
+          "expected": "Ves las citas ordenadas por hora"
+        },
+        {
+          "step": 2,
+          "action": "Desde el móvil de un cliente, cancela su cita",
+          "expected": "Ves «Cita cancelada»"
+        },
+        {
+          "step": 3,
+          "action": "Vuelve a «Mañana»",
+          "expected": "La cita cancelada ya no aparece y su hora queda libre"
+        }
       ],
       "videos": [],
-      "tasks": { "done": 3, "total": 7 }, "status": "building", "acceptance": null,
-      "issue": { "number": 4, "url": "https://github.com/taller-ruiz/citas/issues/4" },
-      "tags": []
+      "tasks": {
+        "done": 3,
+        "total": 7
+      },
+      "status": "building",
+      "acceptance": null,
+      "issue": {
+        "number": 4,
+        "url": "https://github.com/taller-ruiz/citas/issues/4"
+      },
+      "tags": [],
+      "feature": "initial"
     },
     {
-      "n": 3, "title": "Bonos de revisión", "increment": "Tus clientes pueden comprar un bono de tres revisiones y gastarlo al pedir cita.",
-      "requirements": ["REQ-F-005"], "needs": ["N-006"], "workflows": ["WF-003"],
+      "n": 3,
+      "title": "Bonos de revisión",
+      "increment": "Tus clientes pueden comprar un bono de tres revisiones y gastarlo al pedir cita.",
+      "requirements": [
+        "REQ-F-005"
+      ],
+      "needs": [
+        "N-006"
+      ],
+      "workflows": [
+        "WF-003"
+      ],
       "demo": [],
       "videos": [],
-      "tasks": { "done": 0, "total": 5 }, "status": "pending", "acceptance": null,
-      "issue": { "number": 9, "url": "https://github.com/taller-ruiz/citas/issues/9" },
-      "tags": []
+      "tasks": {
+        "done": 0,
+        "total": 5
+      },
+      "status": "pending",
+      "acceptance": null,
+      "issue": {
+        "number": 9,
+        "url": "https://github.com/taller-ruiz/citas/issues/9"
+      },
+      "tags": [],
+      "feature": "CHG-2026-09-20-001"
     }
   ],
   "journal": [
-    { "at": "2026-09-01T10:00:00+02:00", "feature": "initial", "stage": "setup", "kind": "start", "text": "Empezamos el proyecto: lo primero es entender lo que necesitas.", "refs": [], "derived": false },
-    { "at": "2026-09-02T18:30:00+02:00", "feature": "initial", "stage": "requirements-engineer", "kind": "done", "text": "Recogimos cinco necesidades en la primera reunión, con tus propias palabras.", "refs": ["N-001", "N-002", "N-003", "N-004", "N-005"], "derived": false },
-    { "at": "2026-09-04T12:00:00+02:00", "feature": "initial", "stage": "requirements-engineer", "kind": "done", "text": "Se guardó la versión 1 de los requisitos.", "refs": [], "derived": true },
-    { "at": "2026-09-04T12:10:00+02:00", "feature": "initial", "stage": "requirements-engineer", "kind": "gate", "text": "Aprobaste los requisitos y sus ejemplos.", "refs": [], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-04T12:11:00+02:00", "feature": "initial", "stage": "requirements-engineer", "kind": "decision", "text": "La tienda de recambios queda para más adelante.", "refs": ["N-005"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-04T12:30:00+02:00", "feature": "initial", "stage": "route", "kind": "skip", "text": "No haremos una fase de diseño aparte: la aplicación es pequeña y los ejemplos ya son claros.", "refs": [], "by": "Lucía Gómez (responsable técnica)", "derived": false },
-    { "at": "2026-09-05T17:00:00+02:00", "feature": "initial", "stage": "plan-architect", "kind": "done", "text": "Planificamos dos entregas: primero pedir cita, después la agenda de mañana.", "refs": [], "derived": false },
-    { "at": "2026-09-06T09:15:00+02:00", "feature": "initial", "stage": "task-implementer", "kind": "start", "text": "Empezamos a construir la entrega 1.", "refs": ["FASE-1"], "derived": false },
-    { "at": "2026-09-14T16:00:00+02:00", "feature": "initial", "stage": "acceptance", "kind": "evidence", "text": "Grabamos el recorrido completo de pedir cita y comprobamos que los datos se guardan en París.", "refs": ["REQ-F-001", "REQ-C-001"], "derived": false },
-    { "at": "2026-09-15T11:00:00+02:00", "feature": "initial", "stage": "acceptance", "kind": "gate", "text": "Aceptaste la entrega 1 en el taller.", "refs": ["FASE-1"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-15T11:05:00+02:00", "feature": "initial", "stage": "acceptance", "kind": "feedback", "text": "Pediste que el botón «Pedir cita» sea más grande. Lo tratamos como un cambio pequeño y ya está hecho.", "refs": ["REQ-F-001"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-20T10:00:00+02:00", "feature": "CHG-2026-09-20-001", "stage": "req-change", "kind": "change", "text": "Nueva función: bonos de tres revisiones con descuento. Será la entrega 3.", "refs": ["N-006", "REQ-F-005"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-20T10:20:00+02:00", "feature": "initial", "stage": "req-change", "kind": "decision", "text": "El aviso por SMS se aplaza hasta estudiar su coste.", "refs": ["REQ-F-006"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-20T10:25:00+02:00", "feature": "initial", "stage": "req-change", "kind": "change", "text": "Quitamos el pago de la señal con tarjeta: cobrarás en el taller.", "refs": ["REQ-F-007"], "by": "Marta Ruiz (dueña del taller)", "derived": false },
-    { "at": "2026-09-22T09:00:00+02:00", "feature": "initial", "stage": "task-implementer", "kind": "start", "text": "Empezamos a construir la entrega 2.", "refs": ["FASE-2"], "derived": false },
-    { "at": "2026-09-29T19:40:00+02:00", "feature": "initial", "stage": "acceptance", "kind": "evidence", "text": "Un revisor independiente comprobó que, al cancelar una cita, la hora no vuelve a quedar libre. Lo estamos arreglando.", "refs": ["REQ-F-004"], "derived": false },
-    { "at": "2026-10-01T09:30:00+02:00", "feature": "initial", "stage": "task-implementer", "kind": "done", "text": "Terminamos la lista de citas de mañana; falta grabar su vídeo.", "refs": ["REQ-F-003"], "derived": false }
+    {
+      "at": "2026-09-01T10:00:00+02:00",
+      "feature": "initial",
+      "stage": "setup",
+      "kind": "start",
+      "text": "Empezamos el proyecto: lo primero es entender lo que necesitas.",
+      "refs": [],
+      "derived": false
+    },
+    {
+      "at": "2026-09-02T18:30:00+02:00",
+      "feature": "initial",
+      "stage": "requirements-engineer",
+      "kind": "done",
+      "text": "Recogimos cinco necesidades en la primera reunión, con tus propias palabras.",
+      "refs": [
+        "N-001",
+        "N-002",
+        "N-003",
+        "N-004",
+        "N-005"
+      ],
+      "derived": false
+    },
+    {
+      "at": "2026-09-04T12:00:00+02:00",
+      "feature": "initial",
+      "stage": "requirements-engineer",
+      "kind": "done",
+      "text": "Se guardó la versión 1 de los requisitos.",
+      "refs": [],
+      "derived": true
+    },
+    {
+      "at": "2026-09-04T12:10:00+02:00",
+      "feature": "initial",
+      "stage": "requirements-engineer",
+      "kind": "gate",
+      "text": "Aprobaste los requisitos y sus ejemplos.",
+      "refs": [],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-04T12:11:00+02:00",
+      "feature": "initial",
+      "stage": "requirements-engineer",
+      "kind": "decision",
+      "text": "La tienda de recambios queda para más adelante.",
+      "refs": [
+        "N-005"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-04T12:30:00+02:00",
+      "feature": "initial",
+      "stage": "route",
+      "kind": "skip",
+      "text": "No haremos una fase de diseño aparte: la aplicación es pequeña y los ejemplos ya son claros.",
+      "refs": [],
+      "by": "Lucía Gómez (responsable técnica)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-05T17:00:00+02:00",
+      "feature": "initial",
+      "stage": "plan-architect",
+      "kind": "done",
+      "text": "Planificamos dos entregas: primero pedir cita, después la agenda de mañana.",
+      "refs": [],
+      "derived": false
+    },
+    {
+      "at": "2026-09-06T09:15:00+02:00",
+      "feature": "initial",
+      "stage": "task-implementer",
+      "kind": "start",
+      "text": "Empezamos a construir la entrega 1.",
+      "refs": [
+        "FASE-1"
+      ],
+      "derived": false
+    },
+    {
+      "at": "2026-09-14T16:00:00+02:00",
+      "feature": "initial",
+      "stage": "acceptance",
+      "kind": "evidence",
+      "text": "Grabamos el recorrido completo de pedir cita y comprobamos que los datos se guardan en París.",
+      "refs": [
+        "REQ-F-001",
+        "REQ-C-001"
+      ],
+      "derived": false
+    },
+    {
+      "at": "2026-09-15T11:00:00+02:00",
+      "feature": "initial",
+      "stage": "acceptance",
+      "kind": "gate",
+      "text": "Aceptaste la entrega 1 en el taller.",
+      "refs": [
+        "FASE-1"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-15T11:05:00+02:00",
+      "feature": "initial",
+      "stage": "acceptance",
+      "kind": "feedback",
+      "text": "Pediste que el botón «Pedir cita» sea más grande. Lo tratamos como un cambio pequeño y ya está hecho.",
+      "refs": [
+        "REQ-F-001"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-20T10:00:00+02:00",
+      "feature": "CHG-2026-09-20-001",
+      "stage": "req-change",
+      "kind": "change",
+      "text": "Nueva función: bonos de tres revisiones con descuento. Será la entrega 3.",
+      "refs": [
+        "N-006",
+        "REQ-F-005"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-20T10:20:00+02:00",
+      "feature": "initial",
+      "stage": "req-change",
+      "kind": "decision",
+      "text": "El aviso por SMS se aplaza hasta estudiar su coste.",
+      "refs": [
+        "REQ-F-006"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-20T10:25:00+02:00",
+      "feature": "initial",
+      "stage": "req-change",
+      "kind": "change",
+      "text": "Quitamos el pago de la señal con tarjeta: cobrarás en el taller.",
+      "refs": [
+        "REQ-F-007"
+      ],
+      "by": "Marta Ruiz (dueña del taller)",
+      "derived": false
+    },
+    {
+      "at": "2026-09-22T09:00:00+02:00",
+      "feature": "initial",
+      "stage": "task-implementer",
+      "kind": "start",
+      "text": "Empezamos a construir la entrega 2.",
+      "refs": [
+        "FASE-2"
+      ],
+      "derived": false
+    },
+    {
+      "at": "2026-09-29T19:40:00+02:00",
+      "feature": "initial",
+      "stage": "acceptance",
+      "kind": "evidence",
+      "text": "Un revisor independiente comprobó que, al cancelar una cita, la hora no vuelve a quedar libre. Lo estamos arreglando.",
+      "refs": [
+        "REQ-F-004"
+      ],
+      "derived": false
+    },
+    {
+      "at": "2026-10-01T09:30:00+02:00",
+      "feature": "initial",
+      "stage": "task-implementer",
+      "kind": "done",
+      "text": "Terminamos la lista de citas de mañana; falta grabar su vídeo.",
+      "refs": [
+        "REQ-F-003"
+      ],
+      "derived": false
+    }
   ],
   "evidence": {
     "files": [
-      { "path": "evidencias/FASE-1/REQ-F-001-AC1.png", "sha256": "5b1e04c9a3", "bytes": 182344, "kind": "image", "criteria": ["REQ-F-001#1"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-1/REQ-F-001-AC2.png", "sha256": "0d7c11ff41", "bytes": 175020, "kind": "image", "criteria": ["REQ-F-001#2"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-1/REQ-F-002-AC1.png", "sha256": "9a20b6d1e8", "bytes": 160112, "kind": "image", "criteria": ["REQ-F-002#1"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-1/WF-001.webm", "sha256": "e44f7a3c09", "bytes": 4210880, "kind": "video", "criteria": ["REQ-F-001#1", "REQ-F-001#2", "REQ-F-002#1"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-2/REQ-F-003-AC1.png", "sha256": "71bd2e90c2", "bytes": 201554, "kind": "image", "criteria": ["REQ-F-003#1"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-2/REQ-F-003-AC2.png", "sha256": "c3f0a8127d", "bytes": 98012, "kind": "image", "criteria": ["REQ-F-003#2"], "published": false, "reason": "personal-data" },
-      { "path": "evidencias/FASE-2/REQ-F-004-AC1.png", "sha256": "2e6a5d44b0", "bytes": 143900, "kind": "image", "criteria": ["REQ-F-004#1"], "published": true, "reason": null },
-      { "path": "evidencias/FASE-1/WF-001-escritorio.webm", "sha256": "f8109be25a", "bytes": 24117248, "kind": "video", "criteria": ["REQ-F-001#1"], "published": false, "reason": "too-large" }
+      {
+        "path": "evidencias/FASE-1/REQ-F-001-AC1.png",
+        "sha256": "5b1e04c9a3",
+        "bytes": 182344,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-001#1"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-1/REQ-F-001-AC2.png",
+        "sha256": "0d7c11ff41",
+        "bytes": 175020,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-001#2"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-1/REQ-F-002-AC1.png",
+        "sha256": "9a20b6d1e8",
+        "bytes": 160112,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-002#1"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-1/WF-001.webm",
+        "sha256": "e44f7a3c09",
+        "bytes": 4210880,
+        "kind": "video",
+        "criteria": [
+          "REQ-F-001#1",
+          "REQ-F-001#2",
+          "REQ-F-002#1"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-2/REQ-F-003-AC1.png",
+        "sha256": "71bd2e90c2",
+        "bytes": 201554,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-003#1"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-2/REQ-F-003-AC2.png",
+        "sha256": "c3f0a8127d",
+        "bytes": 98012,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-003#2"
+        ],
+        "published": false,
+        "reason": "personal-data",
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-2/REQ-F-004-AC1.png",
+        "sha256": "2e6a5d44b0",
+        "bytes": 143900,
+        "kind": "image",
+        "criteria": [
+          "REQ-F-004#1"
+        ],
+        "published": true,
+        "reason": null,
+        "inAssets": false
+      },
+      {
+        "path": "evidencias/FASE-1/WF-001-escritorio.webm",
+        "sha256": "f8109be25a",
+        "bytes": 24117248,
+        "kind": "video",
+        "criteria": [
+          "REQ-F-001#1"
+        ],
+        "published": false,
+        "reason": "too-large",
+        "inAssets": false
+      }
     ],
     "pack": ".sdd/entregas/FASE-1-evidencias.tar.gz"
   },
   "technical": {
     "sha": "9c41e7a2d0b5f6c3e1a8",
-    "gate": { "code": 1, "label": "FASE-2: 2 requisitos sin verificar (REQ-F-003 weakened, REQ-F-004 FAILING)" },
+    "gate": {
+      "code": 1,
+      "label": "FASE-2: 2 requisitos sin verificar (REQ-F-003 weakened, REQ-F-004 FAILING)"
+    },
     "tags": [
-      { "name": "requirements-v1", "date": "2026-09-04", "url": "https://github.com/taller-ruiz/citas/releases/tag/requirements-v1" },
-      { "name": "fase-1-accepted", "date": "2026-09-15", "url": "https://github.com/taller-ruiz/citas/releases/tag/fase-1-accepted" },
-      { "name": "requirements-v2", "date": "2026-09-20", "url": "https://github.com/taller-ruiz/citas/releases/tag/requirements-v2" }
+      {
+        "name": "requirements-v1",
+        "date": "2026-09-04",
+        "url": "https://github.com/taller-ruiz/citas/releases/tag/requirements-v1"
+      },
+      {
+        "name": "fase-1-accepted",
+        "date": "2026-09-15",
+        "url": "https://github.com/taller-ruiz/citas/releases/tag/fase-1-accepted"
+      },
+      {
+        "name": "requirements-v2",
+        "date": "2026-09-20",
+        "url": "https://github.com/taller-ruiz/citas/releases/tag/requirements-v2"
+      }
     ],
     "report": "acceptance/ACCEPTANCE-REPORT.md",
     "pipeline": [
-      { "stage": "requirements-engineer", "status": "done", "lastRun": "2026-09-20T10:30:00+02:00" },
-      { "stage": "specifications-engineer", "status": "skipped", "lastRun": null },
-      { "stage": "spec-auditor", "status": "skipped", "lastRun": null },
-      { "stage": "test-planner", "status": "skipped", "lastRun": null },
-      { "stage": "plan-architect", "status": "done", "lastRun": "2026-09-20T11:00:00+02:00" },
-      { "stage": "task-generator", "status": "done", "lastRun": "2026-09-20T11:20:00+02:00" },
-      { "stage": "task-implementer", "status": "running", "lastRun": "2026-10-01T09:30:00+02:00" },
-      { "stage": "acceptance", "status": "done", "lastRun": "2026-09-29T19:40:00+02:00" }
+      {
+        "stage": "requirements-engineer",
+        "status": "done",
+        "lastRun": "2026-09-20T10:30:00+02:00"
+      },
+      {
+        "stage": "specifications-engineer",
+        "status": "skipped",
+        "lastRun": null
+      },
+      {
+        "stage": "spec-auditor",
+        "status": "skipped",
+        "lastRun": null
+      },
+      {
+        "stage": "test-planner",
+        "status": "skipped",
+        "lastRun": null
+      },
+      {
+        "stage": "plan-architect",
+        "status": "done",
+        "lastRun": "2026-09-20T11:00:00+02:00"
+      },
+      {
+        "stage": "task-generator",
+        "status": "done",
+        "lastRun": "2026-09-20T11:20:00+02:00"
+      },
+      {
+        "stage": "task-implementer",
+        "status": "running",
+        "lastRun": "2026-10-01T09:30:00+02:00"
+      },
+      {
+        "stage": "acceptance",
+        "status": "done",
+        "lastRun": "2026-09-29T19:40:00+02:00"
+      }
     ]
   },
-  "page": { "url": null, "comments": true }
+  "page": {
+    "url": null,
+    "comments": true
+  }
 }

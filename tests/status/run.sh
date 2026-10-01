@@ -376,5 +376,9 @@ expect "feature: its requirement and the change in the journal" "$(jf "$D" 'R("R
   "CHG-2026-09-20-001|CHG-2026-09-20-001:CHG-2026-09-20-001"
 [ ! -e "$repo/.sdd/acceptance.json" ] && pass "todo: build never writes .sdd/acceptance.json" || bad "todo: ledger written"
 
+# the template's sample data follows the same contract the CLI writes
+node "$ROOT/tests/status/shape.mjs" "$ROOT/templates/status-page/sample-data.json" >/dev/null 2>&1 \
+  && pass "template sample-data.json follows sdd-status-v1" || bad "template sample-data.json drifted from sdd-status-v1"
+
 if [ "$fail" = 0 ]; then echo "status: all tests passed"; else echo "status: FAILURES"; fi
 exit "$fail"
