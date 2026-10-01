@@ -1,7 +1,9 @@
 # sdd-begin (managed by /sdd-setup; do not edit between the markers)
 # Per-checkout pipeline state written by the SDD hooks. Each developer has their own.
 pipeline-state.json
-# Async questions, bench events and other per-checkout SDD runtime files.
+# Async questions, bench events and other per-checkout SDD runtime files, and the built status page
+# (.sdd/status-page/: index.html, data.json, evidencias/), rebuilt by `sdd status build` on every update.
+# status/ (journal.jsonl and page.json) is versioned on purpose: every clone and station shares one page and one history.
 .sdd/
 # Ephemeral worktrees created by Claude Code (isolation: worktree, EnterWorktree).
 .claude/worktrees/

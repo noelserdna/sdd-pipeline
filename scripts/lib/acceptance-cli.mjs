@@ -74,7 +74,7 @@ function cmdLintNeeds(o) {
   const reqs = parseRequirements(reqText);
   if (!needs.length) die(`no "### N-…" blocks in ${needsFile}`);
   if (!reqs.length) die(`no "### REQ-…" blocks in ${reqFile}`);
-  const r = checkNeedCoverage(needs, reqs, reqText);
+  const r = checkNeedCoverage(needs, reqs, reqText, { plain: true });
   if (o.json) out(JSON.stringify({ source: { needs: needsFile, requirements: reqFile }, ...r }, null, 2));
   else {
     for (const e of r.errors) out(`error  ${e.code}  ${e.msg}`);
