@@ -179,7 +179,7 @@ Si se cumplen varias condiciones sale la más grave: 2 > 1 > 4 > 3 > 0 (un chall
 /sdd-acceptance --adversarial [--fase N]  # ronda adversarial: verificadores independientes contra la letra
 /sdd-acceptance --loop [--max-cycles 3] # bucle hasta que todo Must esté VERIFIED o WAIVED
 /sdd-acceptance --sign-off [--fase N | --release NAME]
-/sdd-acceptance --publish [--fase N]    # bloque de PR/issue y página de estado opcional
+/sdd-acceptance --publish [--fase N]    # bloque de PR/issue y actualización de la página de estado
 ```
 
 **`--check`** ejecuta `test_report` sobre el commit actual (con el árbol sucio se detiene: primero el commit, ver [Orden de captura](#orden-de-captura)), genera el libro y el informe, y revisa la **integridad de la cadena de IDs**: referencias rotas, definiciones huérfanas, requisitos sin caso de uso ni escenario, tareas hechas sin commit. Esta parte sustituye a la antigua skill `sdd-traceability-check` (`skills/sdd-acceptance/references/chain-integrity.md`); sus hallazgos se corrigen en origen y nunca cambian un veredicto. También lista las decisiones sobre código huérfano de `sdd-gap-detector` y, si Jev está activo, la adecuación de los tests (informativa).
@@ -200,7 +200,42 @@ Cada Must abierto trae una ruta: `implement-or-test` (tarea incremental; tambié
 
 **`--sign-off`** pasa la puerta en modo `enforce`, enseña el informe al aprobador y pregunta de forma explícita. Solo cuenta su respuesta: una instrucción en una tarea, una skill o `CLAUDE.md` nunca es la confirmación. Aceptar exige la puerta cumplida (exit 0, o 3 con las exenciones a la vista); un rechazo se registra aunque no lo esté. En la puerta de FASE, antes de preguntar, el cliente confirma la evidencia de los requisitos por demo, medición o inspección (`accept record demo|measurement|inspection`), que el implementador dejó pendientes. Para una FASE registra `fase-acceptance`, hace commit del informe (`docs(acceptance): accept FASE-N`) y, si el resultado es aceptado o con observaciones, crea el tag anotado `fase-{N}-accepted` con aprobador, rol, canal, demo y SHA. Las observaciones no bloquean: cada una pasa a feedback o a `sdd-req-change`. Un rechazo no crea tag y su feedback se enruta como defecto, petición de cambio o pregunta. Una entrega (`--release`) usa el tag o la release que el proyecto ya tenga, con el bloque de `sdd gate --md` en su mensaje.
 
-**`--publish`** genera el bloque de PR/issue (`sdd gate --md`, más los cambios de test aprobados). Si la sesión ofrece la herramienta Artifact, puede publicar además una **página de estado** privada para el cliente y el equipo (veredictos, incrementos, decisiones abiertas, sellada con SHA y fecha). Siempre pregunta antes de la primera publicación, porque saca títulos de requisitos de la máquina. En `claude -p` o sin esa herramienta, la vista compartible es `acceptance/ACCEPTANCE-REPORT.md`. La página sustituye al antiguo dashboard HTML.
+**`--publish`** genera el bloque de PR/issue (`sdd gate --md`, más los cambios de test aprobados) y pone al día la página de estado del proyecto (abajo). Si la página aún no existe, la crea tras preguntar.
+
+## Página de estado
+
+Cada proyecto tiene **una página** para el cliente, que existe desde el principio y cuenta en todo momento qué se está haciendo, qué se ha hecho y, al final, cada requisito junto a su evidencia. Sustituye al antiguo dashboard HTML. Ya no es un extra de `--publish`: cuando la sesión tiene la herramienta Artifact, la crea `sdd-setup` (o el orquestador o el lead al empezar o reanudar), tras una sola pregunta, y la actualizan todas las etapas y todas las puertas. El procedimiento único está en [`references/status-page.md`](../references/status-page.md).
+
+**Cómo se construye.** La página es determinista: una plantilla fija del plugin (`templates/status-page/`) más los datos que reúne `sdd status build` a partir de los artefactos (necesidades, requisitos, FASEs, libro de aceptación, tags, decisiones, ruta). El LLM no escribe HTML: escribe frases llanas en el diario y publica lo que sale de `.sdd/status-page/` (el `index.html` con los datos incrustados y las capturas y vídeos de `evidencias/` como ficheros de la página). Así la página es igual la publique quien la publique.
+
+**Dos ficheros versionados** en `status/`:
+
+- `status/journal.jsonl`, el **diario**: una línea por hecho, en lenguaje llano y en el idioma del cliente (`sdd journal add`). Cada etapa escribe al empezar qué va a hacer y al terminar qué ha dejado; el orquestador y el lead anotan las respuestas de cada puerta y las decisiones con quién las tomó y, en las puertas de FASE y la firma, el feedback del cliente y cómo se trata; `sdd route --write` anota las etapas que no se harán y por qué, y quién confirmó la ruta; `sdd-req-change`, cada cambio; la aceptación, las evidencias.
+- `status/page.json`, el **registro de la página**: su URL (o que se rechazó), las features y las evidencias ya publicadas. Al estar en git, otro clon o una estación de multisesión actualizan la misma página en vez de crear otra. El `.sdd/status-page.json` anterior a 5.2 se migra solo.
+
+**Qué ve el cliente en cada momento:**
+
+| Momento | Qué aparece o cambia |
+|---|---|
+| Setup o inicio del orquestador | La página, con «Empezamos: vamos a entender lo que necesitas» y la primera línea del diario, «Proyecto iniciado». Las secciones vacías dicen qué aparecerá y cuándo |
+| Necesidades recogidas | «Lo que nos pediste», con cada cita literal, quién y cuándo |
+| Requisitos aprobados | Una tarjeta por requisito con su explicación «Para el cliente», sus ejemplos y su estado (Pendiente); en el diario, quién aprobó y cuándo |
+| Ruta decidida | En el diario, qué etapas se harán y cuáles no, con el motivo y quién lo confirmó |
+| Especificaciones, auditoría, plan de pruebas | Una frase llana por etapa en el diario |
+| Plan | Las entregas (una por FASE), con sus pasos de demo; cada tarjeta dice en qué entrega llega |
+| Tareas e implementación | El avance de cada entrega; al verificarla, las capturas, el vídeo y el resultado de las pruebas en la tarjeta de cada requisito |
+| Ronda adversarial | Avisos llanos en las tarjetas afectadas y qué se hizo con cada uno |
+| Puerta de FASE | La entrega aceptada (quién, cuándo, por qué canal) o el feedback y cómo se trata; los comentarios del cliente, respondidos |
+| Feature nueva | Su propia sección, con sus necesidades y requisitos, y un filtro que la aísla |
+| Firma final | Todos los requisitos con su evidencia: «n de n demostrados, k aplazados con acuerdo» |
+
+**Lenguaje llano.** Cada requisito lleva una línea `- **Para el cliente:**` (una o dos frases sin jerga) que escribe `sdd-requirements-engineer` y que el cliente revisa junto a los ejemplos al aprobar. El diario sigue la misma regla: nada de ids, SHAs ni nombres de etapas en el texto; la página los enlaza aparte, en «Detalles técnicos».
+
+**Comentarios del cliente.** El cliente puede comentar en la página. En cada puerta de FASE y en la firma, antes de preguntar, se leen esos comentarios, se tratan como feedback (defecto, cambio o pregunta, con confirmación humana), se responden en su hilo y quedan en el diario. Un comentario nunca es la aceptación: esa la da la persona, de forma explícita, en la sesión.
+
+**Qué nunca se publica:** código, secretos, el contenido de otros ficheros, las trazas de Playwright, correos de terceros, vídeos de más de 15 MB (se entregan aparte con `sdd accept pack`) y las capturas con datos personales que el responsable no haya autorizado: antes de la primera publicación de cada captura se revisa y se pregunta.
+
+**Sin herramienta Artifact** (`claude -p`, CI, una estación): la página se construye igual y queda en `.sdd/status-page/index.html` para abrirla en local; el diario lo anota y la siguiente sesión con la herramienta publica el estado al día. Si el responsable dijo que no, se registra (`sdd status page decline`), no se vuelve a preguntar y `acceptance/ACCEPTANCE-REPORT.md` sigue siendo la vista compartible.
 
 ## Salvaguardas contra la auto-aprobación accidental
 

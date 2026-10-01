@@ -34,7 +34,7 @@ variable, so `SDD="node …"` followed by `$SDD accept` fails there.
 /sdd-acceptance --adversarial [--fase N]  # independent verifiers read the letter against code and tests
 /sdd-acceptance --loop [--fase N] [--max-cycles 3]   # goal loop until every Must is VERIFIED or WAIVED
 /sdd-acceptance --sign-off [--fase N | --release NAME] # gate + human acceptance + tag
-/sdd-acceptance --publish [--fase N]    # PR/issue block + optional status page
+/sdd-acceptance --publish [--fase N]    # PR/issue block + status page update
 ```
 
 ### Flags
@@ -48,7 +48,7 @@ variable, so `SDD="node …"` followed by `$SDD accept` fails there.
 | `--max-cycles N` | With `--loop`: cycle limit, default 3; the CLI caps it at 5 |
 | `--sign-off` | Release gate and recorded human acceptance (below) |
 | `--release NAME` | With `--sign-off` and no `--fase`: the release to accept (e.g. `v1.4.0`) |
-| `--publish` | PR/issue acceptance block and, optionally, the shareable status page (Artifact) |
+| `--publish` | PR/issue acceptance block and an update of the project's status page |
 
 ## Verdicts and evidence
 
@@ -215,15 +215,24 @@ the last `--adversarial` run and are kept by later runs of other modes (patch on
 `adversarial_confirmed`, `adversarial_refuted` (counter-verification results; `inconclusive` is the remainder),
 `adversarial_open` (field `open` of `node "$SDD" accept challenge list --json`, after recording), `adversarial_agents` (verifiers,
 counter-verifiers and critics launched) and `coverage_gaps` (requirements in no FASE, FASEs without header and the
-LLM critic's gaps). Then commit what this run wrote under `acceptance/` (the report and any records
-appended by `--remeasure`), as every stage commits its outputs (plugin-root `references/git-conventions.md`,
-§ Stage outputs are committed). The report names the SHA it evaluated, so a later reader can tell whether it is
-current, and the commit touches no code path, so it does not age the evidence:
+LLM critic's gaps). Then write the customer's journal lines (plugin-root `references/status-page.md` §1): one
+`done` line in plain words (`--kind done --stage acceptance`: what is now shown and what is still missing, e.g. "5
+de 6 peticiones de la entrega 1 ya se pueden ver funcionando; falta la captura de la lista vacía") and an
+`evidence` line when this run added captures, videos or measurements. Commit them with what this run wrote under
+`acceptance/` (the report and any records appended by `--remeasure`), as every stage commits its outputs
+(plugin-root `references/git-conventions.md`, § Stage outputs are committed). The report names the SHA it
+evaluated, so a later reader can tell whether it is current, and the commit touches no code path, so it does not
+age the evidence:
 
 ```bash
-git add acceptance/
+git add acceptance/ status/journal.jsonl
 git diff --cached --quiet || git commit -m "docs(acceptance): acceptance report at {sha7}" --trailer "Refs: <evaluated REQ ids>"
 ```
+
+Last, the page update (`references/status-page.md` §3) when `status/page.json` has a `url`, except in station mode
+(a role other than `sdd-lead`), where the station only writes the journal and the lead publishes. Every mode that
+ends in Step 6 (`--check`, `--fase`, `--adversarial`, `--loop`) does this, and each starts with a `--kind start` line
+saying what it is about to check.
 
 ## `--adversarial`
 
@@ -381,7 +390,10 @@ it has the confirmation question, the record command and the tag message.
    `node "$SDD" accept pack --fase N` writes `.sdd/entregas/FASE-N-evidencias.tar.gz` with `evidencias/FASE-N/` and a
    `manifest.json` of hashes and criteria (`references/sign-off.md` §4). Where it is delivered or stored is the team's
    decision; say where it is.
-8. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
+8. Journal and page (plugin-root `references/status-page.md`): a `decision` line with `--by` ("Ana aceptó la
+   entrega 1 en la demo del 27 de septiembre", or what was rejected and why), committed with the record, then the
+   page update (§3), which shows the delivery as accepted.
+9. Push the commit or tag only when the user agrees. With a tracker (`tracker` in the Stack Profile), ask and then run
    `node "$SDD" issue close fase N` (it refuses without the `fase-{N}-accepted` tag); after a rejection, `node "$SDD" issue update
    fase N` keeps the issue's checklist and verdicts current.
 
@@ -392,13 +404,14 @@ Two outputs, both built from the same data (`.sdd/acceptance.json`, the report, 
 1. **PR / issue block** (always): `node "$SDD" gate --md [--fase N]`, followed by the approved test edits of the last loop,
    if any. A FASE PR links its issue with `Refs #N` (the issue closes at acceptance); a change PR uses `Closes #N`.
    `node "$SDD" pr-body` prints the full PR body when the tracker is configured.
-2. **Status page** (optional, replaces the old HTML dashboard): a shareable page for the customer and the team,
-   published as a Claude Artifact. Read [references/status-page.md](references/status-page.md) before building it.
-   Ask before the first publish of a project, because it sends requirement titles and verdicts off the machine. Only
-   when the session offers the Artifact tool; otherwise (for example `claude -p`) `acceptance/ACCEPTANCE-REPORT.md`
-   is the shareable view.
+2. **Status page**: the project's living page (plugin-root `references/status-page.md`). It normally exists since
+   setup, and `--publish` brings it up to date (§3); when `status/page.json` is missing, create it (§2, which asks
+   first). Declined, or no Artifact tool: build it locally (§4) and `acceptance/ACCEPTANCE-REPORT.md` is the
+   shareable view. In station mode (a role other than `sdd-lead`) the station does not publish: it writes the
+   journal and the lead publishes after the handoff.
 
-Nothing is pushed, created or published without asking.
+Nothing is pushed or created without asking, and a page is published for the first time only after the owner says
+yes.
 
 ## Constraints
 
@@ -409,5 +422,5 @@ Nothing is pushed, created or published without asking.
 - Human records (`accept record`, acceptance tags) are made only after the named person confirms in this
   conversation. The tool guard asks and the upstream guard blocks hand edits of `acceptance/decisions.jsonl` and the
   report; together they prevent accidental self-approval, they are not a guarantee.
-- Read-only on `requirements/`, `spec/`, `plan/`, `task/` and code; writes `acceptance/` through the CLI, feedback
-  entries, `.sdd/` state and the `acceptance` stage of `pipeline-state.json`.
+- Read-only on `requirements/`, `spec/`, `plan/`, `task/` and code; writes `acceptance/` and `status/` through the CLI,
+  feedback entries, `.sdd/` state and the `acceptance` stage of `pipeline-state.json`.

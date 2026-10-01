@@ -105,7 +105,7 @@ State lives in `pipeline-state.json` (one file, the single source of truth); cha
 
 | Skill | Purpose |
 |-------|---------|
-| `sdd-acceptance` | Verdict per requirement (VERIFIED / FAILING / MISSING / WAIVED) with its evidence, ID-chain integrity, a goal loop until every Must is met, the customer's sign-off and an optional status page — see [docs/aceptacion.md](docs/aceptacion.md) |
+| `sdd-acceptance` | Verdict per requirement (VERIFIED / FAILING / MISSING / WAIVED) with its evidence, ID-chain integrity, a goal loop until every Must is met, the customer's sign-off and updates of the project's status page — see [docs/aceptacion.md](docs/aceptacion.md) |
 | `sdd-setup` | Initialise a project: state file, git hook and vendored validator, `.gitignore` policy, stack kits, multi-session roles; cleans up 4.x status lines |
 | `sdd-pipeline-status` | Stage report, staleness, acceptance summary, next action; `--diagnose` classifies an existing project (8 adoption scenarios) and lists the skills to run |
 | `sdd-gap-detector` | Missing endpoints, orphan code, schema mismatches — with a human review document; `--semantic` checks whether the code implements each requirement (Jev judge when enabled, LLM otherwise) |

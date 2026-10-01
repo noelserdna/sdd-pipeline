@@ -7,6 +7,8 @@ description: "Transforms requirements into formal specs (SRS) per SWEBOK v4: ana
 
 Second stage of the SDD pipeline: turns `requirements/REQUIREMENTS.md` into the `spec/` tree that every downstream skill reads. Requirements are analysed and every open decision is settled with the user before anything is written; then the id ledger and the shared domain are written, the per-requirement pass runs (in parallel lanes above the threshold), and a grep-based gate validates the result.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage specifications-engineer --kind start --text "Vamos a describir con detalle cómo se comportará cada función"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Asking the User
 
 Decisions belong to the user; the skill never settles an ambiguity silently.
@@ -323,7 +325,7 @@ After generating all output artifacts, update `pipeline-state.json`:
    - `nextStep`: `"Run /sdd-spec-auditor"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Commit the files this run wrote: `git add spec/`, then `docs(specs): …` with `Refs:` the REQ ids covered and the main UC/API ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+6. Commit the files this run wrote: `git add spec/`, then `docs(specs): …` with `Refs:` the REQ ids covered and the main UC/API ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage specifications-engineer --kind done --text "Describimos 6 recorridos de uso y las reglas que cumplen"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 7. Display summary table to user (console output)
 8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 

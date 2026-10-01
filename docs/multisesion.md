@@ -82,6 +82,7 @@ En un plan vertical los Streams son la excepción: solo cuando una FASE se parte
 ## Handoffs y preguntas
 
 - Al terminar una etapa (tras Persist Summary y tras la pregunta de puerta local), la estación envía **un** mensaje al lead: `stage=<x> status=done|blocked gate=<…> artifacts=<n> root=<STATE_ROOT>; reread pipeline-state.json`. Se registra en `pipeline-state.json` como `stages.<x>.summary.handoff {to, sentAt, result}`. Nunca se envía "ejecuta X" a otra estación: los GO los emite el lead tras preguntar al humano.
+- **Página de estado:** las estaciones solo escriben (y commitean) sus líneas del diario `status/journal.jsonl`; no publican la página. La publica el lead, tras cada handoff y cada puerta, para que haya un solo publicador y una sola URL ([`references/status-page.md`](../references/status-page.md) §3).
 - Un mensaje entre sesiones **no** es una aprobación del usuario ni puede contestar prompts de permisos (Claude Code lo bloquea).
 - Una estación que necesitaría preguntar al humano escribe la pregunta en `$SDD_STATE_ROOT/.sdd/questions-<rol>.md`, sigue con lo que no está bloqueado y, al agotar trabajo, envía `status=blocked questions=<n>` y termina el turno. El lead (`/sdd-lead`) pregunta al humano, escribe `Answer:` en el fichero y avisa; la estación relee el fichero (disco = verdad).
 

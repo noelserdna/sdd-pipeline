@@ -9,6 +9,8 @@ Validates that every threat to the specified system has a specified mitigation. 
 Posture Scorecard plus findings with OWASP ASVS 4.0.3 and CWE references, in `audits/SECURITY-AUDIT-BASELINE.md`.
 Report prose follows the user's language; IDs, field labels and technical terms stay as defined here.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage security-auditor --kind start --text "Vamos a revisar la seguridad de lo que se va a construir"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Principles
 
 1. **Threat-driven.** A finding states "attacker can {action} because {gap in spec}" or asks "what must happen when
@@ -179,7 +181,7 @@ After writing the report, update `pipeline-state.json` (if absent, create it fro
   `"No P0 security findings — continue the pipeline"`), `generatedAt`.
 
 Commit the report (`git add audits/SECURITY-AUDIT-BASELINE.md`), then `docs(security): …` with `Refs:` the spec ids
-with P0/P1 findings, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+with P0/P1 findings, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage security-auditor --kind done --text "Revisamos la seguridad: 2 riesgos importantes que te propondremos corregir"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 
 Show the summary table to the user. Handoff: follow the plugin-root `references/handoff-protocol.md` (station mode
 only; never from a subagent).

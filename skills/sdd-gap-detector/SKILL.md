@@ -15,6 +15,8 @@ Code and test paths come from the SDD Stack Profile (`code_paths` / `test_paths`
 one of `spec/contracts/`, `spec/use-cases/`, BDD scenarios (or `requirements/` for `--semantic`); partial specs are
 fine — report what could not be checked.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage gap-detector --kind start --text "Vamos a comparar lo construido con lo que se pidió"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Modes
 
 | Mode | Flag | Runs |
@@ -193,6 +195,6 @@ After writing the results, update `pipeline-state.json` (create it from
    - `nextStep`: e.g. "Review audits/GAP-ANALYSIS-REVIEW.md" or "Implement missing endpoints"
    - `generatedAt`: now
 3. Commit the review (`git add audits/GAP-ANALYSIS-REVIEW.md`; `.sdd/gap-analysis.json` is ignored), then
-   `docs(gaps): …` with `Refs:` the ids of the missing or mismatched items, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+   `docs(gaps): …` with `Refs:` the ids of the missing or mismatched items, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage gap-detector --kind done --text "Comparamos lo construido con lo pedido: no falta nada y sobra una función que nadie pidió"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 4. Show the summary table. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode;
    never from a subagent).

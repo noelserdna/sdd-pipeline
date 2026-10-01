@@ -10,6 +10,8 @@ description: "Generates implementation task documents from FASE files and plans:
 
 Reads `plan/` (from `sdd-plan-architect`) and writes only `task/`. Code is written later by `sdd-task-implementer`; spec changes go through `sdd-req-change`.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage task-generator --kind start --text "Vamos a desglosar cada entrega en pasos de trabajo pequeños"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Core Principles
 
 1. **One task = one commit.** Each task is completable and committable on its own, one behaviour (typically 1-6 files, all on the task line), its tests written first inside it. Work it needs from another uncommitted task is a dependency (`blocked-by`), not part of it.
@@ -357,6 +359,6 @@ After writing all artifacts, update `pipeline-state.json` (create with the defau
    - `highlights`: 3-5 observations (e.g. "42 tasks across 7 FASEs", "65% parallelizable") plus one line per FASE with more than one work Stream ("FASE-1: 2 streams (A: 2 tasks, B: 2 tasks)"). When the mode was degraded to sequential, the first highlight is the reason.
    - `nextStep`: `"Run /sdd-task-implementer --fase=0"`
    - `generatedAt`: now
-3. Commit the files this run wrote: `git add task/`, then `docs(tasks): …` with `Refs:` the FASE ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+3. Commit the files this run wrote: `git add task/`, then `docs(tasks): …` with `Refs:` the FASE ids, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage task-generator --kind done --text "Desglosamos las 4 entregas en 32 pasos de trabajo"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 4. Show the summary table to the user.
 5. Handoff: plugin-root `references/handoff-protocol.md` (station mode only; never from a subagent).

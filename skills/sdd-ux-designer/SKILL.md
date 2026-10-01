@@ -9,6 +9,8 @@ description: "UX design system across 12 dimensions (brand, tokens, components, 
 > Este skill explora el espacio de diseño UI/UX en profundidad antes de la planificación,
 > asegurando que ninguna dimensión visual, de accesibilidad o de interacción quede sin especificar.
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage ux-designer --kind start --text "Vamos a diseñar las pantallas y cómo se usan"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Purpose
 
 Explore and document UI/UX decisions across 12 dimensions, producing a design vision, a design system (tokens, Atomic Design component library, responsive strategy), ASCII wireframes for key screens, a WCAG 2.2 AA accessibility spec and an interaction model. Skip it for API-only services and CLI tools without a visual UI.
@@ -363,6 +365,6 @@ After generating all output artifacts, update `pipeline-state.json`:
    - `nextStep`: `"Run /sdd-plan-architect (ux/ will be consumed automatically)"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Commit the files this run wrote: `git add ux/`, then `docs(ux): …` with `Refs:` the UC ids the wireframes cover, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+6. Commit the files this run wrote: `git add ux/`, then `docs(ux): …` with `Refs:` the UC ids the wireframes cover, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage ux-designer --kind done --text "Diseñamos 8 pantallas con sus estados, usables también con teclado y lector de pantalla"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 7. Display summary table to user (console output)
 8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
