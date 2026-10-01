@@ -98,6 +98,7 @@ Write into the canonical tree owned by `sdd-specifications-engineer` ("Specifica
 ```markdown
 ### REQ-F-012: {Title} [IMPORTED]
 - **Statement:** {EARS statement}
+- **Para el cliente:** {one or two plain sentences, in the customer's language, on what the user can do or count on}
 - **Category:** Functional
 - **Priority:** Must have | Should have | Nice to have
 - **Source:** {format} {original-id} ({file}:{line|row})
@@ -105,6 +106,8 @@ Write into the canonical tree owned by `sdd-specifications-engineer` ("Specifica
 - **Original text:** "{original description}"
 - **Acceptance criteria:** {imported criteria as GIVEN/WHEN/THEN, or "None imported"}
 ```
+
+The `Para el cliente:` line (`sdd-requirements-engineer` `references/requirements-template.md`) is what the status page shows on the requirement's card. Take it from the source's own plain description when it has one; otherwise draft it. Either way it is pending the customer's review: it gets no `Examples reviewed by` until the customer reads it with the examples at approval (approval §3), and the import report lists the drafted ones as to be reviewed with the customer.
 
 **Specs** (`spec/`):
 

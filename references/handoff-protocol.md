@@ -22,6 +22,7 @@ State root: `STATE_ROOT="${SDD_STATE_ROOT:-$(dirname "$(git rev-parse --path-for
 2. After the skill's own local gate question (spec-auditor Step 4.5, implementer FASE report, ...). In station mode that question was written to the questions file instead (`references/async-questions.md`) and the handoff reports `status=blocked`.
 3. Exactly once per skill run. Never per task, per finding, or per PAUSE.
 4. `sdd-task-implementer` in a worktree (Stream mode) skips Persist Summary but still sends; it records nothing, because a worktree does not write the shared state.
+5. A station never publishes the status page: it writes and commits its journal lines (`status/journal.jsonl`) before the handoff, and the lead publishes the page after reading the message (plugin-root `references/status-page.md` §3), so there is one publisher and one URL.
 
 ## 3. Sending
 

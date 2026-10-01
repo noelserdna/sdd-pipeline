@@ -98,7 +98,7 @@ grep -oE '"(sdd@[^"]+|sdd-pipeline@sdd-pipeline-local)"' "${CLAUDE_CONFIG_DIR:-$
 
 If any signal is present:
 
-1. Show the signals table and run `bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --dry-run`; show its output verbatim.
+1. Show the signals table and run `bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/migrate-hooks-v3.sh" --dry-run`; show its output verbatim.
 2. Ask the user to confirm. The migration backs everything up in `.claude/backups/`, removes the copied hooks/agents and their entries in `.claude/settings.json` (the plugin provides them now), removes the project status line scripts with their `statusLine`/`subagentStatusLine` entries and the legacy `.sdd/` runtime files, reinstalls `commit-msg`, writes `sddVersion`/`hooksVersion: 3` into `pipeline-state.json` and applies the `.gitignore` policy.
 3. On confirmation run it without `--dry-run`, then continue with Step 1 (every later step is idempotent). If declined, continue anyway and warn that the project hooks and the plugin hooks will both run until the migration is applied.
 4. Old plugin ids cannot be removed by a script: tell the user to run `/plugin uninstall <id>` (and `/plugin marketplace remove <name>` for the marketplace of `sdd@...`).
@@ -113,7 +113,7 @@ Location: the root of the main checkout.
 ```bash
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 sed -e "s/__SDD_VERSION__/$SDD_VERSION/" -e "s/__NOW__/$NOW/" \
-  "$SDD_PLUGIN_ROOT/templates/pipeline-state.template.json" > pipeline-state.json
+  "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/templates/pipeline-state.template.json" > pipeline-state.json
 jq -e '.hooksVersion == 3 and (.stages | length) == 7' pipeline-state.json >/dev/null
 ```
 
@@ -122,7 +122,7 @@ The template holds `sddVersion`, `hooksVersion: 3`, `currentStage: "requirements
 ### Step 2: Git `commit-msg` hook
 
 ```bash
-bash "$SDD_PLUGIN_ROOT/scripts/install-git-hooks.sh"
+bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/install-git-hooks.sh"
 ```
 
 Installs `hooks/sdd-commit-msg-hook.sh` into the hooks directory git actually uses: `core.hooksPath` when set, otherwise `$(git rev-parse --git-common-dir)/hooks`, which every linked worktree shares. A foreign hook is backed up with a timestamp and `--uninstall` restores it; re-running is a no-op. The installer also vendors the validator into `.claude/sdd/sdd.mjs` (with the modules it imports), stamped with the plugin version and overwritten on every re-install; the hook runs it with node and falls back to the same rules in bash. The rules are those of the plugin-root `references/git-conventions.md`: `Task:` on `feat`/`test`/`refactor`, `Task:` or `Change:` on `fix`/`perf`, `Refs:` on `docs(specs)`, well-formed ids, and no trailer lines outside the trailer block; other `docs`, `chore`, `ci`, `style`, `build`, merges and reverts are exempt; bypass with `[skip-sdd]` in the message or `SDD_SKIP_VERIFY=1`. If the project is not a git repository, skip with a warning.
@@ -162,7 +162,7 @@ Node fallback for the settings edit: `node -e 'const fs=require("fs"),f=process.
 **4.1 `.gitignore`.** Apply the managed block (idempotent; refreshes an outdated block in place):
 
 ```bash
-bash "$SDD_PLUGIN_ROOT/scripts/migrate-hooks-v3.sh" --gitignore-only
+bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/migrate-hooks-v3.sh" --gitignore-only
 ```
 
 | Ignored | Why |
@@ -188,8 +188,8 @@ mkdir -p .claude/sdd
   | .roles |= with_entries(.value |= (
       .name |= sub("^" + $p + "-"; $s + "-")
       | if .worktree then .worktree |= sub("^\\.\\./" + $p + "-"; "../" + $s + "-") else . end))' \
-  "$SDD_PLUGIN_ROOT/templates/sdd-sessions.example.json" > .claude/sdd-sessions.json
-cp "$SDD_PLUGIN_ROOT/scripts/sdd-up.sh" .claude/sdd/sdd-up.sh && chmod +x .claude/sdd/sdd-up.sh
+  "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/templates/sdd-sessions.example.json" > .claude/sdd-sessions.json
+cp "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-up.sh" .claude/sdd/sdd-up.sh && chmod +x .claude/sdd/sdd-up.sh
 ```
 
 Never overwrite an existing `sdd-sessions.json` (the user tailors roles, `owns` globs, colors and worktrees there); refresh `sdd-up.sh` whenever it differs from the plugin copy. Show the resulting roles as a table (role, session name, color, owns, stages, worktree) and explain how to use them:
@@ -201,7 +201,7 @@ Never overwrite an existing `sdd-sessions.json` (the user tailors roles, `owns` 
 
 ### Step 4b: Stack kit (`--stack`)
 
-The implementation skills never guess commands. Tests, lint, build, database reset, server and acceptance suite all come from the `## SDD Stack Profile` section of the root `CLAUDE.md` (contract, resolution order and limits: [`docs/stacks.md`](../../docs/stacks.md)). A **stack kit** writes that section for a known stack, plus a short `## Stack Conventions` section and path-scoped rules. Kits shipped with the plugin: `ls "$SDD_PLUGIN_ROOT/templates/stacks"` (`rails`, `nextjs-prisma`).
+The implementation skills never guess commands. Tests, lint, build, database reset, server and acceptance suite all come from the `## SDD Stack Profile` section of the root `CLAUDE.md` (contract, resolution order and limits: [`docs/stacks.md`](../../docs/stacks.md)). A **stack kit** writes that section for a known stack, plus a short `## Stack Conventions` section and path-scoped rules. Kits shipped with the plugin: `ls "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/templates/stacks"` (`rails`, `nextjs-prisma`).
 
 | Situation | Action |
 |-----------|--------|
@@ -211,7 +211,7 @@ The implementation skills never guess commands. Tests, lint, build, database res
 | Nothing detected, or no kit for this stack | No kit; write the minimal profile below, and suggest completing it by hand following `docs/stacks.md` |
 
 ```bash
-KIT_SH="$SDD_PLUGIN_ROOT/scripts/install-stack-kit.sh"
+KIT_SH="${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/install-stack-kit.sh"
 bash "$KIT_SH" --stack rails --app-dir web --dry-run     # show verbatim
 bash "$KIT_SH" --stack rails --app-dir web               # + --port N, --set "acceptance=cd acceptance && npx playwright test"
 bash "$KIT_SH"                                           # refresh the installed kit
@@ -250,7 +250,7 @@ Add `- default_branch: <name>` only when the user names a default branch that `o
 Only with `--tracker`. SDD keeps one issue per FASE and per change and checks every PR/MR in CI (conventions: the plugin-root `references/git-conventions.md`, section "Issues, PRs and CI").
 
 1. **Provider.** The flag value, else the host of `git remote get-url origin`: `github.com` → github; `gitlab.com`, `gitlab.*` or the host of `glab config get host` → gitlab. Anything else: ask. Report `gh auth status` / `glab auth status`; a missing or unauthenticated CLI does not block this step, but `sdd issue …` will exit 2 until it is fixed.
-2. **Files.** Copy from `$SDD_PLUGIN_ROOT/templates/`. When a destination exists and differs, show the diff and ask before overwriting it; the team may have tailored it.
+2. **Files.** Copy from `${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/templates/`. When a destination exists and differs, show the diff and ask before overwriting it; the team may have tailored it.
 
 | Provider | Source | Destination |
 |----------|--------|-------------|
@@ -283,7 +283,7 @@ Unless `--quality-gates` was given, ask. They add latency (about 30 s per Stop, 
 ```bash
 [ -f .claude/settings.json ] || echo '{}' > .claude/settings.json
 jq -s '.[0] as $s | (.[1].hooks // {}) as $q | $s | .hooks = ($q + ($s.hooks // {}))' \
-  .claude/settings.json "$SDD_PLUGIN_ROOT/templates/settings-optional-quality-gates.json" \
+  .claude/settings.json "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/templates/settings-optional-quality-gates.json" \
   > .claude/settings.json.tmp && mv .claude/settings.json.tmp .claude/settings.json
 ```
 
@@ -293,10 +293,10 @@ The project's living page for the customer exists from the start, so the custome
 first one (plugin-root `references/status-page.md`).
 
 1. **Journal.** Unless `status/journal.jsonl` already exists, write its first line, in the customer's language:
-   `node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" journal add --stage setup --kind start --text "Proyecto iniciado"`.
+   `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage setup --kind start --text "Proyecto iniciado"`.
 2. **Merges.** Branches append journal lines in parallel, so git should keep both sides: add
    `status/journal.jsonl merge=union` to `.gitattributes` when no line for that path is there yet.
-3. **Page.** `node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" status page --json` (it also moves a pre-5.2
+3. **Page.** `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" status page --json` (it also moves a pre-5.2
    `.sdd/status-page.json` into `status/page.json`). No `url` and not `declined`, and the session has the Artifact
    tool: run "Create if missing" (§2 of the reference), which asks once; "No" runs `status page decline`. Its commit
    is Step 7's, with the other setup files. Station
@@ -316,7 +316,7 @@ jq -e '.roles | length > 0' .claude/sdd-sessions.json        # if --multisession
 grep -q '^<!-- sdd-stack-begin kit=' CLAUDE.md && ls .claude/rules/sdd-*.md   # if Step 4b was applied
 ls .github/workflows/sdd.yml 2>/dev/null || ls .gitlab/sdd.gitlab-ci.yml       # if Step 4c was applied
 ls .github/workflows/sdd-smoke.yml 2>/dev/null || ls .gitlab/sdd-smoke.gitlab-ci.yml   # if the smoke job was installed
-ls "$SDD_PLUGIN_ROOT/server/dist/server.js"                  # MCP bundle shipped with the plugin
+ls "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/server/dist/server.js"                  # MCP bundle shipped with the plugin
 ```
 
 Report, once Step 7 has run:

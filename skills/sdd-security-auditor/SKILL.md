@@ -181,7 +181,7 @@ After writing the report, update `pipeline-state.json` (if absent, create it fro
   `"No P0 security findings — continue the pipeline"`), `generatedAt`.
 
 Commit the report (`git add audits/SECURITY-AUDIT-BASELINE.md`), then `docs(security): …` with `Refs:` the spec ids
-with P0/P1 findings, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage security-auditor --kind done --text "Revisamos la seguridad: 2 riesgos importantes que te propondremos corregir"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3).
+with P0/P1 findings, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage security-auditor --kind done --text "Revisamos la seguridad: 2 riesgos importantes que te propondremos corregir"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3), except in station mode (a role other than `sdd-lead`), where the station only writes the journal and the lead publishes.
 
 Show the summary table to the user. Handoff: follow the plugin-root `references/handoff-protocol.md` (station mode
 only; never from a subagent).

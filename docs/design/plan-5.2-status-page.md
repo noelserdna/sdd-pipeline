@@ -25,9 +25,9 @@ La página es **determinista**: una plantilla fija del plugin + un `data.json` q
 
 1. **Diario versionado** `status/journal.jsonl` (nuevo, en git). Una línea por hecho: `{at, feature, stage, kind: start|done|gate|decision|change|skip|evidence|feedback, text (lenguaje llano, idioma del cliente), refs[], by?}`.
    - CLI: `sdd journal add --stage S --kind K --text "…" [--feature F] [--refs ID…] [--by "Nombre (rol)"]` y `sdd journal list [--json]`.
-   - Lo escriben las skills en su paso Persist (una línea `done`), el orquestador y el lead en cada puerta (`gate`, `decision`), `sdd-req-change` (`change`), `sdd route --write` (`skip` con motivo) y la aceptación (`evidence`, `feedback`).
-   - `sdd status build` completa huecos a partir de tags con fecha, `decisions.jsonl` y `route`, para que un paso olvidado no deje el diario cojo.
-2. **Registro de la página** `status/page.json` (en git): `{url, createdAt, features: [{id, title, createdAt, chg?}], assets: {sha256: url}}`. Sustituye a `.sdd/status-page.json` (migración: si existe el viejo, se mueve).
+   - Lo escriben las skills en su paso Persist (una línea `done`), el orquestador y el lead en cada puerta (`gate`, `decision`, con `--stage orchestrator` / `--stage lead`) y en las puertas de FASE y la firma (`feedback`, con `--stage acceptance`), `sdd-req-change` (`change`), `sdd route --write` (un `skip` con motivo por etapa saltada y una `decision` con quién confirmó la ruta) y la aceptación (`evidence`).
+   - `sdd status build` completa huecos a partir de tags con fecha, `decisions.jsonl` y `route`, para que un paso olvidado no deje el diario cojo: la aprobación de requisitos (tag `requirements-vN`, también `requirements-v1.0`) y la aceptación de cada FASE salen como `decision`, deduplicadas contra las líneas escritas por refs y día.
+2. **Registro de la página** `status/page.json` (en git): `{url, createdAt, declined?, features: [{id, title, createdAt, chg?, summary?}], assets: {sha256: url}}`. Sustituye a `.sdd/status-page.json` (migración: si existe el viejo, se mueve).
 3. **Datos** `sdd status build [--out .sdd/status-page] [--json]` (nuevo `scripts/lib/status.mjs`). Reutiliza, sin recalcular:
    - `parseNeeds` / `checkNeedCoverage` (`scripts/sdd-jev.mjs:211`, `:275`) → necesidades literales y `coveredBy`.
    - Parser de requisitos (`sdd req show`, `scripts/sdd.mjs:829`) → enunciado, prioridad, tipo, criterios, línea «Para el cliente».
@@ -90,7 +90,7 @@ Enlaces: cada necesidad, requisito, entrega y evidencia tiene ancla (`#N-001`, `
 
 - Nuevos: `scripts/lib/status.mjs`, `scripts/lib/journal.mjs`, `templates/status-page/index.html`, `templates/status-page/README.md`, `references/status-page.md` (movido y reescrito), `tests/status/run.sh`.
 - CLI: `scripts/sdd.mjs` (comandos `status build`, `journal add|list`, cabecera de uso), `scripts/lib/tracker.mjs` (helper `webUrl`).
-- Skills (patrón repetido: una línea en Persist + referencia al procedimiento): `sdd-setup`, `sdd-orchestrator` (regla 5 → columna explícita en la tabla Flow; comentarios en `references/fase-gate.md`), `sdd-lead` (alinear fila 11 y puertas), `sdd-requirements-engineer` (plantilla «Para el cliente» y `references/approval.md`), `sdd-req-change` (feature nueva), `sdd-task-implementer` Phase 9, `sdd-acceptance` (`--publish` apunta al procedimiento común), `sdd-pipeline-status`, `sdd-route` vía `scripts/lib/route.mjs` (línea `skip` en el diario).
+- Skills (patrón repetido: una línea en Persist + referencia al procedimiento): `sdd-setup`, `sdd-orchestrator` (regla 5 → columna explícita en la tabla Flow; comentarios en `references/fase-gate.md`), `sdd-lead` (alinear fila 11 y puertas), `sdd-requirements-engineer` (plantilla «Para el cliente» y `references/approval.md`), `sdd-req-change` (feature nueva), `sdd-task-implementer` Phase 9, `sdd-acceptance` (`--publish` apunta al procedimiento común), `sdd-pipeline-status`, `sdd-route` vía `scripts/lib/route.mjs` (líneas `skip` y la `decision` de la ruta en el diario).
 - `sdd-jev.mjs` / `sdd lint --needs`: aviso si falta «Para el cliente».
 - `templates/gitignore.sdd`: mantener `.sdd/status-page/` fuera; `status/` versionado.
 - Docs: `docs/aceptacion.md`, `docs/guia-paso-a-paso.md`, `docs/guia-completa-extendida.md`, `CLAUDE.md`, `CHANGELOG.md`, `cascade-patterns.md` §9 (contrato del diario).
@@ -145,11 +145,12 @@ interfaz las pone la plantilla (diccionario por `project.lang`, `es` y `en`).
     } ],
     "videos": [ { "path": "evidencias/FASE-1/WF-001.webm", "published": true } ],
     "warnings": [ { "code": "unshown|weakened|challenge|stale|failing", "text": "…técnico corto…", "ac": 1 } ],
-    "waiver": { "reason": "…", "by": "…", "followUp": "#12" } | null,
+    "waiver": { "reason": "…", "by": "…", "followUp": "#12|null", "at": "ISO|null" } | null,
     "links": { "commits": [ { "sha": "abc1234", "url": "…|null", "subject": "…" } ], "issue": { "number": 3, "url": "…" } | null }
   } ],
   "fases": [ {
     "n": 1, "title": "…", "increment": "…", "requirements": ["REQ-F-001"], "needs": ["N-001"], "workflows": ["WF-001"],
+    "feature": "initial",                    // la feature de sus requisitos (initial si mezcla varias); la usa el filtro
     "demo": [ { "step": 1, "action": "…", "expected": "…" } ],
     "videos": [ { "path": "…", "published": true } ],
     "missingVideos": ["WF-001"],             // vídeos de recorrido que faltan (aviso de la entrega, no de cada requisito)
@@ -162,7 +163,8 @@ interfaz las pone la plantilla (diccionario por `project.lang`, `es` y `en`).
   "journal": [ { "at": "ISO", "feature": "initial", "stage": "requirements-engineer", "kind": "start|done|gate|decision|change|skip|evidence|feedback",
                  "text": "…llano…", "refs": ["REQ-F-001"], "by": "…?", "derived": false } ],
   "evidence": { "files": [ { "path": "…", "sha256": "…", "bytes": 0, "kind": "image|video", "criteria": ["REQ-F-001#1"], "published": true,
-                             "reason": "too-large|personal-data|missing|null" } ],
+                             "reason": "too-large|personal-data|missing|null",
+                             "inAssets": false } ],     // published = se copia a la página; inAssets = su sha256 ya está en status/page.json assets (ya publicado o retenido)
                 "pack": ".sdd/entregas/FASE-1-evidencias.tar.gz|null" },
   "technical": { "sha": "…", "gate": { "code": 0, "label": "…" } | null, "tags": [ { "name": "…", "date": "…", "url": "…|null" } ],
                  "report": "acceptance/ACCEPTANCE-REPORT.md|null", "pipeline": [ { "stage": "…", "status": "…", "lastRun": "…" } ] },
@@ -170,11 +172,23 @@ interfaz las pone la plantilla (diccionario por `project.lang`, `es` y `en`).
 }
 ```
 
-Mapeo de `where.phase` desde `pipeline-state.json`: `understand` = requirements-engineer sin `requirements-vN`;
-`agree` = requisitos escritos pendientes de aprobación; `design` = specifications/spec-auditor/test-planner/tech/ux;
-`plan` = plan-architect/task-generator; `build` = task-implementer; `verify` = acceptance/gap-detector antes de la
-firma; `deliver` = firma en curso; `done` = firmado (todas las FASEs `accepted`). Las etapas `skipped` salen como
-`skipped` con su `reason`.
+Mapeo de `where.phase` (implementado en `scripts/lib/status.mjs`): las fases previas a las entregas salen de los
+requisitos, el tag de aprobación y `pipeline-state.json`; a partir del plan, de las FASEs, sus tareas y el ledger de
+cada FASE, mirando la primera FASE no aceptada («la abierta»):
+- `understand` = aún no hay requisitos activos; `agree` = requisitos escritos sin tag `requirements-vN`;
+- `design` = aprobados, sin FASEs y con alguna etapa de diseño de la ruta (specifications-engineer, spec-auditor,
+  test-planner y, si la ruta las ejecuta, tech-designer y ux-designer) sin terminar; `plan` = sin FASEs y el diseño
+  hecho, o la FASE abierta sin tareas todavía;
+- `build` = la FASE abierta en construcción (resto de casos);
+- `verify` = la FASE abierta con todas sus tareas hechas (y no rechazada), o con `acceptance` en curso, mientras su
+  gate no pasa;
+- `deliver` = la FASE abierta está `verified`: su gate pasa (`sdd gate --fase N` 0, o 3 con Musts aplazados) y espera
+  la aceptación del cliente;
+- `done` = todas las FASEs aceptadas (`accepted` u `observations`).
+
+La fase `design` de la barra sale `skipped`, con su `reason`, solo cuando la ruta salta todo el diseño
+(specifications-engineer, spec-auditor y test-planner `skipped`, y ni tech ni ux en la ruta); las demás etapas
+saltadas se cuentan en el diario.
 
 Estado llano del requisito: `deprecated` → deprecated; `WAIVED` → deferred; `FAILING` → failing; `VERIFIED` → shown;
 `MISSING` con alguna FASE suya `building|verified` o tareas hechas → building; resto → pending.
