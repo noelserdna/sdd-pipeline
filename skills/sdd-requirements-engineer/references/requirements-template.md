@@ -18,6 +18,7 @@
 
 ### REQ-F-001: {Title}
 - **Statement:** WHEN {trigger} THE {system} SHALL {behavior}
+- **Para el cliente:** {one or two plain sentences, e.g. "Puedes apuntar una tarea nueva y la ves al momento en tu lista."}
 - **Category:** Functional
 - **Priority:** Must have | Should have | Nice to have
 - **Needs:** N-001, N-003
@@ -34,6 +35,7 @@
 
 ### REQ-NF-001: {Title}
 - **Statement:** THE {system} SHALL {behavior} {quantified constraint}
+- **Para el cliente:** {e.g. "La lista aparece en menos de un segundo aunque tengas mil tareas."}
 - **Category:** Performance | Security | Scalability | Availability | Usability
 - **Priority:** Must have | Should have | Nice to have
 - **Needs:** N-00X
@@ -46,6 +48,7 @@
 
 ### REQ-C-001: {Title}
 - **Statement:** {constraint description}
+- **Para el cliente:** {e.g. "Funciona en el navegador, sin instalar nada."}
 - **Type:** Technical | Business | Regulatory
 - **Source:** {origin of constraint}
 - **Needs:** N-00X | — (team/architecture source)
@@ -81,5 +84,6 @@
 - **Acceptance criteria** carry real example data (names, amounts, IDs, exact messages, exit codes), not placeholders: "GIVEN a cart with 2 × 12.50 € WHEN …" instead of "GIVEN a cart with items". Customers can check a concrete example; they cannot check an abstraction. Cover the normal path, the main alternative and at least one error.
 - **Replay criterion:** a requirement that writes state (creates, changes, deletes, sends, charges) carries one criterion for the same write run again with the same input, stating what is kept: `GIVEN task 4 "Comprar leche" was just created WHEN the same form is submitted again THEN the list still has one "Comprar leche" (id 4)`, or a second record when that is what the customer wants. A retried or double-clicked write is the outcome nobody asks about and every user meets; when the adaptive route skips the specifications (decided after this gate), the criteria are the whole contract and this is the only place it gets written, and with specifications `sdd-specifications-engineer` derives its `replay` row from it.
 - **Visual criteria (`the user sees`):** a criterion whose outcome is something the user looks at starts its THEN with `the user sees` (in Spanish `el usuario ve`) followed by the literal text, label, title or value on the screen: `THEN the user sees the heading "Proyectos personales" and 3 rows`. The marker is decided with the customer, not guessed later from verbs like "shows" or "displays": `sdd-test-planner` turns every marked criterion into an E2E that enters through the user's route and asserts that exact text, so an unmarked visual criterion ends up tested below the screen, where a heading nobody wired still passes.
+- **Para el cliente:** what the requirement means for the customer, in one or two plain sentences in their language: what they will be able to do or can count on, with no EARS keywords, ids, technical terms or implementation. The status page shows it on the requirement's card next to its evidence, so a reader who never opens this file still knows what each requirement promises; the customer reviews it with the examples (approval §3), and `sdd lint --needs` warns when it is missing. The label stays in Spanish whatever the document's language, because `sdd status build` reads it.
 - **Examples reviewed by:** who on the customer side read the examples and agreed, and when. Per requirement, or once in the header when a whole batch was reviewed together.
 - **Deprecated** requirements stay in place with `- **Status:** Deprecated (YYYY-MM-DD) — {reason}` (written by `sdd-req-change`); they are ignored by the coverage checks.

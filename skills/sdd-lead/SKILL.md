@@ -50,7 +50,7 @@ and the lead is its only publisher, so there is one URL whatever station did the
 
 - **Start or resume:** "Create if missing" (§2 of the reference); with a page, update it (§3).
 - **After each handoff** (Receive) and **each gate answer:** write the `gate` line (the question and the answer) or
-  the `decision` line with `--by` (approvals, route, waivers, acceptances), then update the page. The route's `skip`
+  the `decision` line with `--by` (route, waivers, gap decisions), then update the page. The requirements approval (approval §6) and `sdd-acceptance --sign-off` write their own `decision` lines. The route's `skip`
   lines come from `route --write` itself.
 - **FASE gates and sign-off:** read the page's comments before asking, route them as feedback, answer in their
   threads and write `feedback` lines (`skills/sdd-orchestrator/references/fase-gate.md` §1, §5); show the page during
