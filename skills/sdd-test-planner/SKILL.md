@@ -9,6 +9,8 @@ description: "Test planning per SWEBOK v4: strategy, matrices, coverage per use 
 
 Turns the audited `spec/` into a test strategy (`test/TEST-PLAN.md`), per-UC test matrices, performance scenarios and E2E acceptance scenarios. Runs after `sdd-spec-auditor` and before `sdd-plan-architect` (which reads TEST-PLAN §9) and `sdd-task-generator` (which turns matrices into test tasks). Optional inputs: `audits/SECURITY-AUDIT-BASELINE.md` (security test ids) and `ux/` (E2E enrichment: page objects, accessibility assertions). It writes no test code (`sdd-task-implementer` does) and never edits `spec/` (spec defects go to the matrices' "Findings for sdd-spec-auditor").
 
+**Journal.** When a run begins, tell the customer in one plain sentence what it is about to do: `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage test-planner --kind start --text "Vamos a decidir cómo comprobaremos cada cosa que pediste"`. Persist adds the `done` line (plugin-root `references/status-page.md` §1).
+
 ## Reading Strategy (index first)
 
 Generation time is dominated by output tokens; reading the whole corpus only adds turns. Never `cat` the whole `spec/` tree: build an index, then open only the sections a mode needs.
@@ -476,7 +478,7 @@ After generating all output artifacts, update `pipeline-state.json`:
    - `nextStep`: `"Run /sdd-plan-architect"`
    - `generatedAt`: current ISO-8601
 5. Write updated `pipeline-state.json`
-6. Commit the files this run wrote: `git add test/`, then `docs(test-plan): …` with `Refs:` the UC and REQ ids the plan covers, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed).
+6. Commit the files this run wrote: `git add test/`, then `docs(test-plan): …` with `Refs:` the UC and REQ ids the plan covers, skipped when nothing is staged (plugin-root `references/git-conventions.md` § Stage outputs are committed). Before the commit, write the customer's journal line and stage it too (`git add status/journal.jsonl`): `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal add --stage test-planner --kind done --text "Preparamos 40 comprobaciones, al menos una por cada cosa que pediste"`, with this run's real numbers; after the commit, update the status page when `status/page.json` has a `url` (plugin-root `references/status-page.md` §1, §3).
 7. Display summary table to user (console output)
 8. Handoff: follow the plugin-root `references/handoff-protocol.md` (only in station mode; never from a subagent).
 

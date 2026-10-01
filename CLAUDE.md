@@ -8,7 +8,7 @@ A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json
 
 - 21 skills: 7 pipeline, 4 lateral, 3 brownfield, 7 utility (including acceptance, the interactive orchestrator and the multi-session lead)
 - 5 hook scripts (7 event registrations) plus the git `commit-msg` hook
-- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, literal lint, adaptive route, acceptance ledger and gate)
+- one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, literal lint, adaptive route, acceptance ledger and gate, customer journal and status page)
 - an MCP server for live traceability queries
 - an optional TypeSafe Jev integration for bulk judgments
 
@@ -31,6 +31,8 @@ sdd-task-implementer         →  code/test paths from the SDD Stack Profile, on
 sdd-acceptance               →  acceptance/ACCEPTANCE-REPORT.md, decisions.jsonl, challenges.jsonl; tag fase-{N}-accepted at sign-off
 ```
 
+**Status page** (`references/status-page.md`, `docs/aceptacion.md`): one page per project for the customer, created at setup (or when the orchestrator or lead starts) when the session has the Artifact tool, and updated after every stage and gate. It is deterministic: the fixed template `templates/status-page/` filled by `sdd status build` from the artifacts. Skills only write plain-language lines to the journal (`sdd journal add`, `status/journal.jsonl`: a `start` line when a run begins, a `done` line in Persist) and run the publish procedure; the URL, features and published evidence live in `status/page.json`. Both are versioned. Each requirement carries a `- **Para el cliente:**` line the customer reviews at approval; customer comments on the page are read at every FASE gate.
+
 FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → persist of the central use case), then one user journey per FASE with a `## Demo` of at most 10 steps. The FASE gate is the customer's acceptance of that increment.
 
 **Adaptive route** (`docs/ruta.md`): after gate 1, `sdd route` proposes which optional stages this project needs (specifications, spec audit, test plan, the laterals, gap-detector), from counted facts of the requirements and seven narrow factor judgments (Jev, or the session's LLM through `--answers` when Jev is off; a doubt counts as yes). The rules and their reasons live in `scripts/lib/route-rules.mjs`. A person confirms it in one question (orchestrator/lead stage 1b), and `route --write --confirm` stores the `route` block and marks the stages it leaves out `skipped` with a `skipReason`. Without specifications, plan-architect plans from the requirements (journeys by customer need, `Escenarios` as `REQ-X-NNN ACn`), tests carry `REQ-X-NNN ACn`, and req-change edits only `requirements/`, cascades from plan-architect and re-evaluates the route after every approved ADD/MODIFY. It recommends the stages that escalate and never lowers the rigor by itself.
@@ -44,8 +46,8 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 **Brownfield:** `sdd-reverse-engineer` (code → artifacts, retroactive FASEs by functional area), `sdd-reconcile` (drift; amends specs only, reads `.sdd/gap-analysis.json`), `sdd-import` (Jira, OpenAPI, Markdown, Notion, CSV, Excel).
 
 **Utility:**
-- `sdd-setup`: state file, git hook and vendored validator, stack kits `--stack=<rails|nextjs-prisma>`, multi-session, cleanup of 4.x status lines.
-- `sdd-pipeline-status`: stage report and acceptance summary; `--diagnose` classifies an existing project into 8 adoption scenarios.
+- `sdd-setup`: state file, git hook and vendored validator, journal and status page, stack kits `--stack=<rails|nextjs-prisma>`, multi-session, cleanup of 4.x status lines.
+- `sdd-pipeline-status`: stage report, acceptance summary, status page link and last journal line; `--diagnose` classifies an existing project into 8 adoption scenarios.
 - `sdd-acceptance`: `--check` (ledger + chain integrity), `--fase N`, `--adversarial` (independent verifiers against the letter of each requirement, run before every FASE gate), `--loop`, `--sign-off`, `--publish`. See `docs/aceptacion.md`.
 - `sdd-gap-detector`: spec vs code gaps; `--semantic` checks requirement coverage in the code.
 - `sdd-session-summary`
@@ -58,15 +60,15 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
 hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
-scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, quotes, junit, plan-lint, tracker, route, route-rules), sdd-task-lint.mjs (alias),
+scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, quotes, junit, plan-lint, tracker, route, route-rules, status, journal), sdd-task-lint.mjs (alias),
                        sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
                        install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
 server/                src/{index,server,graph-loader,acceptance,resources,prompts,hints}.ts, src/tools/{query,impact,context,coverage,trace,gaps}.ts
-templates/             pipeline-state template, gitignore policy, sessions example, optional quality gates, stacks/<kit>/
-references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md
+templates/             pipeline-state template, gitignore policy, sessions example, optional quality gates, stacks/<kit>/, status-page/ (page template + data contract)
+references/            sdd-constitution.md (12 articles), git-conventions.md, handoff-protocol.md, async-questions.md, status-page.md
 .claude/agents/        maintainer agents for THIS repo (sdd-pipeline-auditor, sdd-cross-auditor), not shipped
 examples/todo-app/     toy project (customer needs + requirements) used by the pipeline auditor
-tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, quotes, seeded (seeded-defect bench), tracker, route, e2e, fixtures
+tests/                 hooks, setup, tasks, graph, jev, bench, git, plan, acceptance, quotes, seeded (seeded-defect bench), tracker, route, status, e2e, fixtures
 docs/                  guides (Spanish), git, acceptance, stacks, multisession, jev, measurements, design/
 ```
 
@@ -77,7 +79,7 @@ The same commands CI runs:
 ```bash
 node scripts/validate-plugin.mjs && bash scripts/check-paths.sh && bash scripts/check-version.sh
 bash tests/e2e/00-validate.sh
-for t in hooks setup tasks graph jev bench git plan acceptance quotes seeded tracker route; do bash tests/$t/run.sh || break; done
+for t in hooks setup tasks graph jev bench git plan acceptance quotes seeded tracker route status; do bash tests/$t/run.sh || break; done
 shellcheck -S warning hooks/*.sh scripts/*.sh tests/hooks/*.sh
 cd server && npm run check && npm run build && npm test   # commit dist/server.js with src changes
 ```
@@ -122,6 +124,7 @@ This is the foundational principle, and the last article of `references/sdd-cons
 - Skills set done/stale/error, preferably with `bash "$SDD_PLUGIN_ROOT/scripts/sdd-state.sh" set <stage> <status>`, which takes the same lock as the hooks.
 - Staleness cascades downstream. A change in `requirements/` means re-running from specifications-engineer (from plan-architect when the route skipped the specifications), `spec/` from spec-auditor, `plan/` from task-generator, `task/` from task-implementer.
 - Gates on the spec audit read `stages["spec-auditor"].summary.metrics.gate_result` ∈ {PASS, CONDITIONAL}; a skipped spec-auditor makes them n/a.
+- `status/journal.jsonl` and `status/page.json` (versioned, cascade-patterns §10) are the customer's plain record and the status page register; they have no stage key and a cascade never marks them stale. `summary` stays the technical record.
 - `.sdd/acceptance.json` (git-ignored) holds the last ledger; `acceptance/` (versioned) holds the report, the human decisions (`decisions.jsonl`) and the adversarial challenges (`challenges.jsonl`).
 
 ## Automation

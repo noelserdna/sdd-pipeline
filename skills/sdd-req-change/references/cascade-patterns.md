@@ -295,7 +295,7 @@ If git is not available, use file modification timestamps as a proxy:
 
 ## 9. Stage Summaries
 
-Each skill persists a structured summary in `pipeline-state.json` upon completion. This enables the dashboard to display rich stage information without re-scanning artifacts.
+Each skill persists a structured summary in `pipeline-state.json` upon completion. This enables the dashboard to display rich stage information without re-scanning artifacts. It is the technical record; the customer's plain record of the same events is the journal (§10).
 
 **Changing a stage status.** Prefer the locked helper over a hand-written read-modify-write, which can clobber the hooks' async writes: `bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set <stage> <pending|running|done|stale|error>` (`get <stage>` reads it). It creates the stage key if missing, keeps `summary` and the other fields, sets `lastRun` on running/done and `currentStage` on running, clears `staleReason` except on stale, and never creates `pipeline-state.json` (exit 1 without it: create it from the template first). Write `summary` and `staleReason` with a separate jq patch.
 
@@ -354,3 +354,47 @@ Each skill's own Persist section is authoritative; this table mirrors them.
 4. **Lateral skills**: `security-auditor`, `req-change`, `tech-designer`, `ux-designer`, `gap-detector` and `acceptance` store summaries under their own keys in `stages` (not part of the 7-stage linear chain).
 5. **Hook-safe**: The H3 state-updater hook does NOT modify `summary` — it is exclusively managed by skills.
 6. **Handoff patch**: `summary.handoff` is absent in single-session mode. In station mode it is added with a minimal patch (jq under lock, tmp → mv) after Persist Summary and after the skill's local gate question; it is never a full rewrite of the file, and it is replaced together with `summary` on re-run. Readers (H1, `sdd-pipeline-status`, `sdd-lead`, dashboard) must tolerate its absence.
+
+## 10. Customer Journal and Status Page Register
+
+Two versioned files under `status/` back the project's status page (plugin-root `references/status-page.md`). They
+live in git, not in `pipeline-state.json`, because every clone, teammate and station must see the same history and
+the same page URL. Both are written only through the `sdd` CLI; nobody edits them by hand.
+
+**`status/journal.jsonl`**: one JSON object per line, append-only, in the order things happened.
+
+```json
+{"at": "2026-03-04T15:30:00Z", "feature": "initial", "stage": "test-planner", "kind": "done", "text": "Preparamos 40 comprobaciones, al menos una por cada cosa que pediste", "refs": ["REQ-F-001"], "by": null}
+```
+
+| Field | Meaning |
+|---|---|
+| `at` | ISO-8601, set by the CLI |
+| `feature` | `initial` or the `CHG-…` id of a feature added later |
+| `stage` | the stage key of `stages` (`requirements-engineer`, …, `acceptance`, `req-change`), or `setup`, `route`, `status-page` |
+| `kind` | `start` · `done` · `gate` · `decision` · `change` · `skip` · `evidence` · `feedback` |
+| `text` | one fact in plain words, in the customer's language, without ids or jargon |
+| `refs` | ids the page links the line to (needs, requirements, FASEs, CHG, tags) |
+| `by` | "Name (role)" for a person's decision or comment; absent otherwise |
+
+| Writer | Kinds |
+|---|---|
+| Stage skills (Persist step; at the start of a run) | `start`, `done` |
+| `sdd-orchestrator`, `sdd-lead` | `gate`, `decision`, `feedback` |
+| Requirements approval (`approval.md` §6), `sdd-acceptance --sign-off` | `decision` |
+| `sdd-req-change` | `change` |
+| `sdd route --write` (the CLI itself) | `skip` |
+| `sdd-acceptance` | `done`, `evidence`, `decision` |
+
+**`status/page.json`**: `{url, createdAt, declined?, features: [{id, title, createdAt, chg?, summary?}], assets:
+{sha256: published path}}`, written by `sdd status page set | decline | feature add | asset`. It replaces the
+pre-5.2 `.sdd/status-page.json`, which the CLI moves on first use.
+
+**Journal versus `summary`.** The journal is the customer's plain record: it only grows, and a re-run adds a line
+instead of replacing one. `summary` stays the technical record of the stage's last run (artifacts, metrics,
+highlights; overwritten on re-run, §9) and is what gates, hooks and `sdd-pipeline-status` read. A skill writes both;
+neither replaces the other, and nothing reads a verdict or a gate result from the journal.
+
+**Cascade.** `status/` has no stage key, is never marked stale and is never rewritten by a cascade: a change adds
+lines and the next `sdd status build` recomputes the page from the artifacts. The built page (`.sdd/status-page/`)
+is git-ignored and rebuilt on every update.
