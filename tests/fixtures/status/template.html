@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estado del proyecto</title>
+</head>
+<body>
+<!-- Minimal test template for tests/status/run.sh: the real one is templates/status-page/index.html. -->
+<main id="app"></main>
+<!--SDD-DATA-->
+<script>
+  const data = JSON.parse(document.getElementById("sdd-data").textContent);
+  document.getElementById("app").textContent = data.project.name + " · " + data.where.phase;
+</script>
+</body>
+</html>

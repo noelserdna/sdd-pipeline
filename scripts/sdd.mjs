@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification, branches, requirements and the
-// acceptance ledger. Node >= 18, no deps.
+// sdd.mjs — the sdd-pipeline CLI: task files, git traceability, commit verification, branches, requirements, the
+// acceptance ledger, the journal and the status page data. Node >= 18, no deps.
 //
 // Usage (paths are relative to --repo when given, else to the current directory; every command takes --repo DIR):
 //   sdd lint [--dir task] [--fase N] [--json] [file.md ...]
@@ -155,6 +155,27 @@
 //       skipReason (never a done/running stage; never un-skips on its own: a stage needed again is listed in
 //       `escalations`). --full runs every stage, --set overrides one (both are a person's choice and may un-skip).
 //       Exit 0 ok · 2 usage or missing files · 3 Jev disabled or failing and no --answers.
+//       --write also appends to status/journal.jsonl one `skip` line per stage it newly marks skipped and a `decision`.
+//   sdd journal add --stage S --kind start|done|gate|decision|change|skip|evidence|feedback --text "…"
+//              [--feature F (default initial)] [--refs ID...] [--by "Name (role)"] [--at ISO] [--json]
+//       Append one plain-language line to status/journal.jsonl (versioned; created when missing), keys in a fixed order
+//       {at, feature, stage, kind, text, refs, by?}. Stages: the pipeline stage keys plus setup, route, status-page,
+//       req-change, orchestrator, lead. Exit 2 on an invalid field (nothing written).
+//   sdd journal list [--feature F] [--json]                    the journal lines in file order
+//   sdd status page [--json]                                   status/page.json {url, declined, createdAt, features,
+//       assets}; moves a pre-5.2 .sdd/status-page.json into it the first time.
+//   sdd status page set --url URL | decline | feature add --id ID --title T [--chg CHG] [--summary S]
+//              | asset --sha256 H --url <published path | URL | withheld>
+//       Write the registry: the page URL, the owner's "no", a feature added later (its own section and filter), an
+//       evidence file already published (or withheld: personal data, kept off the page).
+//   sdd status build [--out .sdd/status-page] [--template FILE] [--json]
+//       The page data, contract sdd-status-v1 (docs/design/plan-5.2-status-page.md; scripts/lib/status.mjs): needs,
+//       requirements with their «Para el cliente» line, criteria and evidence (read-only acceptance ledger), FASEs,
+//       tasks, commits and web links (GitHub, GitLab), the journal plus facts derived from dated tags, the route,
+//       decisions.jsonl and change reports. Writes --out/data.json, --out/index.html (templates/status-page/index.html
+//       with the JSON in <script id="sdd-data">) and copies to --out/evidencias/ the captures and videos that are
+//       present with their recorded sha256 (never traces; over 15 MB or withheld: listed, not copied). --json prints the
+//       data (each evidence file with inAssets: already in status/page.json). Exit 2 on a missing template.
 // Commit vocabulary: references/git-conventions.md. Old entry point: scripts/sdd-task-lint.mjs (alias).
 // Exit codes: 0 ok · 1 findings (lint errors, invalid messages, --require-done unmet, nothing traced) · 2 usage or git error.
 // (sdd gate has its own codes, above.)
@@ -172,6 +193,7 @@ import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
 import { runTracker } from "./lib/tracker.mjs";
 import { runRoute } from "./lib/route.mjs";
+import { runStatus } from "./lib/status.mjs";
 import { parseRequirements } from "./sdd-jev.mjs";
 import { reqHash } from "./lib/acceptance.mjs";
 
@@ -840,6 +862,25 @@ function cmdReq(o) {
   return 0;
 }
 
+// ------------------------------------------------------------------ task progress (for `sdd status build`)
+/** Every task of task/TASK-FASE-*.md under `root` with {id, fase, done, commits, refs}, or null without task files.
+ *  done = a `Task:` trailer in a non-reverted commit; with task_state checkbox a checked box also counts. */
+function taskProgress(root) {
+  const dir = path.join(root, "task");
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return null;
+  const files = readdirSync(dir).filter((f) => /^TASK-FASE-\d+.*\.md$/.test(f)).map((f) => path.join(dir, f));
+  if (!files.length) return null;
+  const docs = files.map(parseFile);
+  const refs = new Map(docs.flatMap((d) => d.tasks).map((t) => [t.id, t.refs]));
+  let list = null;
+  if (isRepo(root)) {
+    try { const s = status({ repo: root }, docs); list = s.tasks.map((t) => ({ ...t, done: t.done || (s.task_state === "checkbox" && t.checkbox === "x") })); }
+    catch (e) { if (!(e instanceof Exit) && !(e instanceof GitError)) throw e; }
+  }
+  if (!list) list = docs.flatMap((d) => d.tasks).map((t) => ({ id: t.id, fase: t.fase, done: /^[xX]$/.test(t.state), commits: [] }));
+  return list.map((t) => ({ id: t.id, fase: t.fase, done: t.done, commits: t.commits || [], refs: refs.get(t.id) || [] }));
+}
+
 // ------------------------------------------------------------------ main
 /** First positional word of argv (skipping `--repo DIR`): the command. */
 function firstCommand(argv) {
@@ -866,6 +907,10 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
     if (first.cmd === "route") {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runRoute([...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
+    }
+    if (["journal", "status"].includes(first.cmd)) {
+      if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
+      return runStatus(first.cmd, [...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog, taskProgress });
     }
     if (["issue", "pr-body"].includes(first.cmd)) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
