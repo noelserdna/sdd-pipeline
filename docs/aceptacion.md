@@ -210,7 +210,7 @@ Cada proyecto tiene **una página** para el cliente, que existe desde el princip
 
 **Dos ficheros versionados** en `status/`:
 
-- `status/journal.jsonl`, el **diario**: una línea por hecho, en lenguaje llano y en el idioma del cliente (`sdd journal add`). Cada etapa escribe al empezar qué va a hacer y al terminar qué ha dejado; el orquestador y el lead anotan las respuestas de cada puerta y las decisiones con quién las tomó; `sdd route --write` anota las etapas que no se harán y por qué; `sdd-req-change`, cada cambio; la aceptación, las evidencias y el feedback.
+- `status/journal.jsonl`, el **diario**: una línea por hecho, en lenguaje llano y en el idioma del cliente (`sdd journal add`). Cada etapa escribe al empezar qué va a hacer y al terminar qué ha dejado; el orquestador y el lead anotan las respuestas de cada puerta y las decisiones con quién las tomó y, en las puertas de FASE y la firma, el feedback del cliente y cómo se trata; `sdd route --write` anota las etapas que no se harán y por qué, y quién confirmó la ruta; `sdd-req-change`, cada cambio; la aceptación, las evidencias.
 - `status/page.json`, el **registro de la página**: su URL (o que se rechazó), las features y las evidencias ya publicadas. Al estar en git, otro clon o una estación de multisesión actualizan la misma página en vez de crear otra. El `.sdd/status-page.json` anterior a 5.2 se migra solo.
 
 **Qué ve el cliente en cada momento:**

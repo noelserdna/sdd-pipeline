@@ -147,7 +147,7 @@ final sign-off, before asking the gate question (`skills/sdd-orchestrator/refere
    `feedback-route` proposal when Jev is on) and have a person confirm the route before anything runs.
 3. Reply in its thread, in plain words, with what will happen ("Lo corregimos en esta entrega", "Lo tratamos como un
    cambio; te pediremos que lo apruebes").
-4. Journal: `--kind feedback --text "<what they said, briefly> → <what will be done>" --by "<commenter>"`.
+4. Journal: `--stage acceptance --kind feedback --text "<what they said, briefly> → <what will be done>" --by "<commenter>"`.
 
 A comment that arrives between gates is read and answered at the next one, unless the user asks earlier.
 
