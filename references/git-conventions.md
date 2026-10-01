@@ -78,7 +78,8 @@ git diff --cached --quiet || git commit -m "docs(specs): specifications v1 from 
 ```
 
 - Scope per stage: `requirements`, `specs`, `audit`, `test-plan`, `plan`, `tasks`, `design`, `ux`, `security`, `gaps`,
-  `acceptance`, `changes`, `feedback`; the bootstrap skills (`sdd-import`, `sdd-reverse-engineer`) use `specs`.
+  `acceptance`, `changes`, `feedback`, `status` (the journal and the status page register, plugin-root
+  `references/status-page.md`); the bootstrap skills (`sdd-import`, `sdd-reverse-engineer`) use `specs`.
   `Refs:` lists the main ids the output defines or covers (required for `docs(specs)`).
 - Branch: the branch rule above applies, with one exception: before any delivery (no `fase-*-accepted` tag) the
   greenfield upstream stages may commit on the default branch; once such a tag exists, the skill starts a branch
