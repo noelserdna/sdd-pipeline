@@ -77,6 +77,7 @@ Read [references/requirement-extraction-heuristics.md](references/requirement-ex
 3. Tag confidence: no tag = directly observable; `[INFERRED]` = derived from patterns; `[IMPLICIT-RULE]` = business logic buried in conditionals.
 4. Priority from usage, dependency count and error-handling presence.
 5. Each requirement cites `Source: file:line` (and `Tests:` when present).
+6. Each requirement carries its `- **Para el cliente:**` line (`sdd-requirements-engineer` `references/requirements-template.md`): one or two plain sentences on what the user can do or count on, drafted from what the code does. The code shows behaviour, not what the customer meant, so the line is a draft pending the customer's review: it has no `Examples reviewed by` until the customer reads it with the examples at approval (approval §3), and Checkpoint 2 lists these drafts as pending review with the customer.
 
 **Seed mode:** keep every `[IMPORTED]` requirement with its ID and text. When code confirms it, add the `Source:` evidence; when code contradicts or does not implement it, keep the text and list it under a "Conflicts with code" section for the user (the imported document states intent; code does not override it). New requirements found only in code get the next free ID and `[INFERRED]`.
 
@@ -101,7 +102,7 @@ In seed mode, existing `[IMPORTED]` spec files are extended (add sections, evide
 
 ### Checkpoint 2 — after Phase 6
 
-Present: requirements count by group and confidence, spec files generated, items needing a user decision, and a REQ → UC → WF → API preview. Ask whether to proceed with test plan, plan and tasks.
+Present: requirements count by group and confidence, spec files generated, items needing a user decision (including the `Para el cliente:` drafts to review with the customer), and a REQ → UC → WF → API preview. Ask whether to proceed with test plan, plan and tasks.
 
 ### Phase 7: Test Plan Mapping
 
