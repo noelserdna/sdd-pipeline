@@ -155,6 +155,7 @@ const REQ_FIELDS = {
   verification: "verification", "verificación": "verification", verificacion: "verification",
   status: "status", estado: "status",
   "examples reviewed by": "examplesReviewedBy", "ejemplos revisados por": "examplesReviewedBy",
+  "para el cliente": "plain", "for the customer": "plain",
 };
 export const VERIFICATION_METHODS = ["test", "demo", "measurement", "inspection"];
 const NEED_ID = /\bN-\d{3,}\b/g;
@@ -169,7 +170,8 @@ function normPriority(v) {
 
 // Returns one object per `### REQ-…` block: {id, type (F|NF|C|other), title, statement, criteria[], priority
 // (Must|Should|Nice|raw|null), needs (array of N-ids, [] for "—", null when the field is absent), verification
-// (one of VERIFICATION_METHODS, the raw text when unknown, null when absent), deprecated, examplesReviewedBy}.
+// (one of VERIFICATION_METHODS, the raw text when unknown, null when absent), deprecated, examplesReviewedBy, plain (the
+// `- **Para el cliente:**` line: one or two plain sentences the customer reviews; null when absent)}.
 export function parseRequirements(text) {
   const reqs = [];
   let cur = null;
@@ -178,7 +180,7 @@ export function parseRequirements(text) {
     if (h) {
       const type = (h[1].match(/^REQ-(F|NF|C)-\d+$/) || [])[1] || "other";
       cur = { id: h[1], type, title: h[2].trim(), statement: "", criteria: [], priority: null, needs: null,
-        verification: null, deprecated: /\[deprecated\]|\(deprecated\)|\[obsoleto\]|^~~/i.test(h[2]), examplesReviewedBy: null };
+        verification: null, deprecated: /\[deprecated\]|\(deprecated\)|\[obsoleto\]|^~~/i.test(h[2]), examplesReviewedBy: null, plain: null };
       reqs.push(cur); continue;
     }
     if (!cur) continue;
@@ -198,6 +200,7 @@ export function parseRequirements(text) {
       cur.verification = m && VERIFICATION_METHODS.includes(m[0]) ? m[0] : val || null;
     } else if (key === "status") { if (/deprecated|obsoleto/i.test(val)) cur.deprecated = true; }
     else if (key === "examplesReviewedBy") cur.examplesReviewedBy = val || null;
+    else if (key === "plain") cur.plain = val || null;
   }
   for (const r of reqs) if (!r.statement) r.statement = r.title;
   return reqs;
@@ -234,7 +237,9 @@ export function parseNeeds(text) {
 
 // Mechanical need coverage: the check that decides (Jev only suggests). errors block approval; warnings are
 // shown at the gate. Deprecated requirements are ignored. REQ-C may carry `Needs: —` (team/architecture source).
-export function checkNeedCoverage(needs, reqs, reqText = "") {
+// opts.plain: also warn (`no-plain`) for each active requirement without its `- **Para el cliente:**` line, the plain
+// explanation the status page shows (`sdd lint --needs` asks for it).
+export function checkNeedCoverage(needs, reqs, reqText = "", opts = {}) {
   const errors = [], warnings = [];
   const byId = new Map(needs.map((n) => [n.id, n]));
   const active = reqs.filter((r) => !r.deprecated);
@@ -267,6 +272,8 @@ export function checkNeedCoverage(needs, reqs, reqText = "") {
   const docReviewed = /^>?\s*\*\*(Examples reviewed by|Ejemplos revisados por)\s*:?\*\*\s*:?\s*\S/im.test(reqText);
   for (const r of fnf) if (!r.examplesReviewedBy && !docReviewed)
     warnings.push({ code: "examples-not-reviewed", id: r.id, msg: `${r.id} has no "Examples reviewed by:" (nor a document-level one)` });
+  if (opts.plain) for (const r of active) if (!r.plain)
+    warnings.push({ code: "no-plain", id: r.id, msg: `${r.id} has no "- **Para el cliente:**" line (one or two plain sentences the customer reviews; the status page shows it)` });
   const must = fnf.filter((r) => r.priority === "Must").length;
   const mustRatio = fnf.length ? Math.round((must / fnf.length) * 100) / 100 : 0;
   const mustConfirmed = /^>?\s*\*\*(Must list confirmed by|Lista Must confirmada por)\s*:?\*\*\s*:?\s*\S/im.test(reqText);
