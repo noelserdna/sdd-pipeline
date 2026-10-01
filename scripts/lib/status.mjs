@@ -460,10 +460,15 @@ export function buildStatus(root, { taskProgress = () => null, now = new Date() 
     const accepted = hasTag(`fase-${f.n}-accepted`);
     const verifiedTag = hasTag(`fase-${f.n}-verified`);
     const inScope = (fl?.requirements || []).filter((r) => r.in_scope && r.verdict !== "DEPRECATED");
+    // A FASE is offered to the customer only when its gate passes (sdd gate 0, or 3 with waived Musts): the same rule
+    // as `sdd gate --fase N`, so a weakened test, a missing capture or video, or an open challenge on a Must under
+    // adversarial_gate enforce keep it in «building». The tag fase-N-verified can predate those findings.
+    const blocked = !!fl && inScope.length > 0 && ![0, 3].includes(gateCode(fl, adversarialGate(root)));
     let status;
     if (acc && !acc.stale) status = acc.result === "accepted" ? "accepted" : acc.result === "observations" ? "observations" : "rejected";
     else if (accepted && !acc) status = "accepted";
-    else if (verifiedTag || (fl && inScope.length && fl.summary.goal)) status = "verified";
+    else if (!blocked && (verifiedTag || (fl && inScope.length && fl.summary.goal))) status = "verified";
+    else if (blocked) status = "building";
     else if (ts.some((t) => t.done) || f.requirements.some((id) => ["VERIFIED", "FAILING"].includes(verdictOf(id)))) status = "building";
     else status = "pending";
     const issueN = issues.get(f.n);
@@ -494,6 +499,10 @@ export function buildStatus(root, { taskProgress = () => null, now = new Date() 
     if (verdict === "DEPRECATED") status = "deprecated";
     else if (verdict === "WAIVED") status = "deferred";
     else if (verdict === "FAILING") status = "failing";
+    // An open challenge on a Must keeps it out of «shown» while the gate enforces it: the customer must not read
+    // «proven» next to «an independent reviewer found a problem».
+    else if (verdict === "VERIFIED" && req.priority === "Must" && adversarialGate(root) === "enforce"
+      && (lr?.challenges || []).some((c) => c.state === "open")) status = "building";
     else if (verdict === "VERIFIED") status = "shown";
     else {
       const mine = fases.filter((f) => f.requirements.includes(req.id));
@@ -541,7 +550,7 @@ export function buildStatus(root, { taskProgress = () => null, now = new Date() 
       };
     });
     for (const ch of lr?.challenges || []) if (ch.state === "open") warnings.push({ code: "challenge", text: `${ch.id} ${ch.category}: "${String(ch.quote || "").slice(0, 120)}"`, ac: ch.ac ?? null });
-    if (fase && req.type === "F" && !req.deprecated && verdict !== "WAIVED") for (const id of fase._missingVideos) warnings.push({ code: "missing_video", text: `FASE-${fase.n}: video ${id} missing`, ac: null });
+    // a missing walkthrough video belongs to the FASE (fases[].missingVideos), not to each of its requirements
     // videos: those of its FASE plus any named after the requirement or one of its scenarios
     const scen = crit.flatMap((c) => c.scenarios || []);
     const vids = [...fase?.videos.map((v) => v._f) || []];
@@ -633,7 +642,7 @@ export function buildStatus(root, { taskProgress = () => null, now = new Date() 
   }
   const strip = (list) => list.map((x) => ({ path: x.path, published: x._f.published }));
   for (const r of requirements) { r.videos = strip(r.videos); for (const c of r.criteria) c.captures = strip(c.captures); }
-  for (const f of fases) { f.videos = strip(f.videos); delete f._missingVideos; }
+  for (const f of fases) { f.videos = strip(f.videos); f.missingVideos = f._missingVideos; delete f._missingVideos; }
   const packDir = path.join(root, ".sdd", "entregas");
   const packs = existsSync(packDir) ? readdirSync(packDir).map((x) => x.match(/^FASE-(\d+)-evidencias\.tar\.gz$/)).filter(Boolean).sort((a, b) => Number(b[1]) - Number(a[1])) : [];
 

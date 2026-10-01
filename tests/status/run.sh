@@ -213,10 +213,15 @@ build; shape_ok "moment 4a (FASE built)"
 expect "moment 4a: tasks done, not verified → verify" "$(jf "$D" 'j.where.phase+":"+F(1).status+":"+F(1).tasks.done+"/"+F(1).tasks.total')" "verify:building:8/8"
 expect "moment 4a: where.fase and now name the delivery" "$(jf "$D" 'j.where.fase.n+"/"+j.where.fase.of+"|"+j.where.now.slice(0,40)')" "1/1|Estamos comprobando la entrega 1 de 1: E"
 (cd "$m" && GIT_COMMITTER_DATE="2026-09-12T18:00:00" git tag -a fase-1-verified -m "FASE-1 implementation complete and verified")
-build; shape_ok "moment 4 (FASE verified)"
-expect "moment 4: verified FASE → deliver, the customer is asked to try it" "$(jf "$D" 'j.where.phase+":"+F(1).status+":"+j.where.needFromYou.map(x=>x.anchor).join()')" "deliver:verified:FASE-1"
+build; shape_ok "moment 4 (FASE tagged, gate blocked)"
+expect "moment 4: tag, but the bench's defects block the gate → not offered to the customer" "$(jf "$D" 'j.where.phase+":"+F(1).status+":"+j.where.needFromYou.map(x=>x.anchor).join()+":"+F(1).missingVideos.join()')" "verify:building::WF-001"
 expect "moment 4: tag in the FASE and in the journal" "$(jf "$D" 'F(1).tags.map(t=>t.name).join()+"|"+j.journal.filter(e=>e.derived&&e.kind==="evidence").map(e=>e.refs.join("+")).join()')" "fase-1-verified|FASE-1+fase-1-verified"
 expect "moment 4: statuses (verified, held back by the bench's defects, failing none)" "$(jf "$D" 'j.requirements.map(r=>r.id.slice(-1)+r.status[0]).join()')" "1s,2b,3b,4s,5s,6s,7b,8s"
+# with the gates a person turned off, the same FASE passes its gate and the customer is asked to try it
+printf -- '- visual_evidence: off\n- literal_gate: off\n- adversarial_gate: off\n' >> "$m/CLAUDE.md"; commit "docs: gates off for this moment"
+find "$m/junit" -type f -exec touch {} +
+build; shape_ok "moment 4b (gate passes)"
+expect "moment 4b: gate passes → deliver, the customer is asked to try it" "$(jf "$D" 'j.where.phase+":"+F(1).status+":"+j.where.needFromYou.map(x=>x.anchor).join()')" "deliver:verified:FASE-1"
 run accept record fase-acceptance --fase 1 --result accepted --channel "reunión de demo" --by "Marta Ibáñez" --role "coordinación académica"
 expect "fase-acceptance recorded" "$rc" 0
 build; shape_ok "moment 5 (signed)"
@@ -236,7 +241,7 @@ build; shape_ok "seeded bench"
 O="$repo/.sdd/status-page"
 expect "seeded: every requirement has its criteria with tests bound" "$(jf "$D" 'j.requirements.every(r=>r.criteria.length&&r.criteria.every(c=>c.tests.total>0))')" true
 expect "seeded: shown requirements carry a published capture per criterion" "$(jf "$D" 'j.requirements.filter(r=>r.status==="shown").every(r=>r.criteria.every(c=>c.captures.length&&c.captures.every(x=>x.published)))')" true
-expect "seeded: REQ-F-007 unshown (no capture), held back" "$(jf "$D" 'R("REQ-F-007").status+":"+R("REQ-F-007").criteria[0].status+":"+R("REQ-F-007").warnings.map(w=>w.code).join("+")')" "building:unshown:unshown+missing_video"
+expect "seeded: REQ-F-007 unshown (no capture), held back" "$(jf "$D" 'R("REQ-F-007").status+":"+R("REQ-F-007").criteria[0].status+":"+R("REQ-F-007").warnings.map(w=>w.code).join("+")')" "building:unshown:unshown"
 expect "seeded: REQ-F-002 and REQ-F-003 weakened with the missing literal" "$(jf "$D" '["REQ-F-002","REQ-F-003"].map(id=>R(id).criteria[0].status+"/"+R(id).warnings[0].code).join()')" "weakened/weakened,weakened/weakened"
 contains "$(jf "$D" 'R("REQ-F-002").warnings[0].text')" '"Proyectos personales"' && pass "seeded: the weakened warning names the literal" || bad "weakened text"
 expect "seeded: tests n of n per criterion" "$(jf "$D" 'R("REQ-F-006").criteria.map(c=>c.tests.pass+"/"+c.tests.total).join()')" "1/1,1/1"

@@ -381,11 +381,6 @@
           "code": "weakened",
           "text": "Q-03: el literal «Cambio de cubierta» no aparece en el test",
           "ac": 1
-        },
-        {
-          "code": "missing_video",
-          "text": "falta WF-002.webm en evidencias/FASE-2",
-          "ac": null
         }
       ],
       "waiver": null,
@@ -739,7 +734,8 @@
           "url": "https://github.com/taller-ruiz/citas/releases/tag/fase-1-accepted"
         }
       ],
-      "feature": "initial"
+      "feature": "initial",
+      "missingVideos": []
     },
     {
       "n": 2,
@@ -785,7 +781,10 @@
         "url": "https://github.com/taller-ruiz/citas/issues/4"
       },
       "tags": [],
-      "feature": "initial"
+      "feature": "initial",
+      "missingVideos": [
+        "WF-002"
+      ]
     },
     {
       "n": 3,
@@ -813,7 +812,8 @@
         "url": "https://github.com/taller-ruiz/citas/issues/9"
       },
       "tags": [],
-      "feature": "CHG-2026-09-20-001"
+      "feature": "CHG-2026-09-20-001",
+      "missingVideos": []
     }
   ],
   "journal": [

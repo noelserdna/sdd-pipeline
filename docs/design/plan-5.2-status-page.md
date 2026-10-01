@@ -144,7 +144,7 @@ interfaz las pone la plantilla (diccionario por `project.lang`, `es` y `en`).
       "record": { "type": "demo|inspection", "by": "…", "at": "…", "note": "…" } | null
     } ],
     "videos": [ { "path": "evidencias/FASE-1/WF-001.webm", "published": true } ],
-    "warnings": [ { "code": "unshown|weakened|challenge|missing_video|stale|failing", "text": "…técnico corto…", "ac": 1 } ],
+    "warnings": [ { "code": "unshown|weakened|challenge|stale|failing", "text": "…técnico corto…", "ac": 1 } ],
     "waiver": { "reason": "…", "by": "…", "followUp": "#12" } | null,
     "links": { "commits": [ { "sha": "abc1234", "url": "…|null", "subject": "…" } ], "issue": { "number": 3, "url": "…" } | null }
   } ],
@@ -152,6 +152,7 @@ interfaz las pone la plantilla (diccionario por `project.lang`, `es` y `en`).
     "n": 1, "title": "…", "increment": "…", "requirements": ["REQ-F-001"], "needs": ["N-001"], "workflows": ["WF-001"],
     "demo": [ { "step": 1, "action": "…", "expected": "…" } ],
     "videos": [ { "path": "…", "published": true } ],
+    "missingVideos": ["WF-001"],             // vídeos de recorrido que faltan (aviso de la entrega, no de cada requisito)
     "tasks": { "done": 3, "total": 8 },
     "status": "pending|building|verified|accepted|rejected|observations",
     "acceptance": { "by": "…", "role": "…", "at": "…", "channel": "…" } | null,
@@ -180,3 +181,8 @@ Estado llano del requisito: `deprecated` → deprecated; `WAIVED` → deferred; 
 
 Ficheros del diario y registro: `status/journal.jsonl` y `status/page.json` (versionados). Salida: `.sdd/status-page/`
 (`index.html`, `data.json`, `evidencias/…`), git-ignorada.
+
+Ajustes tras la prueba real (2026-10-01): una FASE cuya puerta sigue bloqueada (challenge abierto en un Must con
+`adversarial_gate: enforce`, criterio sin captura o vídeo que falta con `visual_evidence: required`) sale como
+`building`, no `verified`, y no se pide al cliente que la pruebe; un requisito Must `VERIFIED` con un challenge abierto
+bajo `enforce` sale como `building`; el aviso de vídeo que falta va en `fases[].missingVideos`, no en cada requisito.

@@ -205,7 +205,7 @@ section.block { padding-block: 2.75rem 0.5rem; scroll-margin-top: 3.5rem; displa
   padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); cursor: zoom-in;
   width: 11rem; max-width: 100%; aspect-ratio: 4 / 3; overflow: hidden; display: block;
 }
-.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; object-position: left top; display: block; }
 .missing {
   width: 11rem; max-width: 100%; aspect-ratio: 4 / 3; border: 1.5px dashed var(--tone, var(--line)); border-radius: 8px;
   display: grid; place-items: center; text-align: center; padding: 0.6rem; font-size: 0.8125rem; color: var(--tone, var(--muted));
@@ -434,7 +434,6 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
       waiverBy: "Lo acordaste con nosotros: {by}.",
       followUp: "Seguimiento: {ref}",
       commits: "Cambios en el código",
-      noCommits: "Aún sin cambios en el código",
       issue: "Seguimiento #{n}",
       includes: "Incluye",
       demoH: "Cómo probarla",
@@ -590,7 +589,6 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
       waiverBy: "Agreed with: {by}.",
       followUp: "Follow-up: {ref}",
       commits: "Code changes",
-      noCommits: "No code changes yet",
       issue: "Tracking #{n}",
       includes: "Includes",
       demoH: "How to try it",
@@ -1002,10 +1000,11 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
 
     var commits = arr(r.links && r.links.commits);
     var issue = r.links && r.links.issue;
-    card.appendChild(h("div", { class: "req-foot" },
-      h("span", null, commits.length ? [L.commits + ": ", commits.map(function (c, i) {
+    // Commits are a technical detail: the footer shows them only when there are some, and says nothing otherwise.
+    if (commits.length || issue) card.appendChild(h("div", { class: "req-foot" },
+      commits.length ? h("span", null, L.commits + ": ", commits.map(function (c, i) {
         return [i ? ", " : "", ext(c.url, c.sha, "sha")];
-      })] : L.noCommits),
+      })) : null,
       issue ? ext(issue.url, fmt(L.issue, { n: issue.number })) : null));
     return card;
   }
@@ -1067,6 +1066,9 @@ dialog.lb button { font: inherit; cursor: pointer; border: 1px solid var(--line)
       card.appendChild(h("div", { class: "fase-cols" }, left, mid, right));
       var vids = arr(f.videos).map(videoEl).filter(Boolean);
       if (vids.length) card.appendChild(h("div", { class: "videos" }, vids));
+      var mv = arr(f.missingVideos);
+      if (mv.length) card.appendChild(h("ul", { class: "warnings" }, h("li", { class: WARN_TONE.missing_video },
+        icon("alert"), h("span", null, h("strong", { text: L.warn.missing_video })), h("span", { class: "tech", text: mv.join(", ") }))));
       sec.appendChild(card);
     });
     return fixHead(sec);

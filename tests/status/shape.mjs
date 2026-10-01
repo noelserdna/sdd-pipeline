@@ -76,7 +76,7 @@ data.requirements.forEach((r, i) => {
 data.fases.forEach((f, i) => {
   const p = `fases[${i}]`;
   shape(p, f, { n: T.int, title: T.str, increment: T.str, requirements: T.arr, needs: T.arr, feature: T.str, workflows: T.arr, demo: T.arr,
-    videos: T.arr, tasks: T.obj, status: oneOf(["pending", "building", "verified", "accepted", "rejected", "observations"]),
+    videos: T.arr, missingVideos: T.arr, tasks: T.obj, status: oneOf(["pending", "building", "verified", "accepted", "rejected", "observations"]),
     acceptance: T.objN, issue: T.objN, tags: T.arr });
   f.demo.forEach((x, k) => shape(`${p}.demo[${k}]`, x, { step: T.int, action: T.str, expected: T.str }));
   f.videos.forEach((x, k) => file(`${p}.videos[${k}]`, x));
