@@ -52,7 +52,7 @@ Es la etapa 1b del orquestador y del lead, después de la puerta 1 (requisitos a
 
 `--write` guarda el bloque `route` en `pipeline-state.json` (`decidedAt`, factores, hechos, etapas con su motivo, dudas, `confirmedBy` y `reqHash`) y deja cada etapa saltada con `status: "skipped"` y su `skipReason`. Una etapa `done` o `running` nunca pasa a `skipped`.
 
-Una etapa `skipped` cuenta como satisfecha: no aparece como siguiente paso, las etapas posteriores pueden ejecutarse y el estado se resume como "N/M done, K skipped". `sdd-pipeline-status` enseña la ruta y los motivos, y la página de estado lista las etapas saltadas en su recorrido, con el motivo y quién confirmó la ruta. La regla del orquestador "nunca saltar una etapa sin que el usuario lo sepa" se cumple con esta confirmación.
+Una etapa `skipped` cuenta como satisfecha: no aparece como siguiente paso, las etapas posteriores pueden ejecutarse y el estado se resume como "N/M done, K skipped". `sdd-pipeline-status` enseña la ruta y los motivos, y `--write` anota en el diario de la página de estado (`status/journal.jsonl`) una línea `skip` por etapa saltada, con su motivo, y una `decision` con quién confirmó la ruta. La barra de fases de la página marca «Diseñar» como saltada solo cuando la ruta salta todo el diseño (specs, auditoría de specs y plan de tests, sin diseño técnico ni UX); las demás etapas saltadas se ven en el diario. La regla del orquestador "nunca saltar una etapa sin que el usuario lo sepa" se cumple con esta confirmación.
 
 ## El camino sin specs formales
 
