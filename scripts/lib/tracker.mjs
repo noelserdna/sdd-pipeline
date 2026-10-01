@@ -111,6 +111,23 @@ export function detectProvider(root) {
   return { provider: null, source: "remote", ...base, reason: `cannot tell the provider of ${h}: set \`tracker: github|gitlab\` in the SDD Stack Profile` };
 }
 
+/**
+ * Web URL of a commit, tag, file or issue on the provider of `repo` ({provider, host, path}, as detectProvider returns
+ * it), or null when the provider is unknown or a field is missing. kind: commit {sha} · tag {tag} · blob {path, ref
+ * (a sha, tag or branch)} · issue {number}. GitHub and GitLab only; nothing is fetched.
+ */
+export function webUrl(repo, { kind, sha, tag, path: file, ref, number } = {}) {
+  if (!repo || !repo.host || !repo.path || !["github", "gitlab"].includes(repo.provider)) return null;
+  const base = `https://${repo.host}/${repo.path}`;
+  const sep = repo.provider === "gitlab" ? "/-" : "";
+  const enc = (s) => String(s).split("/").map(encodeURIComponent).join("/");
+  if (kind === "commit" && sha) return `${base}${sep}/commit/${sha}`;
+  if (kind === "tag" && tag) return repo.provider === "gitlab" ? `${base}/-/tags/${encodeURIComponent(tag)}` : `${base}/releases/tag/${encodeURIComponent(tag)}`;
+  if (kind === "blob" && file && ref) return `${base}${sep}/blob/${encodeURIComponent(ref)}/${enc(String(file).replace(/^\.?\/+/, ""))}`;
+  if (kind === "issue" && Number.isInteger(Number(number)) && Number(number) > 0) return `${base}${sep}/issues/${Number(number)}`;
+  return null;
+}
+
 function context(o, { needApi = true } = {}) {
   const base = path.resolve(o.repo || ".");
   if (!isRepo(base)) usage(`not a git repository: ${base}`);
@@ -238,7 +255,7 @@ function faseSource(root, n) {
     necesidades: headerValue(f.necesidades), demo: section(text, /^demo\b/i),
   };
 }
-function changeSource(root, id) {
+export function changeSource(root, id) {
   const file = path.join(root, "changes", `CHANGE-REPORT-${id}.md`);
   const alt = path.join(root, "changes", "applied", `CHANGE-REPORT-${id}.md`);
   const f = existsSync(file) ? file : existsSync(alt) ? alt : null;
