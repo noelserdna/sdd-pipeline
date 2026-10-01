@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 5.2: página de estado viva del proyecto
+
+Motivación: el cliente no técnico tenía que preguntar dónde estaba el proyecto. En 5.1 la «página viva» existía solo en prosa: nada la creaba al empezar, ninguna etapa la actualizaba, el LLM la recomponía cada vez, su URL vivía en `.sdd/status-page.json` (sin versionar, así que otro clon o una estación creaba otra), no había historia (el `summary` se sobrescribe en cada re-ejecución), los requisitos no se explicaban en lenguaje llano y las guías la llamaban «opcional en `--publish`». Plan y contrato de datos en `docs/design/plan-5.2-status-page.md`.
+
+#### Changed (incompatible)
+- **La página de estado deja de ser opcional cuando la sesión tiene la herramienta Artifact.** `sdd-setup` (o el orquestador o el lead al empezar o reanudar) la crea tras una sola pregunta, y todas las etapas y puertas la actualizan; «no» queda registrado con `sdd status page decline` y no se vuelve a preguntar. Sin la herramienta (`claude -p`, CI, estaciones) se construye en local en `.sdd/status-page/index.html`.
+  - **Migración:** el `.sdd/status-page.json` de 5.1 se mueve a `status/page.json` (versionado) la primera vez que corre `sdd status page`; la misma URL se sigue actualizando.
+- **El procedimiento se mueve a la raíz del plugin:** `skills/sdd-acceptance/references/status-page.md` desaparece; todas las skills remiten a `references/status-page.md`.
+
+#### Added
+- **Página determinista:** plantilla fija `templates/status-page/` más los datos de `sdd status build` (contrato `sdd-status-v1`): dónde estamos y qué necesitamos del cliente, lo que pidió (citas literales), cada requisito (funciones, calidad, condiciones) con su explicación llana y su evidencia en la misma tarjeta (capturas por criterio, vídeo, pruebas, mediciones, demos registradas), las entregas, el diario, una sección por feature, detalles técnicos plegados y glosario. Las capturas y vídeos se publican como ficheros de la página.
+- **Diario versionado** `status/journal.jsonl` (`sdd journal add|list`): una línea llana por hecho, en el idioma del cliente. Cada skill de etapa escribe `start` al empezar y `done` en su Persist; el orquestador y el lead, `gate` y `decision` en cada puerta; la aprobación de requisitos y la firma, su `decision` con quién y cuándo; `sdd-req-change`, `change`; `sdd route --write`, `skip` con el motivo; la aceptación, `evidence` y `feedback`. El `summary` de `pipeline-state.json` sigue siendo el registro técnico (`cascade-patterns.md` §10).
+- **Registro** `status/page.json` (`sdd status page [set|decline|feature add|asset]`): URL, features y evidencias publicadas.
+- **Línea «Para el cliente»** en cada requisito (`REQ-F`, `REQ-NF`, `REQ-C`): una o dos frases sin jerga que el cliente revisa junto a los ejemplos en la puerta 1; `sdd-req-change` la mantiene en ADD/MODIFY.
+- **Comentarios del cliente:** en cada puerta de FASE y en la firma se leen los comentarios de la página, se tratan como feedback (defecto / cambio / pregunta, con confirmación humana), se responden en su hilo y quedan en el diario. La demo de la puerta se enseña sobre la página.
+- **Features nuevas:** un ADD de una capacidad nueva crea su sección en la página (`sdd status page feature add`).
+- `sdd-pipeline-status` muestra el enlace de la página y la última línea del diario; `sdd-setup` marca `status/journal.jsonl merge=union` en `.gitattributes` para que las ramas no choquen al añadir líneas.
+- Suite `tests/status`.
+
+#### Changed
+- `sdd-orchestrator`: la regla 5 pasa a una columna «Status page» de la tabla Flow. `sdd-lead` es el único que publica (las estaciones escriben el diario) y su fila 11 deja de tratar la página como opcional.
+- `sdd-acceptance --publish` actualiza la página común (o la crea, preguntando) además del bloque de PR/issue.
+
 ## [5.1.0] - 2026-09-30
 
 ### 5.1: evidencia visual, ronda adversarial y verificación del entorno desplegado

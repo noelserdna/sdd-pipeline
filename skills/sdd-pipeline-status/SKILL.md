@@ -54,6 +54,10 @@ the current directory.
    `must_challenged` > 0 and `adversarial_gate: enforce` (the ledger's, else the Stack Profile's) is what `sdd gate`
    reports as exit 4: say "goal blocked by open challenges", never "goal met". Do not run `sdd accept` yourself: this
    skill only reads.
+5b. **Status page.** Read `status/page.json` (versioned, at the project root): its `url`, or `declined`, or absent.
+   Show the last line of the customer's journal (`node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd.mjs" journal list --json`, the
+   last entry: date, text, who). Absent page in an interactive project → recommend creating it (plugin-root
+   `references/status-page.md` §2); this skill only reads and never publishes.
 6. **Report** (template below). Next action: the first stage that is stale, errored or pending (never a skipped one), in pipeline order
    (requirements → specifications → spec-auditor → test-planner → plan-architect → task-generator →
    task-implementer). When all of them are done or skipped: no `acceptance.json` → `/sdd-acceptance --check`; open Musts
@@ -80,6 +84,9 @@ the current directory.
 - Must 7/9 verified, 1 waived (REQ-NF-002) · FAILING 1 · MISSING 0 · stale evidence 0 · evaluated at a1b2c3d (HEAD) · goal not met
 - Unshown 2 · missing videos: WF-003 · Musts with open challenges 1 (REQ-F-006)
 - Open Musts: REQ-F-004 (FAILING)
+
+### Status page
+- https://claude.ai/… (or "declined", or "not created yet") · last journal line, 2026-01-21: "Planificamos 4 entregas; la primera te dejará crear y ver tareas"
 
 ### Handoffs             (multi-session only)
 | Stage | To | Sent | Result |

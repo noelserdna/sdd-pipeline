@@ -20,6 +20,7 @@ Since 4.0 the plugin itself provides the hooks (`hooks/hooks.json`), the agents 
 | `## SDD Stack Profile` + `## Stack Conventions` block in root `CLAUDE.md`, `.claude/rules/sdd-<kit>-*.md` | 4b (`--stack`) | Yes |
 | Minimal `## SDD Stack Profile` (`task_state: trailers`) in root `CLAUDE.md` when no kit is installed | 4b | Yes |
 | CI job, post-deploy smoke job (profile with `staging_url` and `smoke`), PR/MR and change-request templates (`.github/` or `.gitlab/`), `tracker:` profile key | 4c (`--tracker`) | Yes |
+| `status/journal.jsonl` (first line "Proyecto iniciado"), `status/page.json` (page URL or `declined`), the journal's line in `.gitattributes` | 5b | Yes |
 
 Step 7 commits the versioned files this run wrote (`chore(sdd): setup`).
 
@@ -286,6 +287,22 @@ jq -s '.[0] as $s | (.[1].hooks // {}) as $q | $s | .hooks = ($q + ($s.hooks // 
   > .claude/settings.json.tmp && mv .claude/settings.json.tmp .claude/settings.json
 ```
 
+### Step 5b: Journal and status page
+
+The project's living page for the customer exists from the start, so the customer can follow every stage from the
+first one (plugin-root `references/status-page.md`).
+
+1. **Journal.** Unless `status/journal.jsonl` already exists, write its first line, in the customer's language:
+   `node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" journal add --stage setup --kind start --text "Proyecto iniciado"`.
+2. **Merges.** Branches append journal lines in parallel, so git should keep both sides: add
+   `status/journal.jsonl merge=union` to `.gitattributes` when no line for that path is there yet.
+3. **Page.** `node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" status page --json` (it also moves a pre-5.2
+   `.sdd/status-page.json` into `status/page.json`). No `url` and not `declined`, and the session has the Artifact
+   tool: run "Create if missing" (§2 of the reference), which asks once; "No" runs `status page decline`. Its commit
+   is Step 7's, with the other setup files. Station
+   (`SDD_ROLE` set), `claude -p` or no Artifact tool: build it locally only (§4); the lead or the next interactive
+   session creates it.
+
 ### Step 6: Verification and summary
 
 Setup is not a pipeline stage: do not touch `stages`, only confirm the files are valid.
@@ -320,6 +337,7 @@ Report, once Step 7 has run:
 | Tracker | <github\|gitlab>: CI job + PR/MR and issue templates, `tracker:` in the profile; merge setting printed / Not requested |
 | Post-deploy smoke | Installed (`uses:`/`include:` line printed for the deploy pipeline) / Skipped / n/a (no `staging_url` or `smoke`) |
 | Quality gates H7/H8 | Configured / Skipped |
+| Status page | <url> created / Already at <url> / Declined / Local only (<reason>); journal started |
 | Setup commit | <sha> chore(sdd): setup / Skipped (<reason>; paths not committed) |
 | Dependencies | node <v>, git <v> (>= 2.32 for --trailer), jq yes/no (node fallback), python3 yes/no, tmux yes/no |
 
@@ -334,12 +352,12 @@ Report, once Step 7 has run:
 
 A setup left uncommitted breaks the pipeline later: the first `git switch` to the default branch (merging a FASE, starting the next one) fails on the modified `CLAUDE.md` and `.gitignore`, and the vendored validator that CI runs is missing from the repository. So setup ends by committing what it wrote, as one `chore(sdd): setup` commit (`chore` needs no trailers).
 
-1. **Paths.** Only the files this run created or changed, from this list: `.gitignore`, `CLAUDE.md`, `.claude/sdd/`, `.claude/sdd-sessions.json`, `.claude/settings.json` (only when Step 5 merged into it), `.claude/rules/sdd-*.md`, and the Step 4c files (`.github/workflows/sdd.yml`, `.github/workflows/sdd-smoke.yml`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/change-request.md`, `.gitlab/`, `.gitlab-ci.yml`). Never `pipeline-state.json`, `.sdd/` or `.claude/settings.local.json`. When `CLAUDE.md` or `.gitignore` already had uncommitted edits by the user before this run, say so: the commit would include them.
+1. **Paths.** Only the files this run created or changed, from this list: `.gitignore`, `CLAUDE.md`, `.claude/sdd/`, `.claude/sdd-sessions.json`, `.claude/settings.json` (only when Step 5 merged into it), `.claude/rules/sdd-*.md`, `status/` and `.gitattributes` (Step 5b), and the Step 4c files (`.github/workflows/sdd.yml`, `.github/workflows/sdd-smoke.yml`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/change-request.md`, `.gitlab/`, `.gitlab-ci.yml`). Never `pipeline-state.json`, `.sdd/` or `.claude/settings.local.json`. When `CLAUDE.md` or `.gitignore` already had uncommitted edits by the user before this run, say so: the commit would include them.
 2. **Consent.** Interactive session: ask once — `Commit the setup files as "chore(sdd): setup"?` with `[A] Yes (recommended)` / `[B] No, I will commit them` — listing the paths. Station (`SDD_ROLE` set) or a non-interactive run (`claude -p`): commit without asking, since nobody is there to answer and the next stage needs a clean tree.
 3. **Commit.** A pathspec on `git commit` commits only those paths, leaving anything else the user staged untouched:
 
 ```bash
-P=".gitignore CLAUDE.md .claude/sdd .claude/rules"   # the paths of step 1 that this run wrote
+P=".gitignore CLAUDE.md .claude/sdd .claude/rules status .gitattributes"   # the paths of step 1 that this run wrote
 git add -- $P
 git diff --cached --quiet -- $P || git commit -q -m "chore(sdd): setup" -- $P
 git status --short -- $P                              # empty: everything setup wrote is committed

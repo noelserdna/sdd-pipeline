@@ -105,7 +105,7 @@ El estado vive en `pipeline-state.json` (un único fichero, fuente de verdad); l
 
 | Skill | Propósito |
 |-------|-----------|
-| `sdd-acceptance` | Veredicto por requisito (VERIFIED / FAILING / MISSING / WAIVED) con su evidencia, integridad de la cadena de IDs, un bucle hasta que todo Must se cumple, la firma del cliente y una página de estado opcional — ver [docs/aceptacion.md](docs/aceptacion.md) |
+| `sdd-acceptance` | Veredicto por requisito (VERIFIED / FAILING / MISSING / WAIVED) con su evidencia, integridad de la cadena de IDs, un bucle hasta que todo Must se cumple, la firma del cliente y la actualización de la página de estado del proyecto — ver [docs/aceptacion.md](docs/aceptacion.md) |
 | `sdd-setup` | Inicializa un proyecto: fichero de estado, hook git y validador vendorizado, política `.gitignore`, kits por stack, roles multi-sesión; limpia las status lines de 4.x |
 | `sdd-pipeline-status` | Informe de etapas, staleness, resumen de aceptación y siguiente acción; `--diagnose` clasifica un proyecto existente (8 escenarios de adopción) y lista las skills a ejecutar |
 | `sdd-gap-detector` | Endpoints que faltan, código huérfano, discrepancias de esquema — con un documento de revisión humana; `--semantic` comprueba si el código implementa cada requisito (juez Jev si está activo, LLM si no) |
