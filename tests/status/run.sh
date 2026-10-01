@@ -142,7 +142,7 @@ newrepo "$tmp/fresh"; state; commit "chore: setup"
 build
 shape_ok "fresh pipeline-state.json"
 expect "fresh state: phase understand, pipeline listed" "$(jf "$D" 'j.where.phase+":"+j.technical.pipeline.length+":"+j.where.now')" "understand:7:Estamos entendiendo lo que necesitas."
-run status build; expect "status build without the plugin template → 2 (template is another piece)" "$( [ -f "$ROOT/templates/status-page/index.html" ] && echo 2 || echo "$rc")" 2
+run status build; expect "status build with the plugin template (templates/status-page/index.html) exits 0" "$rc" 0
 run status build --template "$tmp/none.html"; expect "status build: missing --template → 2" "$rc" 2
 printf '<html><body>no marker</body></html>\n' > "$tmp/nomarker.html"
 run status build --template "$tmp/nomarker.html"; expect "status build: template without marker → 2" "$rc" 2
@@ -306,6 +306,15 @@ run status build --template "$tmp/inside.html" --out .sdd/other
 expect "template with the element: one sdd-data element" "$(grep -o 'id="sdd-data"' "$repo/.sdd/other/index.html" | wc -l | tr -d ' ')" 1
 run status build --template "$TPL" --json
 expect "status build --json prints the data" "$(js 'j.$schema+":"+j.where.phase')" "sdd-status-v1:agree"
+# the real template of the plugin: the built page holds the JSON, not the marker, and the project title
+run status build --out .sdd/real
+expect "real template: build exits 0" "$rc" 0
+expect "real template: the marker is gone, one sdd-data element" "$(grep -c 'id="sdd-data"><!--SDD-DATA-->' "$repo/.sdd/real/index.html" || true):$(grep -o 'id="sdd-data"' "$repo/.sdd/real/index.html" | wc -l | tr -d ' ')" "0:1"
+expect "real template: embedded JSON equals data.json" "$(node -e '
+const fs=require("fs");const h=fs.readFileSync(process.argv[1],"utf8");
+const m=h.match(/<script type="application\/json" id="sdd-data">([\s\S]*?)<\/script>/);
+process.stdout.write(String(Boolean(m)&&JSON.stringify(JSON.parse(m[1]))===JSON.stringify(JSON.parse(fs.readFileSync(process.argv[2],"utf8")))));' "$repo/.sdd/real/index.html" "$repo/.sdd/real/data.json")" true
+expect "real template: title with the project name" "$(grep -o "<title>[^<]*</title>" "$repo/.sdd/real/index.html")" "<title>Estado · cv-alumnos</title>"
 
 # ---------------------------------------------------------------- 6. the acceptance todo fixture: records and attachments
 newrepo "$tmp/todo"; repo="$tmp/todo"
