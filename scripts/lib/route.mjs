@@ -11,6 +11,8 @@
 // It never overwrites a stage that is done or running and never un-skips a stage on its own: a re-evaluation that
 // now wants a skipped stage reports it in `escalations`; only --full or --set <stage>=run (a person's choice) turns
 // a skipped stage back to pending. A re-evaluation never lowers rigor either: a stage an earlier route ran stays run.
+// --write also appends to the project journal status/journal.jsonl (scripts/lib/journal.mjs): one `skip` line per stage
+// it newly marks skipped, with its reason in plain words, and one `decision` line with who confirmed the route.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -18,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRequirements, parseNeeds } from "../sdd-jev.mjs";
 import { stackProfile } from "./git-log.mjs";
+import { appendEntry, projectLang, skipText, routeDecisionText } from "./journal.mjs";
 import {
   FACTORS, OPTIONAL_STAGES, CORE_STAGES, evaluateFactors, computeFacts, decideRoute, savedMinutes, loadThresholds,
 } from "./route-rules.mjs";
@@ -95,7 +98,7 @@ function askJev(state) {
 }
 
 // ── pipeline-state.json ──────────────────────────────────────────────────────
-function stateFile(root) {
+export function stateFile(root) {
   const r = spawnSync("bash", [STATE_SH, "path"], { cwd: root, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: root } });
   const f = (r.stdout || "").trim();
   return { file: f || path.join(root, "pipeline-state.json"), exists: r.status === 0 && Boolean(f) && existsSync(f) };
@@ -228,6 +231,7 @@ export function runRoute(argv, { prog = "sdd" } = {}) {
       if (!st.exists) fail(`no pipeline-state.json at ${st.file} (run /sdd-setup first)`);
       const route = { factors: r.factors, facts: r.facts, stages, doubts: r.doubts, escalations, confirmedBy: o.confirm || null, reqHash: r.reqHash };
       result.written = writeState(st.file, route, stages, explicit);
+      result.journal = journalRoute(root, stages, result.written, o.confirm);
     }
     if (o.json) out(JSON.stringify(result, null, 2));
     else printHuman(result);
@@ -236,6 +240,21 @@ export function runRoute(argv, { prog = "sdd" } = {}) {
     if (e instanceof Exit) return e.code;
     throw e;
   }
+}
+
+/** Journal lines of a written route: a `skip` per stage this write marked skipped, then the `decision`. */
+function journalRoute(root, stages, written, confirm) {
+  const lang = projectLang(root);
+  const lines = [];
+  const add = (e) => {
+    const r = appendEntry(root, e);
+    if (r.errors.length) process.stderr.write(`${PROG} route: journal: ${r.errors.join("; ")}\n`);
+    else lines.push(r.line);
+  };
+  for (const c of written.changed.filter((x) => x.to === "skipped")) add({ stage: c.stage, kind: "skip", text: skipText(c.stage, stages[c.stage].reason, lang) });
+  const run = OPTIONAL_STAGES.filter((k) => stages[k].run).length;
+  add({ stage: "route", kind: "decision", text: routeDecisionText(run, OPTIONAL_STAGES.length - run, lang), ...(confirm ? { by: confirm } : {}) });
+  return { file: "status/journal.jsonl", lines };
 }
 
 function printHuman(r) {
@@ -255,4 +274,5 @@ function printHuman(r) {
     for (const c of r.written.kept) out(`state: ${c.stage} kept ${c.status}${c.escalation ? " (escalation: a person decides)" : ""}`);
     out(`state: route written to ${r.written.file}`);
   }
+  if (r.journal) out(`journal: ${r.journal.lines.length} line(s) added to ${r.journal.file}`);
 }
