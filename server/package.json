@@ -1,6 +1,6 @@
 {
   "name": "@sdd/mcp-server",
-  "version": "5.2.0-rc.1",
+  "version": "5.2.0",
   "description": "SDD traceability MCP server, bundled for the sdd-pipeline Claude Code plugin",
   "private": true,
   "type": "module",

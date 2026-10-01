@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-10-01
+
 ### 5.2: página de estado viva del proyecto
 
 Motivación: el cliente no técnico tenía que preguntar dónde estaba el proyecto. En 5.1 la «página viva» existía solo en prosa: nada la creaba al empezar, ninguna etapa la actualizaba, el LLM la recomponía cada vez, su URL vivía en `.sdd/status-page.json` (sin versionar, así que otro clon o una estación creaba otra), no había historia (el `summary` se sobrescribe en cada re-ejecución), los requisitos no se explicaban en lenguaje llano y las guías la llamaban «opcional en `--publish`». Plan y contrato de datos en `docs/design/plan-5.2-status-page.md`.
