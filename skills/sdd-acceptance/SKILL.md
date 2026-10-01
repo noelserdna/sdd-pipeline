@@ -215,22 +215,24 @@ the last `--adversarial` run and are kept by later runs of other modes (patch on
 `adversarial_confirmed`, `adversarial_refuted` (counter-verification results; `inconclusive` is the remainder),
 `adversarial_open` (field `open` of `node "$SDD" accept challenge list --json`, after recording), `adversarial_agents` (verifiers,
 counter-verifiers and critics launched) and `coverage_gaps` (requirements in no FASE, FASEs without header and the
-LLM critic's gaps). Then commit what this run wrote under `acceptance/` (the report and any records
-appended by `--remeasure`), as every stage commits its outputs (plugin-root `references/git-conventions.md`,
-§ Stage outputs are committed). The report names the SHA it evaluated, so a later reader can tell whether it is
-current, and the commit touches no code path, so it does not age the evidence:
+LLM critic's gaps). Then write the customer's journal lines (plugin-root `references/status-page.md` §1): one
+`done` line in plain words (`--kind done --stage acceptance`: what is now shown and what is still missing, e.g. "5
+de 6 peticiones de la entrega 1 ya se pueden ver funcionando; falta la captura de la lista vacía") and an
+`evidence` line when this run added captures, videos or measurements. Commit them with what this run wrote under
+`acceptance/` (the report and any records appended by `--remeasure`), as every stage commits its outputs
+(plugin-root `references/git-conventions.md`, § Stage outputs are committed). The report names the SHA it
+evaluated, so a later reader can tell whether it is current, and the commit touches no code path, so it does not
+age the evidence:
 
 ```bash
-git add acceptance/
+git add acceptance/ status/journal.jsonl
 git diff --cached --quiet || git commit -m "docs(acceptance): acceptance report at {sha7}" --trailer "Refs: <evaluated REQ ids>"
 ```
 
-Last, the journal and the status page (plugin-root `references/status-page.md`): one `done` line in plain words
-for the customer (`--kind done --stage acceptance`: what is now shown and what is still missing, e.g. "5 de 6
-peticiones de la entrega 1 ya se pueden ver funcionando; falta la captura de la lista vacía"), an `evidence` line
-when this run added captures, videos or measurements, both in the commit above, and the page update (§3) when
-`status/page.json` has a `url`. Every mode that ends in Step 6 (`--check`, `--fase`, `--adversarial`, `--loop`)
-does this, and each starts with a `--kind start` line saying what it is about to check.
+Last, the page update (`references/status-page.md` §3) when `status/page.json` has a `url`, except in station mode
+(a role other than `sdd-lead`), where the station only writes the journal and the lead publishes. Every mode that
+ends in Step 6 (`--check`, `--fase`, `--adversarial`, `--loop`) does this, and each starts with a `--kind start` line
+saying what it is about to check.
 
 ## `--adversarial`
 
@@ -405,7 +407,8 @@ Two outputs, both built from the same data (`.sdd/acceptance.json`, the report, 
 2. **Status page**: the project's living page (plugin-root `references/status-page.md`). It normally exists since
    setup, and `--publish` brings it up to date (§3); when `status/page.json` is missing, create it (§2, which asks
    first). Declined, or no Artifact tool: build it locally (§4) and `acceptance/ACCEPTANCE-REPORT.md` is the
-   shareable view.
+   shareable view. In station mode (a role other than `sdd-lead`) the station does not publish: it writes the
+   journal and the lead publishes after the handoff.
 
 Nothing is pushed or created without asking, and a page is published for the first time only after the owner says
 yes.
