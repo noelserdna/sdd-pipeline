@@ -206,6 +206,8 @@
 //       with the JSON in <script id="sdd-data">) and copies to --out/evidencias/ the captures and videos that are
 //       present with their recorded sha256 (never traces; over 15 MB or withheld: listed, not copied). --json prints the
 //       data (each evidence file with inAssets: already in status/page.json). Exit 2 on a missing template.
+// Stack Profile: the `## SDD Stack Profile` section of CLAUDE.md, else of .claude/CLAUDE.md (the order of the hooks'
+// sdd_profile_get; the first file with the section is the profile); lines inside fenced code blocks do not count.
 // Commit vocabulary: references/git-conventions.md. Old entry point: scripts/sdd-task-lint.mjs (alias).
 // Exit codes: 0 ok · 1 findings (lint errors, invalid messages, --require-done unmet, nothing traced) · 2 usage or git error.
 // (sdd gate has its own codes, above.)
