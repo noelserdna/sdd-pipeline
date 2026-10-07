@@ -225,6 +225,10 @@ export const PROFILE_FILES = ["CLAUDE.md", ".claude/CLAUDE.md"];
  * the same fence) are skipped, so an example `- literal_gate: off` inside a block does not count. A key repeated in
  * the section keeps its last value (what every CLI gate has always read; `sdd lint --floor` compares with the same
  * reading). Keys are lower-cased; a value wrapped in backticks is unwrapped.
+ * `sdd_profile_get` of hooks/lib/sdd-common.sh reads the same way on what matters (last occurrence wins, ``` and ~~~
+ * fences skipped, section ends at the next `#`/`##` heading). It still differs in: `-` bullets only (here `-` or
+ * `*`); the value returned verbatim (here unwrapped from backticks); the heading matched case-sensitively; and it
+ * also reads the CLAUDE.md of STATE_ROOT (the main checkout seen from a worktree), where the CLI reads only <repo>.
  */
 export function parseStackProfile(text) {
   const profile = {}, lines = {};

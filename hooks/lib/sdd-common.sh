@@ -178,10 +178,17 @@ sdd_roots() {
 
 # ---------------------------------------------------------------- SDD Stack Profile
 # Sección `## SDD Stack Profile` del CLAUDE.md del proyecto (contrato v1): líneas `- clave: valor`
-# hasta el siguiente `## ` o EOF. Se busca en DIR/CLAUDE.md, DIR/.claude/CLAUDE.md y, si difiere,
-# en STATE_ROOT (checkout principal visto desde un worktree); gana el PRIMER fichero que tenga la
-# sección. Claves en minúsculas; valores recortados, tolera CRLF; el valor es todo lo que sigue a
-# los primeros `:` (admite `{}`, `&&`, comillas y más `:`). Encabezados dentro de ``` se ignoran.
+# hasta el siguiente encabezado `#`/`##` o EOF. Se busca en DIR/CLAUDE.md, DIR/.claude/CLAUDE.md y,
+# si difiere, en STATE_ROOT (checkout principal visto desde un worktree); gana el PRIMER fichero que
+# tenga la sección. Claves en minúsculas; valores recortados, tolera CRLF; el valor es todo lo que
+# sigue a los primeros `:` (admite `{}`, `&&`, comillas y más `:`).
+# Igual que parseStackProfile de scripts/lib/git-log.mjs (la CLI): una clave repetida en la sección
+# vale lo que diga su ÚLTIMA aparición, y las líneas dentro de bloques de código (``` o ~~~, cerrados
+# por la misma cerca, de longitud igual o mayor) se ignoran.
+# Diferencias que quedan con la CLI: aquí solo cuentan viñetas `-` (la CLI admite también `*`); el
+# valor se devuelve tal cual (la CLI quita los backticks que lo envuelven); el encabezado debe ser
+# exactamente `## SDD Stack Profile` (la CLI no distingue mayúsculas); y aquí se lee también el
+# CLAUDE.md de STATE_ROOT, mientras la CLI solo lee el repo en el que corre.
 
 # sdd_profile_get KEY [DIR] → valor (vacío si no hay sección, clave o awk). DIR=${PROJECT_DIR}.
 sdd_profile_get() {
@@ -203,11 +210,18 @@ $f"
 '
     set -f
     awk -v want="$key" '
-      FNR == 1 { if (found) exit; insec = 0; fence = 0 }
+      FNR == 1 { if (found) exit; insec = 0; fence = "" }
       { sub(/\r$/, "") }
-      /^[ \t]*```/ { fence = !fence; next }
-      fence { next }
-      /^## / {
+      fence != "" {
+        if (match($0, /^[ \t]*(````*|~~~~*)/)) {
+          t = substr($0, RSTART, RLENGTH); sub(/^[ \t]+/, "", t)
+          rest = substr($0, RSTART + RLENGTH); gsub(/[ \t]/, "", rest)
+          if (substr(t, 1, 1) == substr(fence, 1, 1) && length(t) >= length(fence) && rest == "") fence = ""
+        }
+        next
+      }
+      match($0, /^[ \t]*(````*|~~~~*)/) { fence = substr($0, RSTART, RLENGTH); sub(/^[ \t]+/, "", fence); next }
+      /^##?[ \t]/ {
         if (insec) exit
         h = $0; sub(/[ \t]+$/, "", h)
         if (h == "## SDD Stack Profile") { insec = 1; found = 1 }
@@ -219,8 +233,9 @@ $f"
         k = substr(line, 1, i - 1); gsub(/^[ \t]+|[ \t]+$/, "", k)
         if (tolower(k) != want) next
         v = substr(line, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v)
-        print v; exit
+        val = v; have = 1
       }
+      END { if (have) print val }
     ' $files 2>/dev/null
   ) || true
   return 0
