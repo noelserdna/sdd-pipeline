@@ -380,7 +380,7 @@ After a FASE or a batch of tasks, update `pipeline-state.json` — not in Stream
 2. `stages["task-implementer"].status` = `"done"`, or `"running"` while FASEs remain or Phase 9 failed; `lastRun` = now.
 3. `summary`:
    - `artifacts`: key files in `{code_paths}` / `{test_paths}` with labels.
-   - `metrics`: `{ "tasks_completed", "tasks_remaining", "commits", "tests_passed", "tests_failed", "mode": "parallel"|"sequential", "task_agents", "pauses", "stack", "profile_source": "declared"|"detected"|"legacy"|"architecture", "inline_p_tasks" }`; `--integrate` adds `"streamsIntegrated"`, `"mergeConflicts"`. When `mode` is `sequential` and the batch had `[P]` tasks, the first highlight says why.
+   - `metrics`: `{ "tasks_completed", "tasks_remaining", "commits", "tests_passed", "tests_failed", "mode": "parallel"|"sequential", "task_agents", "pauses", "stack", "profile_source": "declared"|"detected"|"legacy"|"architecture", "inline_p_tasks", "floor_errors", "review_findings" }` (the last two from Phase 9: F errors of `lint --floor` and `CODE-REVIEW` entries of step 2b); `--integrate` adds `"streamsIntegrated"`, `"mergeConflicts"`. When `mode` is `sequential` and the batch had `[P]` tasks, the first highlight says why.
    - `highlights`: 3-5 observations; `--integrate` adds one per merged branch (`Merged feat/fase-1-a (3 tasks) → 9f3c2a1`) and per conflict.
    - `nextStep`: `"Run /sdd-task-implementer --fase=N"` or `"Pipeline complete"`; `generatedAt`: now.
 4. Write the file, show the summary table, and in station mode hand off per the plugin-root `references/handoff-protocol.md` (never from a subagent).

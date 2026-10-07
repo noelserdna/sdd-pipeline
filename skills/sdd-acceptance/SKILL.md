@@ -221,7 +221,7 @@ bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set acceptan
 
 and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with `artifacts`
 (`acceptance/ACCEPTANCE-REPORT.md`), `metrics` (`must_total`, `must_verified`, `must_waived`, `failing`, `missing`,
-`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, and
+`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `floor_errors`, `evaluated_sha`, `mode`, and
 `unshown` and `literal_gaps` from the ledger's summary), `highlights` (≤ 5) and `nextStep`. The adversarial metrics describe
 the last `--adversarial` run and are kept by later runs of other modes (patch only the keys a mode computes):
 `adversarial_findings` (findings the verifiers raised, including those from the clean sample),

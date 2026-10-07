@@ -90,3 +90,5 @@ jobs:
       - run: bash tests/plan/run.sh
       - run: bash tests/tracker/run.sh
       - run: bash tests/route/run.sh
+      - run: bash tests/floor/run.sh
+      - run: bash tests/triggers/run.sh

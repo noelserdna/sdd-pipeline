@@ -81,6 +81,31 @@ La ruta `weakened-test` es una edición de test: arreglar la cita y asertar el l
 
 **Excepción humana.** Cuando un helper construye el literal y nunca aparece tal cual en el test, una persona lo registra: `sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() lo toma de i18n/es.json" --by … --role …`. El literal tiene que ser uno del criterio. El Q-03 pasa a `excepted` mientras el texto del requisito conserve su `reqHash`; tras un MODIFY la excepción caduca y sale en «Decisiones a reconfirmar». El tool guard pregunta antes de cualquier `accept record`.
 
+## El listón
+
+Una suite en verde no dice nada de los tests que ya no corren. `lint --quotes` mira el texto y un `test.skip` conserva sus literales; un gate del Stack Profile se baja con una línea de `CLAUDE.md`. `sdd lint --floor` compara el árbol con una base y avisa de lo que **baja** el listón; endurecer nunca es hallazgo.
+
+```bash
+node "$SDD" lint --floor [--base REF] [--json]
+```
+
+- **Base.** `--base`; si no, el merge-base con la rama por defecto; si no, el último tag `fase-*-accepted`; sin ninguno, exit 2. La salida dice siempre qué base usó y por qué. El implementer (Phase 9) no pasa `--base`: lo que se revisa no elige contra qué se compara.
+- **Hallazgos (v1).**
+
+| Código | Qué | Severidad |
+|---|---|---|
+| F-07 | Un gate del Stack Profile (`literal_gate`, `acceptance_gate`, `adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) más bajo que el valor que la base fijaba explícitamente | error |
+| F-01 | `skip`/`only`/`focus` añadido sobre un test ligado a un criterio o que ya existía en la base | error (`todo` y el resto, aviso) |
+| F-02 | Fichero de test borrado que nombraba ids de criterio | error |
+| F-04 | Supresión de cobertura o de seguridad añadida | aviso |
+
+- **Modo.** `floor_gate: off | warn | enforce` (por defecto `enforce`) se lee **de la base**, así que bajarlo en la rama es un F-07 más. Exit 0 limpio, 1 con errores, 2 sin base. `--json` añade `testEdits: [{status: A|M|D|R, file}]`, los ficheros de test cambiados desde la base.
+- **Tests saltados en el libro.** Si todos los tests ligados a un criterio están saltados, el criterio queda MISSING con `reason: "bound test skipped"` y `sdd loop next` lo enruta como **`weakened-test`**, no como comportamiento que falta. Reactivar el test tal cual endurece y no necesita aprobación; cualquier otra edición del test reactivado la aprueba una persona.
+- **Dónde corre.** Phase 9 del implementer (antes de capturar), el informe de ediciones de test al final de `sdd-acceptance --loop` (`--base` = el sha del ciclo 1, con los borrados `D` incluidos), la puerta de FASE y la firma (se enseñan los hallazgos abiertos y las excepciones), y el CI de los proyectos contra la rama base del PR.
+- **Excepción humana.** Cuando una persona decide que un hallazgo es correcto (un test saltado a propósito mientras su requisito se cambia), lo registra: `sdd accept record floor-exception --code F-01 --file tests/api/export.test.js --line "línea exacta" --base SHA --reason TEXT --by … --role …`. Cubre esa línea de ese fichero frente a esa base, nada más. El tool guard pregunta, como en todo `accept record`. Un agente nunca resuelve un error del listón bajando otra cosa: revierte la rebaja o se la presenta a una persona.
+
+**Prove-It.** Un commit `fix` que toca `code_paths` sin tocar ningún test lo señala `sdd verify --range` (`prove_it: warn` por defecto, `enforce` falla, `off` no mira; exentos merges, reverts, `fixup!`, `[skip-sdd]`, `perf` y fixes sin código). Las tareas de arreglo que vienen de la puerta de FASE o de la ronda adversarial llevan `Reproduce first:`: el test que reproduce el defecto, ligado a su criterio, falla antes del arreglo; uno del criterio que ya estaba en verde no cuenta.
+
 ## Orden de captura
 
 La evidencia describe un commit, así que el orden es siempre **commit → evidencia → libro → commit `docs(acceptance)`**:
@@ -128,7 +153,7 @@ La puerta la fija `adversarial_gate` en el Stack Profile: `off` lo ignora, `warn
 |---|---|---|
 | `.sdd/acceptance.json` | No (ignorado) | El libro completo con `evaluated_sha`. Lo leen `sdd-pipeline-status`, el hook de inicio de sesión y el servidor MCP (`sdd_coverage`, `sdd_context`) |
 | `acceptance/ACCEPTANCE-REPORT.md` | Sí | Informe legible por el cliente: primero los Must exentos, luego una fila por requisito con evidencia y necesidades, decisiones a reconfirmar y el SHA evaluado |
-| `acceptance/decisions.jsonl` | Sí | Solo hechos humanos: exenciones, demos, mediciones, inspecciones, aceptaciones de FASE y descartes de challenges, con quién, rol, commit y hash del texto |
+| `acceptance/decisions.jsonl` | Sí | Solo hechos humanos: exenciones, demos, mediciones, inspecciones, aceptaciones de FASE, descartes de challenges y excepciones (literales y del listón), con quién, rol, commit y hash del texto |
 | `acceptance/challenges.jsonl` | Sí | Hallazgos de la ronda adversarial: requisito, criterio, categoría, cita, evidencia `ruta:línea`, verificador, contraverificación, `HEAD` y hash del texto |
 | `evidencias/FASE-N/` | No (ignorado) | Capturas y vídeos; el libro guarda su `sha256` |
 | `.sdd/entregas/FASE-N-evidencias.tar.gz` | No (ignorado) | El paquete de evidencia de una FASE aceptada, con su manifiesto |
@@ -153,6 +178,8 @@ node "$SDD" accept pack --fase 1              # evidencias/FASE-1/ + manifest.js
 node "$SDD" req show REQ-F-004 [--ac 2] [--json]   # enunciado y criterios literales
 node "$SDD" lint --quotes [--fase N] [--json]       # cita y literales de cada criterio en sus tests (Q-01..Q-03)
 node "$SDD" accept record literal-exception --req REQ-F-004 --ac 2 --literal "…" --reason "…" --by … --role …
+node "$SDD" lint --floor [--base REF] [--json]        # lo que baja el listón desde la base (F-01, F-02, F-04, F-07)
+node "$SDD" accept record floor-exception --code F-01 --file PATH --line "…" --base SHA --reason "…" --by … --role …
 node "$SDD" accept adversarial plan [--fase N] [--json]
 node "$SDD" accept challenge add --req REQ-F-004 --ac 2 --category WEAKENED-ASSERT --quote "…" --evidence src/x.ts:41 --verifier … --counter confirmed
 node "$SDD" accept challenge list [--open] [--json]
