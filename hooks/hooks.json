@@ -5,7 +5,11 @@
       {
         "matcher": "startup|resume|compact",
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-session-start.sh", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-session-start.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -13,25 +17,42 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-upstream-guard.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-upstream-guard.sh\"",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-tool-guard.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-tool-guard.sh\"",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Read|Edit|Write",
         "hooks": [
-          { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-augment-hook.js", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-augment-hook.js\"",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Skill",
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh", "timeout": 5, "async": true }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh\"",
+            "timeout": 5,
+            "async": true
+          }
         ]
       }
     ],
@@ -39,16 +60,29 @@
       {
         "matcher": "Write",
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh", "timeout": 10, "async": true }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh\"",
+            "timeout": 10,
+            "async": true
+          }
         ]
       }
     ],
     "UserPromptExpansion": [
       {
         "hooks": [
-          { "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh", "timeout": 5, "async": true }
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-pipeline-state-updater.sh\"",
+            "timeout": 5,
+            "async": true
+          }
         ]
       }
     ]
-  }
+  },
+  "modules": [
+    "./live/register.tsx"
+  ]
 }

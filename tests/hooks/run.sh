@@ -336,6 +336,14 @@ awk '{ printf "%s\r\n", $0 }' "$FIX/CLAUDE.rails-web.md" > "$rcrlf/.claude/CLAUD
 [ "$(prof "$rweb" stack)" = rails ] && [ -z "$(prof "$rweb" after_section)" ] && pass "sdd_profile_get: la sección termina en el siguiente '## '" || bad "sdd_profile_get lee fuera de la sección"
 [ "$(prof "$rcrlf" app_dir)" = web ] && [ "$(prof "$rcrlf" test_name)" = 'bin/rails test {} -n "/{name}/"' ] && pass "sdd_profile_get: CRLF y .claude/CLAUDE.md cuando el raíz no tiene sección" || bad "sdd_profile_get CRLF: '$(prof "$rcrlf" app_dir | od -c | head -2)'"
 [ -z "$(prof "$nogit" app_dir)" ] && pass "sdd_profile_get sin CLAUDE.md → nada" || bad "sdd_profile_get sin CLAUDE.md"
+# misma lectura que la CLI (parseStackProfile): la última aparición gana y ~~~ también es un bloque de código
+rdup="$tmp/rdup"; mkdir -p "$rdup"
+printf '%s\n' '# P' '' '## SDD Stack Profile' '' '- literal_gate: off' '- stack: rails' '' '~~~markdown' '- stack: ejemplo' '- app_dir: nada' '~~~' '' \
+  '````' '- app_dir: tampoco' '```' '- app_dir: sigue-dentro' '````' '- literal_gate: enforce' > "$rdup/CLAUDE.md"
+[ "$(prof "$rdup" literal_gate)" = enforce ] && pass "sdd_profile_get: clave repetida → vale la última, como la CLI" || bad "sdd_profile_get clave repetida: '$(prof "$rdup" literal_gate)'"
+[ "$(prof "$rdup" stack)" = rails ] && [ -z "$(prof "$rdup" app_dir)" ] && pass "sdd_profile_get: ignora bloques ~~~ y una cerca solo cierra con la misma más larga o igual" || bad "sdd_profile_get bloques ~~~: stack='$(prof "$rdup" stack)' app_dir='$(prof "$rdup" app_dir)'"
+cli_lg=$(cd "$rdup" && node -e 'import(process.argv[1]).then(m=>console.log(m.stackProfile(".").literal_gate+" "+m.stackProfile(".").stack+" "+(m.stackProfile(".").app_dir??"")))' "$ROOT/scripts/lib/git-log.mjs" 2>/dev/null)
+[ "$cli_lg" = "enforce rails " ] && pass "CLI y hook leen igual el mismo perfil (clave repetida y ~~~)" || bad "CLI lee '$cli_lg'"
 okc=1
 for spec in "$rweb web/app/models/task.rb yes" "$rweb web/lib/x.rb yes" "$rweb web/config/routes.rb yes" "$rweb web/db/schema.rb yes" "$rweb web/test/models/x_test.rb yes" \
             "$rweb web/application.rb no" "$rweb src/x.ts no" "$rroot test/models/x_test.rb yes" "$rroot app/models/x.rb yes" \
@@ -448,6 +456,7 @@ done <<'EOF'
 node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" accept record waiver --req REQ-F-001 --by Ana --role PO --reason x --follow-up #12
 sdd accept record inspection --req REQ-C-001 --by Ana --role PO --note ok
 sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() builds it" --by Ana --role PO
+node scripts/sdd.mjs accept record floor-exception --code F-01 --file tests/a.test.js --line 'test.skip("x", () => {' --base main --reason "flaky" --by Ana --role PO
 cd app && node ../scripts/sdd.mjs  accept  record demo --req REQ-F-002 --observed ok --pass true --by A --role QA
 git tag -a fase-2-accepted -m "FASE-2 accepted by Ana"
 git -C web tag -s requirements-v3 -m "approved"

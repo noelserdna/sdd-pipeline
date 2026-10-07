@@ -165,6 +165,42 @@ git -C "$repo" commit -q -m "Merge feature" --trailer "Refs: FASE-3" 2>/dev/null
 run verify --range HEAD~1..HEAD --repo "$repo" --json; expect "merge commit exento en rango" "$rc:$(js 'j.results[0].exempt')" "0:merge"
 run verify --range nada..HEAD --repo "$repo"; expect "rango inválido → 2" "$rc" 2
 
+# ---------------------------------------------------------------- 5b. verify --range: Prove-It (fix con código y sin test)
+pv="$tmp/pv"; mkdir -p "$pv/src" "$pv/tests"
+git -C "$pv" init -q -b main
+printf '# P\n\n## SDD Stack Profile\n\n- code_paths: src\n- test_paths: tests\n' > "$pv/CLAUDE.md"
+echo a > "$pv/src/a.ts"; git -C "$pv" add -A; git -C "$pv" commit -q -m "chore: init"
+pfix() { # pfix SUBJECT FILE... → one commit touching each FILE
+  local subj="$1"; shift
+  for f in "$@"; do mkdir -p "$pv/$(dirname "$f")"; echo "$RANDOM" >> "$pv/$f"; done
+  git -C "$pv" add -A; git -C "$pv" commit -q -m "$subj" --trailer "Task: TASK-F1-001"
+}
+pfix "fix(a): solo código" src/a.ts
+run verify --range HEAD~1..HEAD --repo "$pv"
+expect "fix solo src → aviso, exit 0" "$rc" 0
+has "Prove-It: mensaje" '`fix` changes code (src/a.ts) but no test: add the test that reproduces the defect in the same commit (Prove-It), or route a missing criterion through sdd-req-change'
+run verify --range HEAD~1..HEAD --repo "$pv" --json
+expect "json: prove_it_missing y modo" "$(js 'j.prove_it+" "+j.prove_it_missing.length+" "+(j.prove_it_missing[0]===j.results[0].sha)')" "warn 1 true"
+printf -- '- prove_it: enforce\n' >> "$pv/CLAUDE.md"
+run verify --range HEAD~1..HEAD --repo "$pv"; expect "prove_it enforce → exit 1" "$rc" 1; has "enforce: error" "error: \`fix\` changes code"
+pfix "fix(a): código y test" src/a.ts tests/a.test.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "fix src + tests/ → limpio" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+pfix "fix(a): test junto al código" src/b.ts src/b.test.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "fix src/b.ts + src/b.test.ts → limpio" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+pfix "fix(build): dependencia" package.json
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "fix solo package.json → limpio" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+pfix "fix(a): urgente [skip-sdd]" src/a.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "fix [skip-sdd] → limpio" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+pfix "perf(a): más rápido" src/a.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "perf exento" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+pfix "fixup! fix(a): solo código" src/a.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "fixup! exento" "$rc:$(js 'j.prove_it_missing.length')" "0:0"
+sed -i.bak 's/^- prove_it: enforce$/- prove_it: off/' "$pv/CLAUDE.md"; rm -f "$pv/CLAUDE.md.bak"
+pfix "fix(a): otra vez" src/a.ts
+run verify --range HEAD~1..HEAD --repo "$pv" --json; expect "prove_it off → nada" "$rc:$(js 'j.prove_it+" "+j.prove_it_missing.length')" "0:off 0"
+rc=0; out=$(printf 'fix(a): x\n\nChange: CHG-2026-10-07-001\n' | node "$SDD" verify --message - --repo "$pv" 2>&1) || rc=$?
+expect "--message no aplica Prove-It" "$rc" 0
+
 # ---------------------------------------------------------------- 6. branch
 b="$tmp/b"; mkdir -p "$b"
 git config --global init.defaultBranch trunk
@@ -238,6 +274,53 @@ try { readCommits("/", {}); } catch (e) { thrown = e instanceof GitError ? "GitE
 const hits = commitsFor([{ ids: ["REQ-F-012"] }, { ids: ["REQ-F-01"] }], "REQ-F-01").length;
 console.log([t.join("|"), thrown, hits].join(" "));' 2>&1) || rc=$?
 expect "lib: tokens, GitError y matching exacto" "$out" "REQ-F-01|UC-001|REQ-F-012|CR-3 GitError 1"
+
+# ---------------------------------------------------------------- 9. Stack Profile: .claude/CLAUDE.md y bloques de código
+sp="$tmp/sp"; mkdir -p "$sp/.claude"
+profile_of() { (cd "$ROOT/scripts/lib" && node --input-type=module -e '
+import { stackProfile } from "./git-log.mjs";
+const p = stackProfile(process.argv[1]);
+console.log(["literal_gate", "test_paths", "visual_evidence"].map((k) => `${k}=${p[k] ?? "-"}`).join(" "));' "$1"); }
+cat > "$sp/.claude/CLAUDE.md" <<'EOF'
+# P
+
+## SDD Stack Profile
+
+- literal_gate: warn
+- test_paths: spec
+EOF
+expect "perfil solo en .claude/CLAUDE.md: se lee" "$(profile_of "$sp")" "literal_gate=warn test_paths=spec visual_evidence=-"
+cat > "$sp/CLAUDE.md" <<'EOF'
+# P
+
+## SDD Stack Profile
+
+Ejemplo de cómo se relaja un gate (no es la configuración):
+
+```markdown
+- literal_gate: off
+- visual_evidence: off
+```
+
+~~~
+- test_paths: nope
+~~~
+
+- literal_gate: enforce
+- test_paths: tests
+- literal_gate: off
+
+## Otra sección
+
+- visual_evidence: warn
+EOF
+expect "CLAUDE.md manda; bloques de código (backticks y tildes) ignorados; clave repetida: la última" "$(profile_of "$sp")" "literal_gate=off test_paths=tests visual_evidence=-"
+printf '# P\n\nsin perfil\n' > "$sp/CLAUDE.md"
+expect "CLAUDE.md sin sección: se usa .claude/CLAUDE.md (orden de sdd_profile_get)" "$(profile_of "$sp")" "literal_gate=warn test_paths=spec visual_evidence=-"
+if command -v awk >/dev/null 2>&1; then
+  hook_val=$(bash -c '. "$1/hooks/lib/sdd-common.sh" 2>/dev/null; sdd_profile_get literal_gate "$2"' _ "$ROOT" "$sp" 2>/dev/null || true)
+  expect "el hook (sdd_profile_get) lee lo mismo" "$hook_val" "warn"
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "git: todo ok"; else echo "git: hay fallos"; exit 1; fi

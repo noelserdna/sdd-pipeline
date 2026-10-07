@@ -1,6 +1,6 @@
 ---
 name: sdd-req-change
-description: "Requirement changes (req-change): ADD, MODIFY, DEPRECATE propagated to specs; optional pipeline cascade. Triggers: 'change requirement', 'add requirement', 'deprecate requirement', 'new feature', 'I need', 'fix this', 'update dependency', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'pipeline cascade'."
+description: "Requirement changes (req-change), corrective bug fixes included: ADD, MODIFY, DEPRECATE propagated to specs; optional pipeline cascade. Triggers: 'change requirement', 'add requirement', 'deprecate requirement', 'new feature', 'I need', 'fix this bug', 'update dependency', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'corregir este fallo'."
 ---
 
 # sdd-req-change — Requirements Change Manager & Pipeline Cascade Trigger
@@ -82,6 +82,7 @@ For each change in the input:
 | COVERAGE-GAP | None: the spec is fine but tasks miss it; recommend `/sdd-task-generator --fase=N --incremental` and leave the entry open for that run |
 | TOOL-GUARDRAIL | None: a tool refused an AI agent; a human acts or adds a non-destructive command to the SDD Stack Profile |
 | ENV-REQUIRED | None: a person adds the variable's name to the Stack Profile's `env_required` and its value to each environment |
+| CODE-REVIEW | None: the code, not the spec, is in question; a person confirms it as a defect (`/sdd-task-generator --fase=N --incremental`, a fix task with `Reproduce first:`) or closes it `WONT-FIX` |
 
 After the CRs are applied, set `Status: RESOLVED` (or `CLOSED — spec kept`) on each processed entry and cite the `IF-` IDs in the Change Report.
 

@@ -375,6 +375,24 @@ Verify that every source file with testable logic has adequate test coverage.
 
 ---
 
+## Scoped review (Phase 9 step 2b)
+
+Run by a fresh read-only subagent, never by the context that implemented the FASE. It looks only where nothing else
+looks: the acceptance ledger already judges each criterion through its bound tests, and the adversarial round reads
+each requirement's letter, so this review does not repeat Completeness, Coverage or CHECK-R01/R06.
+
+- **Security:** CHECK-H07 over the files the FASE's commits touched (`git log HEAD --format= --name-only` filtered by
+  the FASE's `Task:` trailers).
+- **Correctness the ledger does not see:** behaviour no test binds to a criterion: error cases and transport of
+  CHECK-R03, invariants of CHECK-R04 and rejected transitions of CHECK-R05 without a test, and code paths reachable
+  from the FASE's operations that no test exercises (an unchecked return, a branch that swallows a failure).
+
+Output: one line per finding, `{H07 | R03 | R04 | R05 | R-PATH} · file:line · what is wrong · the spec id it breaks,
+if any`, or `no findings`. No severities, no verdict and no fixes: the main agent turns each line into an IF entry
+(SKILL.md Phase 9 step 2b), and a person decides what happens to it.
+
+---
+
 ## Graceful Degradation
 
 Verification adapts to available context:

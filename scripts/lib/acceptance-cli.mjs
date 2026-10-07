@@ -26,7 +26,7 @@ const die = (msg) => { console.error(`${PROG}: ${msg}`); throw new Exit(2); };
 const VALUED = new Set(["repo", "junit", "junit-sha", "fase", "out", "report", "mode", "ledger", "state", "max-cycles",
   "req", "ac", "by", "role", "reason", "follow-up", "observed", "pass", "metric", "op", "threshold", "paths", "note",
   "result", "channel", "demo", "requirements", "decisions", "command", "extract", "attach",
-  "category", "quote", "evidence", "verifier", "counter", "challenge", "challenges", "literal"]);
+  "category", "quote", "evidence", "verifier", "counter", "challenge", "challenges", "literal", "code", "file", "line", "base"]);
 const MULTI = new Set(["junit", "paths", "attach", "evidence"]);
 const FLAGS = new Set(["json", "md", "needs", "quotes", "reset", "no-out", "help", "remeasure", "allow-dirty", "open"]);
 
@@ -186,6 +186,9 @@ function printLedger(ledger) {
         for (const g of c.literal_gaps)
           out(`${c.state === "weakened" ? "weakened" : "warning: literal gap"} ${r.id} AC${c.n}: ${g.code === "Q-02" ? "the quote is not the criterion's current text" : `literal "${g.literal}" not in the test`} (${g.file}:${g.line}, ${ROUTES.weakened})`);
   }
+  for (const r of ledger.requirements.filter((x) => x.in_scope && x.verdict !== "WAIVED"))
+    for (const c of (r.criteria || []).filter((x) => x.skipped))
+      out(`skipped ${r.id} AC${c.n}: every fresh test bound to it is skipped (${ROUTES.weakened})`);
   for (const r of ledger.requirements.filter((x) => x.in_scope))
     for (const c of (r.challenges || []).filter((x) => x.state === "open"))
       out(`challenge ${c.id} open ${r.id} AC${c.ac} ${c.category} (${c.counter}): "${c.quote}" (${ROUTES.adversarial})`);
@@ -220,7 +223,8 @@ function cmdRecord(o) {
   if (!RECORD_TYPES.includes(type)) usage(`accept record needs a type: ${RECORD_TYPES.join(" | ")}`);
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
   const root = rootOf(o);
-  const reqs = readReqs(root, o);
+  // A floor exception names no requirement: it works in a project without requirements/REQUIREMENTS.md.
+  const reqs = type === "floor-exception" && !existsSync(path.resolve(root, o.requirements || "requirements/REQUIREMENTS.md")) ? [] : readReqs(root, o);
   const g = gitContext(root);
   const rec = { type, at: new Date().toISOString(), by: o.by, role: o.role, head: g.head };
   const bool = (v, name) => {
@@ -240,6 +244,13 @@ function cmdRecord(o) {
     // ledger shows it as dismissed with who, role and reason.
     const ch = readChallenges(challengesPath(root, o)).challenges.find((c) => c.id === String(o.challenge || "").toUpperCase());
     Object.assign(rec, { challenge: o.challenge ? String(o.challenge).toUpperCase() : undefined, reason: o.reason, ...(ch ? { req: ch.req, ac: ch.ac } : {}) });
+  } else if (type === "floor-exception") {
+    // A person accepts one finding of `sdd lint --floor` (code, file, exact line text) against one base commit; the
+    // finding comes back when the line changes or the base moves.
+    if (o.req !== undefined) usage("a floor-exception names no requirement: drop --req");
+    const file = o.file === undefined ? undefined : String(o.file).replace(/\\/g, "/").replace(/^\.\//, "");
+    const base = o.base === undefined ? undefined : (isRepo(root) ? resolveSha(root, o.base) : o.base);
+    Object.assign(rec, { code: o.code === undefined ? undefined : String(o.code).toUpperCase(), file, text: o.line, base, reason: o.reason });
   } else {
     rec.req = o.req;
     if (type === "literal-exception") Object.assign(rec, { literal: o.literal, reason: o.reason });
@@ -255,7 +266,7 @@ function cmdRecord(o) {
   for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];
   const errors = validateRecord(rec, reqs, { challenges: readChallenges(challengesPath(root, o)).challenges, records: readDecisions(decisionsPath(root, o)).records });
   if (o.attach.length) {
-    if (type === "waiver" || type === "challenge-dismissal" || type === "literal-exception") errors.push(`a ${type} records no observation: --attach is for demo, inspection, measurement and fase-acceptance`);
+    if (["waiver", "challenge-dismissal", "literal-exception", "floor-exception"].includes(type)) errors.push(`a ${type} records no observation: --attach is for demo, inspection, measurement and fase-acceptance`);
     else {
       const att = attachFiles(root, o.attach);
       errors.push(...att.errors);
@@ -265,7 +276,7 @@ function cmdRecord(o) {
   if (errors.length) { for (const e of errors) console.error(`${PROG}: accept record ${type}: ${e}`); return 2; }
   // An observation is anchored to HEAD: made on uncommitted code it would be stale from birth (a waiver, a dismissal or
   // a literal exception observes nothing: the last one is bound to the requirement's text by reqHash).
-  if (type !== "waiver" && type !== "challenge-dismissal" && type !== "literal-exception") {
+  if (!["waiver", "challenge-dismissal", "literal-exception", "floor-exception"].includes(type)) {
     const d = uncommitted(root, g, rec.paths);
     if (d) {
       if (!o["allow-dirty"]) { console.error(`${PROG}: accept record ${type}: ${d}: commit first, or pass --allow-dirty to record it with dirty: true`); return 2; }
@@ -274,6 +285,7 @@ function cmdRecord(o) {
   }
   const { file, n } = appendRecord(root, o, rec);
   if (o.json) out(JSON.stringify({ file, line: n, record: rec }, null, 2));
+  else if (type === "floor-exception") out(`recorded floor-exception ${rec.code} ${rec.file} "${String(rec.text).trim()}" (base ${rec.base.slice(0, 7)}) at ${file}:${n}`);
   else out(`recorded ${type} ${rec.challenge ? `${rec.challenge} (${rec.req} AC${rec.ac})` : rec.literal !== undefined ? `${rec.req} AC${rec.ac} "${rec.literal}"` : rec.req || `FASE ${rec.fase}`} at ${file}:${n}`);
   return 0;
 }
@@ -697,7 +709,7 @@ function cmdLoop(o) {
   const cycle = state.cycles.length + 1;
   const target = (r) => ({ req: r.id, priority: r.priority, verdict: r.verdict, verification: r.verification,
     criteria: r.criteria.filter((c) => c.state !== "pass").map((c) => ({ n: c.n, state: c.state, scenarios: c.scenarios, route_hint: criterionHint(r, c),
-      ...(c.state === "weakened" ? { literal_gaps: c.literal_gaps } : {}) })),
+      ...(c.state === "weakened" ? { literal_gaps: c.literal_gaps } : {}), ...(c.skipped ? { skipped: true } : {}) })),
     route_hint: routeHint(r) });
   const open = (r) => ["FAILING", "MISSING"].includes(r.verdict);
   // Open challenges of the adversarial round, one target each whatever the verdict: confirmed ones route to

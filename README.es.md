@@ -105,6 +105,7 @@ El estado vive en `pipeline-state.json` (un único fichero, fuente de verdad); l
 
 | Skill | Propósito |
 |-------|-----------|
+| `sdd-live` (mod) | Vista en vivo dentro de Claude Code: la etapa SDD, la skill en curso y qué hace cada subagente, encima del prompt y en el panel `/sdd` — ver [docs/vista-en-vivo.md](docs/vista-en-vivo.md) |
 | `sdd-acceptance` | Veredicto por requisito (VERIFIED / FAILING / MISSING / WAIVED) con su evidencia, integridad de la cadena de IDs, un bucle hasta que todo Must se cumple, la firma del cliente y la actualización de la página de estado del proyecto — ver [docs/aceptacion.md](docs/aceptacion.md) |
 | `sdd-setup` | Inicializa un proyecto: fichero de estado, hook git y validador vendorizado, política `.gitignore`, kits por stack, roles multi-sesión; limpia las status lines de 4.x |
 | `sdd-pipeline-status` | Informe de etapas, staleness, resumen de aceptación y siguiente acción; `--diagnose` clasifica un proyecto existente (8 escenarios de adopción) y lista las skills a ejecutar |

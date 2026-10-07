@@ -39,6 +39,12 @@ and the customer should see those answers before being asked again.
    the gate keeps its code and the challenges of item 4 are what the customer weighs.
 4. The open challenges of §0 (`node "$SDD" accept challenge list --open`): requirement, category, the quote of the
    criterion not met and where.
+5. The floor: `node "$SDD" lint --floor` (the CLI picks the base and says which): each open F finding (code, file,
+   line) and each `floor-exception` already recorded against that base, with who recorded it and why. A lowered gate,
+   a skipped or deleted test is something the customer is entitled to see before accepting; an F error is reverted or
+   excepted by a person (`skills/sdd-acceptance/SKILL.md`, "The floor"), never accepted silently.
+6. The open entries of the implementer's independent review (Phase 9 step 2b: Category `CODE-REVIEW` in
+   `feedback/IMPL-FEEDBACK-FASE-{N}.md`): a person routes each one in §5, as a defect or closed `WONT-FIX`.
 
 ## 2. Human evidence
 
@@ -91,6 +97,7 @@ a human confirms it before anything runs:
 | defect | the delivery contradicts what the requirements and scenarios already say | `sdd-task-generator --fase {N} --incremental`, then `sdd-task-implementer --fase {N} --continue`; the code is fixed, never the spec or the test (Art. 12) |
 | change-request | new or different behaviour | `sdd-req-change` with the feedback as the change text; approval of the change works as usual |
 | question | information, no change | answer it, then ask the gate again |
+| dismissed | a finding (a `CODE-REVIEW` entry) that a person judges is not a defect | the person gives the reason; set the entry's `Status: WONT-FIX` with that reason and their name; no task, no change |
 
 Proposal: when `node "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-jev.mjs" status` exits 0, send one item per
 piece of feedback to Jev with the question set `scripts/jev/feedback-route.json` (its description gives the state

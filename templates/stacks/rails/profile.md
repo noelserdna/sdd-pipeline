@@ -27,6 +27,8 @@
 - evidence_dir: evidencias
 - adversarial_gate: enforce
 - literal_gate: enforce
+- floor_gate: enforce
+- prove_it: warn
 - test_slots: 2
 - staging_url: none
 - smoke: none

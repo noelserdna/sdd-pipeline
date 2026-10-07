@@ -10,7 +10,18 @@ bad()  { echo "FAIL $1"; fail=1; }
 
 step "claude plugin validate --strict"
 if command -v claude >/dev/null 2>&1; then
-  claude plugin validate ./ --strict >/dev/null 2>&1 && ok "marketplace + plugin" || bad "claude plugin validate ./ --strict"
+  # The root CLAUDE.md is this repository's maintainer guide, not context the plugin ships: newer CLIs warn that a
+  # plugin does not load it, and --strict turns that warning into a failure. Only that warning is tolerated.
+  # Only the items of a "Found N warning(s)/error(s):" block count; the other ❯ lines are the report of what the
+  # hooks module hooks and calls.
+  if out=$(claude plugin validate ./ --strict 2>&1); then ok "marketplace + plugin"
+  else
+    issues=$(printf '%s\n' "$out" | awk '/Found [0-9]+ (warning|error)/{b=1;next} b&&/^[[:space:]]*$/{b=0} b&&/❯/' | grep -v 'CLAUDE.md at the plugin root is not loaded' || true)
+    if [ -z "$issues" ]; then ok "marketplace + plugin (root CLAUDE.md is the maintainer guide)"
+    else bad "claude plugin validate ./ --strict"; printf '%s\n' "$issues" | head -5; fi
+  fi
+  # The live mod (hooks/live): its tests run under the engine's own kit, which only a local claude CLI has.
+  claude plugin test ./ >/dev/null 2>&1 && ok "mod sdd-live (claude plugin test)" || bad "claude plugin test ./"
   claude plugin validate ./skills --strict >/dev/null 2>&1 && ok "skills" || bad "claude plugin validate ./skills"
   # El plugin no distribuye agentes; los de mantenimiento viven en .claude/agents/ (no se publican).
   if [ -d agents ]; then

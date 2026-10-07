@@ -80,7 +80,7 @@ let hookCount = 0;
 for (const [event, groups] of Object.entries(hooks.hooks ?? {})) {
   for (const g of groups) for (const h of g.hooks ?? []) {
     hookCount++;
-    const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/);
+    const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/);
     if (!m) { errors.push(`hooks.json ${event}: command sin \${CLAUDE_PLUGIN_ROOT}: ${h.command}`); continue; }
     const target = path.join(ROOT, m[1]);
     if (!existsSync(target)) errors.push(`hooks.json ${event}: no existe ${m[1]}`);
@@ -93,7 +93,7 @@ const mcp = json(".mcp.json");
 if (!mcp.mcpServers) errors.push(".mcp.json: falta el wrapper mcpServers");
 for (const [name, cfg] of Object.entries(mcp.mcpServers ?? {})) {
   for (const arg of cfg.args ?? []) {
-    const m = arg.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/);
+    const m = arg.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/);
     if (m && !existsSync(path.join(ROOT, m[1]))) errors.push(`.mcp.json ${name}: no existe ${m[1]} (¿npm run build?)`);
   }
 }
@@ -101,7 +101,7 @@ for (const [name, cfg] of Object.entries(mcp.mcpServers ?? {})) {
 // 6. Resumen
 const hookScripts = new Set();
 for (const groups of Object.values(hooks.hooks ?? {})) for (const g of groups) for (const h of g.hooks ?? []) {
-  const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/); if (m) hookScripts.add(m[1]);
+  const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/); if (m) hookScripts.add(m[1]);
 }
 console.log(`plugin ${plugin.name}@${plugin.version}: ${skillCount} skills, ${agentCount} agentes, ${hookScripts.size} hooks (${hookCount} registros de evento), ${Object.keys(mcp.mcpServers ?? {}).length} MCP`);
 // coherencia: lo que el manifiesto dice de sí mismo
@@ -120,8 +120,9 @@ const PROFILE_KEYS = ["stack", "app_dir", "code_paths", "test_paths", "install",
   "visual_evidence", "evidence_dir", "adversarial_gate", "literal_gate", "test_slots", "staging_url", "smoke", "smoke_report_path",
   "env_required", "deploy"];
 // Optional keys: valid in a profile, never required of a kit (default_branch: branch rule of references/git-conventions.md;
-// test_report_path: where test_report writes JUnit when it is not .sdd/junit/, project-specific).
-const OPTIONAL_PROFILE_KEYS = ["default_branch", "test_report_path"];
+// test_report_path: where test_report writes JUnit when it is not .sdd/junit/, project-specific; 5.3: floor_gate of
+// `sdd lint --floor`, default enforce, and prove_it of `sdd verify --range`, default warn).
+const OPTIONAL_PROFILE_KEYS = ["default_branch", "test_report_path", "floor_gate", "prove_it"];
 const REQUIRED_KEYS = ["test", "test_file", "lint", "server", "port", "db_reset_safe"];
 const FORBIDDEN = [
   [/CONSENT/, "CONSENT"], [/migrate\s+reset/i, "migrate reset"], [/@restart/i, "@restart"],
@@ -175,6 +176,7 @@ if (existsSync(stacksDir)) {
       if (defaults.stack !== undefined && defaults.stack !== kit) errors.push(`${where}/kit.json: defaults.stack "${defaults.stack}" != ${kit}`);
       if (defaults.port !== undefined && !/^\d{1,5}$/.test(defaults.port)) errors.push(`${where}/kit.json: defaults.port debe ser un número ("3000")`);
       if (typeof defaults.app_dir === "string" && /[{}]/.test(defaults.app_dir)) errors.push(`${where}/kit.json: defaults.app_dir no admite marcadores`);
+      for (const k of ["floor_gate", "prove_it"]) if (defaults[k] !== undefined && !["off", "warn", "enforce"].includes(defaults[k])) errors.push(`${where}/kit.json: defaults.${k} debe ser off, warn o enforce`);
     }
     if (!strList(meta.rules)) errors.push(`${where}/kit.json: rules debe ser una lista no vacía`);
     if (!strList(meta.layers)) errors.push(`${where}/kit.json: layers debe ser una lista ordenada no vacía`);
@@ -212,6 +214,8 @@ if (existsSync(stacksDir)) {
       expect("visual_evidence", (v) => ["required", "warn", "off"].includes(v), "debe ser required, warn u off");
       expect("adversarial_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
       expect("literal_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
+      expect("floor_gate", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
+      expect("prove_it", (v) => ["off", "warn", "enforce"].includes(v), "debe ser off, warn o enforce");
       expect("test_slots", (v) => /^[1-9]\d*$/.test(v), "debe ser un entero >= 1");
       expect("staging_url", (v) => v === "none" || /^https?:\/\//.test(v), "debe ser una URL http(s) o none");
       expect("test_report", (v) => v === "none" || /\.sdd\/junit\//.test(v), "debe escribir JUnit en .sdd/junit/ (o ser none)");

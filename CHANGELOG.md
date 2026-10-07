@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Vista en vivo: el mod `sdd-live`
+
+Motivación: durante una sesión no se veía en qué etapa estaba el pipeline ni qué hacían los agentes lanzados. La página de estado (5.2) sirve para compartir con el cliente; esto es la vista del equipo mientras trabaja, dentro de Claude Code.
+
+#### Added
+- **Mod `sdd-live`** (`hooks/live/`, cargado por `modules` en `hooks/hooks.json`): franja encima del prompt con la fase SDD, la entrega, los requisitos demostrados, el gate, la skill SDD en curso y los agentes en marcha; panel `/sdd` con cada subagente (lo que se le pidió, su tipo, su última acción y las recientes, cuánto lleva y cómo terminó), los requisitos con sus avisos, el diario y el enlace a la página del cliente; avisos al terminar un agente o cambiar la fase; entrada en la barra de estado. Solo observa: ningún fallo del mod detiene una herramienta ni un agente. `/sdd <ruta>` sigue otro proyecto, `/sdd off` vuelve al directorio de la sesión, `/sdd clear` limpia los agentes terminados. Guía en `docs/vista-en-vivo.md`.
+- `sdd status build --no-out`: los datos de la página en modo solo lectura (sin plantilla, sin escribir, sin copiar evidencias), para vistas que se refrescan a menudo.
+
+#### Changed
+- Los tests del servidor MCP pasan a `server/test/*.spec.ts`, para que el kit de tests de los mods (`claude plugin test`, que recoge todo `*.test.ts`) solo ejecute los del mod.
+
+### 5.3: el listón no baja sin que lo vea una persona
+
+Motivación: un análisis de [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (v0.6.12) frente a 5.2.0, con un especialista de diseño por mejora (solo lectura, con evidencia del repo) y una revisión escéptica independiente que comprobó cada afirmación contra el código y recortó el alcance. Lo que encontraron: `lint --quotes` mira el texto y un `test.skip` conserva sus literales; un test ligado y saltado dejaba el criterio en `implement-or-test` (causa equivocada); nada impedía bajar los gates del Stack Profile en `CLAUDE.md`; el informe de ediciones de test del bucle ignoraba los borrados; las tareas de arreglo de la puerta de FASE y de la ronda adversarial no exigían un test que reprodujera el defecto; y nadie con contexto limpio revisaba la seguridad del código. Plan y revisión en `docs/design/plan-5.3-agent-skills.md`.
+
+#### Added
+- **Guardia del listón** `sdd lint --floor [--base REF] [--json]`: compara con una base (`--base` → merge-base con la rama por defecto → último `fase-*-accepted` → exit 2; la base y su motivo siempre en la salida) y avisa solo de lo que baja el listón: F-07 gate del Stack Profile rebajado frente a un valor explícito de la base, F-01 skip/only/focus añadido sobre un test ligado o ya existente, F-02 fichero de test borrado, renombrado o movido fuera de `test_paths` perdiendo ids de criterio (errores), F-04 supresión de cobertura o seguridad (aviso). Clave `floor_gate: off|warn|enforce` (defecto `enforce`, leída de la base). Corre en Phase 9 del implementer (sin `--base`), en el informe de fin de `sdd-acceptance --loop`, en la puerta de FASE y la firma, y en las plantillas de CI contra la rama base del PR/MR.
+- **Excepción humana** `sdd accept record floor-exception --code --file --line --base --reason --by --role`, atada a fichero, línea exacta y sha de la base.
+- **Tests saltados en el libro:** un criterio cuyos tests ligados están todos saltados queda MISSING con `reason: "bound test skipped"` y ruta `weakened-test`. Reactivar el test es endurecer; cualquier otra edición del test reactivado la aprueba una persona.
+- **Prove-It:** las tareas de arreglo con `Source: FEEDBACK-FASE-{N}` o `ACCEPTANCE-ADVERSARIAL-FASE-{N}` llevan `Reproduce first:` (el test que reproduce el defecto falla antes del arreglo; uno del criterio ya en verde no cuenta; `WEAKENED-ASSERT`/`WRONG-CAPTURE` arreglan el test, con aprobación humana). `sdd verify --range` avisa de un `fix` que toca código sin tocar tests (`prove_it: off|warn|enforce`, defecto `warn`). Sin trailer nuevo ni commit en rojo: rompería `git bisect` y «una tarea = un commit».
+- **Revisión independiente en Phase 9 (paso 2b):** un subagente `general-purpose` en contexto limpio y solo lectura ejecuta `--verify` limitado a H07 (seguridad) y a la corrección que el libro no ve. Cada hallazgo es una entrada `IF` BLOCKER de categoría `CODE-REVIEW` que una persona encauza en la puerta de FASE; no es un FAIL ni se arregla solo, porque la opinión de un único LLM sin contraverificar no cambia código.
+- **Casos de enrutado de las descriptions** (`tests/triggers`): positivos en español e inglés por skill y `pin` en rank-1 rompen CI; el resto del ranking avisa. Triggers en español para import, reconcile y reverse-engineer, y `fix` desambiguado.
+- Métricas `floor_errors` (acceptance, task-implementer) y `review_findings` (task-implementer) en `cascade-patterns.md` §9. Suites `tests/floor` y `tests/triggers` en CI.
+
+#### Changed
+- Los kits `rails` y `nextjs-prisma` (v1.3.0) escriben `floor_gate: enforce` y `prove_it: warn`: F-07 solo compara las claves que la base escribe, así que sin ellas en el perfil nada impedía bajarlas.
+- El informe «Test edits inside the loop» de `sdd-acceptance` es uno solo con `lint --floor --base <sha del ciclo 1> --json`: hallazgos F y `testEdits` con `A`, `M`, `R` y también `D`.
+
+#### Fixed
+- El parser del Stack Profile de la CLI lee también `.claude/CLAUDE.md` y salta los bloques de código (``` y ~~~), así que un perfil de ejemplo dentro de un bloque no cuenta; `sdd_profile_get` de los hooks lee igual (la última aparición de una clave gana, `~~~` es bloque).
+- `hooks/hooks.json` entrecomilla `${CLAUDE_PLUGIN_ROOT}` en cada comando, para que una ruta con espacios no se parta.
+- `adversarial-protocol.md` §8 y `sdd-acceptance` decían que `adversarial_gate` vale `warn` por defecto; el defecto es `enforce` (exit 4), como ya hacía la CLI.
+
+#### Aplazado
+- **Mutación de bolsillo** (`UNKILLED-MUTANT`, `sdd accept mutate`): la revisión escéptica mostró que el defecto sembrado que la motivaba (D5) ya lo caza la ronda adversarial (CROSSING). Vuelve cuando haya un defecto sembrado que solo la mutación cace, candidatos que no dependan de `Task:`, `baseline-failed` visible, operadores Ruby y su excepción en §3 del protocolo.
+- **Evals de presión** (`claude plugin eval`, nivel 2): son facturables y no deterministas, así que nunca en CI; esperan a que M1 y M3 existan para que el caso adversarial se mida contra `enforce`.
+
 ## [5.2.0] - 2026-10-01
 
 ### 5.2: página de estado viva del proyecto

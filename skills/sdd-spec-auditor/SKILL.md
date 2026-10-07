@@ -1,6 +1,6 @@
 ---
 name: sdd-spec-auditor
-description: "Audits specs for defects: ambiguities, implicit rules, dangerous silences, contradictions, weak invariants, decisions without ADRs; Mode Fix repairs. Does NOT propose implementations. Triggers: 'audit specs', 'review specifications', 'spec quality', 'find ambiguities', 'fix specs', 'auditar especificaciones', 'revisar specs', 'calidad de specs'."
+description: "Audits specs for defects: ambiguities, implicit rules, dangerous silences, contradictions, weak invariants, decisions without ADRs; Mode Fix repairs. Does NOT propose implementations. Triggers: 'audit specs', 'review specifications', 'spec quality', 'find ambiguities', 'fix specs', 'auditar especificaciones', 'revisar specs', 'calidad de specs', 'corregir hallazgos de la auditoría'."
 hooks:
   Stop:
     - type: prompt

@@ -1,6 +1,6 @@
 // check.mjs — compares the raw outputs of tests/seeded/run.sh with the answer key (tests/seeded/EXPECTED.md).
 // Usage: node tests/seeded/check.mjs OUT_DIR   (OUT_DIR holds NAME.json / NAME.err / NAME.rc for node-test, quotes,
-// accept, gate, plan and tasks). Prints the table «defecto → cazado por» and exits 1 when an expected mechanical layer
+// accept, gate, plan, tasks, and the second stage floor and floor2). Prints the table «defecto → cazado por» and exits 1 when an expected mechanical layer
 // misses its defect, a control requirement is flagged, or a precondition fails. Node >= 18, no dependencies.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -142,6 +142,35 @@ for (const e of KEY) {
   } else if (e.expect.includes("adversarial")) notes.push("el resto, solo la ronda adversarial");
   rows.push([e.id, `${e.pattern} ${e.what}`, target, e.expect.map((x) => LABEL[x]).join(" + "), hits.join(", ") || "—", result, notes.join("; ")]);
   if (result === "FAIL") fail(`${e.id} ${target}: ${notes.filter((n) => !n.startsWith("SKIP")).join("; ")}`);
+}
+
+// ------------------------------------------------------------------ second stage: the floor guard (5.3)
+// D8: a commit adds test.skip to the bound test of REQ-F-006 AC1 → exactly one F-01 error bound to it, no other F
+// finding (control: the rest of the commit is clean). D9: a docs commit lowers literal_gate enforce → off → exactly one
+// F-07 error on literal_gate, nothing else. Both against --base HEAD~1, so the base source is `flag`.
+const FLOOR = [
+  { id: "D8", what: "M1 test saltado", name: "floor", target: "REQ-F-006 AC1", expect: "lint --floor F-01",
+    ok: (f) => f.code === "F-01" && f.severity === "error" && (f.criteria || []).includes("REQ-F-006 AC1") && f.file === "tests/api/confirmar.test.js" },
+  { id: "D9", what: "M1 gate rebajado", name: "floor2", target: "literal_gate", expect: "lint --floor F-07",
+    ok: (f) => f.code === "F-07" && f.severity === "error" && f.key === "literal_gate" && f.from === "enforce" && f.to === "off" },
+];
+for (const e of FLOOR) {
+  const j = jsonOf(e.name), rc = rcOf(e.name);
+  const notes = [];
+  let result = "ok";
+  if (!j || !Array.isArray(j.findings)) {
+    result = "FAIL"; notes.push(`salida no JSON (exit ${rc}: ${read(`${e.name}.err`).trim().slice(0, 160)})`);
+  } else {
+    const hits = j.findings.filter(e.ok);
+    const others = j.findings.filter((f) => !e.ok(f));
+    if (hits.length !== 1) { result = "FAIL"; notes.push(`${hits.length} hallazgo(s) esperados, se quería 1`); }
+    if (others.length) { result = "FAIL"; notes.push(`falso positivo: ${others.map((f) => `${f.code} ${f.severity} ${f.file}`).join(", ")}`); }
+    if (rc !== 1) { result = "FAIL"; notes.push(`exit ${rc}, se esperaba 1`); }
+    if (j.base?.source !== "flag") { result = "FAIL"; notes.push(`base ${j.base?.source}, se esperaba flag`); }
+  }
+  const caught = j && Array.isArray(j.findings) ? j.findings.map((f) => `${f.code} ${f.severity}`).join(", ") || "—" : "—";
+  rows.push([e.id, e.what, e.target, e.expect, caught, result, notes.join("; ")]);
+  if (result === "FAIL") fail(`${e.id} ${e.target}: ${notes.join("; ")}`);
 }
 
 // Findings of lint --quotes on requirements outside the key.

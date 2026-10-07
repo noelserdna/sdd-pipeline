@@ -41,6 +41,8 @@ A section of the project's root `CLAUDE.md` (written by `/sdd-setup --stack=<kit
 - evidence_dir: <dir>        # default evidencias
 - adversarial_gate: off|warn|enforce
 - literal_gate: off|warn|enforce
+- floor_gate: off|warn|enforce   # optional; default enforce
+- prove_it: off|warn|enforce     # optional; default warn
 - test_slots: <n>
 - staging_url: <url|none>
 - smoke: <cmd|none>
@@ -81,6 +83,8 @@ detected/kit/legacy value (§3), then the default below.
 | `evidence_dir` | where the acceptance suite writes captures and videos, `<dir>/FASE-{N}/` (git-ignored; `sdd accept pack` bundles it) | `evidencias` |
 | `adversarial_gate` | how `sdd gate` treats an open challenge of the adversarial round on a Must (`off` · `warn` prints it · `enforce` exits 4) | `enforce` |
 | `literal_gate` | how `sdd accept` treats a test that names a criterion without carrying its letter (`sdd lint --quotes` Q-02 stale quote, Q-03 missing literal): `enforce` holds a passing Must criterion back as `weakened` (requirement not VERIFIED, loop route `weakened-test`) · `warn` lists the gap · `off` skips the check | `enforce` |
+| `floor_gate` | how `sdd lint --floor` (Phase 9 step 4.0, the acceptance loop, CI) treats what lowers the bar since its base: a gate of this profile set lower, a skip/only/focus added to a bound or existing test, a test file deleted, renamed or moved out of `test_paths` losing the criterion ids it named (`enforce` exits 1 on them · `warn` prints them and exits 0 · `off` skips the check). The mode is read from the base, not from the tree under review, so lowering it is itself a finding; a finding a person accepts is a `floor-exception` record | `enforce` |
+| `prove_it` | how `sdd verify --range` treats a `fix` commit that changes `code_paths` without touching any test (`warn` prints it · `enforce` fails · `off` skips it; merges, reverts, `fixup!`, `[skip-sdd]`, `perf` and fixes without code are exempt; plugin-root `references/git-conventions.md`, Prove-It) | `warn` |
 | `test_slots` | how many test processes may run at once on this machine: `[P]` subagents that run tests (SKILL.md → Multi-Agent Strategy), Phase 9-S, one Playwright worker with `1` (§2), the lead's second implementation station, the adversarial verifiers. `1` when tests use an in-memory or shared database, browsers or containers | `2` |
 | `staging_url` | base URL of the deployed staging environment for the smoke templates and the test planner's smoke tier | `none` |
 | `smoke` | command that runs the post-deploy smoke tier (tests tagged `@smoke-deploy`; `@smoke` is the PR tier) against `staging_url`, e.g. `PLAYWRIGHT_JUNIT_OUTPUT_FILE="$PWD/$SMOKE_REPORT_PATH/smoke.xml" npx playwright test --grep @smoke-deploy --reporter=junit` | `none` |
@@ -326,7 +330,8 @@ Current behaviour: Phase 7 marks `- [x]` before the commit and stages the task d
   Mode 7 EXTERNAL dependencies and G-11 (run at the worktree's `HEAD`), `--verify` Completeness,
   integration-protocol I-06 (main checkout `HEAD`) and I-09 (the Stream branch — see integration-protocol.md).
 - `[!]` (blocked) is derived: a task is blocked while `feedback/IMPL-FEEDBACK-FASE-{N}.md` has an entry with
-  `Severity: BLOCKER`, `Status: OPEN` and that `Task`. Wherever SKILL.md says "mark `[!]`", write or keep that entry.
+  `Severity: BLOCKER`, `Status: OPEN` and that `Task` (a `CODE-REVIEW` entry has `Task: n/a` and blocks no task).
+  Wherever SKILL.md says "mark `[!]`", write or keep that entry.
 - Divergences reported by `tasks status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
   auto-fixed; the trailer wins.
 - Merge conflicts in `task/TASK-FASE-{N}.md` cannot come from task progress, so the "keep both `[x]`" rule of

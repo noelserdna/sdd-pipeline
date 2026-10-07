@@ -29,6 +29,15 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: node .claude/sdd/sdd.mjs verify --range "origin/${BASE_REF}..HEAD"
 
+      # What the PR lowers against its base branch: a Stack Profile gate set lower, a skip/only/focus added to a bound
+      # or existing test, a deleted test file that named criteria (errors), coverage/security suppressions (warnings).
+      # floor_gate in the base's profile decides: enforce fails the job, warn prints, off skips.
+      - name: Floor (nothing lowers the bar)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node .claude/sdd/sdd.mjs lint --floor --base "origin/${BASE_REF}"
+
       - name: Task files
         run: |
           if [ -d task ]; then node .claude/sdd/sdd.mjs lint; else echo "sdd: no task/ yet, skipped"; fi

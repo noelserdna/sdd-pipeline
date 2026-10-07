@@ -137,7 +137,8 @@ PAUSE: Merge conflict integrating Stream B (feat/fase-N-b) into FASE-N
 
 ```bash
 # every task of the FASE is [x]   (task_state: trailers → sdd.mjs tasks status --fase $N --json: 0 pending,
-# and no OPEN BLOCKER entry in feedback/IMPL-FEEDBACK-FASE-N.md)
+# and no OPEN BLOCKER entry naming a task in feedback/IMPL-FEEDBACK-FASE-N.md;
+# CODE-REVIEW entries have Task: n/a and are routed at the FASE gate)
 grep -cE '^- \[ \] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0
 grep -cE '^- \[!\] TASK-F'"$N"'-' task/TASK-FASE-N.md           # → 0 (blocked tasks stop the FASE)
 # no task implemented twice (same Task: trailer on two commits)
