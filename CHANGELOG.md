@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Vista en vivo: el mod `sdd-live`
+
+Motivación: durante una sesión no se veía en qué etapa estaba el pipeline ni qué hacían los agentes lanzados. La página de estado (5.2) sirve para compartir con el cliente; esto es la vista del equipo mientras trabaja, dentro de Claude Code.
+
+#### Added
+- **Mod `sdd-live`** (`hooks/live/`, cargado por `modules` en `hooks/hooks.json`): franja encima del prompt con la fase SDD, la entrega, los requisitos demostrados, el gate, la skill SDD en curso y los agentes en marcha; panel `/sdd` con cada subagente (lo que se le pidió, su tipo, su última acción y las recientes, cuánto lleva y cómo terminó), los requisitos con sus avisos, el diario y el enlace a la página del cliente; avisos al terminar un agente o cambiar la fase; entrada en la barra de estado. Solo observa: ningún fallo del mod detiene una herramienta ni un agente. `/sdd <ruta>` sigue otro proyecto, `/sdd off` vuelve al directorio de la sesión, `/sdd clear` limpia los agentes terminados. Guía en `docs/vista-en-vivo.md`.
+- `sdd status build --no-out`: los datos de la página en modo solo lectura (sin plantilla, sin escribir, sin copiar evidencias), para vistas que se refrescan a menudo.
+
+#### Changed
+- Los tests del servidor MCP pasan a `server/test/*.spec.ts`, para que el kit de tests de los mods (`claude plugin test`, que recoge todo `*.test.ts`) solo ejecute los del mod.
+
 ### 5.3: el listón no baja sin que lo vea una persona
 
 Motivación: un análisis de [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (v0.6.12) frente a 5.2.0, con un especialista de diseño por mejora (solo lectura, con evidencia del repo) y una revisión escéptica independiente que comprobó cada afirmación contra el código y recortó el alcance. Lo que encontraron: `lint --quotes` mira el texto y un `test.skip` conserva sus literales; un test ligado y saltado dejaba el criterio en `implement-or-test` (causa equivocada); nada impedía bajar los gates del Stack Profile en `CLAUDE.md`; el informe de ediciones de test del bucle ignoraba los borrados; las tareas de arreglo de la puerta de FASE y de la ronda adversarial no exigían un test que reprodujera el defecto; y nadie con contexto limpio revisaba la seguridad del código. Plan y revisión en `docs/design/plan-5.3-agent-skills.md`.

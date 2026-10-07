@@ -8,6 +8,7 @@ A **Claude Code plugin** (`sdd-pipeline`, version in `.claude-plugin/plugin.json
 
 - 21 skills: 7 pipeline, 4 lateral, 3 brownfield, 7 utility (including acceptance, the interactive orchestrator and the multi-session lead)
 - 5 hook scripts (7 event registrations) plus the git `commit-msg` hook
+- one mod, `sdd-live` (`hooks/live/`): a live view inside Claude Code of the SDD stage, the subagents at work and the project
 - one CLI, `scripts/sdd.mjs` (tasks, git traceability, commit verification, branches, need coverage, plan lint, literal lint, floor lint, adaptive route, acceptance ledger and gate, customer journal and status page)
 - an MCP server for live traceability queries
 - an optional TypeSafe Jev integration for bulk judgments
@@ -59,7 +60,9 @@ FASEs are **vertical**: FASE-0 is a walking skeleton (write → observe → pers
 ```
 .claude-plugin/        plugin.json, marketplace.json
 skills/sdd-*/          SKILL.md + references/ (loaded on demand at the step that names them)
-hooks/                 hooks.json, lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook)
+hooks/                 hooks.json (command hooks + `modules`), lib/sdd-common.sh, sdd-*.sh, sdd-augment-hook.js, sdd-commit-msg-hook.sh (git hook),
+                       live/ (the sdd-live mod: register.tsx, its test and fixture)
+types/                 sdd-live.d.ts (the mod's state contract, named by plugin.json `types`)
 scripts/               sdd.mjs (+ lib/: git-log, acceptance, acceptance-cli, quotes, junit, plan-lint, tracker, route, route-rules, status, journal, floor), sdd-task-lint.mjs (alias),
                        sdd-state.sh, sdd-jev.mjs + jev/*.json, sdd-graph.py + test-result-parser.py (graph JSON),
                        install-*.sh, migrate-hooks-v3.sh, sdd-up/bench/profile, validate-plugin.mjs, check-*.sh, release.sh
@@ -140,6 +143,8 @@ Hooks are declared in `hooks/hooks.json` and run from `${CLAUDE_PLUGIN_ROOT}`. N
 | `sdd-tool-guard.sh` | PreToolUse (Bash) | Denies assigning human-consent variables for AI-gated tools; asks before `sdd accept record` and `fase-N-accepted`/`requirements-vN` tags |
 | `sdd-augment-hook.js` | PreToolUse (Read/Edit/Write) | Adds up to 2 traceability lines for the file from the graph |
 | `sdd-pipeline-state-updater.sh` | PreToolUse (Skill), UserPromptExpansion, PostToolUse (Write); async | Marks the stage running when its skill starts or a file under its directory is written |
+
+**The `sdd-live` mod** (`hooks/live/register.tsx`, a function-hooks module named under `modules` in `hooks/hooks.json`; guide `docs/vista-en-vivo.md`): a band above the prompt (SDD phase, delivery, requirements proven, gate, the SDD skill in course and the subagents at work), a `/sdd` pane (each subagent with what it was asked, its type, its last and recent actions and how it ended; the requirements with their warnings; the journal; the customer page link), toasts when an agent finishes or the phase changes, and a status-line entry. It only observes: every hook passes the call on whatever fails (`.catch(($, e, next) => next(e))`). Project data comes from `sdd status build --no-out` (read-only). Its state belongs to the plugin (`sdd-pipeline` keys, contract `types/sdd-live.d.ts`). Tests: `claude plugin test ./` (run by `tests/e2e/00-validate.sh` when the claude CLI is present; server tests are `*.spec.ts` so the mod kit does not pick them up).
 
 Also:
 - The git `commit-msg` hook, installed by `sdd-setup`: it runs `sdd verify` from the validator vendored into `.claude/sdd/` (commit it; CI uses it too).
