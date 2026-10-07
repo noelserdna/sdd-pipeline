@@ -18,6 +18,12 @@
 //   sdd trace delivered <ID> [--rev R] [--json]                commits for ID → tags and branches that contain them
 //   sdd verify --message FILE|- [--json]                       validate one commit message (the commit-msg hook)
 //   sdd verify --range A..B [--json]                           validate every commit in a range + squash detection
+//       + Prove-It: a `fix` commit (not exempt, not a merge) that changes files under code_paths and no test file
+//       (under test_paths, or named *.test.*, *.spec.*, *_test.*, *_spec.rb, test_*.py) gets "`fix` changes code (<files>)
+//       but no test: add the test that reproduces the defect in the same commit (Prove-It), or route a missing criterion
+//       through sdd-req-change" — a warning under Stack Profile `prove_it: warn` (default), an error under enforce,
+//       nothing under off. perf, merges, reverts, fixup!/squash!/amend!, [skip-sdd] and fixes without code are exempt.
+//       JSON adds prove_it (the mode) and prove_it_missing [sha…]. `verify --message` does not apply it.
 //   sdd branch status [--json]                                 current branch, default branch, detached, worktree
 //   sdd branch start fase <N> <slug> [--issue N] [--from-current] [--json]   fase-{N}-{slug}
 //   sdd branch start change <CHG-ID> <slug> [--issue N]        change/{CHG-ID}-{slug}
@@ -229,7 +235,9 @@ const BOLD_NOCHECK_RE = /^(\s*)[-*]\s+\*\*(TASK-F\d+-\d+)\*\*(.*)$/;
 const HEADING_TASK_RE = /^(#{1,6})\s+(?:\[([ xX!])\]\s*)?(?:✅\s*)?(\*\*)?(TASK-F\d+-\d+)(\*\*)?(.*)$/;
 const FIELD_RE = /^(\s*)(?:[-*]\s+)?\*\*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]*?)\s*:?\s*\*\*\s*:?\s*(.*)$/;
 const PHASE_WORDS = /^(setup|foundation|domain|contracts?|slices?|integration|integraci[oó]n|tests?|verification|verificaci[oó]n)\b/i;
-const SPEC_ID_RE = /\b(?:REQ|UC|WF|API|BDD|INV|ADR|RN|NFR|VO|ENT)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g;
+// A test file by its name, wherever it lives (Prove-It in `verify --range`): *.test.*, *.spec.*, *_test.*, *_spec.rb, test_*.py.
+const TEST_NAME_RE = /(?:\.(?:test|spec)\.[^./]+$|_test\.[^./]+$|_spec\.rb$|^test_[^/]*\.py$)/;
+const SPEC_ID_RE =/\b(?:REQ|UC|WF|API|BDD|INV|ADR|RN|NFR|VO|ENT)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g;
 const FIELD_NAMES = { commit: "commit", acceptance: "acceptance", "aceptación": "acceptance", aceptacion: "acceptance",
   refs: "refs", revert: "revert", review: "review", files: "files" };
 
@@ -740,23 +748,40 @@ function cmdVerify(o) {
   const raw = gitOk(repo, ["log", "--name-only", fmt, ...o.range.split(/\s+/).filter(Boolean)]);
   const code = codePaths(repo);
   const inCode = (f) => code.some((p) => f === p || f.startsWith(p + "/"));
-  const results = [], perTask = {};
+  // Prove-It (5.3): a `fix` that changes code ships the test that reproduces the defect. Stack Profile
+  // `prove_it: off|warn|enforce` (default warn; any other value: warn).
+  const prof = stackProfile(topLevel(repo));
+  const proveIt = ["off", "warn", "enforce"].includes(String(prof.prove_it || "").trim().toLowerCase()) ? String(prof.prove_it).trim().toLowerCase() : "warn";
+  const testDirs = (prof.test_paths || "").split(",").map((s) => s.trim().replace(/^\.\//, "").replace(/\/+$/, "")).filter(Boolean);
+  const tests = testDirs.length ? testDirs : ["tests"];
+  const isTest = (f) => tests.some((p) => f === p || f.startsWith(p + "/")) || TEST_NAME_RE.test(path.posix.basename(f));
+  const results = [], perTask = {}, proveItMissing = [];
   let codeCommits = 0;
   for (const rec of raw.split("\x1e").slice(1)) {
     const [sha, parents = "", tr = "", body = "", tail = ""] = rec.split("\x1f");
     const lines = body.replace(/\n+$/, "").split("\n").map((text, i) => ({ n: i + 1, text }));
     const r = { sha, ...checkMessage(lines, parseTrailerLines(tr)) };
     const files = tail.split("\n").map((s) => s.trim()).filter(Boolean);
-    r.code = parents.split(" ").filter(Boolean).length < 2 && files.some(inCode);
+    const merge = parents.split(" ").filter(Boolean).length >= 2;
+    r.code = !merge && files.some(inCode);
     if (r.code) codeCommits++;
     for (const t of r.trailers.Task) (perTask[t] ||= []).push(short(sha));
+    if (proveIt !== "off" && r.type === "fix" && !r.exempt && !merge) {
+      const changed = files.filter((f) => inCode(f) && !isTest(f));
+      if (changed.length && !files.some(isTest)) {
+        const msg = `\`fix\` changes code (${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}) but no test: add the test that reproduces the defect in the same commit (Prove-It), or route a missing criterion through sdd-req-change`;
+        (proveIt === "enforce" ? r.errors : r.warnings).push(msg);
+        proveItMissing.push(sha);
+      }
+    }
     results.push(r);
   }
   const rangeErrors = [];
   if (codeCommits && !Object.keys(perTask).length) {
     rangeErrors.push(`${o.range} has ${codeCommits} commit(s) touching code paths (${code.join(", ")}) but no Task: trailer — a squash or rebase merge drops the per-task commits; merge with a merge commit (git merge --no-ff) instead`);
   }
-  return report(results, o, { range: o.range, code_paths: code, code_commits: codeCommits, per_task_commits: perTask, rangeErrors });
+  return report(results, o, { range: o.range, code_paths: code, code_commits: codeCommits, per_task_commits: perTask,
+    prove_it: proveIt, prove_it_missing: proveItMissing, rangeErrors });
 }
 
 // ------------------------------------------------------------------ branch
