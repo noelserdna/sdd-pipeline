@@ -156,7 +156,7 @@ node "$SDD" accept --junit-sha "$SHA" --report acceptance/ACCEPTANCE-REPORT.md [
 
 Pass `--junit-sha` whenever Step 1 captured at `$SHA` on a clean tree; the CLI checks the tree itself and exits 2
 when it is dirty. Without it the CLI falls back to file times and warns on stderr. Human records follow the same
-rule: every `accept record` except `waiver`, `challenge-dismissal` and `literal-exception` (which observe nothing in the code), and
+rule: every `accept record` except `waiver`, `challenge-dismissal`, `literal-exception` and `floor-exception` (which observe nothing in the code), and
 `accept measure`, exit 2 on dirty code, so commit first; `--allow-dirty` exists for a record that genuinely cannot wait, and is stored as
 `dirty: true` for every later reader to see.
 

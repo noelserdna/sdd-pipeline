@@ -118,7 +118,7 @@ La evidencia describe un commit, así que el orden es siempre **commit → evide
 La CLI no pregunta: rechaza.
 
 - `sdd accept --junit-sha SHA` con código sucio → exit 2 («commit first»). Sin `--junit-sha` y con el árbol sucio, avisa por stderr y la evidencia cuenta como obsoleta.
-- `sdd accept record …` (salvo `waiver`, `challenge-dismissal` y `literal-exception`, que no observan nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
+- `sdd accept record …` (salvo `waiver`, `challenge-dismissal`, `literal-exception` y `floor-exception`, que no observan nada del código) y `sdd accept measure` con código sucio → exit 2. `--allow-dirty` lo permite y queda grabado como `dirty: true` en el registro.
 - Un FAIL arreglado después de capturar es código nuevo: commit y volver al paso 1.
 
 ## Ronda adversarial
