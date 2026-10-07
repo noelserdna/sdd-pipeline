@@ -18,6 +18,8 @@ Dos requisitos limpios sirven de control de falsos positivos.
 | D5 replay | P4 | REQ-F-006 AC2 (volver a confirmar conserva la corrección del staff) | `src/api/cv.js` `confirmar` copia siempre `editado` a `publicado`, y `editar` sobre un CV publicado solo toca `publicado`: la segunda confirmación pisa la corrección. `tests/api/confirmar.test.js` («REQ-F-006 AC2») confirma una sola vez, edita y comprueba; no hay test de replay | **solo ronda adversarial** (`CROSSING`, o `WEAKENED-ASSERT`: la cita dice «se vuelve a confirmar» y el test nunca lo hace) | La cita es exacta y su literal «Perfil orientado a backend» está en el assert (sin Q); test verde con captura: VERIFIED |
 | D6 sin captura | M3 | REQ-F-007 AC1 («Tu CV ya está publicado») | Test verde (`tests/ui/panel.test.js`), ninguna imagen `REQ-F-007-AC1` / `AC-001-04` en `evidencias/` | ledger **`unshown`** → REQ-F-007 MISSING «no visual evidence»; `sdd gate` exit 1 | — |
 | D7 sin vídeo | M3 | FASE-1 `> **Workflows:** WF-001` | En `evidencias/FASE-1/` solo hay `AC-001-05-descarga.webm` (sin `WF-001` en el nombre) | `sdd gate --fase 1` / `sdd accept --fase 1`: **`missing_videos: ["WF-001"]`** | — |
+| D8 test saltado | M1 | REQ-F-006 AC1 (segunda etapa) | Un commit posterior `test(cv): …` cambia `test("REQ-F-006 AC1 …"` por `test.skip(` en `tests/api/confirmar.test.js`; la suite sigue en verde y la cita y el literal siguen en el fichero | `sdd lint --floor --base HEAD~1`: **un único F-01 error** ligado a `REQ-F-006 AC1`, ningún otro hallazgo F, exit 1 | `lint --quotes` mira el texto, no la ejecución; el ledger lo vería con un JUnit nuevo (`bound test skipped`), pero el JUnit del banco es anterior |
+| D9 gate rebajado | M1 | `literal_gate` del Stack Profile (tercera etapa) | Un commit `docs: …` cambia `- literal_gate: enforce` por `- literal_gate: off` en `CLAUDE.md` | `sdd lint --floor --base HEAD~1`: **un único F-07 error** (`literal_gate` enforce → off), exit 1 | Con `off` el ledger deja de mirar los literales: ninguna otra capa lo nota |
 | C1 control | — | REQ-F-001 AC1 (cabecera) | Cableado por `/cv`, cita exacta, literales en el assert, captura | ninguna: VERIFIED y sin hallazgos | — |
 | C2 control | — | REQ-F-008 AC1, AC2 (descarga) | Cableado por `/cv/descargar`, citas exactas, literales en los asserts, capturas | ninguna: VERIFIED y sin hallazgos | — |
 
@@ -26,6 +28,11 @@ Resultado mecánico esperado del conjunto: `sdd lint` 0 · `sdd lint --plan` 0 e
 capa literal (REQ-F-002 y REQ-F-003 además, `summary.literal_gaps` = 2) · `sdd gate --fase 1` exit 1.
 `sdd lint --quotes` exit 1 con Q-03 en REQ-F-002 AC1 y Q-02 (+ Q-03) en REQ-F-003 AC1, y ningún hallazgo más: los
 demás tests citan su criterio literalmente y conservan sus literales, así que cualquier otro Q es un falso positivo.
+
+Segunda etapa (5.3, tras las capas anteriores y sin cambiar sus resultados): sobre el mismo repo, el commit de D8 y
+`sdd lint --floor --base HEAD~1 --json` dan exactamente un F-01 error ligado a `REQ-F-006 AC1` (base `flag`, exit 1) y
+ningún otro F; el commit de D9 y la misma orden dan exactamente un F-07 error en `literal_gate`. Cualquier otro
+hallazgo F es un falso positivo.
 
 ## Ronda adversarial a ciegas
 
