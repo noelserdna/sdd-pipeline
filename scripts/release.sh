@@ -27,7 +27,13 @@ fi
 
 bash scripts/check-version.sh
 node scripts/validate-plugin.mjs >/dev/null
-command -v claude >/dev/null && claude plugin validate ./ --strict >/dev/null
+# claude plugin validate --strict: only the items of its "Found N warning(s)/error(s):" blocks count, and the warning
+# that the root CLAUDE.md (this repository's maintainer guide) is not loaded as plugin context is tolerated, as in
+# tests/e2e/00-validate.sh.
+if command -v claude >/dev/null && ! out=$(claude plugin validate ./ --strict 2>&1); then
+  issues=$(printf '%s\n' "$out" | awk '/Found [0-9]+ (warning|error)/{b=1;next} b&&/^[[:space:]]*$/{b=0} b&&/❯/' | grep -v 'CLAUDE.md at the plugin root is not loaded' || true)
+  if [ -n "$issues" ]; then printf 'claude plugin validate --strict:\n%s\n' "$issues"; exit 1; fi
+fi
 
 git add -A
 git commit -q -m "chore(release): sdd-pipeline v$VER"
