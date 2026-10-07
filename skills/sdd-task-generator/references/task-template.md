@@ -310,6 +310,24 @@ With `visual_evidence: off` the last Acceptance bullet is dropped.
 
 ---
 
+## Fix task (Mode 5, `FEEDBACK-FASE-{N}` and `ACCEPTANCE-ADVERSARIAL-FASE-{N}`)
+
+The defect slipped past a green test, so the fix proves itself with a new or tightened test that fails on the current code. `ACCEPTANCE-LOOP` tasks use the slice form with `Test first:`.
+
+```markdown
+- [ ] TASK-F{N}-{SEQ} Fix {defect in one line} ({CH-NNN | IF-N-SEQ | feedback id}) | `{test_path}`, `{code_path}`
+  - Source: {FEEDBACK-FASE-{N} | ACCEPTANCE-ADVERSARIAL-FASE-{N}}
+  - **Commit:** `fix({scope}): {message}`
+  - **Acceptance:**
+    - Reproduce first: `{AC-NNN-NN | REQ-X-NNN ACn | INV-… | CONTRACT-…} {defect behaviour}` fails on the current code with {observed wrong result}
+    - {expected behaviour with the criterion's values}; {category and `path:line` of the finding, for an adversarial one}
+  - **Refs:** FASE-{N}, {REQ ids}, {scenario / INV / CONTRACT ids}, {CH-NNN}
+```
+
+For a `WEAKENED-ASSERT` or `WRONG-CAPTURE` finding the code is right and the test is what gets fixed: no `Reproduce first:` line, the first Acceptance bullet names the tightened assert (or capture) with the criterion's literal, and the edit is listed for a person's approval (`sdd-acceptance`, Test edits inside the loop).
+
+---
+
 ## Task Entry Format (Quick Reference)
 
 ```markdown
@@ -336,7 +354,7 @@ With `visual_evidence: off` the last Acceptance bullet is dropped.
 | blocked-by | NO | Task IDs this task depends on (same FASE or earlier); drives Stream assignment (V-18) |
 | Files | NO | Extra paths the task creates/modifies; together with the line paths they form the task's write-set (Stream Ownership) |
 | Commit | YES | Conventional commit format (V-05) |
-| Acceptance | YES | At least 1 criterion with specific values (V-06). `feat`/`fix` tasks: the first is `Test first: …` and the test file is in the write-set (Constitution Art. 8). `chore`/`build`/config tasks: `Verify: \`{command}\` → {expected output}`, no test file; a chore task that says `Test first` must list its test file |
+| Acceptance | YES | At least 1 criterion with specific values (V-06). `feat`/`fix` tasks: the first is `Test first: …` (`Reproduce first: …` in a fix task from feedback or the adversarial round, § Fix task) and the test file is in the write-set (Constitution Art. 8). `chore`/`build`/config tasks: `Verify: \`{command}\` → {expected output}`, no test file; a chore task that says `Test first` must list its test file |
 | Refs | YES | At least FASE reference |
 | Revert | Full: YES · compact: only when not SAFE | Category + impact (V-07; absent = SAFE in compact) |
 | Review | Full: YES (≥ 2 checks) · compact: omitted | Patterns in `references/review-checklist.md` |

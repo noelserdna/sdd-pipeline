@@ -152,6 +152,7 @@ For each task:
 1. Create the test file where the Stack Profile / plan places it.
 2. Tests for every **Acceptance** criterion, the referenced UC exception flows and the applicable INV-*; names state behaviour + criterion (`should return 401 when token is expired`), and each criterion's quote sits above its assert (`references/tdd-workflow.md`).
 3. Run `{test_file}` (or `{test_name}`) → they must FAIL. Tests that pass without implementation are wrong; fix them.
+4. In a fix task (its `Reproduce first:` line), the test that must fail before the fix is the one that reproduces the defect, bound to the criterion, INV or CONTRACT it breaks; a test of that criterion that is already green proves nothing about the defect, so it does not count. The exception is `WEAKENED-ASSERT` and `WRONG-CAPTURE`, where the code is right and the test is what gets fixed: a test edit a person approves. A defect with no criterion to cite is not fixed here: record a `SPEC-DEVIATION` and let `sdd-req-change` decide.
 
 Tasks without behaviour (`chore`/`build`/config, e.g. a runner setting or a fixture) write no test: run the `Verify:` command the task states and check its output (e.g. `config parses → {server} starts without errors`). A chore task that says `Test first` but lists no test file is a task defect: record it as IF feedback and verify with a command.
 
