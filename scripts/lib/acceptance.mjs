@@ -56,7 +56,10 @@ import { lintQuotes, literalGate, literalGapsByCriterion, isCriterionLiteral } f
 
 export const SCHEMA = "sdd-acceptance-v1";
 export const VERDICTS = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
-export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal", "literal-exception"];
+export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal", "literal-exception",
+  "floor-exception"];
+/** Finding codes of `sdd lint --floor` (scripts/lib/floor.mjs) that a person may except with a floor-exception record. */
+export const FLOOR_CODES = ["F-01", "F-02", "F-04", "F-07"];
 export const OPS = { lt: (a, b) => a < b, le: (a, b) => a <= b, gt: (a, b) => a > b, ge: (a, b) => a >= b, eq: (a, b) => a === b };
 export const FASE_RESULTS = ["accepted", "rejected", "observations"];
 export const DECISIONS_FILE = "acceptance/decisions.jsonl";
@@ -211,6 +214,15 @@ export function validateRecord(rec, reqs, ctx = {}) {
     if (!rec.challenge) { e.push("--challenge CH-NNN is required"); return e; }
     if (!(ctx.challenges || []).some((c) => c.id === rec.challenge)) e.push(`${rec.challenge} is not in ${CHALLENGES_FILE}`);
     else if ((ctx.records || []).some((r) => r.type === "challenge-dismissal" && r.challenge === rec.challenge)) e.push(`${rec.challenge} is already dismissed`);
+    return e;
+  }
+  if (rec.type === "floor-exception") {
+    // A person accepts one finding of `sdd lint --floor`: that code, file and exact line, against that base commit.
+    if (!FLOOR_CODES.includes(rec.code)) e.push(`--code must be one of ${FLOOR_CODES.join(", ")}`);
+    if (!rec.file) e.push("--file is required (the file of the finding, relative to the repository)");
+    if (!String(rec.text ?? "").trim()) e.push("--line is required (the exact text of the finding's line, as `sdd lint --floor --json` prints it in `text`)");
+    if (!/^[0-9a-f]{40}$/.test(String(rec.base || ""))) e.push("--base is required (the base commit of the floor check)");
+    if (!rec.reason) e.push("--reason is required (why the lowered floor is right)");
     return e;
   }
   const req = reqs.find((r) => r.id === rec.req);

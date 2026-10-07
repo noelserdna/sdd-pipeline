@@ -258,6 +258,24 @@ export function profileFromTexts(list) {
   return { file: null, profile: {}, lines: {} };
 }
 
+// ------------------------------------------------------------------ branches
+export function refExists(repo, ref) { return git(repo, ["show-ref", "--verify", "-q", ref]).status === 0; }
+/** Default branch: Stack Profile default_branch → origin/HEAD → init.defaultBranch → main/master → unborn HEAD.
+ *  → { name, source } (both null when nothing applies). Shared by `sdd branch` and `sdd lint --floor`. */
+export function defaultBranch(repo) {
+  const prof = stackProfile(topLevel(repo));
+  if (prof.default_branch) return { name: prof.default_branch, source: "profile" };
+  const oh = git(repo, ["symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD"]);
+  if (oh.status === 0 && oh.stdout.trim()) return { name: oh.stdout.trim().replace(/^origin\//, ""), source: "origin/HEAD" };
+  const cfg = git(repo, ["config", "--get", "init.defaultBranch"]).stdout.trim();
+  const unborn = git(repo, ["rev-parse", "-q", "--verify", "HEAD"]).status !== 0;
+  const cur = git(repo, ["symbolic-ref", "--short", "-q", "HEAD"]).stdout.trim();
+  if (cfg && (refExists(repo, `refs/heads/${cfg}`) || (unborn && cur === cfg))) return { name: cfg, source: "init.defaultBranch" };
+  for (const b of ["main", "master"]) if (refExists(repo, `refs/heads/${b}`)) return { name: b, source: "existing" };
+  if (unborn && cur) return { name: cur, source: "unborn HEAD" };
+  return { name: null, source: null };
+}
+
 /** Stack Profile of <repo>/CLAUDE.md, else <repo>/.claude/CLAUDE.md, as { key: value }. */
 export function stackProfile(repo) {
   return stackProfileWithSource(repo).profile;

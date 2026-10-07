@@ -448,6 +448,7 @@ done <<'EOF'
 node "$SDD_PLUGIN_ROOT/scripts/sdd.mjs" accept record waiver --req REQ-F-001 --by Ana --role PO --reason x --follow-up #12
 sdd accept record inspection --req REQ-C-001 --by Ana --role PO --note ok
 sdd accept record literal-exception --req REQ-F-001 --ac 2 --literal "title must not be empty" --reason "msg() builds it" --by Ana --role PO
+node scripts/sdd.mjs accept record floor-exception --code F-01 --file tests/a.test.js --line 'test.skip("x", () => {' --base main --reason "flaky" --by Ana --role PO
 cd app && node ../scripts/sdd.mjs  accept  record demo --req REQ-F-002 --observed ok --pass true --by A --role QA
 git tag -a fase-2-accepted -m "FASE-2 accepted by Ana"
 git -C web tag -s requirements-v3 -m "approved"

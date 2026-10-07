@@ -94,7 +94,7 @@ export function quoteMatches(quote, criterion) {
 
 // ------------------------------------------------------------------ source files
 const HASH_COMMENTS = new Set([".rb", ".py", ".sh", ".bash", ".feature", ".ex", ".exs", ".r", ".pl", ".yml", ".yaml", ".toml", ".cr", ".nim"]);
-const SOURCE_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".rb", ".py", ".go", ".java",
+export const SOURCE_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".rb", ".py", ".go", ".java",
   ".kt", ".kts", ".scala", ".groovy", ".cs", ".fs", ".php", ".rs", ".swift", ".dart", ".ex", ".exs", ".feature", ".sh", ".bash",
   ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".clj", ".cr", ".nim", ".r", ".pl"]);
 const MAX_BYTES = 2 * 1024 * 1024;

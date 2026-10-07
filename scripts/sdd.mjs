@@ -46,6 +46,25 @@
 //       (a backtick span before it is the command or route the test drives). A literal-exception record turns a Q-03
 //       into `excepted`. Prints `file:line Q-0N REQ-X-NNN ACn message` and a summary; --json {findings[{code, severity,
 //       req, ac, file, line, literal?, quote?, exception?, message}], summary}. Exit 1 on any error not excepted.
+//   sdd lint --floor [--base REF] [--json]
+//       Floor guard (scripts/lib/floor.mjs): was the bar lowered between a base commit and the working tree (plus
+//       untracked files)? Base: --base REF (source flag) · else merge-base of HEAD with the default branch (merge-base;
+//       not when HEAD is on the default branch) · else the nearest fase-*-accepted tag reachable from HEAD (tag) · else
+//       exit 2 "no base". The base and its source are always printed. Only added/removed lines count; raising the bar
+//       is never a finding. F-01 skip/only/focus/todo added under test_paths: error on a test bound to a criterion
+//       (AC-NNN-NN or `REQ-X-NNN ACn` in its name) or one that existed in the base, warning on a todo or a new unbound
+//       test · F-02 test file deleted, or renamed/moved out of test_paths, losing the criterion ids it named: error
+//       (deleted without ids: warning) · F-04 coverage/security suppression added (istanbul|c8|v8 ignore, pragma: no
+//       cover, :nocov:, nosemgrep, gitleaks:allow, Stryker disable): warning · F-07 Stack Profile gate lowered against
+//       the base, only keys the base writes (literal_gate, acceptance_gate, adversarial_gate, floor_gate: enforce >
+//       warn > off; visual_evidence: required > warn > off; prove_it: enforce > warn > off): error. Mode: Stack
+//       Profile `floor_gate: off|warn|enforce` (default enforce) read from the base, else the tree. A
+//       floor-exception record (same code, file, line text and base) turns an error into `excepted`. Prints
+//       `floor: base <sha> (<source>: …)`, `file:line F-0N error|warning|excepted message`, `test edit <A|M|D|R> file`
+//       and a summary; --json {base{sha, ref, source, detail}, head, mode, mode_source, findings[{code, severity, file,
+//       line, text, message, kind?, criteria?, scenarios?, key?, from?, to?, exception?}], testEdits[{status, file,
+//       from?}], summary, exit}. Exit 0 clean, warnings only or mode warn/off · 1 errors not excepted under enforce ·
+//       2 no base, usage or git error.
 //   sdd accept [--junit PATH...] [--junit-sha SHA] [--fase N] [--out .sdd/acceptance.json|-] [--no-out]
 //              [--report acceptance/ACCEPTANCE-REPORT.md] [--remeasure] [--json]
 //       Acceptance ledger: verdict per requirement (DEPRECATED, WAIVED, FAILING, MISSING, VERIFIED) from JUnit tests
@@ -64,7 +83,7 @@
 //       `literal_gaps` of `sdd lint --quotes` (Q-02/Q-03 not excepted); under enforce a passing criterion of a Must with
 //       one is `weakened` and the requirement MISSING ("test does not carry the criterion's literal"); warn only lists
 //       them. summary.literal_gaps counts the criteria, summary.weakened the held-back ones.
-//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal|literal-exception> --by NAME --role ROLE [fields]
+//   sdd accept record <waiver|demo|measurement|inspection|fase-acceptance|challenge-dismissal|literal-exception|floor-exception> --by NAME --role ROLE [fields]
 //              [--attach FILE...] [--allow-dirty]
 //       Append one validated decision to acceptance/decisions.jsonl (head and reqHash are filled in). Fields:
 //       waiver --req ID --reason TEXT [--follow-up #N (required for a Must)] · demo --req ID [--ac N] --observed TEXT
@@ -73,10 +92,15 @@
 //       · fase-acceptance --fase N --result accepted|rejected|observations --channel TEXT [--demo ID]
 //       · challenge-dismissal --challenge CH-NNN --reason TEXT (a person decides a finding does not hold)
 //       · literal-exception --req ID --ac N --literal TEXT --reason TEXT (a literal of the criterion that a helper
-//       builds, so it is never verbatim in the test: its Q-03 is excepted while the requirement keeps its reqHash).
+//       builds, so it is never verbatim in the test: its Q-03 is excepted while the requirement keeps its reqHash)
+//       · floor-exception --code F-0N --file PATH --line "exact line text" --base REF --reason TEXT (no --req; a person
+//       accepts one finding of `sdd lint --floor`: code F-01, F-02, F-04 or F-07, the file and the line text as the JSON
+//       prints them in `text` — whitespace at both ends ignored — against that base; the record keeps code, file, text
+//       and base as a full sha; a changed line or another base brings the finding back).
 //       --attach stores files under evidence_dir with their sha256 (not on a waiver, a dismissal or an exception). Every
-//       type but waiver, challenge-dismissal and literal-exception exits 2 on uncommitted changes under its --paths (default the code paths,
-//       untracked files included): commit first, or --allow-dirty to store the record with dirty: true.
+//       type but waiver, challenge-dismissal, literal-exception and floor-exception exits 2 on uncommitted changes under
+//       its --paths (default the code paths, untracked files included): commit first, or --allow-dirty to store the
+//       record with dirty: true.
 //   sdd accept measure --req ID [--ac N] --metric NAME --command CMD --extract REGEX --op lt|le|gt|ge|eq
 //              --threshold NUM [--paths P...] [--allow-dirty] [--json]
 //       Machine measurement: runs CMD from the repo root, takes the first capture group of REGEX in its output as the
@@ -187,8 +211,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GitError, git, gitOk, isRepo, topLevel, readCommits, effectiveCommits, commitsFor, originIds,
-  parseMessage, trailersOf, parseTrailerLines, checkMessage, stackProfile,
+  parseMessage, trailersOf, parseTrailerLines, checkMessage, stackProfile, refExists, defaultBranch,
 } from "./lib/git-log.mjs";
+import { runFloor } from "./lib/floor.mjs";
 import { runAcceptance } from "./lib/acceptance-cli.mjs";
 import { runPlanLint } from "./lib/plan-lint.mjs";
 import { runTracker } from "./lib/tracker.mjs";
@@ -735,20 +760,6 @@ function cmdVerify(o) {
 }
 
 // ------------------------------------------------------------------ branch
-function refExists(repo, ref) { return git(repo, ["show-ref", "--verify", "-q", ref]).status === 0; }
-function defaultBranch(repo) {
-  const prof = stackProfile(topLevel(repo));
-  if (prof.default_branch) return { name: prof.default_branch, source: "profile" };
-  const oh = git(repo, ["symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD"]);
-  if (oh.status === 0 && oh.stdout.trim()) return { name: oh.stdout.trim().replace(/^origin\//, ""), source: "origin/HEAD" };
-  const cfg = git(repo, ["config", "--get", "init.defaultBranch"]).stdout.trim();
-  const unborn = git(repo, ["rev-parse", "-q", "--verify", "HEAD"]).status !== 0;
-  const cur = git(repo, ["symbolic-ref", "--short", "-q", "HEAD"]).stdout.trim();
-  if (cfg && (refExists(repo, `refs/heads/${cfg}`) || (unborn && cur === cfg))) return { name: cfg, source: "init.defaultBranch" };
-  for (const b of ["main", "master"]) if (refExists(repo, `refs/heads/${b}`)) return { name: b, source: "existing" };
-  if (unborn && cur) return { name: cur, source: "unborn HEAD" };
-  return { name: null, source: null };
-}
 function branchInfo(repo) {
   const cur = git(repo, ["symbolic-ref", "--short", "-q", "HEAD"]);
   const current = cur.status === 0 ? cur.stdout.trim() : null;
@@ -899,6 +910,10 @@ export function run(argv, { prog = "sdd", helpUrl = import.meta.url, legacy = fa
     if (first.cmd === "lint" && argv.includes("--plan")) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
       return runPlanLint([...argv.slice(0, first.index), ...argv.slice(first.index + 1)], { prog });
+    }
+    if (first.cmd === "lint" && argv.includes("--floor")) {
+      if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }
+      return runFloor([...argv.slice(0, first.index), ...argv.slice(first.index + 1)].filter((a) => a !== "--floor"), { prog });
     }
     if (["accept", "gate", "loop"].includes(first.cmd) || (first.cmd === "lint" && (argv.includes("--needs") || argv.includes("--quotes")))) {
       if (argv.includes("--help") || argv.includes("-h")) { try { help(0); } catch (e) { if (e instanceof Exit) return e.code; throw e; } }

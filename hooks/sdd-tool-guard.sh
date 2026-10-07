@@ -21,7 +21,8 @@
 # Además pide confirmación humana (permissionDecision "ask") para los registros de aceptación:
 #   - `sdd accept record …` (también `sdd.mjs accept record`, `$SDD accept record`, `node "${SDD}" accept record`):
 #     añade una exención, demo, medición, inspección, aceptación de FASE, descarte de un challenge adversarial
-#     (`accept record challenge-dismissal`) o excepción de un literal (`accept record literal-exception`) a acceptance/decisions.jsonl en nombre de una persona. Se busca en el texto FUERA de comillas: `jq '.summary="… accept record …"'` o
+#     (`accept record challenge-dismissal`), excepción de un literal (`accept record literal-exception`) o de un
+#     hallazgo del listón (`accept record floor-exception`, 5.3) a acceptance/decisions.jsonl en nombre de una persona. Se busca en el texto FUERA de comillas: `jq '.summary="… accept record …"'` o
 #     `echo "sdd accept record"` no preguntan; `sdd accept measure` y `sdd accept --remeasure` tampoco: registran una
 #     medición producida por un comando (by "command"), no una decisión de una persona; `sdd accept challenge add`
 #     tampoco: registra un hallazgo de la ronda adversarial (lo descarta solo una persona, con el registro de arriba);
