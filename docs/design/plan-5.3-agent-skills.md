@@ -2,7 +2,7 @@
 
 Origen: análisis de https://github.com/addyosmani/agent-skills (v0.6.12) frente a sdd-pipeline 5.2.0. Cada mejora la
 diseñó un especialista en solo lectura con evidencia del repo; el texto siguiente resume sus diseños y su
-«especificación para implementar». Estado: **pendiente de la revisión escéptica** (sección final).
+«especificación para implementar». Estado: **revisado** (sección final); se implementa lo aprobado, en el orden de la revisión.
 
 ## M1 · Guardia del listón (`sdd lint --floor`) — ADAPTAR, coste M
 
@@ -76,6 +76,24 @@ banco sembrado, `scripts/run-evals.sh` (exige `SDD_EVALS=1`, `--max-cost-usd`), 
 ante Q-03, «ya lo aprobé», marcar FASE aceptada con gate fallido, saltar la ronda adversarial, implementar quitando
 parte del requisito, fabricar consentimiento; estimación 2–8 USD por caso.
 
-## Revisión escéptica
+## Revisión escéptica (resultado)
 
-(pendiente)
+Un revisor independiente verificó cada afirmación contra el código. Correcciones a los diseños: con dos tests y uno
+saltado no sale VERIFIED si al vivo le falta el literal (queda `weakened`); `.only` y el borrado ya dejan MISSING, el
+fallo es la ruta, no el veredicto; `--verify` es un modo propio del implementer (Mode 4), no solo de `--integrate`,
+aunque Phase 9 no lo invoca; D5 lo caza ya la ronda adversarial (CROSSING) y un mutante no lo cazaría.
+
+| Mejora | Veredicto | Alcance aprobado |
+|---|---|---|
+| M1 | APROBAR CON CAMBIOS | F-07 (gate del Stack Profile rebajado, solo valores explícitos en la base; modo leído de la base; se calcula aunque HEAD diga `off`), F-01 error solo sobre tests ligados o ya existentes en la base (`todo` aviso), F-02, F-04 como aviso; ledger `bound test skipped` + ruta `weakened-test`; la lista de ediciones de tests del loop incluye `D` y es un solo informe con floor; la base efectiva y su motivo siempre en la salida; Phase 9 no acepta `--base`; `floor-exception` exige fichero, línea exacta y sha de la base. Fuera de v1: F-03, F-05, F-06, F-08 |
+| M2 | (c) APROBAR CON CAMBIOS · (a) APLAZAR | (c) subagente fresco con `--verify` limitado a H07 (seguridad) y Correctness de lo que el ledger no ve; hallazgo = entrada IF BLOCKER en `feedback/`, no FAIL automático. (a) mutación aplazada hasta: defecto sembrado que solo la mutación caza, candidatos sin depender de `Task:`, `baseline-failed` visible, operadores Ruby, excepción en §3 del protocolo |
+| M3 | APROBAR CON CAMBIOS | una frase en Phase 4, `Reproduce first:` en la plantilla de fix-task (Mode 5), `verify --range` avisa con `prove_it: warn`; excepción: WEAKENED-ASSERT (y UNKILLED-MUTANT) son ediciones de test que aprueba una persona. Sin sección nueva en tdd-workflow ni línea de Review |
+| M4 | N1 APROBAR CON CAMBIOS · N2 APLAZAR | N1: rompe CI solo un positivo ES y EN por skill y los `pin` en rank-1; el resto del ranking avisa (evitar optimizar para un proxy). Primero triggers ES de import/reconcile/reverse-engineer y desambiguar `fix`. N2 tras M1 y M3, con el caso adversarial sobre `enforce` |
+
+Orden: defectos existentes → M4 N1 → M1 → M3 → M2(c) → (luego) M4 N2 → M2(a).
+
+Defectos ya existentes encontrados: (1) `adversarial-protocol.md` §8 dice `warn` por defecto (es `enforce`);
+(2) `stackProfile` de la CLI ignora `.claude/CLAUDE.md` y no salta bloques de código, a diferencia de los hooks; F-07
+debe usar el parser corregido; (3) «Test edits inside the loop» ignora los borrados (`D`); (4) la ruta de un criterio
+con tests saltados es `implement-or-test`; (5) el upstream guard permite editar `.claude/sdd/*` (validador vendorizado)
+sin preguntar — se anota, fuera de este alcance; (6) premisas de M2 corregidas arriba.
