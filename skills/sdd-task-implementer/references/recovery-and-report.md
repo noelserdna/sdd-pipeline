@@ -139,7 +139,7 @@ entry). `sdd-req-change --file feedback/IMPL-FEEDBACK-FASE-{N}.md` processes it.
 | **Severity**       | BLOCKER | WARNING |
 | **Task**           | TASK-F{N}-{SEQ} |
 | **Affected Specs** | {comma-separated spec file paths} |
-| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION | TOOL-GUARDRAIL | COVERAGE-GAP | ENV-REQUIRED |
+| **Category**       | AMBIGUITY | CONFLICT | MISSING-BEHAVIOR | INCORRECT-CONTRACT | STALE-DECISION | SPEC-DEVIATION | TOOL-GUARDRAIL | COVERAGE-GAP | ENV-REQUIRED | CODE-REVIEW |
 | **Status**         | OPEN | RESOLVED | WONT-FIX |
 
 **Problem:**
@@ -162,7 +162,9 @@ also carries `| **Spec** | {spec ID and exact text} |`, `| **Deviation** | … |
 `| **Recommendation** | AMEND \| KEEP \| NEEDS-DISCUSSION |`, with `Status: PENDING-REVIEW`. A `COVERAGE-GAP` entry
 (Phase 9: a source file at 0% coverage and not excluded) names the file and recommends
 `/sdd-task-generator --fase=N --incremental`. An `ENV-REQUIRED` entry (Phase 3: the task reads an environment
-variable that the profile's `env_required` does not list) names the variable, never its value.
+variable that the profile's `env_required` does not list) names the variable, never its value. A `CODE-REVIEW` entry
+(Phase 9 step 2b: a finding of the independent review) carries the reviewer's line (check, `file:line`, spec id) as
+Evidence; it stays BLOCKER until a person routes it to a fix task or sets `WONT-FIX` with the reason.
 
 ---
 

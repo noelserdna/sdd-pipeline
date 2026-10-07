@@ -28,9 +28,11 @@ Ledger: si todos los tests frescos de un criterio están `skip` → `c.skipped`,
 
 ## M2 · Revisión de código por FASE con mutación de bolsillo — ADAPTAR, coste M
 
-Problema real: nadie comprueba si los tests matan mutantes (D5 sale VERIFIED en las capas mecánicas); la seguridad
-del código no la revisa nadie independiente (`sdd-security-auditor` solo audita specs); `--verify` (Coherence
-H01-H09, H07 Security hygiene) existe pero solo corre dentro de `--integrate` y en el mismo contexto que implementó.
+Problema real: nadie comprueba si los tests matan mutantes (D5 sale VERIFIED en las capas mecánicas, aunque la ronda
+adversarial ya lo caza como CROSSING, y un mutante no lo cazaría); la seguridad del código no la revisa nadie
+independiente (`sdd-security-auditor` solo audita specs); `--verify` (Coherence H01-H09, H07 Security hygiene) es un
+modo propio del implementer (Mode 4) y corre dentro de `--integrate`, pero Phase 9 no lo invoca y, cuando corre, lo
+hace en el mismo contexto que implementó.
 
 Diseño: (a) categoría nueva `UNKILLED-MUTANT` en `--adversarial`, con la mutación ejecutada por la CLI:
 `sdd accept mutate candidates --fase N` (líneas de candidate files bajo code_paths atribuidas por blame a commits

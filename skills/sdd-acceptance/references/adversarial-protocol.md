@@ -170,5 +170,5 @@ After the fixes are committed, run `--adversarial --fase N` again: the challenge
 ## 8. Gate
 
 `adversarial_gate` in the Stack Profile decides what an open challenge on a Must does to `sdd gate`: `off` ignores
-it, `warn` (the default) prints it and keeps the exit code, `enforce` exits **4**. At `--sign-off` and at the FASE
+it, `warn` prints it and keeps the exit code, `enforce` (the default) exits **4**. At `--sign-off` and at the FASE
 gate, show the open challenges to the approver whatever the setting: a warning nobody reads protects nobody.

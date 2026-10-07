@@ -134,7 +134,7 @@ node scripts/sdd.mjs pr-body --fase 1                 # cuerpo del PR/MR con la 
 - Sin caché: las issues se localizan por la etiqueta `sdd` y un marcador oculto (`<!-- sdd:FASE-1 -->`). `update` no toca el texto humano fuera de su bloque.
 - La issue de una FASE se cierra al aceptar la FASE, no al hacer merge: el PR de FASE lleva `Refs #N`; el de un cambio, `Closes #N`.
 - `pr-body` solo imprime; nunca abre el PR. Todo push, issue, PR o merge pregunta antes.
-- `sdd-setup --tracker` copia las plantillas de `templates/ci/{github,gitlab}/` y de PR e issue (`templates/tracker/`). El CI ejecuta `sdd verify --range` con historial completo (`fetch-depth: 0`), `sdd lint` y `sdd gate --mode warn`.
+- `sdd-setup --tracker` copia las plantillas de `templates/ci/{github,gitlab}/` y de PR e issue (`templates/tracker/`). El CI ejecuta `sdd verify --range` con historial completo (`fetch-depth: 0`), `sdd lint --floor --base` contra la rama base (lo que el PR rebaja: un gate, un test saltado o borrado), `sdd lint` y `sdd gate --mode warn`.
 
 ## Por qué no se usa `git notes`
 

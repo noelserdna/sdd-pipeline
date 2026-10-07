@@ -15,6 +15,10 @@ sdd:
   script:
     # Per-task commits and trailers (fails on a squashed MR)
     - node .claude/sdd/sdd.mjs verify --range "${CI_MERGE_REQUEST_DIFF_BASE_SHA}..HEAD"
+    # Floor: what the MR lowers against its target branch (the diff base is the target's commit the MR starts from):
+    # a Stack Profile gate set lower, a skip/only/focus added to a bound or existing test, a deleted test file that
+    # named criteria (errors), coverage/security suppressions (warnings). floor_gate in the base's profile decides.
+    - node .claude/sdd/sdd.mjs lint --floor --base "${CI_MERGE_REQUEST_DIFF_BASE_SHA}"
     - if [ -d task ]; then node .claude/sdd/sdd.mjs lint; else echo "sdd - no task/ yet, skipped"; fi
     - if [ -d plan ]; then node .claude/sdd/sdd.mjs lint --plan; else echo "sdd - no plan/ yet, skipped"; fi
     # To feed the acceptance gate, run the Stack Profile `test_report` command before this line so it writes JUnit

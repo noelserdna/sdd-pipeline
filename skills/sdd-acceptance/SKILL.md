@@ -97,6 +97,19 @@ a helper builds the literal so it never appears verbatim, a person records
 `accept record literal-exception --req ID --ac N --literal TEXT --reason TEXT --by NAME --role ROLE`; it lapses when the
 requirement's text changes (a MODIFY), like every hash-bound decision.
 
+**The floor.** A green suite says nothing about tests that no longer run. A criterion whose bound tests are all
+skipped stays MISSING with `reason: "bound test skipped"` and routes as `weakened-test`, not as missing behaviour.
+`sdd lint --floor [--base REF] [--json]` compares the tree with a base (`--base`, else the merge-base with the default
+branch, else the last `fase-*-accepted` tag; exit 2 without one; the base and why it was chosen are always printed) and
+reports only what lowers the bar, never what raises it: F-07 a Stack Profile gate (`literal_gate`, `acceptance_gate`,
+`adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) set lower than the base set it explicitly (error);
+F-01 a skip/only/focus added to a bound test or to one that existed at the base (error; `todo` and others warn);
+F-02 a deleted test file that named criteria (error); F-04 a coverage or security suppression (warning). `floor_gate`
+(`off` · `warn` · `enforce`, the default) is read from the base, so lowering it is itself an F-07. Exit 0 clean, 1 with
+errors, 2 without a base. When a person decides that one finding is right (a test retired with its requirement), they
+record `accept record floor-exception --code F-0N --file PATH --line "exact line" --base SHA --reason TEXT --by NAME
+--role ROLE`; it covers that line in that file against that base only.
+
 Evidence counts only while fresh: nothing under the Stack Profile's `code_paths` and `test_paths` (default `src`,
 `tests`) may have changed, committed or not, since the test results were captured, and each record stays valid while
 the files it names (those paths when it names none) are unchanged since its commit. Commits to docs, `feedback/`,
@@ -208,7 +221,7 @@ bash "${SDD_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/sdd-state.sh" set acceptan
 
 and patch `stages.acceptance.summary` (jq under the same file, tmp → mv) with `artifacts`
 (`acceptance/ACCEPTANCE-REPORT.md`), `metrics` (`must_total`, `must_verified`, `must_waived`, `failing`, `missing`,
-`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `evaluated_sha`, `mode`, and
+`stale_evidence`, `goal`, `gate_exit`, `loop_cycles`, `loop_stop`, `test_edits`, `floor_errors`, `evaluated_sha`, `mode`, and
 `unshown` and `literal_gaps` from the ledger's summary), `highlights` (≤ 5) and `nextStep`. The adversarial metrics describe
 the last `--adversarial` run and are kept by later runs of other modes (patch only the keys a mode computes):
 `adversarial_findings` (findings the verifiers raised, including those from the clean sample),
@@ -260,7 +273,7 @@ it holds the verifier prompt, the categories and the commands.
 
 Verifiers never write code, specs, tests or `acceptance/`; only this skill's main thread runs `challenge add`, and only
 a person dismisses a challenge (`accept record challenge-dismissal`). The Stack Profile's `adversarial_gate` (`off` ·
-`warn`, the default · `enforce`) decides whether an open challenge on a Must makes `sdd gate` exit 4.
+`warn` · `enforce`, the default) decides whether an open challenge on a Must makes `sdd gate` exit 4.
 
 Then Step 6 (summary and persist, with the adversarial metrics); its block gains `Adversarial: {f} findings · {c} confirmed · {r} refuted · {o} open challenges · {g} coverage gaps · {a} agents`.
 
@@ -307,14 +320,14 @@ git diff --cached --quiet || git commit -m "docs(feedback): acceptance findings 
 
 | `route_hint` | Meaning | Action |
 |---|---|---|
-| `implement-or-test` | A criterion has a scenario but no passing, fresh test bound to it; or, in a project without `spec/tests` (the route skipped the specifications), a criterion with no test, since the criterion itself is the contract and the test is named `REQ-X-NNN ACn` | Feedback entry `MISSING-BEHAVIOR` (or `COVERAGE-GAP` when the code exists and only the test is missing) naming the requirement, criterion and scenario id; `/sdd-task-generator --fase N --incremental`; `/sdd-task-implementer --fase N --new-tasks-only`. When a test exists but lacks the scenario id in its name, renaming it is a test edit (below) |
+| `implement-or-test` | A criterion has a scenario but no passing, fresh test bound to it (a bound test that is only skipped routes as `weakened-test`); or, in a project without `spec/tests` (the route skipped the specifications), a criterion with no test, since the criterion itself is the contract and the test is named `REQ-X-NNN ACn` | Feedback entry `MISSING-BEHAVIOR` (or `COVERAGE-GAP` when the code exists and only the test is missing) naming the requirement, criterion and scenario id; `/sdd-task-generator --fase N --incremental`; `/sdd-task-implementer --fase N --new-tasks-only`. When a test exists but lacks the scenario id in its name, renaming it is a test edit (below) |
 | `fix-code (Art. 12)` | A bound test fails | The code is wrong, not the test: feedback entry with the failure, incremental task, implementer. Never weaken, skip or rewrite the assertion to make it pass. If you believe the test or the criterion itself is wrong, that is a spec gap |
 | `spec-gap (human, req-change)` | A criterion without any scenario (when `spec/tests` exists), a requirement without `Verification:`, or a spec that looks wrong | `SPEC-DEVIATION` entry (Spec, Deviation, Impact, Recommendation, `Status: PENDING-REVIEW`) and ask the human: keep the spec (then the missing scenario goes to `sdd-test-planner`/the spec owner) or amend it through `/sdd-req-change`. The loop does not edit specs |
 | `remeasure` | A measurement recorded by `accept measure` is stale (its code paths changed) | `node "$SDD" accept --remeasure [--fase N]` re-runs its command and appends the new value; nobody is asked. A value that now fails its threshold turns the requirement FAILING and routes as `fix-code` |
 | `needs-human` | `demo`, `measurement` or `inspection` evidence is missing or failing, and no command can re-measure it; or an open challenge whose counter-verification was `inconclusive` | Prepare what the person needs (run the demo command and capture its output, run the measurement), show it with the criterion, and ask. Record only what they confirm, with their name and role: `node "$SDD" accept record demo --req ID --ac N --observed TEXT --pass true\|false --by NAME --role ROLE [--paths P…] [--attach F…]` (or `measurement` / `inspection`, see `node "$SDD" --help`). The tool guard asks for confirmation before `accept record`; for demo output, `scripts/jev/evidence.json` can pre-screen it (advisory). For an `inconclusive` challenge show its quote and evidence: the person either has it fixed (then it routes as `adversarial-finding`) or dismisses it (`accept record challenge-dismissal --challenge CH-NNN --reason TEXT --by NAME --role ROLE`) |
 | `adversarial-finding` | An open, confirmed challenge of the adversarial round (the target carries its `category`) | Feedback entry citing the `CH-NNN`, quote and evidence; one fix task per finding with `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}` (`/sdd-task-generator --fase N --incremental`, then the implementer with `--new-tasks-only`); `SPEC-QUESTION` goes to a person as a spec gap, and `WRONG-CAPTURE` fixes the journey test's capture (`references/adversarial-protocol.md` §7). Re-run `--adversarial --fase N` after the fix |
 | `capture-evidence` | A criterion passes but is `unshown`, or a workflow of the FASE has no video (one target per id of `missing_videos`, carrying the `WF-NNN` or `FASE-N`) | Re-run the FASE's journey with capture, with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported: the acceptance suite with `--grep` on the scenario ids, or for a video the journey whose title carries that id; then Step 1 again. No feedback entry and no code task. When the rerun still attaches nothing, the journey test does not capture that criterion or is not titled with that workflow id: a missing test, routed as `implement-or-test`. A stack whose runner records no video may instead have a person record the demo and save it under `evidence_dir` with the id in the file name |
-| `weakened-test` | A Must criterion passes, but its test file lacks the criterion's current quote or one of its literals (`literal_gaps` on the target: Q-02 or Q-03 with file and line) | The behaviour may be right and the assert too weak, or the code may show something else: open the criterion with `node "$SDD" req show ID --ac N`, fix the quote and assert the literal exactly (tdd-workflow.md, "The criterion's letter sits above its assert"); if the assert then fails, the code is wrong and routes as `fix-code`. This is a test edit, listed and approved by a person below. When a helper builds the literal, show the helper and let a person decide on a `literal-exception` record; a literal the code cannot produce is a spec gap |
+| `weakened-test` | A Must criterion passes, but its test file lacks the criterion's current quote or one of its literals (`literal_gaps` on the target: Q-02 or Q-03 with file and line); or every test bound to the criterion is skipped (`reason: "bound test skipped"`) | The behaviour may be right and the assert too weak, or the code may show something else: open the criterion with `node "$SDD" req show ID --ac N`, fix the quote and assert the literal exactly (tdd-workflow.md, "The criterion's letter sits above its assert"); if the assert then fails, the code is wrong and routes as `fix-code`. This is a test edit, listed and approved by a person below. When a helper builds the literal, show the helper and let a person decide on a `literal-exception` record; a literal the code cannot produce is a spec gap. A skipped test is re-enabled as it was: that raises the bar and needs nobody's approval, but any other change to the re-enabled test is a test edit a person approves, and a failure that follows routes as `fix-code` |
 | `rerun-tests` | Evidence exists but is stale | Nothing to do beyond Step 1 of the next cycle |
 
 Cycles run sequentially in the main thread: each one needs the commits of the previous one. The implementer's own
@@ -332,14 +345,17 @@ the next cycle continues from `.sdd/acceptance-loop.json`, without `--reset`. `n
 
 ### Test edits inside the loop
 
-A test changed during the loop could make a criterion pass without the behaviour. Before the final summary, list
-every test file that existed at the loop's first cycle and was modified since:
-`git diff --name-status <cycle-1 evaluated_sha>..HEAD -- <test_paths>` (the SHA is `cycles[0].evaluated_sha` in
-`.sdd/acceptance-loop.json`), keeping `M` and `R` entries (the `weakened-test` edits are among them). Show each diff
-to the human and ask whether to approve it.
-A rejected edit is reverted with a new commit (`git revert` of that commit, or a `fix` task restoring the assertion)
-and its criterion returns to the loop. Record the approved ones in `highlights` and `metrics.test_edits`, and in the
-PR body of `--publish`.
+A test changed during the loop could make a criterion pass without the behaviour, and a test deleted or skipped makes
+it stop being checked at all. Before the final summary, build one report against the loop's first cycle:
+`node "$SDD" lint --floor --base <cycle-1 evaluated_sha> --json` (the SHA is `cycles[0].evaluated_sha` in
+`.sdd/acceptance-loop.json`). Its F findings say where the bar went down, and its `testEdits` list every test file
+added (`A`), modified (`M`), renamed (`R`) or deleted (`D`) since that cycle; the `weakened-test` edits are among
+them. Show each finding and each `M`, `R` and `D` diff to the human and ask whether to approve it; new files (`A`)
+are listed for information. A rejected edit is reverted with a new commit (`git revert` of that commit, or a `fix`
+task restoring the assertion or the deleted file) and its criterion returns to the loop. An F error the human accepts
+is recorded as a `floor-exception` (with the base SHA of this report); the others are reverted the same way. Record
+the approved edits in `highlights` and `metrics.test_edits`, the open F errors in `metrics.floor_errors`, and both in
+the PR body of `--publish`.
 
 ### When the loop stops
 
