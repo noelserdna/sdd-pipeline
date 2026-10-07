@@ -4,6 +4,8 @@
 # Claude Code: ajustes locales y worktrees efímeros
 .claude/settings.local.json
 .claude/worktrees/
+# Tipos que el motor escribe al cargar el mod sdd-live desde la carpeta (se regeneran; no se versionan)
+.claude-plugin/types/
 
 # Python
 __pycache__/

@@ -19,5 +19,6 @@
     "acceptance",
     "mcp",
     "worktree"
-  ]
+  ],
+  "types": "./types/sdd-live.d.ts"
 }
