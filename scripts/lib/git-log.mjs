@@ -214,16 +214,60 @@ export function checkMessage(lines, trailers) {
   return res;
 }
 
-/** Stack Profile of <repo>/CLAUDE.md as { key: value }. */
-export function stackProfile(repo) {
-  const f = path.join(repo, "CLAUDE.md");
-  if (!existsSync(f)) return {};
-  const prof = {};
-  let inside = false;
-  for (const l of readFileSync(f, "utf8").split(/\r?\n/)) {
-    if (/^#{1,2}\s/.test(l)) { inside = /^##\s+SDD Stack Profile\s*$/i.test(l); continue; }
-    const m = inside && l.match(/^\s*[-*]\s+([a-z_]+):\s*(.*?)\s*$/);
-    if (m) prof[m[1]] = m[2].replace(/^`(.*)`$/, "$1");
+// ------------------------------------------------------------------ SDD Stack Profile
+/** Files that may hold the `## SDD Stack Profile` section, in the order they are read (same as `sdd_profile_get` of
+ *  hooks/lib/sdd-common.sh): the first file that has the section is the profile; later files are not read. */
+export const PROFILE_FILES = ["CLAUDE.md", ".claude/CLAUDE.md"];
+
+/**
+ * The `## SDD Stack Profile` section of one CLAUDE.md text → { found, profile: { key: value }, lines: { key: { n, text } } }.
+ * The section runs from its heading to the next `#`/`##` heading. Lines inside fenced code blocks (``` or ~~~, closed by
+ * the same fence) are skipped, so an example `- literal_gate: off` inside a block does not count. A key repeated in
+ * the section keeps its last value (what every CLI gate has always read; `sdd lint --floor` compares with the same
+ * reading). Keys are lower-cased; a value wrapped in backticks is unwrapped.
+ */
+export function parseStackProfile(text) {
+  const profile = {}, lines = {};
+  let inside = false, found = false, fence = null;
+  String(text ?? "").split(/\r?\n/).forEach((l, i) => {
+    const f = l.match(/^\s*(`{3,}|~{3,})/);
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !l.trim().slice(f[1].length).trim()) fence = null; return; }
+    if (f) { fence = f[1]; return; }
+    if (/^#{1,2}\s/.test(l)) {
+      inside = /^##\s+SDD Stack Profile\s*$/i.test(l.trimEnd());
+      if (inside) found = true;
+      return;
+    }
+    const m = inside && l.match(/^\s*[-*]\s+([A-Za-z_]+)\s*:\s*(.*?)\s*$/);
+    if (!m) return;
+    const k = m[1].toLowerCase();
+    profile[k] = m[2].replace(/^`(.*)`$/, "$1");
+    lines[k] = { n: i + 1, text: l };
+  });
+  return { found, profile, lines };
+}
+
+/** Profile from the texts of PROFILE_FILES in order ([{ file, text }], text null when absent): the first with the
+ *  section wins. → { file (or null), profile, lines }. */
+export function profileFromTexts(list) {
+  for (const { file, text } of list) {
+    if (text === null || text === undefined) continue;
+    const p = parseStackProfile(text);
+    if (p.found) return { file, profile: p.profile, lines: p.lines };
   }
-  return prof;
+  return { file: null, profile: {}, lines: {} };
+}
+
+/** Stack Profile of <repo>/CLAUDE.md, else <repo>/.claude/CLAUDE.md, as { key: value }. */
+export function stackProfile(repo) {
+  return stackProfileWithSource(repo).profile;
+}
+/** Same, with the file that holds the section and the line of each key. */
+export function stackProfileWithSource(repo) {
+  return profileFromTexts(PROFILE_FILES.map((file) => {
+    const f = path.join(repo, file);
+    let text = null;
+    try { if (existsSync(f)) text = readFileSync(f, "utf8"); } catch { text = null; }
+    return { file, text };
+  }));
 }

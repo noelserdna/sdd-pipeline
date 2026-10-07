@@ -239,5 +239,52 @@ const hits = commitsFor([{ ids: ["REQ-F-012"] }, { ids: ["REQ-F-01"] }], "REQ-F-
 console.log([t.join("|"), thrown, hits].join(" "));' 2>&1) || rc=$?
 expect "lib: tokens, GitError y matching exacto" "$out" "REQ-F-01|UC-001|REQ-F-012|CR-3 GitError 1"
 
+# ---------------------------------------------------------------- 9. Stack Profile: .claude/CLAUDE.md y bloques de código
+sp="$tmp/sp"; mkdir -p "$sp/.claude"
+profile_of() { (cd "$ROOT/scripts/lib" && node --input-type=module -e '
+import { stackProfile } from "./git-log.mjs";
+const p = stackProfile(process.argv[1]);
+console.log(["literal_gate", "test_paths", "visual_evidence"].map((k) => `${k}=${p[k] ?? "-"}`).join(" "));' "$1"); }
+cat > "$sp/.claude/CLAUDE.md" <<'EOF'
+# P
+
+## SDD Stack Profile
+
+- literal_gate: warn
+- test_paths: spec
+EOF
+expect "perfil solo en .claude/CLAUDE.md: se lee" "$(profile_of "$sp")" "literal_gate=warn test_paths=spec visual_evidence=-"
+cat > "$sp/CLAUDE.md" <<'EOF'
+# P
+
+## SDD Stack Profile
+
+Ejemplo de cómo se relaja un gate (no es la configuración):
+
+```markdown
+- literal_gate: off
+- visual_evidence: off
+```
+
+~~~
+- test_paths: nope
+~~~
+
+- literal_gate: enforce
+- test_paths: tests
+- literal_gate: off
+
+## Otra sección
+
+- visual_evidence: warn
+EOF
+expect "CLAUDE.md manda; bloques de código (backticks y tildes) ignorados; clave repetida: la última" "$(profile_of "$sp")" "literal_gate=off test_paths=tests visual_evidence=-"
+printf '# P\n\nsin perfil\n' > "$sp/CLAUDE.md"
+expect "CLAUDE.md sin sección: se usa .claude/CLAUDE.md (orden de sdd_profile_get)" "$(profile_of "$sp")" "literal_gate=warn test_paths=spec visual_evidence=-"
+if command -v awk >/dev/null 2>&1; then
+  hook_val=$(bash -c '. "$1/hooks/lib/sdd-common.sh" 2>/dev/null; sdd_profile_get literal_gate "$2"' _ "$ROOT" "$sp" 2>/dev/null || true)
+  expect "el hook (sdd_profile_get) lee lo mismo" "$hook_val" "warn"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then echo "git: todo ok"; else echo "git: hay fallos"; exit 1; fi
