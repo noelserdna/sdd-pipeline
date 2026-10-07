@@ -159,8 +159,11 @@ visible target. Per `adversarial-finding` target, write a feedback entry in `fee
 quote and evidence, commit it, and route:
 
 - `SPEC-QUESTION` → a `SPEC-DEVIATION` entry and a person decides (`/sdd-req-change`); no task.
-- `WRONG-CAPTURE` → a fix task on the journey test, so it captures the screen where the literal is visible; when the
-  screen itself lacks the literal, the task fixes the code. A changed test is a test edit for a person to approve.
+- `WEAKENED-ASSERT` → a fix task on the test, which is brought to the criterion's letter (never loosened); the code
+  is right, so the task has no `Reproduce first:` and its test edit is for a person to approve
+  (`skills/sdd-task-generator/references/task-template.md`, § Fix task). A failure that follows is fixed in the code.
+- `WRONG-CAPTURE` → the same exception: a fix task on the journey test, so it captures the screen where the literal is
+  visible. When the screen itself lacks the literal, the code is at fault and the task is an ordinary fix task.
 - every other category → `/sdd-task-generator --fase N --incremental`, one fix task per finding with
   `Source: ACCEPTANCE-ADVERSARIAL-FASE-{N}`, then `/sdd-task-implementer --fase N --new-tasks-only`.
 
