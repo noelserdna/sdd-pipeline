@@ -21,6 +21,7 @@ Motivación: un análisis de [addyosmani/agent-skills](https://github.com/addyos
 - Métricas `floor_errors` (acceptance, task-implementer) y `review_findings` (task-implementer) en `cascade-patterns.md` §9. Suites `tests/floor` y `tests/triggers` en CI.
 
 #### Changed
+- Los kits `rails` y `nextjs-prisma` (v1.3.0) escriben `floor_gate: enforce` y `prove_it: warn`: F-07 solo compara las claves que la base escribe, así que sin ellas en el perfil nada impedía bajarlas.
 - El informe «Test edits inside the loop» de `sdd-acceptance` es uno solo con `lint --floor --base <sha del ciclo 1> --json`: hallazgos F y `testEdits` con `A`, `M`, `R` y también `D`.
 
 #### Fixed
