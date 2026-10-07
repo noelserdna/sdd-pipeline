@@ -64,7 +64,8 @@
 //       cover, :nocov:, nosemgrep, gitleaks:allow, Stryker disable): warning · F-07 Stack Profile gate lowered against
 //       the base, only keys the base writes (literal_gate, acceptance_gate, adversarial_gate, floor_gate: enforce >
 //       warn > off; visual_evidence: required > warn > off; prove_it: enforce > warn > off): error. Mode: Stack
-//       Profile `floor_gate: off|warn|enforce` (default enforce) read from the base, else the tree. A
+//       Profile `floor_gate: off|warn|enforce` read from the base, never from the tree; a base without the key means
+//       the default (enforce). A
 //       floor-exception record (same code, file, line text and base) turns an error into `excepted`. Prints
 //       `floor: base <sha> (<source>: …)`, `file:line F-0N error|warning|excepted message`, `test edit <A|M|D|R> file`
 //       and a summary; --json {base{sha, ref, source, detail}, head, mode, mode_source, findings[{code, severity, file,
