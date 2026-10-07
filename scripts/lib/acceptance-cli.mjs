@@ -186,6 +186,9 @@ function printLedger(ledger) {
         for (const g of c.literal_gaps)
           out(`${c.state === "weakened" ? "weakened" : "warning: literal gap"} ${r.id} AC${c.n}: ${g.code === "Q-02" ? "the quote is not the criterion's current text" : `literal "${g.literal}" not in the test`} (${g.file}:${g.line}, ${ROUTES.weakened})`);
   }
+  for (const r of ledger.requirements.filter((x) => x.in_scope && x.verdict !== "WAIVED"))
+    for (const c of (r.criteria || []).filter((x) => x.skipped))
+      out(`skipped ${r.id} AC${c.n}: every fresh test bound to it is skipped (${ROUTES.weakened})`);
   for (const r of ledger.requirements.filter((x) => x.in_scope))
     for (const c of (r.challenges || []).filter((x) => x.state === "open"))
       out(`challenge ${c.id} open ${r.id} AC${c.ac} ${c.category} (${c.counter}): "${c.quote}" (${ROUTES.adversarial})`);
@@ -706,7 +709,7 @@ function cmdLoop(o) {
   const cycle = state.cycles.length + 1;
   const target = (r) => ({ req: r.id, priority: r.priority, verdict: r.verdict, verification: r.verification,
     criteria: r.criteria.filter((c) => c.state !== "pass").map((c) => ({ n: c.n, state: c.state, scenarios: c.scenarios, route_hint: criterionHint(r, c),
-      ...(c.state === "weakened" ? { literal_gaps: c.literal_gaps } : {}) })),
+      ...(c.state === "weakened" ? { literal_gaps: c.literal_gaps } : {}), ...(c.skipped ? { skipped: true } : {}) })),
     route_hint: routeHint(r) });
   const open = (r) => ["FAILING", "MISSING"].includes(r.verdict);
   // Open challenges of the adversarial round, one target each whatever the verdict: confirmed ones route to
