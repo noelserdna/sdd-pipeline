@@ -1,6 +1,6 @@
 ---
 name: sdd-reverse-engineer
-description: "Bootstraps SDD from existing code and tests: generates requirements, specs, test plan, architecture and retroactive tasks with traceability; extracts entities, routes, state machines, invariants, tech debt. Triggers: 'reverse engineer', 'extract specs from code', 'bootstrap SDD', 'code to requirements', 'analyze existing code', 'brownfield to SDD'."
+description: "Bootstraps SDD from existing code and tests: generates requirements, specs, test plan, architecture and retroactive tasks with traceability; extracts entities, routes, state machines, invariants, tech debt. Triggers: 'reverse engineer', 'extract specs from code', 'bootstrap SDD', 'brownfield to SDD', 'ingeniería inversa', 'generar specs desde el código', 'documentar un proyecto existente'."
 ---
 
 # Skill: sdd-reverse-engineer — Code → SDD Artifact Generator

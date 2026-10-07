@@ -1,6 +1,6 @@
 ---
 name: sdd-security-auditor
-description: "Audits spec security posture per OWASP ASVS 4.0.3 and CWE: threat models, auth, data, crypto, validation, incident response, compliance. 10-dimension Scorecard with OWASP/CWE refs. Triggers: 'security audit', 'security review', 'threat model', 'OWASP', 'security posture', 'auditoria de seguridad', 'revisar seguridad', 'vulnerabilities in specs'."
+description: "Audits spec security posture per OWASP ASVS 4.0.3 and CWE: threat models, auth, data, crypto, validation, incident response, compliance. 10-dimension Scorecard with OWASP/CWE refs. Triggers: 'security audit', 'security review', 'threat model', 'OWASP', 'security posture', 'auditar la seguridad', 'revisar seguridad', 'riesgos de seguridad', 'modelo de amenazas', 'vulnerabilities in specs'."
 ---
 
 # SDD Security Auditor

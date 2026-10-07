@@ -1,6 +1,6 @@
 ---
 name: sdd-req-change
-description: "Requirement changes (req-change): ADD, MODIFY, DEPRECATE propagated to specs; optional pipeline cascade. Triggers: 'change requirement', 'add requirement', 'deprecate requirement', 'new feature', 'I need', 'fix this', 'update dependency', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'pipeline cascade'."
+description: "Requirement changes (req-change), corrective bug fixes included: ADD, MODIFY, DEPRECATE propagated to specs; optional pipeline cascade. Triggers: 'change requirement', 'add requirement', 'deprecate requirement', 'new feature', 'I need', 'fix this bug', 'update dependency', 'cambiar requisito', 'nuevo requisito', 'deprecar', 'nueva funcionalidad', 'necesito que', 'corregir este fallo'."
 ---
 
 # sdd-req-change — Requirements Change Manager & Pipeline Cascade Trigger

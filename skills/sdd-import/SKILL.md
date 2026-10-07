@@ -1,6 +1,6 @@
 ---
 name: sdd-import
-description: "Imports external docs into SDD from Jira, OpenAPI/Swagger, Markdown, Notion, CSV or Excel: auto-detects format, maps fields to requirements and specs, previews, generates and merges artifacts. Triggers: 'import docs', 'import from Jira', 'import OpenAPI', 'convert to SDD', 'import requirements', 'import from Notion', 'import CSV', 'import Excel'."
+description: "Imports external docs into SDD from Jira, OpenAPI/Swagger, Markdown, Notion, CSV or Excel: auto-detects format, maps fields to requirements and specs, previews, generates and merges artifacts. Triggers: 'import docs', 'import from Jira', 'import OpenAPI', 'convert to SDD', 'import from Notion', 'import CSV', 'import Excel', 'importar desde Jira', 'importar historias de usuario'."
 ---
 
 # Skill: sdd-import — External Documentation → SDD Format Converter
