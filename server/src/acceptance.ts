@@ -41,6 +41,8 @@ export interface AcceptanceCriterion {
   visual?: "shown" | "missing";
   /** Present when `literal_gate` is not off (5.1 ledgers). */
   literal_gaps?: LiteralGap[];
+  /** 5.3: every fresh test bound to the criterion is skipped (state `missing`, route weakened-test). */
+  skipped?: boolean;
   evidence: Array<Record<string, unknown> & { attachments?: AcceptanceAttachment[] }>;
 }
 
@@ -71,7 +73,8 @@ export interface AcceptanceRequirement {
   needs: string[];
   verification: string | null;
   verdict: Verdict;
-  /** Why a requirement is not VERIFIED when the tests alone would say so, e.g. "no visual evidence". */
+  /** Why a requirement is not VERIFIED when the tests alone would say so, e.g. "no visual evidence",
+   *  "test does not carry the criterion's literal" or "bound test skipped". */
   reason?: string | null;
   criteria: AcceptanceCriterion[];
   criteria_total: number;

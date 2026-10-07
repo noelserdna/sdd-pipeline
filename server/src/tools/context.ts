@@ -55,6 +55,7 @@ function acceptanceGaps(r: AcceptanceRequirement): string[] {
     else if (c.state === "stale") gaps.push(`STALE_AC${c.n}: evidence older than the code — re-run the tests or re-record`);
     else if (c.state === "unshown") gaps.push(`UNSHOWN_AC${c.n}: passes without a screenshot — run the journey again with capture (capture-evidence)`);
     else if (c.state === "weakened") gaps.push(`WEAKENED_AC${c.n}: the test passes without the criterion's literal (${(c.literal_gaps ?? []).map((g) => (g.code === "Q-02" ? `stale quote at ${g.file}:${g.line}` : `"${g.literal}" missing in ${g.file}`)).join("; ")}) — weakened-test`);
+    else if (c.state === "missing" && c.skipped) gaps.push(`SKIPPED_AC${c.n}: every fresh test bound to the criterion is skipped — weakened-test`);
     else if (c.state === "missing" && r.verification === "test" && !c.scenarios.length) gaps.push(`NO_SCENARIO_AC${c.n}: no BDD scenario carries [${r.id} AC${c.n}]`);
     else if (c.state === "missing") gaps.push(`MISSING_AC${c.n}: no passing ${r.verification ?? ""} evidence`.replace("  ", " "));
   }

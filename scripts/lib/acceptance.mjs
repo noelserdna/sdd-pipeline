@@ -9,6 +9,9 @@
 //   acceptance/decisions.jsonl     human records: waiver, demo, measurement, inspection, fase-acceptance
 //
 // Verdict per requirement (first match): DEPRECATED · WAIVED · FAILING · MISSING · VERIFIED.
+// Skipped bound tests: when every fresh test bound to a test-verified criterion is `skip` (at least one), the criterion
+// stays `missing` with `skipped: true`, the requirement MISSING with reason "bound test skipped" and the loop route is
+// weakened-test (the test is switched off, not absent: re-enabling it is a test edit a person approves).
 // Visual evidence (Stack Profile `visual_evidence: required|warn|off`, default required; files under `evidence_dir`,
 // default evidencias/): a REQ-F criterion is shown when a fresh passing test, a fresh record or a fresh file of the
 // evidence dir named after its scenario id (AC-NNN-NN) or `REQ-F-NNN-ACn` brings an image that is present. Under
@@ -56,7 +59,10 @@ import { lintQuotes, literalGate, literalGapsByCriterion, isCriterionLiteral } f
 
 export const SCHEMA = "sdd-acceptance-v1";
 export const VERDICTS = ["VERIFIED", "FAILING", "MISSING", "WAIVED", "DEPRECATED"];
-export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal", "literal-exception"];
+export const RECORD_TYPES = ["waiver", "demo", "measurement", "inspection", "fase-acceptance", "challenge-dismissal", "literal-exception",
+  "floor-exception"];
+/** Finding codes of `sdd lint --floor` (scripts/lib/floor.mjs) that a person may except with a floor-exception record. */
+export const FLOOR_CODES = ["F-01", "F-02", "F-04", "F-07"];
 export const OPS = { lt: (a, b) => a < b, le: (a, b) => a <= b, gt: (a, b) => a > b, ge: (a, b) => a >= b, eq: (a, b) => a === b };
 export const FASE_RESULTS = ["accepted", "rejected", "observations"];
 export const DECISIONS_FILE = "acceptance/decisions.jsonl";
@@ -211,6 +217,15 @@ export function validateRecord(rec, reqs, ctx = {}) {
     if (!rec.challenge) { e.push("--challenge CH-NNN is required"); return e; }
     if (!(ctx.challenges || []).some((c) => c.id === rec.challenge)) e.push(`${rec.challenge} is not in ${CHALLENGES_FILE}`);
     else if ((ctx.records || []).some((r) => r.type === "challenge-dismissal" && r.challenge === rec.challenge)) e.push(`${rec.challenge} is already dismissed`);
+    return e;
+  }
+  if (rec.type === "floor-exception") {
+    // A person accepts one finding of `sdd lint --floor`: that code, file and exact line, against that base commit.
+    if (!FLOOR_CODES.includes(rec.code)) e.push(`--code must be one of ${FLOOR_CODES.join(", ")}`);
+    if (!rec.file) e.push("--file is required (the file of the finding, relative to the repository)");
+    if (!String(rec.text ?? "").trim()) e.push("--line is required (the exact text of the finding's line, as `sdd lint --floor --json` prints it in `text`)");
+    if (!/^[0-9a-f]{40}$/.test(String(rec.base || ""))) e.push("--base is required (the base commit of the floor check)");
+    if (!rec.reason) e.push("--reason is required (why the lowered floor is right)");
     return e;
   }
   const req = reqs.find((r) => r.id === rec.req);
@@ -723,6 +738,10 @@ export function evaluate(opts) {
         if (live.some((t) => t.status === "fail" || t.status === "error")) c.state = "fail";
         else if (live.some((t) => t.status === "pass")) c.state = "pass";
         else if (tests.some((t) => !t.fresh && t.status !== "skip")) c.state = "stale";
+        // Every fresh bound test is skipped: the criterion is not missing a test, its test is switched off. The loop
+        // routes it as weakened-test (re-enabling a test is a test edit a person approves), not implement-or-test.
+        const freshTests = tests.filter((t) => t.fresh);
+        if (c.state === "missing" && freshTests.length && freshTests.every((t) => t.status === "skip")) c.skipped = true;
         c.evidence = tests.map((t) => ({ kind: "test", ref: t.via, name: t.name, status: t.status, fresh: t.fresh, attachments: t.attachments }));
       } else if (method === "demo" || method === "measurement") {
         const r = latest(current.filter((x) => x.type === method && (acNumber(x.ac) === null || acNumber(x.ac) === i)));
@@ -773,7 +792,8 @@ export function evaluate(opts) {
     else verdict = "VERIFIED";
     const evidence = criteria.flatMap((c) => c.evidence.map((e) => ({ ac: c.n, ...e })));
     const heldBack = verdict === "MISSING" && criteria.every((c) => ["pass", "unshown", "weakened"].includes(c.state));
-    const reason = !heldBack ? null : criteria.some((c) => c.state === "weakened") ? "test does not carry the criterion's literal"
+    const reason = verdict === "MISSING" && criteria.some((c) => c.skipped) ? "bound test skipped"
+      : !heldBack ? null : criteria.some((c) => c.state === "weakened") ? "test does not carry the criterion's literal"
       : criteria.some((c) => c.state === "unshown") ? "no visual evidence" : null;
     requirements.push({ ...base, verdict, reason, criteria, criteria_total: criteria.length, criteria_passing: passing, evidence, waiver,
       stale_evidence: verdict === "MISSING" && criteria.some((c) => c.state === "stale") });
@@ -890,7 +910,9 @@ export function routeHint(r, ctx) {
   if (r.verdict === "FAILING") return ROUTES.fix;
   if (!r.verification) return ROUTES.specGap;
   const open = r.criteria.filter((c) => c.state !== "pass");
-  if (open.length && open.every((c) => c.state === "weakened" || c.state === "unshown") && open.some((c) => c.state === "weakened")) return ROUTES.weakened;
+  // A weakened criterion (literal gap) or a skipped bound test: the fix is a test edit a person approves.
+  if (open.length && open.every((c) => c.state === "weakened" || c.state === "unshown" || c.skipped)
+    && open.some((c) => c.state === "weakened" || c.skipped)) return ROUTES.weakened;
   if (open.length && open.every((c) => c.state === "unshown")) return ROUTES.capture;
   if (r.verification === "measurement" && open.length && open.every(remeasurable)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;
@@ -902,7 +924,7 @@ export function criterionHint(r, c, ctx) {
   if (c.state === "pass") return null;
   if (c.state === "fail") return ROUTES.fix;
   if (c.state === "unshown") return ROUTES.capture;
-  if (c.state === "weakened") return ROUTES.weakened;
+  if (c.state === "weakened" || c.skipped) return ROUTES.weakened;
   if (!r.verification) return ROUTES.specGap;
   if (r.verification === "measurement" && remeasurable(c)) return ROUTES.remeasure;
   if (r.verification !== "test") return ROUTES.human;

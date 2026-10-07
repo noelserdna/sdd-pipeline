@@ -346,6 +346,21 @@ all_green
 run loop next --state .sdd/loop-e.json
 expect "loop: goal" "$(loopq 'j.cycle + "/" + j.stop')" 2/goal
 run gate; expect "gate: all Musts verified (F-005 AC2 via REQ ACn test name) → 0" "$rc" 0
+# Skipped bound tests (5.3): every fresh test of a criterion skipped → skipped, "bound test skipped", weakened-test.
+junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=skip" \
+  "test_ac_002_03_filter=pass" "AC-002-04 rm keeps ids=pass" "REQ-F-005 AC2 rm unknown=pass"
+runo accept --json --no-out
+crit='j.requirements.find(r=>r.id==="REQ-F-002").criteria.find(c=>c.scenarios.includes("AC-002-02"))'
+expect "skip only: criterion missing + skipped" "$(js "$crit.state+\" \"+$crit.skipped")" "missing true"
+expect "skip only: requirement MISSING, reason bound test skipped" "$(js 'const r=j.requirements.find(r=>r.id==="REQ-F-002");r.verdict+" / "+r.reason')" "MISSING / bound test skipped"
+runo accept --no-out; has "texto: skipped con la ruta" "skipped REQ-F-002 AC"; has "texto: motivo" "every fresh test bound to it is skipped (weakened-test)"
+runo loop next --state .sdd/loop-skip.json
+expect "loop: skipped → weakened-test (requisito y criterio)" "$(loopq 'const t=j.targets.find(t=>t.req==="REQ-F-002");t.route_hint+" "+t.criteria.map(c=>c.route_hint+":"+c.skipped).join()')" "weakened-test weakened-test:true"
+junit .sdd/junit/unit.xml "AC-001-01 adds=pass" "AC-001-02 empty title=pass" "AC-002-01 order=pass" "AC-002-02 empty list=skip" "AC-002-02 empty list again=pass" \
+  "test_ac_002_03_filter=pass" "AC-002-04 rm keeps ids=pass" "REQ-F-005 AC2 rm unknown=pass"
+runo accept --json --no-out
+expect "uno saltado y otro en verde: pass, sin skipped" "$(js "$crit.state+\" \"+($crit.skipped===undefined)")" "pass true"
+all_green
 
 # ---------------------------------------------------------------- 9b. loop without spec/ (route skipped the specifications)
 # No spec/tests: the requirement criteria are the contract, so a criterion with neither scenario nor test is work for

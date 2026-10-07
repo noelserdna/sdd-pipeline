@@ -5,6 +5,8 @@
 # blind adversarial round cannot read it). This script runs the mechanical layers only:
 #   node --test (precondition: the suite is green) · sdd lint --quotes --json · sdd accept --fase 1 --junit junit
 #   --junit-sha HEAD --json · sdd gate --fase 1 --json · sdd lint --plan --json · sdd lint
+# and then a second stage (5.3): a commit that skips a bound test (D8) and one that lowers a Stack Profile gate (D9),
+# each checked with `sdd lint --floor --base HEAD~1 --json`.
 # and tests/seeded/check.mjs compares their output with the key: exit 1 when an expected mechanical layer misses its
 # defect or a control requirement is flagged. `sdd lint --quotes` (Q-01/Q-02/Q-03, criterion state `weakened`,
 # summary.literal_gaps) is reported SKIP while the CLI does not have it.
@@ -79,6 +81,24 @@ sdd accept accept --fase 1 --junit junit --junit-sha HEAD --no-out --json
 sdd gate   gate --fase 1 --junit junit --junit-sha HEAD --json
 sdd plan   lint --plan --json
 sdd tasks  lint
+
+# ---------------------------------------------------------------- 1b. second stage: the floor guard (5.3)
+# D8: a later commit switches off the bound test of REQ-F-006 AC1 with test.skip (the suite stays green, the literal
+# stays in the file, so only `lint --floor` sees it). D9: a docs commit lowers literal_gate from enforce to off.
+(
+  cd "$repo"
+  node -e 'const fs=require("fs");const f="tests/api/confirmar.test.js";const t=fs.readFileSync(f,"utf8");const a="test(\"REQ-F-006 AC1";if(!t.includes(a))process.exit(1);fs.writeFileSync(f,t.replace(a,"test.skip(\"REQ-F-006 AC1"))'
+  git add -A
+  git commit -qm "test(cv): skip the flaky confirmation test" --trailer "Task: TASK-F1-099"
+)
+sdd floor lint --floor --base HEAD~1 --json
+(
+  cd "$repo"
+  node -e 'const fs=require("fs");const t=fs.readFileSync("CLAUDE.md","utf8");if(!t.includes("- literal_gate: enforce\n"))process.exit(1);fs.writeFileSync("CLAUDE.md",t.replace("- literal_gate: enforce\n","- literal_gate: off\n"))'
+  git add -A
+  git commit -qm "docs: relax the literal gate"
+)
+sdd floor2 lint --floor --base HEAD~1 --json
 
 # ---------------------------------------------------------------- 2. compare with the answer key
 rc=0
