@@ -232,7 +232,7 @@ new_repo mode
 printf -- '- floor_gate: off\n' >> "$repo/CLAUDE.md"
 replace tests/a.test.js 'test("REQ-F-001 AC1 · adds' 'test.skip("REQ-F-001 AC1 · adds'
 runo lint --floor --json
-expect "base sin floor_gate: el modo sale del árbol" "$(js 'j.mode+" "+j.mode_source+" "+j.exit')" "off tree 0"
+expect "base sin floor_gate: el mismo cambio no puede apagarlo (enforce por defecto)" "$(js 'j.mode+" "+j.mode_source+" "+j.exit')" "enforce default 1"
 ( cd "$repo" && git checkout -q -- . )
 printf -- '- floor_gate: warn\n' >> "$repo/CLAUDE.md"; commit "docs: floor warn"
 ( cd "$repo" && git branch -f main HEAD && git switch -q -c w3 )

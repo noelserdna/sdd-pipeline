@@ -33,7 +33,7 @@
 // record in acceptance/decisions.jsonl keeps { type: "floor-exception", code, file, text, base (full sha), reason, by,
 // role, head, at } (`text` = the --line value).
 //
-// --json: { base: {sha, ref, source, detail}, head, mode, mode_source: base|tree|default, test_paths, code_paths,
+// --json: { base: {sha, ref, source, detail}, head, mode, mode_source: base|default, test_paths, code_paths,
 //   findings: [{code, severity: error|warn|excepted, file, line (number | null), text, message, kind?, criteria?,
 //   scenarios?, key?, from?, to?, exception?}], testEdits: [{status: A|M|D|R, file, from?}], summary }.
 // testEdits lists every test file (under test_paths) added, modified, deleted or renamed against the base, for the
@@ -225,8 +225,10 @@ export function floorCheck(root, { baseRef } = {}) {
   const testPaths = listOf(cur.profile.test_paths, ["tests"]);
   const codePaths = listOf(cur.profile.code_paths, ["src"]);
   const validMode = (v) => FLOOR_MODES.includes(String(v ?? "").trim().toLowerCase()) ? String(v).trim().toLowerCase() : null;
+  // The mode is the base's. A base without floor_gate means the default (enforce), never the tree's value: the same
+  // change could otherwise add `floor_gate: off` and silence itself. A person lowers it in one change, checked by the
+  // next; inside the change that lowers it, a person excepts the finding (floor-exception).
   let mode = validMode(baseProf.profile.floor_gate), modeSource = "base";
-  if (!mode) { mode = validMode(cur.profile.floor_gate); modeSource = "tree"; }
   if (!mode) { mode = "enforce"; modeSource = "default"; }
 
   const findings = [];
