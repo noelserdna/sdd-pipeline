@@ -260,7 +260,7 @@ it holds the verifier prompt, the categories and the commands.
 
 Verifiers never write code, specs, tests or `acceptance/`; only this skill's main thread runs `challenge add`, and only
 a person dismisses a challenge (`accept record challenge-dismissal`). The Stack Profile's `adversarial_gate` (`off` ·
-`warn`, the default · `enforce`) decides whether an open challenge on a Must makes `sdd gate` exit 4.
+`warn` · `enforce`, the default) decides whether an open challenge on a Must makes `sdd gate` exit 4.
 
 Then Step 6 (summary and persist, with the adversarial metrics); its block gains `Adversarial: {f} findings · {c} confirmed · {r} refuted · {o} open challenges · {g} coverage gaps · {a} agents`.
 
