@@ -11,7 +11,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "node build.mjs",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.spec.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {

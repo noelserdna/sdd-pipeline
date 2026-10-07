@@ -1,5 +1,5 @@
 // Tests unitarios de graph-loader: degradación sin grafo y forma del grafo vacío.
-// La carga real de un grafo se cubre en smoke.test.ts (subproceso), porque loadGraph registra un fs.watchFile
+// La carga real de un grafo se cubre en smoke.spec.ts (subproceso), porque loadGraph registra un fs.watchFile
 // que mantendría vivo el proceso de tests.
 import { test } from "node:test";
 import assert from "node:assert/strict";
