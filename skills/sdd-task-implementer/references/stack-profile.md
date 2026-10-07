@@ -330,7 +330,8 @@ Current behaviour: Phase 7 marks `- [x]` before the commit and stages the task d
   Mode 7 EXTERNAL dependencies and G-11 (run at the worktree's `HEAD`), `--verify` Completeness,
   integration-protocol I-06 (main checkout `HEAD`) and I-09 (the Stream branch — see integration-protocol.md).
 - `[!]` (blocked) is derived: a task is blocked while `feedback/IMPL-FEEDBACK-FASE-{N}.md` has an entry with
-  `Severity: BLOCKER`, `Status: OPEN` and that `Task`. Wherever SKILL.md says "mark `[!]`", write or keep that entry.
+  `Severity: BLOCKER`, `Status: OPEN` and that `Task` (a `CODE-REVIEW` entry has `Task: n/a` and blocks no task).
+  Wherever SKILL.md says "mark `[!]`", write or keep that entry.
 - Divergences reported by `tasks status` (checkbox `[x]` without trailer, trailer without checkbox) are `WARN`, never
   auto-fixed; the trailer wins.
 - Merge conflicts in `task/TASK-FASE-{N}.md` cannot come from task progress, so the "keep both `[x]`" rule of
