@@ -253,6 +253,7 @@ Con `TYPESAFE_API_KEY`, `test-adequacy.json` pregunta si cada test afirma el THE
 
 ```bash
 node .claude/sdd/sdd.mjs verify --range "origin/$BASE..HEAD"
+node .claude/sdd/sdd.mjs lint --floor --base "origin/$BASE"
 node .claude/sdd/sdd.mjs lint
 node .claude/sdd/sdd.mjs gate --mode warn
 ```
