@@ -80,7 +80,7 @@ let hookCount = 0;
 for (const [event, groups] of Object.entries(hooks.hooks ?? {})) {
   for (const g of groups) for (const h of g.hooks ?? []) {
     hookCount++;
-    const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/);
+    const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/);
     if (!m) { errors.push(`hooks.json ${event}: command sin \${CLAUDE_PLUGIN_ROOT}: ${h.command}`); continue; }
     const target = path.join(ROOT, m[1]);
     if (!existsSync(target)) errors.push(`hooks.json ${event}: no existe ${m[1]}`);
@@ -93,7 +93,7 @@ const mcp = json(".mcp.json");
 if (!mcp.mcpServers) errors.push(".mcp.json: falta el wrapper mcpServers");
 for (const [name, cfg] of Object.entries(mcp.mcpServers ?? {})) {
   for (const arg of cfg.args ?? []) {
-    const m = arg.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/);
+    const m = arg.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/);
     if (m && !existsSync(path.join(ROOT, m[1]))) errors.push(`.mcp.json ${name}: no existe ${m[1]} (¿npm run build?)`);
   }
 }
@@ -101,7 +101,7 @@ for (const [name, cfg] of Object.entries(mcp.mcpServers ?? {})) {
 // 6. Resumen
 const hookScripts = new Set();
 for (const groups of Object.values(hooks.hooks ?? {})) for (const g of groups) for (const h of g.hooks ?? []) {
-  const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/); if (m) hookScripts.add(m[1]);
+  const m = h.command?.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/([^\s"']+)/); if (m) hookScripts.add(m[1]);
 }
 console.log(`plugin ${plugin.name}@${plugin.version}: ${skillCount} skills, ${agentCount} agentes, ${hookScripts.size} hooks (${hookCount} registros de evento), ${Object.keys(mcp.mcpServers ?? {}).length} MCP`);
 // coherencia: lo que el manifiesto dice de sí mismo
