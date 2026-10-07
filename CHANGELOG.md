@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-10-07
+
 ### Vista en vivo: el mod `sdd-live`
 
 Motivación: durante una sesión no se veía en qué etapa estaba el pipeline ni qué hacían los agentes lanzados. La página de estado (5.2) sirve para compartir con el cliente; esto es la vista del equipo mientras trabaja, dentro de Claude Code.
