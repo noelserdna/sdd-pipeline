@@ -105,8 +105,8 @@ reports only what lowers the bar, never what raises it: F-07 a Stack Profile gat
 `adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) set lower than the base set it explicitly (error);
 F-01 a skip/only/focus added to a bound test or to one that existed at the base (error; `todo` and others warn);
 F-02 a deleted test file that named criteria (error); F-04 a coverage or security suppression (warning). `floor_gate`
-(`off` · `warn` · `enforce`, the default) is read from the base, so lowering it is itself an F-07. Exit 0 clean, 1 with
-errors, 2 without a base. When a person decides that one finding is right (a test retired with its requirement), they
+(`off` · `warn` · `enforce`, the default) is read from the base, so lowering it is itself an F-07. Exit 0 clean, with warnings only, or under `warn`/`off`
+even with errors (they are still printed); 1 with errors under `enforce`; 2 without a base. When a person decides that one finding is right (a test retired with its requirement), they
 record `accept record floor-exception --code F-0N --file PATH --line "exact line" --base SHA --reason TEXT --by NAME
 --role ROLE`; it covers that line in that file against that base only.
 
