@@ -201,6 +201,7 @@ Main checkout only. The tag is placed last, and only when everything passes, so 
 
 1. **Criterios de Exito** of `plan/fases/FASE-{N}-*.md`: check each one and record the evidence.
 2. Run once `{test}`, `{typecheck}`, `{lint}`, `{build}`; then `{acceptance}` once with `SDD_FASE={N}` and `SDD_EVIDENCE_DIR={evidence_dir}` exported (the suite writes the captures and videos under `{evidence_dir}/FASE-{N}/`, `references/construction-protocol.md`) and re-run only failed IDs with `--grep <ID>`. Manual smoke (server helper + `curl`) only without an acceptance suite or E2E tasks.
+   - **2b. Independent review.** The context that wrote the code is the worst placed to see what it missed, and the ledger only sees what a test or record binds to a criterion. Launch one subagent (`subagent_type: general-purpose`, a fresh context, read-only: it edits and commits nothing) that runs `--verify --fase {N}` in the scoped mode of `references/verification-protocol.md` § Scoped review: CHECK-H07 security hygiene, and the correctness the ledger does not see. Each finding it returns with `file:line` becomes an `IF-{FASE}-{SEQ}` entry in `feedback/IMPL-FEEDBACK-FASE-{N}.md` with Severity BLOCKER and Category `CODE-REVIEW`. It is not a FAIL of this phase and this skill does not fix it: one LLM's opinion that nobody has counter-verified does not change code, so a person routes each entry at the FASE gate (a fix task, or a dismissal). A finding that contradicts the spec is recorded as a `SPEC-DEVIATION` instead. The completion report lists the entries.
 3. **Coverage per file** (when the plan has a Coverage Map §7.4) with `{coverage}` (`none` → `WARN coverage: n/a (stack profile)`): every listed source file > 0%, and `logic`/`entity`/`service`/`state-machine` files ≥ 80% lines. A file at 0% not in Exclusions → **FAIL**: append an IF- entry (category `COVERAGE-GAP`, Severity BLOCKER) to `feedback/IMPL-FEEDBACK-FASE-{N}.md` and recommend `/sdd-task-generator --fase={N} --incremental`; this skill does not write tasks. Below 80% on domain logic → WARN in the report.
 4. **Demo and acceptance** (vertical plans; skip with a horizontal plan). After steps 1-3 pass:
    - **4.0 Anchor the evidence to a commit.** Evidence captured over uncommitted code describes a tree no commit holds: the ledger discards it, and `sdd accept --junit-sha` refuses it (exit 2, "commit first"). A new file nobody added counts too, because the tests may depend on it.
@@ -229,6 +230,7 @@ Criterios de Exito: 5/5 · Checkpoint: fase-0-verified {placed|not placed: reaso
 Demo: 6/6 steps as expected · Requisitos: REQ-F-001 VERIFIED (3/3 test), REQ-F-002 VERIFIED (2/2 test)   (vertical plans)
 Pending at the FASE gate: {REQ-NF-004 MISSING (0/1 measurement) | none}   (vertical plans)
 Floor: base {short sha} ({reason}) · {e} errors · {w} warnings   (vertical plans)
+Independent review: {IF-1-004 H07 src/api/login.ts:42, … | no findings}
 Next: FASE gate — show the demo and verdicts to the customer (acceptance/ACCEPTANCE-REPORT.md)
 Skipped: {WARN <key>: n/a (stack profile) | none}
 | Task | SHA | Message | Refs |
@@ -269,7 +271,7 @@ Non-trivial `[P]` batches go to parallel subagents by default; invoking the skil
 - At most 4 agents per batch, launched in the foreground in one response; wait for all of them before ending the turn.
 - **Machine resources.** At most `test_slots` of them (Stack Profile, default 2) run tests. Every test process competes for the same CPU, memory, database file and ports, so more of them at once time out and flake instead of finishing sooner. With `test_slots: 1` the agents write in parallel with the prompt's "do not run tests" line, and the main agent runs each agent's `{test_file}` in sequence before its Phase 7; with a larger value, the agents beyond `test_slots` get that line too.
 - Each agent runs Phases 3-6 for one task, writes only its files (disjoint, guaranteed by `sdd-task-generator`), never commits, never nests. The main agent runs Phase 7 for each, sequentially. A failed agent does not stop the others; report it at the end.
-- Launch agents with `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`). Review, commit and Phase 9 stay with the main agent.
+- Launch agents with `model: sonnet` unless `CLAUDE_CODE_SUBAGENT_MODEL` is set (then omit `model`). Review, commit and Phase 9 stay with the main agent; the reviewer of Phase 9 step 2b only reports, and the main agent writes its entries.
 - Inside a Stream worktree the same rule applies to the Stream's `[P]` tasks; subagents inherit the worktree cwd and never touch EXTERNAL tasks or files outside the Stream's `Owns` column.
 
 Agent prompt:
@@ -345,7 +347,7 @@ git diff --cached --quiet || git commit -m "docs(feedback): FASE-{N} implementat
 
 ## Verification Protocol (`--verify`)
 
-Read-only. Dimensions (Completeness, Correctness, Coherence, Coverage), checks, severities and report: `references/verification-protocol.md`. Only commits reachable from `HEAD` count (`git log HEAD`, never `--all`): un-integrated Stream branches do not exist for `--verify`, and inside a worktree only the Stream's tasks can PASS. Completeness starts from the done tasks (Task state). Contracts: semantics against `spec/contracts/`, transport against `design/OPERATION-MAPPING.md`.
+Read-only. Dimensions (Completeness, Correctness, Coherence, Coverage), checks, severities and report: `references/verification-protocol.md`. Only commits reachable from `HEAD` count (`git log HEAD`, never `--all`): un-integrated Stream branches do not exist for `--verify`, and inside a worktree only the Stream's tasks can PASS. Completeness starts from the done tasks (Task state). Contracts: semantics against `spec/contracts/`, transport against `design/OPERATION-MAPPING.md`. Phase 9 step 2b runs it in a fresh subagent limited to § Scoped review.
 
 ## Revert, Recovery and Session Report
 

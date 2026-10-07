@@ -43,6 +43,8 @@ and the customer should see those answers before being asked again.
    line) and each `floor-exception` already recorded against that base, with who recorded it and why. A lowered gate,
    a skipped or deleted test is something the customer is entitled to see before accepting; an F error is reverted or
    excepted by a person (`skills/sdd-acceptance/SKILL.md`, "The floor"), never accepted silently.
+6. The open entries of the implementer's independent review (Phase 9 step 2b: Category `CODE-REVIEW` in
+   `feedback/IMPL-FEEDBACK-FASE-{N}.md`): a person routes each one in §5, as a defect or closed `WONT-FIX`.
 ## 2. Human evidence
 
 A requirement verified by `demo`, `measurement` or `inspection` stays MISSING until a person confirms it, so the
