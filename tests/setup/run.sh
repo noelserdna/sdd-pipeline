@@ -333,7 +333,7 @@ check "kit rails: 5 reglas en .claude/rules/sdd-rails-*.md" sh -c '[ "$(ls .clau
 check "kit rails: sin {app_dir} ni {port} sin resolver" sh -c '! grep -qE "\{(app_dir|port)\}" CLAUDE.md .claude/rules/*.md'
 check "kit rails: solo quedan marcadores de ejecución {file} {files} {pattern}" sh -c '[ -z "$(grep -ohE "\{[a-z_]+\}" CLAUDE.md .claude/rules/*.md | grep -vxE "\{(file|files|pattern)\}")" ]'
 check "kit rails: reglas con frontmatter en la línea 1, globs web/ y cabecera gestionada" sh -c 'for f in .claude/rules/sdd-rails-*.md; do [ "$(head -1 "$f")" = "---" ] && grep -q "^  - \"web/" "$f" && grep -q "<!-- sdd-stack-kit managed kit=rails" "$f" || exit 1; done'
-check "kit rails: claves 5.1 con sus valores por defecto" sh -c 'for kv in "visual_evidence: required" "evidence_dir: evidencias" "adversarial_gate: enforce" "literal_gate: enforce" "test_slots: 2" "staging_url: none" "smoke: none" "smoke_report_path: .sdd/junit/smoke" "env_required: none" "deploy: none"; do grep -qxF -- "- $kv" CLAUDE.md || exit 1; done'
+check "kit rails: claves 5.1 con sus valores por defecto" sh -c 'for kv in "visual_evidence: required" "evidence_dir: evidencias" "adversarial_gate: enforce" "literal_gate: enforce" "floor_gate: enforce" "prove_it: warn" "test_slots: 2" "staging_url: none" "smoke: none" "smoke_report_path: .sdd/junit/smoke" "env_required: none" "deploy: none"; do grep -qxF -- "- $kv" CLAUDE.md || exit 1; done'
 check "kit rails: la regla de testing dice dónde van los E2E con captura y los tests de contrato" sh -c 'grep -q "evidencias/FASE-N/" .claude/rules/sdd-rails-testing.md && grep -q "CONTRACT-<port>" .claude/rules/sdd-rails-testing.md && ! grep -q "No system tests" .claude/rules/sdd-rails-testing.md'
 
 # 7b. idempotencia y texto del usuario
@@ -424,7 +424,7 @@ mkdir -p app && printf '{}\n' > app/package.json && : > app/next.config.ts
 bash "$KIT_SH" --stack auto >/dev/null 2>&1
 check "kit auto: app/package.json + app/next.config.ts → nextjs-prisma en app" sh -c 'grep -q "^<!-- sdd-stack-begin kit=nextjs-prisma " CLAUDE.md && grep -qx -- "- app_dir: app" CLAUDE.md'
 check "kit nextjs-prisma: glob de dominio app/src/{lib,domain,server}/**" grep -qF '"app/src/{lib,domain,server}/**"' .claude/rules/sdd-nextjs-prisma-domain.md
-check "kit nextjs-prisma: claves 5.1 renderizadas" sh -c 'grep -qx -- "- test_slots: 2" CLAUDE.md && grep -qx -- "- evidence_dir: evidencias" CLAUDE.md && grep -qx -- "- adversarial_gate: enforce" CLAUDE.md && grep -qx -- "- literal_gate: enforce" CLAUDE.md'
+check "kit nextjs-prisma: claves 5.1 renderizadas" sh -c 'grep -qx -- "- test_slots: 2" CLAUDE.md && grep -qx -- "- evidence_dir: evidencias" CLAUDE.md && grep -qx -- "- adversarial_gate: enforce" CLAUDE.md && grep -qx -- "- literal_gate: enforce" CLAUDE.md && grep -qx -- "- floor_gate: enforce" CLAUDE.md && grep -qx -- "- prove_it: warn" CLAUDE.md'
 check "kit nextjs-prisma: E2E con captura en app/tests/e2e y contrato en app/tests/contract" sh -c 'grep -q "app/tests/e2e/" .claude/rules/sdd-nextjs-prisma-testing.md && grep -q "app/tests/contract/" .claude/rules/sdd-nextjs-prisma-testing.md'
 check "kit nextjs-prisma: ningún reset de Prisma" sh -c '! grep -qiE "migrate +reset" CLAUDE.md .claude/rules/*.md'
 

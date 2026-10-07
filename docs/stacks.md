@@ -42,6 +42,8 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 - evidence_dir: evidencias
 - adversarial_gate: enforce
 - literal_gate: enforce
+- floor_gate: enforce
+- prove_it: warn
 - test_slots: 2
 - staging_url: none
 - smoke: none
@@ -80,8 +82,8 @@ implementer) y cinco reglas cortas por stack. Los kits son ese material, corregi
 | `evidence_dir` | Carpeta de capturas y vídeos, `<dir>/FASE-N/`, fuera de git; por defecto `evidencias` |
 | `adversarial_gate` | Cómo trata `sdd gate` un hallazgo abierto de la ronda adversarial en un Must: `off`, `warn` (lo imprime) o `enforce` (por defecto; sale con 4) |
 | `literal_gate` | Cómo trata `sdd accept` un test que nombra un criterio sin llevar su letra (`sdd lint --quotes`: Q-02 cita desactualizada, Q-03 literal ausente): `enforce` (por defecto) deja un criterio de un Must en `weakened` y el requisito no es VERIFIED; `warn` solo lo informa; `off` no lo comprueba |
-| `floor_gate` | Opcional. Cómo trata `sdd lint --floor` lo que baja el listón desde su base (un gate de este perfil rebajado, un skip/only/focus añadido a un test ligado o ya existente, un fichero de test con ids de criterio borrado): `enforce` (por defecto) sale con 1, `warn` lo imprime y sale con 0, `off` no lo comprueba. El modo se lee de la base, así que bajarlo es otro hallazgo. Ver [El listón](aceptacion.md#el-listón) |
-| `prove_it` | Opcional. Cómo trata `sdd verify --range` un commit `fix` que cambia `code_paths` sin tocar ningún test: `warn` (por defecto) lo imprime, `enforce` falla, `off` no lo mira. Exentos: merges, reverts, `fixup!`, `[skip-sdd]`, `perf` y fixes sin código |
+| `floor_gate` | Opcional. Cómo trata `sdd lint --floor` lo que baja el listón desde su base (un gate de este perfil rebajado, un skip/only/focus añadido a un test ligado o ya existente, un fichero de test con ids de criterio borrado): `enforce` (por defecto) sale con 1, `warn` lo imprime y sale con 0, `off` no lo comprueba. El modo se lee de la base, así que bajarlo es otro hallazgo. Los kits la escriben (`enforce`), porque F-07 solo protege las claves que la base escribe. Ver [El listón](aceptacion.md#el-listón) |
+| `prove_it` | Opcional. Cómo trata `sdd verify --range` un commit `fix` que cambia `code_paths` sin tocar ningún test: `warn` (por defecto) lo imprime, `enforce` falla, `off` no lo mira. Exentos: merges, reverts, `fixup!`, `[skip-sdd]`, `perf` y fixes sin código. Los kits la escriben (`warn`) para que F-07 la proteja |
 | `test_slots` | Procesos de test que pueden correr a la vez en la máquina (por defecto `2`; `1` con base de datos en memoria o compartida, navegadores o contenedores). Ver [Recursos de la máquina](multisesion.md#recursos-de-la-máquina) |
 | `staging_url` | URL del entorno de staging para las plantillas de smoke, o `none` |
 | `smoke` | Comando del smoke post-deploy contra `staging_url`: ejecuta los tests etiquetados `@smoke-deploy` (`@smoke` es el tier de PR), p. ej. `npx playwright test --grep @smoke-deploy --reporter=junit`; o `none` |

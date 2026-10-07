@@ -94,7 +94,7 @@ node "$SDD" lint --floor [--base REF] [--json]
 
 | Código | Qué | Severidad |
 |---|---|---|
-| F-07 | Un gate del Stack Profile (`literal_gate`, `acceptance_gate`, `adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) más bajo que el valor que la base fijaba explícitamente | error |
+| F-07 | Un gate del Stack Profile (`literal_gate`, `acceptance_gate`, `adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) más bajo que el valor que la base fijaba explícitamente. Una clave que la base no escribe no se compara (vale su valor por defecto); los kits escriben todas | error |
 | F-01 | `skip`/`only`/`focus` añadido sobre un test ligado a un criterio o que ya existía en la base | error (`todo` y el resto, aviso) |
 | F-02 | Fichero de test borrado que nombraba ids de criterio | error |
 | F-04 | Supresión de cobertura o de seguridad añadida | aviso |

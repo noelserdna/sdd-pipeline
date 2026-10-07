@@ -1,6 +1,6 @@
 {
   "name": "rails",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Ruby on Rails 8.x · Ruby 3.3+ · Minitest with fixtures · Hotwire · Importmap · SQLite",
   "detect": {
     "all": ["Gemfile", "config/application.rb"],
@@ -34,6 +34,8 @@
     "evidence_dir": "evidencias",
     "adversarial_gate": "enforce",
     "literal_gate": "enforce",
+    "floor_gate": "enforce",
+    "prove_it": "warn",
     "test_slots": "2",
     "staging_url": "none",
     "smoke": "none",

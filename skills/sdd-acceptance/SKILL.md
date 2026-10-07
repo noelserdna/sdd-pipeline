@@ -102,7 +102,8 @@ skipped stays MISSING with `reason: "bound test skipped"` and routes as `weakene
 `sdd lint --floor [--base REF] [--json]` compares the tree with a base (`--base`, else the merge-base with the default
 branch, else the last `fase-*-accepted` tag; exit 2 without one; the base and why it was chosen are always printed) and
 reports only what lowers the bar, never what raises it: F-07 a Stack Profile gate (`literal_gate`, `acceptance_gate`,
-`adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) set lower than the base set it explicitly (error);
+`adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) set lower than the base set it explicitly (error;
+a key the base does not write is not compared, which is why the stack kits write all six);
 F-01 a skip/only/focus added to a bound test or to one that existed at the base (error; `todo` and others warn);
 F-02 a deleted test file that named criteria (error); F-04 a coverage or security suppression (warning). `floor_gate`
 (`off` · `warn` · `enforce`, the default) is read from the base, so lowering it is itself an F-07. Exit 0 clean, with warnings only, or under `warn`/`off`
