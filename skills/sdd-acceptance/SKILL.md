@@ -105,7 +105,7 @@ reports only what lowers the bar, never what raises it: F-07 a Stack Profile gat
 `adversarial_gate`, `floor_gate`, `visual_evidence`, `prove_it`) set lower than the base set it explicitly (error;
 a key the base does not write is not compared, which is why the stack kits write all six);
 F-01 a skip/only/focus added to a bound test or to one that existed at the base (error; `todo` and others warn);
-F-02 a deleted test file that named criteria (error); F-04 a coverage or security suppression (warning). `floor_gate`
+F-02 a test file deleted, renamed or moved out of `test_paths` losing the criterion ids it named (error); F-04 a coverage or security suppression (warning). `floor_gate`
 (`off` · `warn` · `enforce`, the default) is read from the base, so lowering it is itself an F-07. Exit 0 clean, with warnings only, or under `warn`/`off`
 even with errors (they are still printed); 1 with errors under `enforce`; 2 without a base. When a person decides that one finding is right (a test retired with its requirement), they
 record `accept record floor-exception --code F-0N --file PATH --line "exact line" --base SHA --reason TEXT --by NAME
@@ -123,7 +123,8 @@ through `sdd-req-change` reopens the requirement automatically ("Decisions to re
 1. Read `pipeline-state.json` if present (the stage key of this skill is `acceptance`; the H3 hook marks it running
    when the skill starts). No `requirements/REQUIREMENTS.md` → stop: there is nothing to accept yet.
 2. Resolve from the `## SDD Stack Profile` of `CLAUDE.md`: `app_dir`, `code_paths`, `test_paths`, `test_report`,
-   `test_report_path`, `acceptance_gate`, `visual_evidence`, `evidence_dir`, `adversarial_gate`, `test_slots`
+   `test_report_path`, `acceptance_gate`, `visual_evidence`, `evidence_dir`, `adversarial_gate`, `literal_gate`,
+   `floor_gate`, `test_slots`
    (reference: `../sdd-task-implementer/references/stack-profile.md`).
 3. Run `node "$SDD" lint --needs --json`. Requirements without a valid `Verification:` cannot be accepted: list them; the
    loop routes them as spec gaps.

@@ -20,7 +20,7 @@ task was done and a requirement delivered, so every rule here exists to keep tha
 - One commit = one task: a commit carries a single `Task`.
 - Ids match as exact tokens: `REQ-F-01` never matches `REQ-F-012`.
 - **Prove-It.** A `fix` that touches `code_paths` also touches a test (a file under `test_paths`, or named
-  `*.test.*`, `*_spec.rb`, `test_*.py`): a defect that came back unseen needs a test that would have seen it.
+  `*.test.*`, `*.spec.*`, `*_test.*`, `*_spec.rb`, `test_*.py`): a defect that came back unseen needs a test that would have seen it.
   `verify --range` checks it in CI and warns (Stack Profile `prove_it: warn`, the default), fails with `enforce`, or
   skips it with `off`; merges, reverts, `fixup!`, `[skip-sdd]`, `perf` and fixes that touch no code are exempt. No
   trailer marks it, and the red run is not committed separately: a commit with a failing test breaks `git bisect`, and

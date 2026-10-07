@@ -155,8 +155,8 @@
 //       `goal` also needs no open challenge on a Must. Each missing FASE video is a target {video: WF-NNN|FASE-N, fase,
 //       route_hint: capture-evidence} (under visual_evidence warn, in `others`); progress counts videos_missing, and a
 //       cycle that captures one is progress like a criterion that turns VERIFIED. route_hint weakened-test: the test
-//       passes without the criterion's literal (a `weakened` criterion, with its literal_gaps); the fix is a test edit
-//       that a person approves (Art. 12).
+//       passes without the criterion's literal (a `weakened` criterion, with its literal_gaps), or every fresh test bound
+//       to the criterion is skipped (`skipped: true`); the fix is a test edit that a person approves (Art. 12).
 //   sdd req show <REQ-ID> [--ac N] [--json] [--requirements FILE]
 //       Statement and criteria of requirements/REQUIREMENTS.md verbatim (with --ac N, one line `REQ-F-001 AC1: …`), to
 //       quote the criterion above its assert. Exit 1 when the id or the criterion does not exist.
