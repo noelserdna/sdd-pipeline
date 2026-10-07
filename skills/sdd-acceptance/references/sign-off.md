@@ -7,8 +7,8 @@ Acceptance must be checkable later (who accepted what, when, at which commit, th
 ## 1. Question
 
 Ask with `AskUserQuestion`, after showing the report path, the goal line, any waived Musts, the open challenges of
-the adversarial round (`node "$SDD" accept challenge list --open`, whatever `adversarial_gate` says) and, for a FASE,
-its video and captures (`evidencias/FASE-N/`):
+the adversarial round (`node "$SDD" accept challenge list --open`, whatever `adversarial_gate` says), the open findings of `node "$SDD" lint --floor` with the `floor-exception`
+records against its base and, for a FASE, its video and captures (`evidencias/FASE-N/`):
 
 - Question: "Accept FASE {N} at commit {sha7}? Must {v}/{t} verified{, {w} waived}."
   (release: "Accept release {NAME} at commit {sha7}? …")
