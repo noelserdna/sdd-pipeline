@@ -199,7 +199,7 @@
 //              | asset --sha256 H --url <published path | URL | withheld>
 //       Write the registry: the page URL, the owner's "no", a feature added later (its own section and filter), an
 //       evidence file already published (or withheld: personal data, kept off the page).
-//   sdd status build [--out .sdd/status-page] [--template FILE] [--json]
+//   sdd status build [--out .sdd/status-page] [--template FILE] [--json] [--no-out]
 //       The page data, contract sdd-status-v1 (docs/design/plan-5.2-status-page.md; scripts/lib/status.mjs): needs,
 //       requirements with their «Para el cliente» line, criteria and evidence (read-only acceptance ledger), FASEs,
 //       tasks, commits and web links (GitHub, GitLab), the journal plus facts derived from dated tags, the route,
@@ -207,6 +207,7 @@
 //       with the JSON in <script id="sdd-data">) and copies to --out/evidencias/ the captures and videos that are
 //       present with their recorded sha256 (never traces; over 15 MB or withheld: listed, not copied). --json prints the
 //       data (each evidence file with inAssets: already in status/page.json). Exit 2 on a missing template.
+//       --no-out prints the data and writes nothing (no template, no copy): for live views that refresh often.
 // Stack Profile: the `## SDD Stack Profile` section of CLAUDE.md, else of .claude/CLAUDE.md (the order of the hooks'
 // sdd_profile_get; the first file with the section is the profile); lines inside fenced code blocks do not count.
 // Commit vocabulary: references/git-conventions.md. Old entry point: scripts/sdd-task-lint.mjs (alias).

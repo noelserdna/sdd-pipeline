@@ -385,6 +385,11 @@ expect "feature: a FASE takes the feature of its requirements" "$(jf "$D" 'F(1).
 expect "feature: its requirement and the change in the journal" "$(jf "$D" 'R("REQ-F-003").feature+"|"+j.journal.filter(e=>e.kind==="change").map(e=>e.feature+":"+e.refs[0]).join()')" \
   "CHG-2026-09-20-001|CHG-2026-09-20-001:CHG-2026-09-20-001"
 [ ! -e "$repo/.sdd/acceptance.json" ] && pass "todo: build never writes .sdd/acceptance.json" || bad "todo: ledger written"
+# --no-out: the same data, nothing written (the live mod refreshes with it after every turn)
+rm -rf "$repo/.sdd/status-page"
+run status build --no-out
+expect "--no-out: exit 0 and the contract's data on stdout" "$rc:$(js 'j["$schema"]+"|"+j.features.length')" "0:sdd-status-v1|2"
+[ ! -e "$repo/.sdd/status-page" ] && pass "--no-out writes nothing" || bad "--no-out wrote .sdd/status-page"
 
 # the template's sample data follows the same contract the CLI writes
 node "$ROOT/tests/status/shape.mjs" "$ROOT/templates/status-page/sample-data.json" >/dev/null 2>&1 \

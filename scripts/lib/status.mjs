@@ -53,7 +53,7 @@ const die = (msg, code = 2) => { console.error(`${PROG}: ${msg}`); throw new Exi
 const VALUED = new Set(["repo", "stage", "kind", "text", "feature", "refs", "by", "at", "out", "template", "url", "id",
   "title", "chg", "summary", "sha256"]);
 const MULTI = new Set(["refs"]);
-const FLAGS = new Set(["json", "help"]);
+const FLAGS = new Set(["json", "help", "no-out"]);
 function parse(argv) {
   const o = { _: [], refs: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -768,6 +768,13 @@ function sha256File(abs) {
 
 function cmdBuild(o, root, taskProgress) {
   if (o._.length) usage(`unexpected argument ${o._[0]}`);
+  // --no-out: the data alone, read-only (no template, no files written, no evidence copied). For live views that
+  // refresh often, such as the sdd-live mod, which must not rewrite the page or copy evidence after every turn.
+  if (o["no-out"]) {
+    const { data } = buildStatus(root, { taskProgress });
+    out(JSON.stringify(data, null, o.json ? 2 : 0));
+    return 0;
+  }
   const tpl = o.template ? path.resolve(o.template) : TEMPLATE;
   if (!existsSync(tpl)) die(`status build: template not found: ${tpl}`);
   const template = readFileSync(tpl, "utf8");
