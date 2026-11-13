@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `sdd-graph.py` en Windows: las llamadas a git leen la salida como UTF-8 (antes usaban cp1252 y los mensajes de commit con tildes llegaban al grafo como «anÃ¡lisis»), y la salida del script se fuerza a UTF-8 para no fallar con `UnicodeEncodeError` al redirigirla. Lo reportó un alumno de MISEIA usando el `generate.py` antiguo (4.x), que además perdía casi todos los commits al partir el `git log --name-only`; ese fallo ya no existe desde que `sdd-graph.py` separa los registros con `%x1e`.
+
 ## [5.3.0] - 2026-10-07
 
 ### Vista en vivo: el mod `sdd-live`
