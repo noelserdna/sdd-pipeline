@@ -825,7 +825,7 @@ def scan_commits(project_dir):
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, cwd=project_dir, timeout=5
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=project_dir, timeout=5
         )
         if result.returncode != 0:
             print("  Git not available — skipping commit scan.")
@@ -919,7 +919,7 @@ def _git_commits(project_dir, legacy_only=False):
     fmt = f"--format=%x1e%H%x1f%h%x1f{tr('Task')}%x1f{tr('Refs')}%x1f{tr('Change')}%x1f%s%x1f%an%x1f%aI%x1f%b%x1f"
     try:
         result = subprocess.run(["git", "-c", "core.quotepath=off", "log", "--name-only", fmt, "HEAD"],
-                                capture_output=True, text=True, cwd=project_dir, timeout=60)
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=project_dir, timeout=60)
         if result.returncode != 0:
             print(f"  Warning: git log failed (rc={result.returncode})")
             return []
@@ -977,12 +977,12 @@ def _scan_commits_node(project_dir):
         return None
     try:
         result = subprocess.run(["node", SDD_CLI, "trace", "commits", "--json", "--files", "--repo", project_dir],
-                                capture_output=True, text=True, timeout=120)
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if result.returncode != 0:
             return None
         data = json.loads(result.stdout)
         meta_out = subprocess.run(["git", "log", "--format=%H%x1f%h%x1f%an%x1f%aI", "HEAD"], capture_output=True,
-                                  text=True, cwd=project_dir, timeout=60).stdout
+                                  text=True, encoding="utf-8", errors="replace", cwd=project_dir, timeout=60).stdout
     except Exception:
         return None
     meta = {}
@@ -1013,7 +1013,7 @@ def _build_rename_map(project_dir, old_paths):
     try:
         result = subprocess.run(
             ["git", "log", "HEAD", "-M", "--diff-filter=R", "--name-status", "--format="],
-            capture_output=True, text=True, cwd=project_dir, timeout=60
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=project_dir, timeout=60
         )
         if result.returncode != 0:
             return {}
@@ -2701,6 +2701,12 @@ def _enrich_graph_with_loaders(graph, project_dir):
 
 
 def main():
+    # Windows: console and redirected output default to cp1252, and git output is UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(
         description="SDD traceability graph — scans pipeline artifacts and writes dashboard/traceability-graph.json"
     )
